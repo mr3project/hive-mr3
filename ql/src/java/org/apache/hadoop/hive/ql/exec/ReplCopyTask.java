@@ -164,9 +164,9 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
       }
       return 0;
     } catch (Exception e) {
-      console.printError("Failed with exception " + e.getMessage(), "\n"
-          + StringUtils.stringifyException(e));
-      return ErrorMsg.getErrorMsg(e.getMessage()).getErrorCode();
+      LOG.error(StringUtils.stringifyException(e));
+      setException(e);
+      return (1);
     }
   }
 
