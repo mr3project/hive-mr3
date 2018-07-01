@@ -122,7 +122,8 @@ public class HiveAlterHandler implements AlterHandler {
     boolean dataWasMoved = false;
     boolean isPartitionedTable = false;
 
-    Table oldt;
+    Table oldt = null;
+
     List<TransactionalMetaStoreEventListener> transactionalListeners = handler.getTransactionalListeners();
     List<MetaStoreEventListener> listeners = handler.getListeners();
     Map<String, String> txnAlterTableEventResponses = Collections.emptyMap();
