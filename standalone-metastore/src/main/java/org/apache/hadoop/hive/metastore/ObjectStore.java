@@ -9675,7 +9675,7 @@ public class ObjectStore implements RawStore, Configurable {
   }
 
   @Override
-  public void addNotificationEvent(NotificationEvent entry) {
+  public void addNotificationEvent(NotificationEvent entry) throws MetaException {
     boolean commited = false;
     Query query = null;
     try {
@@ -9699,8 +9699,9 @@ public class ObjectStore implements RawStore, Configurable {
       }
       pm.makePersistent(translateThriftToDb(entry));
       commited = commitTransaction();
-    } catch (Exception e) {
-      LOG.error("couldnot get lock for update", e);
+    } catch (MetaException e) {
+      LOG.error("Couldn't get lock for update", e);
+      throw e;
     } finally {
       rollbackAndCleanup(commited, query);
     }
