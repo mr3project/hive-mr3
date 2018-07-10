@@ -261,12 +261,8 @@ PREHOOK: Input: default@loc_orc_1d_n0@year=2003
 #### A masked pattern was here ####
 POSTHOOK: query: explain extended select state,locid,cnt,zip from loc_orc_1d_n0
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@loc_orc_1d_n0
-POSTHOOK: Input: default@loc_orc_1d_n0@year=2000
-POSTHOOK: Input: default@loc_orc_1d_n0@year=2001
-POSTHOOK: Input: default@loc_orc_1d_n0@year=2002
-POSTHOOK: Input: default@loc_orc_1d_n0@year=2003
-#### A masked pattern was here ####
+OPTIMIZED SQL: SELECT `state`, `locid`, `cnt`, `zip`
+FROM `default`.`loc_orc_1d_n0`
 STAGE DEPENDENCIES:
   Stage-0 is a root stage
 
@@ -650,12 +646,8 @@ PREHOOK: Input: default@loc_orc_1d_n0@year=2003
 #### A masked pattern was here ####
 POSTHOOK: query: explain extended select state,locid,cnt,zip from loc_orc_1d_n0
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@loc_orc_1d_n0
-POSTHOOK: Input: default@loc_orc_1d_n0@year=2000
-POSTHOOK: Input: default@loc_orc_1d_n0@year=2001
-POSTHOOK: Input: default@loc_orc_1d_n0@year=2002
-POSTHOOK: Input: default@loc_orc_1d_n0@year=2003
-#### A masked pattern was here ####
+OPTIMIZED SQL: SELECT `state`, `locid`, `cnt`, `zip`
+FROM `default`.`loc_orc_1d_n0`
 STAGE DEPENDENCIES:
   Stage-0 is a root stage
 
@@ -1081,19 +1073,8 @@ PREHOOK: Input: default@loc_orc_2d_n0@zip=94087/year=2003
 #### A masked pattern was here ####
 POSTHOOK: query: explain extended select state,locid,cnt,zip from loc_orc_2d_n0
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@loc_orc_2d_n0
-POSTHOOK: Input: default@loc_orc_2d_n0@zip=43201/year=2001
-POSTHOOK: Input: default@loc_orc_2d_n0@zip=43201/year=2002
-POSTHOOK: Input: default@loc_orc_2d_n0@zip=43201/year=2003
-POSTHOOK: Input: default@loc_orc_2d_n0@zip=94086/year=2000
-POSTHOOK: Input: default@loc_orc_2d_n0@zip=94086/year=2001
-POSTHOOK: Input: default@loc_orc_2d_n0@zip=94086/year=2002
-POSTHOOK: Input: default@loc_orc_2d_n0@zip=94086/year=2003
-POSTHOOK: Input: default@loc_orc_2d_n0@zip=94087/year=2000
-POSTHOOK: Input: default@loc_orc_2d_n0@zip=94087/year=2001
-POSTHOOK: Input: default@loc_orc_2d_n0@zip=94087/year=2002
-POSTHOOK: Input: default@loc_orc_2d_n0@zip=94087/year=2003
-#### A masked pattern was here ####
+OPTIMIZED SQL: SELECT `state`, `locid`, `cnt`, `zip`
+FROM `default`.`loc_orc_2d_n0`
 STAGE DEPENDENCIES:
   Stage-0 is a root stage
 

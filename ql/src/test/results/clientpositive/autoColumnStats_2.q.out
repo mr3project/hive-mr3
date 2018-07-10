@@ -26,8 +26,8 @@ PREHOOK: Input: default@src_multi1
 #### A masked pattern was here ####
 POSTHOOK: query: explain extended select * from src_multi1
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src_multi1
-#### A masked pattern was here ####
+OPTIMIZED SQL: SELECT `key`, `value`
+FROM `default`.`src_multi1`
 STAGE DEPENDENCIES:
   Stage-0 is a root stage
 
