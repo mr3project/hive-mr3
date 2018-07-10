@@ -4,8 +4,8 @@ PREHOOK: Input: default@src
 #### A masked pattern was here ####
 POSTHOOK: query: explain extended select key from src
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-#### A masked pattern was here ####
+OPTIMIZED SQL: SELECT `key`
+FROM `default`.`src`
 STAGE DEPENDENCIES:
   Stage-0 is a root stage
 
@@ -30,8 +30,8 @@ PREHOOK: Input: default@src
 #### A masked pattern was here ####
 POSTHOOK: query: explain extended select a.key from src a
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-#### A masked pattern was here ####
+OPTIMIZED SQL: SELECT `key`
+FROM `default`.`src`
 STAGE DEPENDENCIES:
   Stage-0 is a root stage
 
@@ -167,8 +167,8 @@ PREHOOK: Input: default@src
 #### A masked pattern was here ####
 POSTHOOK: query: explain extended select key from src ('user.defined.key'='some.value')
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-#### A masked pattern was here ####
+OPTIMIZED SQL: SELECT `key`
+FROM `default`.`src`
 STAGE DEPENDENCIES:
   Stage-0 is a root stage
 
@@ -308,8 +308,8 @@ PREHOOK: Input: default@src
 #### A masked pattern was here ####
 POSTHOOK: query: explain extended select a.key from src ('user.defined.key'='some.value') a
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@src
-#### A masked pattern was here ####
+OPTIMIZED SQL: SELECT `key`
+FROM `default`.`src`
 STAGE DEPENDENCIES:
   Stage-0 is a root stage
 
