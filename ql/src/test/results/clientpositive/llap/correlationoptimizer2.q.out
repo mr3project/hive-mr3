@@ -98,11 +98,11 @@ STAGE PLANS:
                     0 _col0 (type: string)
                     1 _col0 (type: string)
                   outputColumnNames: _col0, _col1, _col2, _col3
-                  Statistics: Num rows: 9 Data size: 1701 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 12 Data size: 2268 Basic stats: COMPLETE Column stats: COMPLETE
                   Select Operator
                     expressions: hash(_col0) (type: int), hash(_col1) (type: int), hash(_col2) (type: int), hash(_col3) (type: int)
                     outputColumnNames: _col0, _col1, _col2, _col3
-                    Statistics: Num rows: 9 Data size: 1701 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 12 Data size: 2268 Basic stats: COMPLETE Column stats: COMPLETE
                     Group By Operator
                       aggregations: sum(_col0), sum(_col1), sum(_col2), sum(_col3)
                       mode: hash
@@ -253,11 +253,11 @@ STAGE PLANS:
                     0 _col0 (type: string)
                     1 _col0 (type: string)
                   outputColumnNames: _col0, _col1, _col2, _col3
-                  Statistics: Num rows: 9 Data size: 1701 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 12 Data size: 2268 Basic stats: COMPLETE Column stats: COMPLETE
                   Select Operator
                     expressions: hash(_col0) (type: int), hash(_col1) (type: int), hash(_col2) (type: int), hash(_col3) (type: int)
                     outputColumnNames: _col0, _col1, _col2, _col3
-                    Statistics: Num rows: 9 Data size: 1701 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 12 Data size: 2268 Basic stats: COMPLETE Column stats: COMPLETE
                     Group By Operator
                       aggregations: sum(_col0), sum(_col1), sum(_col2), sum(_col3)
                       mode: hash
@@ -406,11 +406,11 @@ STAGE PLANS:
                     0 _col0 (type: string)
                     1 _col0 (type: string)
                   outputColumnNames: _col0, _col1, _col2, _col3
-                  Statistics: Num rows: 250 Data size: 24690 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 250 Data size: 24972 Basic stats: COMPLETE Column stats: COMPLETE
                   Select Operator
                     expressions: hash(_col0) (type: int), hash(_col1) (type: int), hash(_col2) (type: int), hash(_col3) (type: int)
                     outputColumnNames: _col0, _col1, _col2, _col3
-                    Statistics: Num rows: 250 Data size: 24690 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 250 Data size: 24972 Basic stats: COMPLETE Column stats: COMPLETE
                     Group By Operator
                       aggregations: sum(_col0), sum(_col1), sum(_col2), sum(_col3)
                       mode: hash
@@ -559,11 +559,11 @@ STAGE PLANS:
                     0 _col0 (type: string)
                     1 _col0 (type: string)
                   outputColumnNames: _col0, _col1, _col2, _col3
-                  Statistics: Num rows: 250 Data size: 24690 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 250 Data size: 24972 Basic stats: COMPLETE Column stats: COMPLETE
                   Select Operator
                     expressions: hash(_col0) (type: int), hash(_col1) (type: int), hash(_col2) (type: int), hash(_col3) (type: int)
                     outputColumnNames: _col0, _col1, _col2, _col3
-                    Statistics: Num rows: 250 Data size: 24690 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 250 Data size: 24972 Basic stats: COMPLETE Column stats: COMPLETE
                     Group By Operator
                       aggregations: sum(_col0), sum(_col1), sum(_col2), sum(_col3)
                       mode: hash
@@ -712,11 +712,11 @@ STAGE PLANS:
                     0 _col0 (type: string)
                     1 _col0 (type: string)
                   outputColumnNames: _col0, _col1, _col2, _col3
-                  Statistics: Num rows: 12 Data size: 2078 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 12 Data size: 2268 Basic stats: COMPLETE Column stats: COMPLETE
                   Select Operator
                     expressions: hash(_col0) (type: int), hash(_col1) (type: int), hash(_col2) (type: int), hash(_col3) (type: int)
                     outputColumnNames: _col0, _col1, _col2, _col3
-                    Statistics: Num rows: 12 Data size: 2078 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 12 Data size: 2268 Basic stats: COMPLETE Column stats: COMPLETE
                     Group By Operator
                       aggregations: sum(_col0), sum(_col1), sum(_col2), sum(_col3)
                       mode: hash
@@ -865,11 +865,11 @@ STAGE PLANS:
                     0 _col0 (type: string)
                     1 _col0 (type: string)
                   outputColumnNames: _col0, _col1, _col2, _col3
-                  Statistics: Num rows: 12 Data size: 2078 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 12 Data size: 2268 Basic stats: COMPLETE Column stats: COMPLETE
                   Select Operator
                     expressions: hash(_col0) (type: int), hash(_col1) (type: int), hash(_col2) (type: int), hash(_col3) (type: int)
                     outputColumnNames: _col0, _col1, _col2, _col3
-                    Statistics: Num rows: 12 Data size: 2078 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 12 Data size: 2268 Basic stats: COMPLETE Column stats: COMPLETE
                     Group By Operator
                       aggregations: sum(_col0), sum(_col1), sum(_col2), sum(_col3)
                       mode: hash
@@ -1026,11 +1026,11 @@ STAGE PLANS:
                   0 _col0 (type: string)
                   1 _col0 (type: string)
                 outputColumnNames: _col0, _col1, _col2, _col3
-                Statistics: Num rows: 262 Data size: 1890 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 262 Data size: 2457 Basic stats: COMPLETE Column stats: COMPLETE
                 Select Operator
                   expressions: hash(_col0) (type: int), hash(_col1) (type: int), hash(_col2) (type: int), hash(_col3) (type: int)
                   outputColumnNames: _col0, _col1, _col2, _col3
-                  Statistics: Num rows: 262 Data size: 1890 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 262 Data size: 2457 Basic stats: COMPLETE Column stats: COMPLETE
                   Group By Operator
                     aggregations: sum(_col0), sum(_col1), sum(_col2), sum(_col3)
                     mode: hash
@@ -1202,11 +1202,11 @@ STAGE PLANS:
                   0 _col0 (type: string)
                   1 _col0 (type: string)
                 outputColumnNames: _col0, _col1, _col2, _col3
-                Statistics: Num rows: 262 Data size: 1890 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 262 Data size: 2457 Basic stats: COMPLETE Column stats: COMPLETE
                 Select Operator
                   expressions: hash(_col0) (type: int), hash(_col1) (type: int), hash(_col2) (type: int), hash(_col3) (type: int)
                   outputColumnNames: _col0, _col1, _col2, _col3
-                  Statistics: Num rows: 262 Data size: 1890 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 262 Data size: 2457 Basic stats: COMPLETE Column stats: COMPLETE
                   Group By Operator
                     aggregations: sum(_col0), sum(_col1), sum(_col2), sum(_col3)
                     mode: hash
@@ -1375,18 +1375,18 @@ STAGE PLANS:
                   0 _col0 (type: string)
                   1 _col0 (type: string)
                 outputColumnNames: _col0
-                Statistics: Num rows: 262 Data size: 870 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 262 Data size: 1131 Basic stats: COMPLETE Column stats: COMPLETE
                 Group By Operator
                   aggregations: count()
                   keys: _col0 (type: string)
                   mode: hash
                   outputColumnNames: _col0, _col1
-                  Statistics: Num rows: 17 Data size: 310 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 13 Data size: 278 Basic stats: COMPLETE Column stats: COMPLETE
                   Reduce Output Operator
                     key expressions: _col0 (type: string)
                     sort order: +
                     Map-reduce partition columns: _col0 (type: string)
-                    Statistics: Num rows: 17 Data size: 310 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 13 Data size: 278 Basic stats: COMPLETE Column stats: COMPLETE
                     value expressions: _col1 (type: bigint)
         Reducer 4 
             Execution mode: vectorized, llap
@@ -1396,11 +1396,11 @@ STAGE PLANS:
                 keys: KEY._col0 (type: string)
                 mode: mergepartial
                 outputColumnNames: _col0, _col1
-                Statistics: Num rows: 17 Data size: 310 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 13 Data size: 278 Basic stats: COMPLETE Column stats: COMPLETE
                 Select Operator
                   expressions: hash(_col0) (type: int), hash(_col1) (type: int)
                   outputColumnNames: _col0, _col1
-                  Statistics: Num rows: 17 Data size: 310 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 13 Data size: 278 Basic stats: COMPLETE Column stats: COMPLETE
                   Group By Operator
                     aggregations: sum(_col0), sum(_col1)
                     mode: hash
@@ -1569,18 +1569,18 @@ STAGE PLANS:
                   0 _col0 (type: string)
                   1 _col0 (type: string)
                 outputColumnNames: _col0
-                Statistics: Num rows: 262 Data size: 870 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 262 Data size: 1131 Basic stats: COMPLETE Column stats: COMPLETE
                 Group By Operator
                   aggregations: count()
                   keys: _col0 (type: string)
                   mode: hash
                   outputColumnNames: _col0, _col1
-                  Statistics: Num rows: 17 Data size: 310 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 13 Data size: 278 Basic stats: COMPLETE Column stats: COMPLETE
                   Reduce Output Operator
                     key expressions: _col0 (type: string)
                     sort order: +
                     Map-reduce partition columns: _col0 (type: string)
-                    Statistics: Num rows: 17 Data size: 310 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 13 Data size: 278 Basic stats: COMPLETE Column stats: COMPLETE
                     value expressions: _col1 (type: bigint)
         Reducer 4 
             Execution mode: vectorized, llap
@@ -1590,11 +1590,11 @@ STAGE PLANS:
                 keys: KEY._col0 (type: string)
                 mode: mergepartial
                 outputColumnNames: _col0, _col1
-                Statistics: Num rows: 17 Data size: 310 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 13 Data size: 278 Basic stats: COMPLETE Column stats: COMPLETE
                 Select Operator
                   expressions: hash(_col0) (type: int), hash(_col1) (type: int)
                   outputColumnNames: _col0, _col1
-                  Statistics: Num rows: 17 Data size: 310 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 13 Data size: 278 Basic stats: COMPLETE Column stats: COMPLETE
                   Group By Operator
                     aggregations: sum(_col0), sum(_col1)
                     mode: hash
