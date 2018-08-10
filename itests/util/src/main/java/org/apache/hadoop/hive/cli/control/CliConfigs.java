@@ -174,6 +174,10 @@ public class CliConfigs {
         setQueryDir("ql/src/test/queries/clientpositive");
 
         includesFrom(testConfigProps, "druid.query.files");
+        excludeQuery("druid_timestamptz.q"); // Disabled in HIVE-20322
+        excludeQuery("druidmini_joins.q"); // Disabled in HIVE-20322
+        excludeQuery("druidmini_masking.q"); // Disabled in HIVE-20322
+        //excludeQuery("druidmini_test1.q"); // Disabled in HIVE-20322
 
         setResultsDir("ql/src/test/results/clientpositive/druid");
         setLogDir("itests/qtest/target/tmp/log");
