@@ -1771,7 +1771,7 @@ public class Hive {
         }
       } else {
         newPartPath = oldPartPath == null
-          ? newPartPath = genPartPathFromTable(tbl, partSpec, tblDataLocationPath) : oldPartPath;
+          ? genPartPathFromTable(tbl, partSpec, tblDataLocationPath) : oldPartPath;
       }
 
       PerfLogger perfLogger = SessionState.getPerfLogger();
