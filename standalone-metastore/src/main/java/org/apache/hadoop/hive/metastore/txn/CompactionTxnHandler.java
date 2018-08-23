@@ -327,7 +327,7 @@ class CompactionTxnHandler extends TxnHandler {
   /**
    * This will remove an entry from the queue after
    * it has been compacted.
-   * 
+   *
    * @param info info on the compaction entry to remove
    */
   @Override
@@ -591,6 +591,7 @@ class CompactionTxnHandler extends TxnHandler {
         StringBuilder prefix = new StringBuilder();
         StringBuilder suffix = new StringBuilder();
 
+        // Delete from TXNS.
         prefix.append("delete from TXNS where ");
         suffix.append("");
 
@@ -942,7 +943,7 @@ class CompactionTxnHandler extends TxnHandler {
    * User initiated compactions don't do this check.
    *
    * Do we allow compacting whole table (when it's partitioned)?  No, though perhaps we should.
-   * That would be a meta operations, i.e. first find all partitions for this table (which have 
+   * That would be a meta operations, i.e. first find all partitions for this table (which have
    * txn info) and schedule each compaction separately.  This avoids complications in this logic.
    */
   @Override
