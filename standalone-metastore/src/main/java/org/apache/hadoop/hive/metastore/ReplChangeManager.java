@@ -123,7 +123,8 @@ public class ReplChangeManager {
     }
   }
 
-  public static ReplChangeManager getInstance(Configuration conf) throws MetaException {
+  public static synchronized ReplChangeManager getInstance(Configuration conf)
+      throws MetaException {
     if (instance == null) {
       instance = new ReplChangeManager(conf);
     }
