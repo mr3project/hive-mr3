@@ -794,7 +794,16 @@ public final class QueryResultsCache {
     String dirName = UUID.randomUUID().toString();
     Path cachedResultsPath = new Path(cacheDirPath, dirName);
     FileSystem fs = cachedResultsPath.getFileSystem(conf);
-    fs.rename(queryResultsPath, cachedResultsPath);
+    try {
+      boolean resultsMoved = Hive.moveFile(conf, queryResultsPath, cachedResultsPath, false, false, false);
+      if (!resultsMoved) {
+        throw new IOException("Failed to move " + queryResultsPath + " to " + cachedResultsPath);
+      }
+    } catch (IOException err) {
+      throw err;
+    } catch (Exception err) {
+      throw new IOException("Error moving " + queryResultsPath + " to " + cachedResultsPath, err);
+    }
     return cachedResultsPath;
   }
 
