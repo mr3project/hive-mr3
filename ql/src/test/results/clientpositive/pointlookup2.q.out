@@ -128,7 +128,7 @@ STAGE PLANS:
                 Statistics: Num rows: 40 Data size: 320 Basic stats: COMPLETE Column stats: NONE
                 Reduce Output Operator
                   key expressions: _col0 (type: int), _col1 (type: string), _col2 (type: string)
-                  null sort order: aaa
+                  null sort order: zzz
                   sort order: +++
                   Statistics: Num rows: 40 Data size: 320 Basic stats: COMPLETE Column stats: NONE
                   tag: -1
@@ -439,7 +439,7 @@ STAGE PLANS:
             GatherStats: false
             Reduce Output Operator
               key expressions: _col0 (type: int)
-              null sort order: a
+              null sort order: z
               sort order: +
               Statistics: Num rows: 22 Data size: 176 Basic stats: COMPLETE Column stats: NONE
               tag: -1
@@ -726,7 +726,7 @@ STAGE PLANS:
             GatherStats: false
             Reduce Output Operator
               key expressions: _col0 (type: int)
-              null sort order: a
+              null sort order: z
               sort order: +
               Statistics: Num rows: 22 Data size: 176 Basic stats: COMPLETE Column stats: NONE
               tag: -1
@@ -1055,7 +1055,7 @@ STAGE PLANS:
             GatherStats: false
             Reduce Output Operator
               key expressions: _col4 (type: int), _col5 (type: string), _col2 (type: string)
-              null sort order: aaa
+              null sort order: zzz
               sort order: +++
               Statistics: Num rows: 20 Data size: 540 Basic stats: COMPLETE Column stats: NONE
               tag: -1
@@ -1438,7 +1438,7 @@ STAGE PLANS:
             GatherStats: false
             Reduce Output Operator
               key expressions: _col0 (type: int), _col1 (type: string), _col3 (type: string)
-              null sort order: aaa
+              null sort order: zzz
               sort order: +++
               Statistics: Num rows: 30 Data size: 810 Basic stats: COMPLETE Column stats: NONE
               tag: -1
@@ -1727,7 +1727,7 @@ STAGE PLANS:
                 Statistics: Num rows: 20 Data size: 160 Basic stats: COMPLETE Column stats: NONE
                 Reduce Output Operator
                   key expressions: _col0 (type: int), _col1 (type: string), _col2 (type: string)
-                  null sort order: aaa
+                  null sort order: zzz
                   sort order: +++
                   Statistics: Num rows: 20 Data size: 160 Basic stats: COMPLETE Column stats: NONE
                   tag: -1
@@ -2038,7 +2038,7 @@ STAGE PLANS:
             GatherStats: false
             Reduce Output Operator
               key expressions: _col0 (type: int)
-              null sort order: a
+              null sort order: z
               sort order: +
               Statistics: Num rows: 22 Data size: 176 Basic stats: COMPLETE Column stats: NONE
               tag: -1
@@ -2325,7 +2325,7 @@ STAGE PLANS:
             GatherStats: false
             Reduce Output Operator
               key expressions: _col0 (type: int)
-              null sort order: a
+              null sort order: z
               sort order: +
               Statistics: Num rows: 22 Data size: 176 Basic stats: COMPLETE Column stats: NONE
               tag: -1
@@ -2651,7 +2651,7 @@ STAGE PLANS:
             GatherStats: false
             Reduce Output Operator
               key expressions: _col4 (type: int), _col5 (type: string), _col2 (type: string)
-              null sort order: aaa
+              null sort order: zzz
               sort order: +++
               Statistics: Num rows: 20 Data size: 540 Basic stats: COMPLETE Column stats: NONE
               tag: -1
@@ -3032,7 +3032,7 @@ STAGE PLANS:
             GatherStats: false
             Reduce Output Operator
               key expressions: _col0 (type: int), _col1 (type: string), _col3 (type: string)
-              null sort order: aaa
+              null sort order: zzz
               sort order: +++
               Statistics: Num rows: 30 Data size: 810 Basic stats: COMPLETE Column stats: NONE
               tag: -1
