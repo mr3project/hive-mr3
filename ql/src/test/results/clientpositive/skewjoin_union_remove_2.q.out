@@ -67,7 +67,7 @@ POSTHOOK: Input: default@t3_n2
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-4 is a root stage
-  Stage-0 depends on stages: Stage-1
+  Stage-0 depends on stages: Stage-1, Stage-4
 
 STAGE PLANS:
   Stage: Stage-1
