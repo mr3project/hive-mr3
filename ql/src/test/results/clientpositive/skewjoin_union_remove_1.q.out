@@ -49,7 +49,7 @@ POSTHOOK: Input: default@t2_n35
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-3 is a root stage
-  Stage-0 depends on stages: Stage-1
+  Stage-0 depends on stages: Stage-1, Stage-3
 
 STAGE PLANS:
   Stage: Stage-1
@@ -195,7 +195,7 @@ POSTHOOK: Input: default@t2_n35
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-3 is a root stage
-  Stage-0 depends on stages: Stage-1
+  Stage-0 depends on stages: Stage-1, Stage-3
 
 STAGE PLANS:
   Stage: Stage-1
