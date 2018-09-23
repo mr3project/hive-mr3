@@ -88,6 +88,8 @@ public class MapJoinDesc extends JoinDesc implements Serializable {
   private boolean isHybridHashJoin;
   private boolean isDynamicPartitionHashJoin = false;
 
+  private String cacheKey;
+
   public MapJoinDesc() {
     bigTableBucketNumMapping = new LinkedHashMap<String, Integer>();
   }
@@ -111,6 +113,7 @@ public class MapJoinDesc extends JoinDesc implements Serializable {
     this.parentDataSizes = clone.parentDataSizes;
     this.isBucketMapJoin = clone.isBucketMapJoin;
     this.isHybridHashJoin = clone.isHybridHashJoin;
+    this.cacheKey = clone.cacheKey;
   }
 
   public MapJoinDesc(final Map<Byte, List<ExprNodeDesc>> keys,
@@ -128,6 +131,7 @@ public class MapJoinDesc extends JoinDesc implements Serializable {
     this.bigTableBucketNumMapping = new LinkedHashMap<String, Integer>();
     this.dumpFilePrefix = dumpFilePrefix;
     this.inMemoryDataSize = inMemoryDataSize;
+    this.cacheKey = null;
     initRetainExprList();
   }
 
@@ -459,23 +463,16 @@ public class MapJoinDesc extends JoinDesc implements Serializable {
     this.isDynamicPartitionHashJoin = isDistributedHashJoin;
   }
 
-  // NOTE: Debugging only.
-  @Explain(displayName = "outer filter mappings", explainLevels = { Level.DEBUG })
-  public String getDebugOuterFilterMapString() {
-    if (conds.length != 1) {
-      return null;
-    }
-    JoinCondDesc cond = conds[0];
-    if (cond.getType() != JoinDesc.FULL_OUTER_JOIN &&
-        cond.getType() != JoinDesc.LEFT_OUTER_JOIN &&
-        cond.getType() != JoinDesc.RIGHT_OUTER_JOIN) {
-      return null;
-    }
-    int[][] fm = getFilterMap();
-    if (fm == null) {
-      return null;
-    }
-    return Arrays.deepToString(fm);
+  public String getCacheKey() {
+    return cacheKey;
+  }
+
+  public void setCacheKey(String cacheKey) {
+    this.cacheKey = cacheKey;
+  }
+
+  public static String generateCacheKey(String operatorId) {
+    return "HASH_MAP_" + operatorId + "_container";
   }
 
   // Use LinkedHashSet to give predictable display order.
