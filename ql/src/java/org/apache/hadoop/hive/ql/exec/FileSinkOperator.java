@@ -435,7 +435,7 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
   protected transient boolean autoDelete = false;
   protected transient JobConf jc;
   Class<? extends Writable> outputClass;
-  String taskId;
+  String taskId, originalTaskId;
 
   protected boolean filesCreated = false;
 
@@ -500,7 +500,7 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
       lbCtx = conf.getLbCtx();
       fsp = prevFsp = null;
       valToPaths = new HashMap<String, FSPaths>();
-      taskId = Utilities.getTaskId(hconf);
+      taskId = originalTaskId = Utilities.getTaskId(hconf);
       initializeSpecPath();
       fs = specPath.getFileSystem(hconf);
 
@@ -1318,7 +1318,7 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
         }
       }
       if (conf.isMmTable()) {
-        Utilities.writeMmCommitManifest(commitPaths, specPath, fs, taskId,
+        Utilities.writeMmCommitManifest(commitPaths, specPath, fs, originalTaskId,
                 conf.getTableWriteId(), conf.getStatementId(), unionPath, conf.getInsertOverwrite());
       }
       // Only publish stats if this operator's flag was set to gather stats
