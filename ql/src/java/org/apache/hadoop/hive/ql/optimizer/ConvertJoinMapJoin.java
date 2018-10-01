@@ -1327,7 +1327,7 @@ public class ConvertJoinMapJoin implements NodeProcessor {
             parentOp.getOpTraits().getNumBuckets() : numBuckets;
       }
 
-      if (parentOp instanceof ReduceSinkOperator) {
+      if (!useOpTraits && parentOp instanceof ReduceSinkOperator) {
         ReduceSinkOperator rs = (ReduceSinkOperator) parentOp;
         estimatedBuckets = (estimatedBuckets < rs.getConf().getNumReducers()) ?
             rs.getConf().getNumReducers() : estimatedBuckets;
