@@ -7254,7 +7254,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
 
       lbCtx = constructListBucketingCtx(dest_tab.getSkewedColNames(),
           dest_tab.getSkewedColValues(), dest_tab.getSkewedColValueLocationMaps(),
-          dest_tab.isStoredAsSubDirectories(), conf);
+          dest_tab.isStoredAsSubDirectories());
 
       // Create the work for moving the table
       // NOTE: specify Dynamic partitions in dest_tab for WriteEntity
@@ -7368,7 +7368,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
 
       lbCtx = constructListBucketingCtx(dest_part.getSkewedColNames(),
           dest_part.getSkewedColValues(), dest_part.getSkewedColValueLocationMaps(),
-          dest_part.isStoredAsSubDirectories(), conf);
+          dest_part.isStoredAsSubDirectories());
       AcidUtils.Operation acidOp = AcidUtils.Operation.NOT_ACID;
       if (destTableIsFullAcid) {
         acidOp = getAcidType(table_desc.getOutputFileFormatClass(), dest);
