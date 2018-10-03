@@ -3361,6 +3361,9 @@ STAGE PLANS:
                 TableScan
                   alias: sds
                   Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: COMPLETE
+                  TableScan Vectorization:
+                      native: true
+                      vectorizationSchemaColumns: [0:sd_id:bigint, 1:cd_id:bigint, 2:input_format:string, 3:is_compressed:boolean, 4:is_storedassubdirectories:boolean, 5:location:string, 6:num_buckets:int, 7:output_format:string, 8:serde_id:bigint]
                   Select Operator
                     Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: COMPLETE
                     Group By Operator
