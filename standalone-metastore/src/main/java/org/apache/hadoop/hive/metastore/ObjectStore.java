@@ -3418,7 +3418,9 @@ public class ObjectStore implements RawStore, Configurable {
       final String defaultPartitionName, final  short maxParts, List<Partition> result,
       boolean allowSql, boolean allowJdo) throws TException {
     assert result != null;
-    final ExpressionTree exprTree = PartFilterExprUtil.makeExpressionTree(expressionProxy, expr);
+
+    final ExpressionTree exprTree = PartFilterExprUtil.makeExpressionTree(expressionProxy, expr,
+                                                    getDefaultPartitionName(defaultPartitionName));
     final AtomicBoolean hasUnknownPartitions = new AtomicBoolean(false);
     result.addAll(new GetListHelper<Partition>(catName, dbName, tblName, allowSql, allowJdo) {
       @Override
@@ -3427,7 +3429,7 @@ public class ObjectStore implements RawStore, Configurable {
         List<Partition> result = null;
         if (exprTree != null) {
           SqlFilterForPushdown filter = new SqlFilterForPushdown();
-          if (directSql.generateSqlFilterForPushdown(ctx.getTable(), exprTree, filter)) {
+          if (directSql.generateSqlFilterForPushdown(ctx.getTable(), exprTree, defaultPartitionName, filter)) {
             return directSql.getPartitionsViaSqlFilter(filter, null);
           }
         }
@@ -3459,7 +3461,16 @@ public class ObjectStore implements RawStore, Configurable {
     return hasUnknownPartitions.get();
   }
 
-
+  /**
+   * Gets the default partition name.
+   * @param inputDefaultPartName Incoming default partition name.
+   * @return Valid default partition name
+   */
+  private String getDefaultPartitionName(String inputDefaultPartName) {
+    return (((inputDefaultPartName == null) || (inputDefaultPartName.isEmpty()))
+            ? MetastoreConf.getVar(getConf(), ConfVars.DEFAULTPARTITIONNAME)
+            : inputDefaultPartName);
+  }
 
   /**
    * Gets the partition names from a table, pruned using an expression.
@@ -3474,10 +3485,8 @@ public class ObjectStore implements RawStore, Configurable {
       String defaultPartName, short maxParts, List<String> result) throws MetaException {
     result.addAll(getPartitionNamesNoTxn(table.getCatName(),
         table.getDbName(), table.getTableName(), maxParts));
-    if (defaultPartName == null || defaultPartName.isEmpty()) {
-      defaultPartName = MetastoreConf.getVar(getConf(), ConfVars.DEFAULTPARTITIONNAME);
-    }
-    return expressionProxy.filterPartitionsByExpr(table.getPartitionKeys(), expr, defaultPartName, result);
+    return expressionProxy.filterPartitionsByExpr(table.getPartitionKeys(), expr,
+            getDefaultPartitionName(defaultPartName), result);
   }
 
   /**
@@ -3912,7 +3921,7 @@ public class ObjectStore implements RawStore, Configurable {
   @Override
   public int getNumPartitionsByExpr(String catName, String dbName, String tblName,
                                     byte[] expr) throws MetaException, NoSuchObjectException {
-    final ExpressionTree exprTree = PartFilterExprUtil.makeExpressionTree(expressionProxy, expr);
+    final ExpressionTree exprTree = PartFilterExprUtil.makeExpressionTree(expressionProxy, expr, null);
     final byte[] tempExpr = expr; // Need to be final to pass it to an inner class
 
 
