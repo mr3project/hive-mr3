@@ -3526,6 +3526,9 @@ public class Vectorizer implements PhysicalPlanResolver {
      * Similarly, we need a mapping since a value expression can be a calculation and the value
      * will go into a scratch column.
      */
+    boolean supportsValueTypes = true;  // Assume.
+    HashSet<String> notSupportedValueTypes = new HashSet<String>();
+
     int[] bigTableValueColumnMap = new int[allBigTableValueExpressions.length];
     String[] bigTableValueColumnNames = new String[allBigTableValueExpressions.length];
     TypeInfo[] bigTableValueTypeInfos = new TypeInfo[allBigTableValueExpressions.length];
@@ -3540,7 +3543,13 @@ public class Vectorizer implements PhysicalPlanResolver {
 
       ExprNodeDesc exprNode = bigTableExprs.get(i);
       bigTableValueColumnNames[i] = exprNode.toString();
-      bigTableValueTypeInfos[i] = exprNode.getTypeInfo();
+      TypeInfo typeInfo = exprNode.getTypeInfo();
+      if (!(typeInfo instanceof PrimitiveTypeInfo)) {
+        supportsValueTypes = false;
+        Category category = typeInfo.getCategory();
+        notSupportedValueTypes.add(category.toString());
+      }
+      bigTableValueTypeInfos[i] = typeInfo;
     }
     if (bigTableValueExpressionsList.size() == 0) {
       slimmedBigTableValueExpressions = null;
@@ -3773,6 +3782,10 @@ public class Vectorizer implements PhysicalPlanResolver {
     if (!supportsKeyTypes) {
       vectorDesc.setNotSupportedKeyTypes(new ArrayList(notSupportedKeyTypes));
     }
+    vectorDesc.setSupportsValueTypes(supportsValueTypes);
+    if (!supportsValueTypes) {
+      vectorDesc.setNotSupportedValueTypes(new ArrayList(notSupportedValueTypes));
+    }
 
     // Check common conditions for both Optimized and Fast Hash Tables.
     boolean result = true;    // Assume.
@@ -3782,7 +3795,8 @@ public class Vectorizer implements PhysicalPlanResolver {
         !oneMapJoinCondition ||
         hasNullSafes ||
         !smallTableExprVectorizes ||
-        outerJoinHasNoKeys) {
+        outerJoinHasNoKeys ||
+        !supportsValueTypes) {
       result = false;
     }
 
