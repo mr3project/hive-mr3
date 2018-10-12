@@ -440,7 +440,7 @@ STAGE PLANS:
                 outputColumnNames: _col2, _col4, _col6, _col13, _col15, _col16, _col24
                 Statistics: Num rows: 22000000 Data size: 22327357890 Basic stats: COMPLETE Column stats: NONE
                 Filter Operator
-                  predicate: ((((_col24 = 'KY') or (_col24 = 'GA') or (_col24 = 'NM')) and _col6 BETWEEN 100 AND 200) or (((_col24 = 'MT') or (_col24 = 'OR') or (_col24 = 'IN')) and _col6 BETWEEN 150 AND 300) or (((_col24 = 'WI') or (_col24 = 'MO') or (_col24 = 'WV')) and _col6 BETWEEN 50 AND 250)) (type: boolean)
+                  predicate: (((_col27) IN ('KY', 'GA', 'NM') and _col14 BETWEEN 100 AND 200) or ((_col27) IN ('MT', 'OR', 'IN') and _col14 BETWEEN 150 AND 300) or ((_col27) IN ('WI', 'MO', 'WV') and _col14 BETWEEN 50 AND 250)) (type: boolean)
                   Statistics: Num rows: 7333332 Data size: 7442451276 Basic stats: COMPLETE Column stats: NONE
                   Map Join Operator
                     condition map:
