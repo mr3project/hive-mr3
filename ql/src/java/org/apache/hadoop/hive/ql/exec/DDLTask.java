@@ -3556,7 +3556,8 @@ public class DDLTask extends Task<DDLWork> implements Serializable {
           builder.append(errMsg);
         }
         else {
-          builder.append(propertyValue);
+          appendNonNull(builder, propertyName, true);
+          appendNonNull(builder, propertyValue);
         }
       }
       else {
