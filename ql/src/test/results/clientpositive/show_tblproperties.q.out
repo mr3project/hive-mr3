@@ -50,7 +50,7 @@ PREHOOK: query: show tblproperties tmpfoo("bar")
 PREHOOK: type: SHOW_TBLPROPERTIES
 POSTHOOK: query: show tblproperties tmpfoo("bar")
 POSTHOOK: type: SHOW_TBLPROPERTIES
-bar value	 
+bar	bar value
 PREHOOK: query: show tblproperties default.tmpfoo
 PREHOOK: type: SHOW_TBLPROPERTIES
 POSTHOOK: query: show tblproperties default.tmpfoo
@@ -69,7 +69,7 @@ PREHOOK: query: show tblproperties default.tmpfoo("bar")
 PREHOOK: type: SHOW_TBLPROPERTIES
 POSTHOOK: query: show tblproperties default.tmpfoo("bar")
 POSTHOOK: type: SHOW_TBLPROPERTIES
-bar value	 
+bar	bar value
 PREHOOK: query: CREATE DATABASE db1
 PREHOOK: type: CREATEDATABASE
 PREHOOK: Output: database:db1
@@ -124,7 +124,7 @@ PREHOOK: query: show tblproperties default.tmpfoo("bar")
 PREHOOK: type: SHOW_TBLPROPERTIES
 POSTHOOK: query: show tblproperties default.tmpfoo("bar")
 POSTHOOK: type: SHOW_TBLPROPERTIES
-bar value	 
+bar	bar value
 PREHOOK: query: show tblproperties tmpfoo
 PREHOOK: type: SHOW_TBLPROPERTIES
 POSTHOOK: query: show tblproperties tmpfoo
@@ -143,7 +143,7 @@ PREHOOK: query: show tblproperties tmpfoo("bar")
 PREHOOK: type: SHOW_TBLPROPERTIES
 POSTHOOK: query: show tblproperties tmpfoo("bar")
 POSTHOOK: type: SHOW_TBLPROPERTIES
-bar value1	 
+bar	bar value1
 PREHOOK: query: use default
 PREHOOK: type: SWITCHDATABASE
 PREHOOK: Input: database:default
@@ -168,4 +168,4 @@ PREHOOK: query: show tblproperties db1.tmpfoo("bar")
 PREHOOK: type: SHOW_TBLPROPERTIES
 POSTHOOK: query: show tblproperties db1.tmpfoo("bar")
 POSTHOOK: type: SHOW_TBLPROPERTIES
-bar value1	 
+bar	bar value1
