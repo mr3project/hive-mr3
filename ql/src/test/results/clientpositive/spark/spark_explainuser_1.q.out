@@ -263,7 +263,7 @@ select src1.key as k1, src1.value as v1,
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has sort by
 
 Vertex dependency in Stage-1
 Reducer 2 <- Map 1 (GROUP)
@@ -3610,7 +3610,7 @@ POSTHOOK: type: CREATETABLE_AS_SELECT
 POSTHOOK: Input: default@src
 POSTHOOK: Output: database:default
 POSTHOOK: Output: default@nzhang_CTAS1_n0
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has sort by
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -3666,7 +3666,7 @@ POSTHOOK: type: CREATETABLE_AS_SELECT
 POSTHOOK: Input: default@src
 POSTHOOK: Output: database:default
 POSTHOOK: Output: default@nzhang_ctas3_n0
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has sort by
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -3761,7 +3761,7 @@ select src1.key as k1, src1.value as v1,
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has sort by
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT), Map 4 (PARTITION-LEVEL SORT)
@@ -4600,7 +4600,7 @@ from noop(on part
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -4649,7 +4649,7 @@ sort by j.p_name)
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in Stage-1
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -4718,7 +4718,7 @@ from noop(on part
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -4773,7 +4773,7 @@ from noop(on part
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -4830,7 +4830,7 @@ group by p_mfgr, p_name, p_size
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -4887,7 +4887,7 @@ order by p_name
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in Stage-1
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -4941,7 +4941,7 @@ order by p_name, p_size desc)
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -4996,7 +4996,7 @@ from noopwithmap(on part
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -5051,7 +5051,7 @@ order by p_name)
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -5106,7 +5106,7 @@ order by p_mfgr DESC, p_name
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -5177,7 +5177,7 @@ window w1 as (partition by p_mfgr order by p_name rows between 2 preceding and 2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -5236,7 +5236,7 @@ order by p_name
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in Stage-1
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -5391,7 +5391,7 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: default@part_4_n0
 POSTHOOK: Output: default@part_5_n0
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in root stage
 Reducer 3 <- Reducer 6 (PARTITION-LEVEL SORT)
@@ -5498,7 +5498,7 @@ from noop(on
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -5577,7 +5577,7 @@ from noop(on
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
@@ -5658,7 +5658,7 @@ from noop(on
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@part
 POSTHOOK: Output: hdfs://### HDFS PATH ###
-Plan not optimized by CBO.
+Plan not optimized by CBO because the statement has PTF
 
 Vertex dependency in root stage
 Reducer 2 <- Map 1 (PARTITION-LEVEL SORT)
