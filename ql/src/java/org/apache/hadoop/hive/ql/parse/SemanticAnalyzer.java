@@ -394,7 +394,8 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       HiveParser.TOK_ORDERBY, HiveParser.TOK_WINDOWSPEC, HiveParser.TOK_CLUSTERBY,
       HiveParser.TOK_DISTRIBUTEBY, HiveParser.TOK_SORTBY);
 
-  private String invalidQueryMaterializationReason;
+  private String invalidResultCacheReason;
+  private String invalidAutomaticRewritingMaterializationReason;
 
   static class Phase1Ctx {
     String dest;
@@ -13572,6 +13573,20 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         }
       }
 
+      if (createVwDesc.isMaterialized() && createVwDesc.isRewriteEnabled()) {
+        if (!ctx.isCboSucceeded()) {
+          String msg = "Cannot enable automatic rewriting for materialized view.";
+          if (ctx.getCboInfo() != null) {
+            msg += " " + ctx.getCboInfo();
+          }
+          throw new SemanticException(msg);
+        }
+        if (!isValidAutomaticRewritingMaterialization()) {
+          throw new SemanticException("Cannot enable automatic rewriting for materialized view. " +
+              getInvalidAutomaticRewritingMaterializationReason());
+        }
+      }
+
       // ALTER VIEW AS SELECT requires the view must exist
       if (createVwDesc.getIsAlterViewAs() && oldView == null) {
         String viewNotExistErrorMsg =
@@ -14883,8 +14898,8 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       return false;
     }
 
-    if (!isValidQueryMaterialization()) {
-      LOG.info("Not eligible for results caching - {}", getInvalidQueryMaterializationReason());
+    if (!isValidQueryCaching()) {
+      LOG.info("Not eligible for results caching - {}", getInvalidResultCacheReason());
       QueryResultsCache.incrementMetric(MetricsConstant.QC_INVALID_FOR_CACHING);
       return false;
     }
@@ -14980,17 +14995,31 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     public String colTypes;
   }
 
-  public String getInvalidQueryMaterializationReason() {
-    return invalidQueryMaterializationReason;
+  public String getInvalidAutomaticRewritingMaterializationReason() {
+    return invalidAutomaticRewritingMaterializationReason;
   }
 
-  public void setInvalidQueryMaterializationReason(
+  public void setInvalidAutomaticRewritingMaterializationReason(
+      String invalidAutomaticRewritingMaterializationReason) {
+    this.invalidAutomaticRewritingMaterializationReason =
+        invalidAutomaticRewritingMaterializationReason;
+  }
+
+  public boolean isValidAutomaticRewritingMaterialization() {
+    return (invalidAutomaticRewritingMaterializationReason == null);
+  }
+
+  public String getInvalidResultCacheReason() {
+    return invalidResultCacheReason;
+  }
+
+  public void setInvalidResultCacheReason(
       String invalidQueryMaterializationReason) {
-    this.invalidQueryMaterializationReason = invalidQueryMaterializationReason;
+    this.invalidResultCacheReason = invalidQueryMaterializationReason;
   }
 
-  public boolean isValidQueryMaterialization() {
-    return (invalidQueryMaterializationReason == null);
+  public boolean isValidQueryCaching() {
+    return (invalidResultCacheReason == null);
   }
 
   protected enum MaterializationRebuildMode {
