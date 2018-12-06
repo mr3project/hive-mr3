@@ -66,7 +66,7 @@ STAGE PLANS:
                   className: VectorSelectOperator
                   native: true
                   projectedOutputColumnNums: [1, 5]
-                  selectExpressions: CastStringToLong(col 4:string)(children: VectorCoalesce(columns [0, 3])(children: col 0:string, ConstantVectorExpression(val 0) -> 3:string) -> 4:string) -> 5:int
+                  selectExpressions: CastStringToLong(col 4:string)(children: IfExprStringGroupColumnStringScalar(col 3:boolean, col 0:string, val 0)(children: IsNotNull(col 0:string) -> 3:boolean) -> 4:string) -> 5:int
               Statistics: Num rows: 5 Data size: 510 Basic stats: COMPLETE Column stats: NONE
               Group By Operator
                 aggregations: sum(_col1)
@@ -269,7 +269,7 @@ STAGE PLANS:
                   className: VectorSelectOperator
                   native: true
                   projectedOutputColumnNums: [1, 5]
-                  selectExpressions: CastStringToLong(col 4:string)(children: VectorCoalesce(columns [0, 3])(children: col 0:string, ConstantVectorExpression(val 0) -> 3:string) -> 4:string) -> 5:int
+                  selectExpressions: CastStringToLong(col 4:string)(children: IfExprStringGroupColumnStringScalar(col 3:boolean, col 0:string, val 0)(children: IsNotNull(col 0:string) -> 3:boolean) -> 4:string) -> 5:int
               Statistics: Num rows: 5 Data size: 510 Basic stats: COMPLETE Column stats: NONE
               Group By Operator
                 aggregations: sum(_col1)

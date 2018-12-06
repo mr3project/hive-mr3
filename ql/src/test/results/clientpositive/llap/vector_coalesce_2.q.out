@@ -72,7 +72,7 @@ STAGE PLANS:
                         className: VectorSelectOperator
                         native: true
                         projectedOutputColumnNums: [1, 5]
-                        selectExpressions: CastStringToLong(col 4:string)(children: VectorCoalesce(columns [0, 3])(children: col 0:string, ConstantVectorExpression(val 0) -> 3:string) -> 4:string) -> 5:int
+                        selectExpressions: CastStringToLong(col 4:string)(children: IfExprStringGroupColumnStringScalar(col 3:boolean, col 0:string, val 0)(children: IsNotNull(col 0:string) -> 3:boolean) -> 4:string) -> 5:int
                     Statistics: Num rows: 5 Data size: 680 Basic stats: COMPLETE Column stats: COMPLETE
                     Group By Operator
                       aggregations: sum(_col1)
@@ -138,8 +138,8 @@ STAGE PLANS:
                   Select Vectorization:
                       className: VectorSelectOperator
                       native: true
-                      projectedOutputColumnNums: [0, 2]
-                      selectExpressions: RoundWithNumDigitsDoubleToDouble(col 3, decimalPlaces 2)(children: DoubleColDivideDoubleScalar(col 2:double, val 60.0)(children: CastLongToDouble(col 1:bigint) -> 2:double) -> 3:double) -> 2:double
+                      projectedOutputColumnNums: [0, 4]
+                      selectExpressions: RoundWithNumDigitsDoubleToDouble(col 3, decimalPlaces 2)(children: DoubleColDivideDoubleScalar(col 2:double, val 60.0)(children: CastLongToDouble(col 1:bigint) -> 2:double) -> 3:double) -> 4:double
                   Statistics: Num rows: 2 Data size: 186 Basic stats: COMPLETE Column stats: COMPLETE
                   File Output Operator
                     compressed: false
@@ -305,7 +305,7 @@ STAGE PLANS:
                         className: VectorSelectOperator
                         native: true
                         projectedOutputColumnNums: [1, 5]
-                        selectExpressions: CastStringToLong(col 4:string)(children: VectorCoalesce(columns [0, 3])(children: col 0:string, ConstantVectorExpression(val 0) -> 3:string) -> 4:string) -> 5:int
+                        selectExpressions: CastStringToLong(col 4:string)(children: IfExprStringGroupColumnStringScalar(col 3:boolean, col 0:string, val 0)(children: IsNotNull(col 0:string) -> 3:boolean) -> 4:string) -> 5:int
                     Statistics: Num rows: 5 Data size: 680 Basic stats: COMPLETE Column stats: COMPLETE
                     Group By Operator
                       aggregations: sum(_col1)
@@ -371,8 +371,8 @@ STAGE PLANS:
                   Select Vectorization:
                       className: VectorSelectOperator
                       native: true
-                      projectedOutputColumnNums: [0, 2]
-                      selectExpressions: RoundWithNumDigitsDoubleToDouble(col 3, decimalPlaces 2)(children: DoubleColDivideDoubleScalar(col 2:double, val 60.0)(children: CastLongToDouble(col 1:bigint) -> 2:double) -> 3:double) -> 2:double
+                      projectedOutputColumnNums: [0, 4]
+                      selectExpressions: RoundWithNumDigitsDoubleToDouble(col 3, decimalPlaces 2)(children: DoubleColDivideDoubleScalar(col 2:double, val 60.0)(children: CastLongToDouble(col 1:bigint) -> 2:double) -> 3:double) -> 4:double
                   Statistics: Num rows: 2 Data size: 186 Basic stats: COMPLETE Column stats: COMPLETE
                   File Output Operator
                     compressed: false
