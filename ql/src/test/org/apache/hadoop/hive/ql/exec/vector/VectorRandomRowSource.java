@@ -642,7 +642,7 @@ public class VectorRandomRowSource {
 
             typeNum = r.nextInt(maxTypeNum);
 
-            Integer typeNumInteger = new Integer(typeNum);
+            Integer typeNumInteger = Integer.valueOf(typeNum);
             if (!hashSet.contains(typeNumInteger)) {
               hashSet.add(typeNumInteger);
               break;
@@ -922,7 +922,7 @@ public class VectorRandomRowSource {
                 }
                 longWritable.set(
                     (Long) VectorRandomRowSource.randomPrimitiveObject(
-                        r, (PrimitiveTypeInfo) TypeInfoFactory.longTypeInfo));
+                        r, TypeInfoFactory.longTypeInfo));
               }
             }
             object = longWritable;
