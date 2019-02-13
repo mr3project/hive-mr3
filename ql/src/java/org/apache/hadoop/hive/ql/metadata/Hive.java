@@ -1182,7 +1182,6 @@ public class Hive {
       tTable = getMSC().getTable(dbName, tableName);
     } catch (NoSuchObjectException e) {
       if (throwException) {
-        LOG.error("Table " + dbName + "." + tableName + " not found: " + e.getMessage());
         throw new InvalidTableException(tableName);
       }
       return null;
