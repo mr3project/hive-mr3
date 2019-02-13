@@ -114,9 +114,6 @@ import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.ImmutableIntList;
 import org.apache.calcite.util.Pair;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.common.ObjectPair;
-import org.apache.hadoop.hive.common.ValidTxnList;
-import org.apache.hadoop.hive.common.ValidTxnWriteIdList;
 import org.apache.hadoop.hive.conf.Constants;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
@@ -3098,10 +3095,6 @@ public class CalcitePlanner extends SemanticAnalyzer {
 
         ASTNode subQueryAST = subQueries.get(i);
         //SubQueryUtils.rewriteParentQueryWhere(clonedSearchCond, subQueryAST);
-        Boolean orInSubquery = new Boolean(false);
-        Integer subqueryCount = new Integer(0);
-        ObjectPair<Boolean, Integer> subqInfo = new ObjectPair<Boolean, Integer>(false, 0);
-
         ASTNode outerQueryExpr = (ASTNode) subQueryAST.getChild(2);
 
         if (outerQueryExpr != null && outerQueryExpr.getType() == HiveParser.TOK_SUBQUERY_EXPR) {
@@ -4147,7 +4140,7 @@ public class CalcitePlanner extends SemanticAnalyzer {
         SqlCall sc = null;
 
         if (amt != null)
-          amtLiteral = cluster.getRexBuilder().makeLiteral(new Integer(bs.getAmt()),
+          amtLiteral = cluster.getRexBuilder().makeLiteral(Integer.valueOf(bs.getAmt()),
               cluster.getTypeFactory().createSqlType(SqlTypeName.INTEGER), true);
 
         switch (bs.getDirection()) {

@@ -8670,7 +8670,7 @@ public class HiveMetaStore extends ThriftHiveMetastore {
             "This usage has been deprecated, consider using the new command "
                 + "line syntax (run with -h to see usage information)");
 
-        this.port = new Integer(args[0]);
+        this.port = Integer.parseInt(args[0]);
       }
 
       // notice that command line options take precedence over the
