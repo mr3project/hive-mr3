@@ -197,6 +197,7 @@ pow
 power
 printf
 quarter
+quote
 radians
 rand
 rank
@@ -363,6 +364,7 @@ parse_url_tuple
 percentile
 posexplode
 positive
+quote
 regexp_replace
 regr_slope
 replace
