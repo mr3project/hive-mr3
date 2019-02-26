@@ -68,7 +68,7 @@ public class ShuffleTran implements SparkTran<HiveKey, BytesWritable, HiveKey, B
 
   @Override
   public Boolean isCacheEnable() {
-    return new Boolean(toCache);
+    return Boolean.valueOf(toCache);
   }
 
   public SparkShuffler getShuffler() {
