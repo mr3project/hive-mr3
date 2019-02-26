@@ -62,6 +62,7 @@ public class HiveRelMdRowCount extends RelMdRowCount {
     super();
   }
 
+  @Override
   public Double getRowCount(Join join, RelMetadataQuery mq) {
     PKFKRelationInfo pkfk = analyzeJoinForPKFK(join, mq);
     if (pkfk != null) {
@@ -96,11 +97,11 @@ public class HiveRelMdRowCount extends RelMdRowCount {
     if (rowCount != null && rel.fetch != null) {
       final int offset = rel.offset == null ? 0 : RexLiteral.intValue(rel.offset);
       final int limit = RexLiteral.intValue(rel.fetch);
-      final Double offsetLimit = new Double(offset + limit);
+      final int offsetLimit = offset + limit;
       // offsetLimit is smaller than rowCount of the input operator
       // thus, we return the offsetLimit
       if (offsetLimit < rowCount) {
-        return offsetLimit;
+        return Double.valueOf(offsetLimit);
       }
     }
     return rowCount;
