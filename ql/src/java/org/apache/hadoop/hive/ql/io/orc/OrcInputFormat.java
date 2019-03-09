@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.io.orc;
 
+import org.apache.hadoop.hive.common.BlobStorageUtils;
 import org.apache.hadoop.hive.common.NoDynamicValuesException;
 import org.apache.hadoop.fs.PathFilter;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
@@ -1036,6 +1037,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     private final Path dir;
     private final boolean allowSyntheticFileIds;
     private final boolean isDefaultFs;
+    private final Configuration conf;
 
     /**
      * @param dir - root of partition dir
@@ -1051,6 +1053,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
       this.dir = dir;
       this.allowSyntheticFileIds = allowSyntheticFileIds;
       this.isDefaultFs = isDefaultFs;
+      this.conf = context.conf;
     }
 
     @Override
@@ -1064,16 +1067,28 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
           if (fileKey == null && allowSyntheticFileIds) {
             fileKey = new SyntheticFileId(fileStatus);
           }
-          TreeMap<Long, BlockLocation> blockOffsets = SHIMS.getLocationsWithOffset(fs, fileStatus);
-          for (Map.Entry<Long, BlockLocation> entry : blockOffsets.entrySet()) {
-            if(entry.getKey() + entry.getValue().getLength() > logicalLen) {
-              //don't create splits for anything past logical EOF
-              continue;
+          if (BlobStorageUtils.isBlobStorageFileSystem(conf, fs)) {
+            final long splitSize = HiveConf.getLongVar(conf, HiveConf.ConfVars.HIVE_ORC_BLOB_STORAGE_SPLIT_SIZE);
+            LOG.info("Blob storage detected for BI split strategy. Splitting files at boundary {}..", splitSize);
+            long start;
+            for (start = 0; start < logicalLen; start = start + splitSize) {
+              OrcSplit orcSplit = new OrcSplit(fileStatus.getPath(), fileKey, start,
+                Math.min(splitSize, logicalLen - start), null, null, isOriginal, true,
+                deltas, -1, logicalLen, dir);
+              splits.add(orcSplit);
             }
-            OrcSplit orcSplit = new OrcSplit(fileStatus.getPath(), fileKey, entry.getKey(),
+          } else {
+            TreeMap<Long, BlockLocation> blockOffsets = SHIMS.getLocationsWithOffset(fs, fileStatus);
+            for (Map.Entry<Long, BlockLocation> entry : blockOffsets.entrySet()) {
+              if (entry.getKey() + entry.getValue().getLength() > logicalLen) {
+                //don't create splits for anything past logical EOF
+                continue;
+              }
+              OrcSplit orcSplit = new OrcSplit(fileStatus.getPath(), fileKey, entry.getKey(),
                 entry.getValue().getLength(), entry.getValue().getHosts(), null, isOriginal, true,
                 deltas, -1, logicalLen, dir);
-            splits.add(orcSplit);
+              splits.add(orcSplit);
+            }
           }
         }
       }
