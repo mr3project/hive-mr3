@@ -33,6 +33,7 @@ import org.apache.avro.generic.GenericDatumReader;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.mapred.FsInput;
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.fs.Path;
@@ -120,10 +121,8 @@ public class AvroGenericRecordReader implements
       for (Map.Entry<Path,PartitionDesc> pathsAndParts: mapWork.getPathToPartitionInfo().entrySet()){
         Path partitionPath = pathsAndParts.getKey();
         if(pathIsInPartition(split.getPath(), partitionPath)) {
-          if(LOG.isInfoEnabled()) {
-              LOG.info("Matching partition " + partitionPath +
-                      " with input split " + split);
-          }
+          LOG.info("Matching partition {} with input split {}", partitionPath,
+              split);
 
           Properties props = pathsAndParts.getValue().getProperties();
           if(props.containsKey(AvroTableProperties.SCHEMA_LITERAL.getPropName()) || props.containsKey(AvroTableProperties.SCHEMA_URL.getPropName())) {
@@ -134,17 +133,16 @@ public class AvroGenericRecordReader implements
           }
         }
       }
-      if(LOG.isInfoEnabled()) {
-        LOG.info("Unable to match filesplit " + split + " with a partition.");
-      }
+      LOG.info("Unable to match filesplit {} with a partition.", split);
     }
 
     // In "select * from table" situations (non-MR), we can add things to the job
     // It's safe to add this to the job since it's not *actually* a mapred job.
     // Here the global state is confined to just this process.
     String s = job.get(AvroTableProperties.AVRO_SERDE_SCHEMA.getPropName());
-    if(s != null) {
-      LOG.info("Found the avro schema in the job: " + s);
+    if (StringUtils.isNotBlank(s)) {
+      LOG.info("Found the avro schema in the job");
+      LOG.debug("Avro schema: {}", s);
       return AvroSerdeUtils.getSchemaFor(s);
     }
     // No more places to get the schema from. Give up.  May have to re-encode later.
