@@ -505,7 +505,7 @@ POSTHOOK: Input: default@part
 #### A masked pattern was here ####
 Manufacturer#1	1173.15
 Manufacturer#2	1690.68
-Warning: Shuffle Join JOIN[27][tables = [$hdt$_0, $hdt$_1]] in Stage 'Stage-2:MAPRED' is a cross product
+Warning: Shuffle Join JOIN[31][tables = [$hdt$_0, $hdt$_1, $hdt$_2]] in Stage 'Stage-3:MAPRED' is a cross product
 PREHOOK: query: explain
 select b.p_mfgr, min(p_retailprice) 
 from part b 
@@ -630,10 +630,60 @@ STAGE PLANS:
           condition map:
                Left Outer Join 0 to 1
           keys:
-            0 _col0 (type: string)
-            1 _col0 (type: string)
-          outputColumnNames: _col0, _col1, _col2, _col3, _col5
-          Statistics: Num rows: 14 Data size: 2087 Basic stats: COMPLETE Column stats: NONE
+            0 
+            1 
+          outputColumnNames: _col0, _col1, _col3, _col4, _col5
+          Statistics: Num rows: 6 Data size: 740 Basic stats: COMPLETE Column stats: COMPLETE
+          Select Operator
+            expressions: _col0 (type: string), _col1 (type: double), _col4 (type: bigint), _col5 (type: bigint), _col3 (type: boolean)
+            outputColumnNames: _col0, _col1, _col2, _col3, _col5
+            Statistics: Num rows: 6 Data size: 740 Basic stats: COMPLETE Column stats: COMPLETE
+            Filter Operator
+              predicate: (((_col3 >= _col2) or (_col2 = 0L) or _col5 is not null or _col0 is null) and (_col0 is not null or (_col2 = 0L) or _col5 is not null) and (_col5 is null or (_col2 = 0L))) (type: boolean)
+              Statistics: Num rows: 6 Data size: 740 Basic stats: COMPLETE Column stats: COMPLETE
+              Select Operator
+                expressions: _col0 (type: string), _col1 (type: double)
+                outputColumnNames: _col0, _col1
+                Statistics: Num rows: 6 Data size: 636 Basic stats: COMPLETE Column stats: COMPLETE
+                File Output Operator
+                  compressed: false
+                  Statistics: Num rows: 6 Data size: 636 Basic stats: COMPLETE Column stats: COMPLETE
+                  table:
+                      input format: org.apache.hadoop.mapred.SequenceFileInputFormat
+                      output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
+                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+
+  Stage: Stage-4
+    Map Reduce
+      Map Operator Tree:
+          TableScan
+            alias: a
+            filterExpr: p_mfgr is not null (type: boolean)
+            Statistics: Num rows: 26 Data size: 2756 Basic stats: COMPLETE Column stats: COMPLETE
+            Filter Operator
+              predicate: p_mfgr is not null (type: boolean)
+              Statistics: Num rows: 26 Data size: 2756 Basic stats: COMPLETE Column stats: COMPLETE
+              Group By Operator
+                aggregations: max(p_retailprice), min(p_retailprice)
+                keys: p_mfgr (type: string)
+                minReductionHashAggr: 0.99
+                mode: hash
+                outputColumnNames: _col0, _col1, _col2
+                Statistics: Num rows: 5 Data size: 570 Basic stats: COMPLETE Column stats: COMPLETE
+                Reduce Output Operator
+                  key expressions: _col0 (type: string)
+                  sort order: +
+                  Map-reduce partition columns: _col0 (type: string)
+                  Statistics: Num rows: 5 Data size: 570 Basic stats: COMPLETE Column stats: COMPLETE
+                  value expressions: _col1 (type: double), _col2 (type: double)
+      Execution mode: vectorized
+      Reduce Operator Tree:
+        Group By Operator
+          aggregations: max(VALUE._col0), min(VALUE._col1)
+          keys: KEY._col0 (type: string)
+          mode: mergepartial
+          outputColumnNames: _col0, _col1, _col2
+          Statistics: Num rows: 5 Data size: 570 Basic stats: COMPLETE Column stats: COMPLETE
           Filter Operator
             predicate: ((_col2 = 0L) or (_col5 is null and _col0 is not null and (_col3 >= _col2))) (type: boolean)
             Statistics: Num rows: 9 Data size: 1341 Basic stats: COMPLETE Column stats: NONE
@@ -770,7 +820,7 @@ STAGE PLANS:
       Processor Tree:
         ListSink
 
-Warning: Shuffle Join JOIN[27][tables = [$hdt$_0, $hdt$_1]] in Stage 'Stage-2:MAPRED' is a cross product
+Warning: Shuffle Join JOIN[31][tables = [$hdt$_0, $hdt$_1, $hdt$_2]] in Stage 'Stage-3:MAPRED' is a cross product
 PREHOOK: query: select b.p_mfgr, min(p_retailprice) 
 from part b 
 group by b.p_mfgr
@@ -832,7 +882,7 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: _dummy_database@_dummy_table
 POSTHOOK: Output: default@t2_n85
 POSTHOOK: Lineage: t2_n85.c1 SCRIPT []
-Warning: Shuffle Join JOIN[20][tables = [$hdt$_0, $hdt$_1]] in Stage 'Stage-2:MAPRED' is a cross product
+Warning: Shuffle Join JOIN[24][tables = [$hdt$_0, $hdt$_1, $hdt$_2]] in Stage 'Stage-3:MAPRED' is a cross product
 PREHOOK: query: explain SELECT c1 FROM t1_n145 group by c1 having c1 NOT IN (SELECT c1 FROM t2_n85)
 PREHOOK: type: QUERY
 PREHOOK: Input: default@t1_n145
@@ -961,11 +1011,11 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: t2_n85
-            Statistics: Num rows: 3 Data size: 6 Basic stats: COMPLETE Column stats: NONE
-            Select Operator
-              expressions: c1 (type: int)
-              outputColumnNames: c1
-              Statistics: Num rows: 3 Data size: 6 Basic stats: COMPLETE Column stats: NONE
+            filterExpr: c1 is not null (type: boolean)
+            Statistics: Num rows: 3 Data size: 12 Basic stats: COMPLETE Column stats: COMPLETE
+            Filter Operator
+              predicate: c1 is not null (type: boolean)
+              Statistics: Num rows: 2 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
               Group By Operator
                 aggregations: count(), count(c1)
                 mode: hash
@@ -1033,7 +1083,7 @@ STAGE PLANS:
       Processor Tree:
         ListSink
 
-Warning: Shuffle Join JOIN[20][tables = [$hdt$_0, $hdt$_1]] in Stage 'Stage-2:MAPRED' is a cross product
+Warning: Shuffle Join JOIN[24][tables = [$hdt$_0, $hdt$_1, $hdt$_2]] in Stage 'Stage-3:MAPRED' is a cross product
 PREHOOK: query: SELECT c1 FROM t1_n145 group by c1 having c1 NOT IN (SELECT c1 FROM t2_n85)
 PREHOOK: type: QUERY
 PREHOOK: Input: default@t1_n145

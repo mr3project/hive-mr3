@@ -188,8 +188,8 @@ Stage-0
                                         PartitionCols:_col0, _col1
                                         Select Operator [SEL_130] (rows=28798881 width=106)
                                           Output:["_col0","_col1","_col2"]
-                                          Filter Operator [FIL_129] (rows=28798881 width=106)
-                                            predicate:cr_item_sk is not null
-                                            TableScan [TS_3] (rows=28798881 width=106)
-                                              default@catalog_returns,catalog_returns,Tbl:COMPLETE,Col:NONE,Output:["cr_item_sk","cr_order_number","cr_refunded_cash"]
+                                          Filter Operator [FIL_113] (rows=28798881 width=117)
+                                            predicate:(cr_item_sk is not null and cr_order_number is not null)
+                                            TableScan [TS_3] (rows=28798881 width=117)
+                                              default@catalog_returns,catalog_returns,Tbl:COMPLETE,Col:COMPLETE,Output:["cr_item_sk","cr_order_number","cr_refunded_cash"]
 
