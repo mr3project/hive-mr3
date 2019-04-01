@@ -21,10 +21,10 @@ FROM (SELECT `key`, `value`
 FROM `default`.`a_n4`) AS `t`
 LEFT JOIN (SELECT `key`, CAST(50 AS INTEGER) AS `value`
 FROM `default`.`a_n4`
-WHERE `value` = 50) AS `t1` ON `t`.`key` = `t1`.`key` AND `t`.`value` = 50
+WHERE `value` = 50 AND `key` IS NOT NULL) AS `t1` ON `t`.`key` = `t1`.`key` AND `t`.`=3`
 LEFT JOIN (SELECT `key`, CAST(60 AS INTEGER) AS `value`
 FROM `default`.`a_n4`
-WHERE `value` = 60) AS `t3` ON `t`.`key` = `t3`.`key` AND `t`.`value` = 60
+WHERE `value` = 60 AND `key` IS NOT NULL) AS `t3` ON `t`.`key` = `t3`.`key` AND `t`.`=`
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -113,11 +113,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: b
+                  filterExpr: ((value = 50) and key is not null) (type: boolean)
                   Statistics: Num rows: 3 Data size: 18 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
                     isSamplingPred: false
-                    predicate: (value = 50) (type: boolean)
+                    predicate: ((value = 50) and key is not null) (type: boolean)
                     Statistics: Num rows: 1 Data size: 6 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), 50 (type: int)
@@ -190,11 +191,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: c
+                  filterExpr: ((value = 60) and key is not null) (type: boolean)
                   Statistics: Num rows: 3 Data size: 18 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
                     isSamplingPred: false
-                    predicate: (value = 60) (type: boolean)
+                    predicate: ((value = 60) and key is not null) (type: boolean)
                     Statistics: Num rows: 1 Data size: 6 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), 60 (type: int)
@@ -342,12 +344,12 @@ POSTHOOK: type: QUERY
 OPTIMIZED SQL: SELECT *
 FROM (SELECT `key`, CAST(50 AS INTEGER) AS `value`
 FROM `default`.`a_n4`
-WHERE `value` = 50) AS `t0`
-RIGHT JOIN (SELECT `key`, `value`
-FROM `default`.`a_n4`) AS `t1` ON `t0`.`key` = `t1`.`key` AND `t1`.`value` = 50
+WHERE `value` = 50 AND `key` IS NOT NULL) AS `t0`
+RIGHT JOIN (SELECT `key`, `value`, `value` = 60 AS `=`, `value` = 50 AS `=3`
+FROM `default`.`a_n4`) AS `t1` ON `t0`.`key` = `t1`.`key` AND `t1`.`=3`
 LEFT JOIN (SELECT `key`, CAST(60 AS INTEGER) AS `value`
 FROM `default`.`a_n4`
-WHERE `value` = 60) AS `t3` ON `t1`.`key` = `t3`.`key` AND `t1`.`value` = 60
+WHERE `value` = 60 AND `key` IS NOT NULL) AS `t3` ON `t1`.`key` = `t3`.`key` AND `t1`.`=`
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -363,11 +365,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: a_n4
+                  filterExpr: ((value = 50) and key is not null) (type: boolean)
                   Statistics: Num rows: 3 Data size: 18 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
                     isSamplingPred: false
-                    predicate: (value = 50) (type: boolean)
+                    predicate: ((value = 50) and key is not null) (type: boolean)
                     Statistics: Num rows: 1 Data size: 6 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), 50 (type: int)
@@ -513,11 +516,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: c
+                  filterExpr: ((value = 60) and key is not null) (type: boolean)
                   Statistics: Num rows: 3 Data size: 18 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
                     isSamplingPred: false
-                    predicate: (value = 60) (type: boolean)
+                    predicate: ((value = 60) and key is not null) (type: boolean)
                     Statistics: Num rows: 1 Data size: 6 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), 60 (type: int)
@@ -665,12 +669,12 @@ POSTHOOK: type: QUERY
 OPTIMIZED SQL: SELECT *
 FROM (SELECT `key`, CAST(50 AS INTEGER) AS `value`
 FROM `default`.`a_n4`
-WHERE `value` = 50) AS `t0`
-RIGHT JOIN (SELECT `key`, `value`
-FROM `default`.`a_n4`) AS `t1` ON `t0`.`key` = `t1`.`key` AND `t1`.`value` = 50
+WHERE `value` = 50 AND `key` IS NOT NULL) AS `t0`
+RIGHT JOIN (SELECT `key`, `value`, `value` = 60 AS `=`, `value` = 50 AS `=3`
+FROM `default`.`a_n4`) AS `t1` ON `t0`.`key` = `t1`.`key` AND `t1`.`=3`
 LEFT JOIN (SELECT `key`, CAST(60 AS INTEGER) AS `value`
 FROM `default`.`a_n4`
-WHERE `value` = 60) AS `t3` ON `t1`.`key` = `t3`.`key` AND `t1`.`value` = 60
+WHERE `value` = 60 AND `key` IS NOT NULL) AS `t3` ON `t1`.`key` = `t3`.`key` AND `t1`.`=`
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -686,11 +690,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: a_n4
+                  filterExpr: ((value = 50) and key is not null) (type: boolean)
                   Statistics: Num rows: 3 Data size: 18 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
                     isSamplingPred: false
-                    predicate: (value = 50) (type: boolean)
+                    predicate: ((value = 50) and key is not null) (type: boolean)
                     Statistics: Num rows: 1 Data size: 6 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), 50 (type: int)
@@ -836,11 +841,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: c
+                  filterExpr: ((value = 60) and key is not null) (type: boolean)
                   Statistics: Num rows: 3 Data size: 18 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
                     isSamplingPred: false
-                    predicate: (value = 60) (type: boolean)
+                    predicate: ((value = 60) and key is not null) (type: boolean)
                     Statistics: Num rows: 1 Data size: 6 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), 60 (type: int)
@@ -992,10 +998,10 @@ FULL JOIN (SELECT `key`, `value`
 FROM `default`.`a_n4`) AS `t0` ON `t`.`key` = `t0`.`key` AND `t`.`value` = 50 AND `t0`.`value` = 50
 LEFT JOIN (SELECT `key`, CAST(60 AS INTEGER) AS `value`
 FROM `default`.`a_n4`
-WHERE `value` = 60) AS `t2` ON `t0`.`key` = `t2`.`key` AND `t0`.`value` = 60
+WHERE `value` = 60 AND `key` IS NOT NULL) AS `t2` ON `t0`.`key` = `t2`.`key` AND `t0`.`=`
 LEFT JOIN (SELECT `key`, CAST(40 AS INTEGER) AS `value`
 FROM `default`.`a_n4`
-WHERE `value` = 40) AS `t4` ON `t`.`key` = `t4`.`key` AND `t`.`value` = 40
+WHERE `value` = 40 AND `key` IS NOT NULL) AS `t4` ON `t`.`key` = `t4`.`key` AND `t`.`=`
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -1157,11 +1163,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: c
+                  filterExpr: ((value = 60) and key is not null) (type: boolean)
                   Statistics: Num rows: 3 Data size: 18 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
                     isSamplingPred: false
-                    predicate: (value = 60) (type: boolean)
+                    predicate: ((value = 60) and key is not null) (type: boolean)
                     Statistics: Num rows: 1 Data size: 6 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), 60 (type: int)
@@ -1234,11 +1241,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: d
+                  filterExpr: ((value = 40) and key is not null) (type: boolean)
                   Statistics: Num rows: 3 Data size: 18 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
                     isSamplingPred: false
-                    predicate: (value = 40) (type: boolean)
+                    predicate: ((value = 40) and key is not null) (type: boolean)
                     Statistics: Num rows: 1 Data size: 6 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), 40 (type: int)
@@ -1383,13 +1391,13 @@ FROM (SELECT `key`, `value`
 FROM `default`.`a_n4`) AS `t`
 LEFT JOIN (SELECT `key`, CAST(50 AS INTEGER) AS `value`
 FROM `default`.`a_n4`
-WHERE `value` = 50) AS `t1` ON `t`.`key` = `t1`.`key` AND `t`.`value` = 50
+WHERE `value` = 50 AND `key` IS NOT NULL) AS `t1` ON `t`.`key` = `t1`.`key` AND `t`.`=4`
 LEFT JOIN (SELECT `key`, CAST(60 AS INTEGER) AS `value`
 FROM `default`.`a_n4`
-WHERE `value` = 60) AS `t3` ON `t`.`key` = `t3`.`key` AND `t`.`value` = 60
+WHERE `value` = 60 AND `key` IS NOT NULL) AS `t3` ON `t`.`key` = `t3`.`key` AND `t`.`=3`
 LEFT JOIN (SELECT `key`, CAST(40 AS INTEGER) AS `value`
 FROM `default`.`a_n4`
-WHERE `value` = 40) AS `t5` ON `t`.`key` = `t5`.`key` AND `t`.`value` = 40
+WHERE `value` = 40 AND `key` IS NOT NULL) AS `t5` ON `t`.`key` = `t5`.`key` AND `t`.`=`
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -1478,11 +1486,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: b
+                  filterExpr: ((value = 50) and key is not null) (type: boolean)
                   Statistics: Num rows: 3 Data size: 18 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
                     isSamplingPred: false
-                    predicate: (value = 50) (type: boolean)
+                    predicate: ((value = 50) and key is not null) (type: boolean)
                     Statistics: Num rows: 1 Data size: 6 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), 50 (type: int)
@@ -1555,11 +1564,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: c
+                  filterExpr: ((value = 60) and key is not null) (type: boolean)
                   Statistics: Num rows: 3 Data size: 18 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
                     isSamplingPred: false
-                    predicate: (value = 60) (type: boolean)
+                    predicate: ((value = 60) and key is not null) (type: boolean)
                     Statistics: Num rows: 1 Data size: 6 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), 60 (type: int)
@@ -1632,11 +1642,12 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: d
+                  filterExpr: ((value = 40) and key is not null) (type: boolean)
                   Statistics: Num rows: 3 Data size: 18 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
                     isSamplingPred: false
-                    predicate: (value = 40) (type: boolean)
+                    predicate: ((value = 40) and key is not null) (type: boolean)
                     Statistics: Num rows: 1 Data size: 6 Basic stats: COMPLETE Column stats: NONE
                     Select Operator
                       expressions: key (type: int), 40 (type: int)
