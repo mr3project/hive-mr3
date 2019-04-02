@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.Function;
 import org.apache.hadoop.hive.metastore.api.PrincipalType;
 import org.apache.hadoop.hive.metastore.api.ResourceType;
@@ -200,8 +201,10 @@ public class FunctionTask extends Task<FunctionWork> {
     try {
       db.createFunction(func);
     } catch (Exception e) {
-      // Addition to metastore failed, remove the function from the registry.
-      FunctionRegistry.unregisterPermanentFunction(registeredName);
+      // Addition to metastore failed, remove the function from the registry except if already exists.
+      if(!(e.getCause() instanceof AlreadyExistsException)) {
+        FunctionRegistry.unregisterPermanentFunction(registeredName);
+      }
       setException(e);
       LOG.error("Failed to add function " + createFunctionDesc.getFunctionName() +
               " to the metastore.", e);
