@@ -43,6 +43,7 @@ import org.slf4j.LoggerFactory;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.BeforeClass;
@@ -57,6 +58,7 @@ import javax.annotation.Nullable;
 /**
  * TestReplicationScenariosAcidTables - test replication for ACID tables
  */
+@Ignore("See HIVE-21647, HIVE-21648")
 public class TestReplicationScenariosAcidTables {
   @Rule
   public final TestName testName = new TestName();
