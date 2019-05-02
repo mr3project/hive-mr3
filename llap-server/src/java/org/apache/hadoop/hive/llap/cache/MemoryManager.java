@@ -24,4 +24,13 @@ public interface MemoryManager {
   void releaseMemory(long memUsage);
   void updateMaxSize(long maxSize);
   void reserveMemory(long memoryToReserve, AtomicBoolean isStopped);
+
+  /**
+   * Request the memory manager to evict more memory, this will be blocking and might return 0 if nothing was evicted.
+   *
+   * @param memoryToEvict amount of bytes to evict.
+   * @return actual amount of evicted bytes.
+   */
+  long evictMemory(long memoryToEvict);
+
 }
