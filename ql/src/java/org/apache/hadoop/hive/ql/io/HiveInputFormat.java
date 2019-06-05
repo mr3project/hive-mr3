@@ -52,7 +52,6 @@ import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.SerializationUtilities;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
-import org.apache.hadoop.hive.ql.exec.spark.SparkDynamicPartitionPruner;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -559,7 +558,9 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
 
   protected ValidWriteIdList getMmValidWriteIds(
       JobConf conf, TableDesc table, ValidWriteIdList validWriteIdList) throws IOException {
-    if (!AcidUtils.isInsertOnlyTable(table.getProperties())) return null;
+    if (!AcidUtils.isInsertOnlyTable(table.getProperties())) {
+      return null;
+    }
     if (validWriteIdList == null) {
       validWriteIdList = AcidUtils.getTableValidWriteIdList( conf, table.getTableName());
       if (validWriteIdList == null) {
@@ -648,7 +649,7 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
       }
     }
   }
- 
+
 
   Path[] getInputPaths(JobConf job) throws IOException {
     Path[] dirs;
@@ -832,7 +833,7 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
     Utilities.setColumnNameList(jobConf, tableScan);
     Utilities.setColumnTypeList(jobConf, tableScan);
     // push down filters
-    ExprNodeGenericFuncDesc filterExpr = (ExprNodeGenericFuncDesc)scanDesc.getFilterExpr();
+    ExprNodeGenericFuncDesc filterExpr = scanDesc.getFilterExpr();
     if (filterExpr == null) {
       return;
     }
