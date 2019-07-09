@@ -152,8 +152,8 @@ STAGE PLANS:
           keys:
             0 _col0 (type: int)
             1 _col0 (type: int)
-          outputColumnNames: _col0, _col3
-          Statistics: Num rows: 27 Data size: 232 Basic stats: COMPLETE Column stats: NONE
+          outputColumnNames: _col0, _col2
+          Statistics: Num rows: 25 Data size: 2305 Basic stats: COMPLETE Column stats: COMPLETE
           File Output Operator
             compressed: false
             GlobalTableId: 0
@@ -182,8 +182,8 @@ STAGE PLANS:
               key expressions: _col3 (type: string)
               null sort order: a
               sort order: +
-              Map-reduce partition columns: _col3 (type: string)
-              Statistics: Num rows: 27 Data size: 232 Basic stats: COMPLETE Column stats: NONE
+              Map-reduce partition columns: _col2 (type: string)
+              Statistics: Num rows: 25 Data size: 2305 Basic stats: COMPLETE Column stats: COMPLETE
               tag: 0
               value expressions: _col0 (type: int)
               auto parallelism: false
@@ -291,18 +291,18 @@ STAGE PLANS:
           keys:
             0 _col3 (type: string)
             1 _col0 (type: string)
-          outputColumnNames: _col0, _col5
-          Statistics: Num rows: 29 Data size: 255 Basic stats: COMPLETE Column stats: NONE
+          outputColumnNames: _col0, _col3
+          Statistics: Num rows: 32 Data size: 2956 Basic stats: COMPLETE Column stats: COMPLETE
           Select Operator
             expressions: _col0 (type: int), _col5 (type: string)
             outputColumnNames: _col0, _col1
-            Statistics: Num rows: 29 Data size: 255 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 32 Data size: 2956 Basic stats: COMPLETE Column stats: COMPLETE
             File Output Operator
               compressed: false
               GlobalTableId: 0
 #### A masked pattern was here ####
               NumFilesPerFileSink: 1
-              Statistics: Num rows: 29 Data size: 255 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 32 Data size: 2956 Basic stats: COMPLETE Column stats: COMPLETE
 #### A masked pattern was here ####
               table:
                   input format: org.apache.hadoop.mapred.SequenceFileInputFormat
