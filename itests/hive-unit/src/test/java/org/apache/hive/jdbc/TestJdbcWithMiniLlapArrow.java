@@ -89,6 +89,7 @@ public class TestJdbcWithMiniLlapArrow extends BaseJdbcWithMiniLlap {
 
   // Currently MAP type is not supported. Add it back when Arrow 1.0 is released.
   // See: SPARK-21187
+  @Test
   @Override
   public void testDataTypes() throws Exception {
     createDataTypesTable("datatypes");
