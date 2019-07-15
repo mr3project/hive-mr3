@@ -3082,33 +3082,36 @@ public class DDLTask extends Task<DDLWork> implements Serializable {
     return 0;
   }
   public static void dumpLockInfo(DataOutputStream os, ShowLocksResponse rsp) throws IOException {
-    // Write a header
-    os.writeBytes("Lock ID");
-    os.write(separator);
-    os.writeBytes("Database");
-    os.write(separator);
-    os.writeBytes("Table");
-    os.write(separator);
-    os.writeBytes("Partition");
-    os.write(separator);
-    os.writeBytes("State");
-    os.write(separator);
-    os.writeBytes("Blocked By");
-    os.write(separator);
-    os.writeBytes("Type");
-    os.write(separator);
-    os.writeBytes("Transaction ID");
-    os.write(separator);
-    os.writeBytes("Last Heartbeat");
-    os.write(separator);
-    os.writeBytes("Acquired At");
-    os.write(separator);
-    os.writeBytes("User");
-    os.write(separator);
-    os.writeBytes("Hostname");
-    os.write(separator);
-    os.writeBytes("Agent Info");
-    os.write(terminator);
+    SessionState sessionState = SessionState.get();
+    // Write a header for CliDriver
+    if(!sessionState.isHiveServerQuery()) {
+      os.writeBytes("Lock ID");
+      os.write(separator);
+      os.writeBytes("Database");
+      os.write(separator);
+      os.writeBytes("Table");
+      os.write(separator);
+      os.writeBytes("Partition");
+      os.write(separator);
+      os.writeBytes("State");
+      os.write(separator);
+      os.writeBytes("Blocked By");
+      os.write(separator);
+      os.writeBytes("Type");
+      os.write(separator);
+      os.writeBytes("Transaction ID");
+      os.write(separator);
+      os.writeBytes("Last Heartbeat");
+      os.write(separator);
+      os.writeBytes("Acquired At");
+      os.write(separator);
+      os.writeBytes("User");
+      os.write(separator);
+      os.writeBytes("Hostname");
+      os.write(separator);
+      os.writeBytes("Agent Info");
+      os.write(terminator);
+    }
 
     List<ShowLocksResponseElement> locks = rsp.getLocks();
     if (locks != null) {
