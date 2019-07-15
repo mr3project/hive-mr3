@@ -62,19 +62,28 @@ import org.junit.Assert;
 
 import com.google.common.collect.ImmutableMap;
 
-import junit.framework.TestCase;
+
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.fail;
+import org.junit.Before;
+import org.junit.After;
+import org.junit.Test;
 
 /**
  * TestHive.
  *
  */
-public class TestHive extends TestCase {
+public class TestHive {
   protected Hive hm;
   protected HiveConf hiveConf;
 
-  @Override
-  protected void setUp() throws Exception {
-    super.setUp();
+  @Before
+  public void setUp() throws Exception {
+
     hiveConf = new HiveConf(this.getClass());
     hiveConf
     .setVar(HiveConf.ConfVars.HIVE_AUTHORIZATION_MANAGER,
@@ -94,10 +103,10 @@ public class TestHive extends TestCase {
     }
   }
 
-  @Override
-  protected void tearDown() throws Exception {
+  @After
+  public void tearDown() throws Exception {
     try {
-      super.tearDown();
+
       // disable trash
       hiveConf.setFloat("fs.trash.checkpoint.interval", 30);  // FS_TRASH_CHECKPOINT_INTERVAL_KEY (hadoop-2)
       hiveConf.setFloat("fs.trash.interval", 30);             // FS_TRASH_INTERVAL_KEY (hadoop-2)
@@ -111,6 +120,7 @@ public class TestHive extends TestCase {
     }
   }
 
+  @Test
   public void testTable() throws Throwable {
     try {
       // create a simple table and test create, drop, get
@@ -210,6 +220,7 @@ public class TestHive extends TestCase {
    *
    * @throws Throwable
    */
+  @Test
   public void testThriftTable() throws Throwable {
     String tableName = "table_for_test_thrifttable";
     try {
@@ -253,6 +264,7 @@ public class TestHive extends TestCase {
    *
    * @throws Throwable
    */
+  @Test
   public void testMetaStoreApiTiming() throws Throwable {
     // Get the RootLogger which, if you don't have log4j2-test.properties defined, will only log ERRORs
     Logger logger = LogManager.getLogger("hive.ql.metadata.Hive");
@@ -351,6 +363,7 @@ public class TestHive extends TestCase {
    * Test basic Hive class interaction, that:
    * - We can have different Hive objects throughout the lifetime of this thread.
    */
+  @Test
   public void testHiveCloseCurrent() throws Throwable {
     Hive hive1 = Hive.get();
     Hive.closeCurrent();
@@ -359,6 +372,7 @@ public class TestHive extends TestCase {
     assertTrue(hive1 != hive2);
   }
 
+  @Test
   public void testGetAndDropTables() throws Throwable {
     try {
       String dbName = "db_for_testgettables";
@@ -411,6 +425,54 @@ public class TestHive extends TestCase {
     }
   }
 
+/*  @Test
+  public void testWmNamespaceHandling() throws Throwable {
+    HiveConf hiveConf = new HiveConf(this.getClass());
+    Hive hm = setUpImpl(hiveConf);
+    // TODO: threadlocals... Why is all this Hive client stuff like that?!!
+    final AtomicReference<Hive> hm2r = new AtomicReference<>();
+    Thread pointlessThread = new Thread(new Runnable() {
+      @Override
+      public void run() {
+        HiveConf hiveConf2 = new HiveConf(this.getClass());
+        hiveConf2.setVar(ConfVars.HIVE_SERVER2_WM_NAMESPACE, "hm2");
+        try {
+          hm2r.set(setUpImpl(hiveConf2));
+        } catch (Exception e) {
+          System.err.println(StringUtils.stringifyException(e));
+        }
+      }
+    });
+    pointlessThread.start();
+    pointlessThread.join();
+    Hive hm2 = hm2r.get();
+    assertNotNull(hm2);
+
+    hm.createResourcePlan(new WMResourcePlan("hm"), null, false);
+    assertEquals(1, hm.getAllResourcePlans().size());
+    assertEquals(0, hm2.getAllResourcePlans().size());
+    hm2.createResourcePlan(new WMResourcePlan("hm"), null, false);
+    WMNullableResourcePlan changes = new WMNullableResourcePlan();
+    changes.setStatus(WMResourcePlanStatus.ACTIVE);
+    hm.alterResourcePlan("hm", changes, true, false, false);
+    // We should not be able to modify the active plan.
+    WMPool pool = new WMPool("hm", "foo");
+    pool.setAllocFraction(0);
+    pool.setQueryParallelism(1);
+    try {
+      hm.createWMPool(pool);
+      fail("Expected exception");
+    } catch (HiveException e) {
+    }
+    // But we should still be able to modify the other plan.
+    pool.unsetNs(); // The call to create sets the namespace.
+    hm2.createWMPool(pool);
+    // Make the 2nd plan active in a different namespace.
+    changes.unsetNs();
+    hm2.alterResourcePlan("hm", changes, true, false, false);
+  } */
+
+  @Test
   public void testDropTableTrash() throws Throwable {
     if (!ShimLoader.getHadoopShims().supportTrashFeature()) {
       return; // it's hadoop-1
@@ -523,6 +585,7 @@ public class TestHive extends TestCase {
    * 2. Drop partitions with PURGE, and check that the data is moved to Trash.
    * @throws Exception on failure.
    */
+  @Test
   public void testDropPartitionsWithPurge() throws Exception {
     String dbName = Warehouse.DEFAULT_DATABASE_NAME;
     String tableName = "table_for_testDropPartitionsWithPurge";
@@ -585,6 +648,7 @@ public class TestHive extends TestCase {
    * Test that tables set up with auto-purge skip trash-directory when tables/partitions are dropped.
    * @throws Throwable
    */
+  @Test
   public void testAutoPurgeTablesAndPartitions() throws Throwable {
 
     String dbName = Warehouse.DEFAULT_DATABASE_NAME;
@@ -637,6 +701,7 @@ public class TestHive extends TestCase {
     }
   }
 
+  @Test
   public void testPartition() throws Throwable {
     try {
       String tableName = "table_for_testpartition";
@@ -685,6 +750,7 @@ public class TestHive extends TestCase {
     }
   }
 
+  @Test
   public void testHiveRefreshOnConfChange() throws Throwable{
     Hive prevHiveObj = Hive.get();
     prevHiveObj.getDatabaseCurrent();
