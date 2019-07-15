@@ -29,9 +29,13 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.junit.Test;
 
 import io.druid.query.Query;
-import junit.framework.TestCase;
+import static org.junit.Assert.assertEquals;
+import org.junit.Test;
 
-public class TestHiveDruidQueryBasedInputFormat extends TestCase {
+/**
+ * Test Class.
+ */
+@SuppressWarnings("SameParameterValue") public class TestHiveDruidQueryBasedInputFormat {
 
   private static final String TIMESERIES_QUERY =
       "{  \"queryType\": \"timeseries\", "

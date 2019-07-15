@@ -43,7 +43,7 @@ import java.util.Map;
 import jline.console.ConsoleReader;
 import jline.console.completer.ArgumentCompleter;
 import jline.console.completer.Completer;
-import junit.framework.TestCase;
+
 
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -53,29 +53,40 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
 import org.apache.hadoop.hive.ql.IDriver;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
+import org.junit.Test;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+import org.junit.Before;
+import org.junit.After;
 
 
 // Cannot call class TestCliDriver since that's the name of the generated
 // code for the script-based testing
-public class TestCliDriverMethods extends TestCase {
+/**
+ * TestCliDriverMethods.
+ */
+public class TestCliDriverMethods {
 
   SecurityManager securityManager;
 
   // Some of these tests require intercepting System.exit() using the SecurityManager.
   // It is safer to  register/unregister our SecurityManager during setup/teardown instead
   // of doing it within the individual test cases.
-  @Override
+  @Before
   public void setUp() {
     securityManager = System.getSecurityManager();
     System.setSecurityManager(new NoExitSecurityManager(securityManager));
   }
 
-  @Override
+  @After
   public void tearDown() {
     System.setSecurityManager(securityManager);
   }
 
   // If the command has an associated schema, make sure it gets printed to use
+  @Test
   public void testThatCliDriverPrintsHeaderForCommandsWithSchema() {
     Schema mockSchema = mock(Schema.class);
     List<FieldSchema> fieldSchemas = new ArrayList<FieldSchema>();
@@ -90,6 +101,7 @@ public class TestCliDriverMethods extends TestCase {
   }
 
   // If the command has no schema, make sure nothing is printed
+  @Test
   public void testThatCliDriverPrintsNoHeaderForCommandsWithNoSchema() {
     Schema mockSchema = mock(Schema.class);
     when(mockSchema.getFieldSchemas()).thenReturn(null);
@@ -100,6 +112,7 @@ public class TestCliDriverMethods extends TestCase {
   }
 
   // Test that CliDriver does not strip comments starting with '--'
+  @Test
   public void testThatCliDriverDoesNotStripComments() throws Exception {
     // We need to overwrite System.out and System.err as that is what is used in ShellCmdExecutor
     // So save old values...
@@ -180,6 +193,7 @@ public class TestCliDriverMethods extends TestCase {
   }
 
 
+  @Test
   public void testGetCommandCompletor() {
     Completer[] completors = CliDriver.getCommandCompleter();
     assertEquals(2, completors.length);
@@ -200,6 +214,7 @@ public class TestCliDriverMethods extends TestCase {
 
   }
 
+  @Test
   public void testRun() throws Exception {
     // clean history
     String historyDirectory = System.getProperty("user.home");
@@ -238,6 +253,7 @@ public class TestCliDriverMethods extends TestCase {
   /**
    * Test commands exit and quit
    */
+  @Test
   public void testQuit() throws Exception {
 
     CliSessionState ss = new CliSessionState(new HiveConf());
@@ -268,6 +284,7 @@ public class TestCliDriverMethods extends TestCase {
 
   }
 
+  @Test
   public void testProcessSelectDatabase() throws Exception {
     CliSessionState sessinState = new CliSessionState(new HiveConf());
     CliSessionState.start(sessinState);
@@ -288,6 +305,7 @@ public class TestCliDriverMethods extends TestCase {
         "FAILED: ParseException line 1:4 cannot recognize input near 'database'"));
   }
 
+  @Test
   public void testprocessInitFiles() throws Exception {
     String oldHiveHome = System.getenv("HIVE_HOME");
     String oldHiveConfDir = System.getenv("HIVE_CONF_DIR");

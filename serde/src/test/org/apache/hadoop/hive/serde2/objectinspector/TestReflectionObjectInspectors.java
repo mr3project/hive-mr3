@@ -33,14 +33,20 @@ import org.apache.hadoop.hive.common.ObjectPair;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.thrift.test.Complex;
+import com.google.common.collect.Lists;
 
-import junit.framework.TestCase;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import org.junit.Test;
 
 /**
  * TestReflectionObjectInspectors.
  *
  */
-public class TestReflectionObjectInspectors extends TestCase {
+public class TestReflectionObjectInspectors {
 
   public void testReflectionObjectInspectors() throws Throwable {
     try {
