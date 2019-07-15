@@ -22,8 +22,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import junit.framework.TestCase;
-
 import org.apache.hadoop.hive.cli.CliSessionState;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
@@ -39,20 +37,24 @@ import org.apache.hadoop.hive.ql.security.DummyHiveMetastoreAuthorizationProvide
 import org.apache.hadoop.hive.ql.security.authorization.AuthorizationPreEventListener;
 import org.apache.hadoop.hive.ql.session.SessionState;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import org.junit.Before;
+import org.junit.After;
+import org.junit.Test;
+
 /**
  * TestAuthorizationPreEventListener. Test case for
  * {@link org.apache.hadoop.hive.ql.security.authorization.AuthorizationPreEventListener} and
  * {@link org.apache.hadoop.hive.metastore.MetaStorePreEventListener}
  */
-public class TestAuthorizationPreEventListener extends TestCase {
+public class TestAuthorizationPreEventListener {
   private HiveConf clientHiveConf;
   private HiveMetaStoreClient msc;
   private IDriver driver;
 
-  @Override
-  protected void setUp() throws Exception {
-
-    super.setUp();
+  @Before
+  public void setUp() throws Exception {
 
     System.setProperty(HiveConf.ConfVars.METASTORE_PRE_EVENT_LISTENERS.varname,
         AuthorizationPreEventListener.class.getName());
@@ -78,9 +80,8 @@ public class TestAuthorizationPreEventListener extends TestCase {
     driver = DriverFactory.newDriver(clientHiveConf);
   }
 
-  @Override
-  protected void tearDown() throws Exception {
-    super.tearDown();
+  @After
+  public void tearDown() throws Exception {
   }
 
   private void validateCreateDb(Database expectedDb, Database actualDb) {
@@ -163,6 +164,7 @@ public class TestAuthorizationPreEventListener extends TestCase {
     assertEquals(expectedDb, actualDb);
   }
 
+  @Test
   public void testListener() throws Exception {
     String dbName = "hive3705";
     String tblName = "tmptbl";
