@@ -768,6 +768,33 @@ public class TestArrowColumnarBatchSerDe {
     initAndSerializeAndDeserialize(schema, toMap(BINARY_ROWS));
   }
 
+  /* @Test
+  public void testPrimitiveCharPadding() throws SerDeException {
+    String[][] schema = {
+        {"char1", "char(10)"},
+    };
+
+    HiveCharWritable[][] rows = new HiveCharWritable[][] {
+        {charW("Hello", 10)}, {charW("world!", 10)}};
+    ArrowColumnarBatchSerDe serDe = new ArrowColumnarBatchSerDe();
+    StructObjectInspector rowOI = initSerDe(serDe, schema);
+
+    ArrowWrapperWritable serialized = null;
+    for (Object[] row : rows) {
+      serialized = serDe.serialize(row, rowOI);
+    }
+    // Pass null to complete a batch
+    if (serialized == null) {
+      serialized = serDe.serialize(null, rowOI);
+    }
+
+    VarCharVector varCharVector = (VarCharVector) serialized.getVectorSchemaRoot().getFieldVectors().get(0);
+    for (int i = 0; i < rows.length; i++) {
+      assertEquals(rows[i][0].getPaddedValue().toString(), new String(varCharVector.get(i)));
+    }
+  } */
+
+  @Test
   public void testMapDecimal() throws SerDeException {
     String[][] schema = {
         {"decimal_map", "map<string,decimal(38,10)>"},
@@ -776,6 +803,7 @@ public class TestArrowColumnarBatchSerDe {
     initAndSerializeAndDeserialize(schema, toMap(DECIMAL_ROWS));
   }
 
+  @Test
   public void testListDecimal() throws SerDeException {
     String[][] schema = {
         {"decimal_list", "array<decimal(38,10)>"},
