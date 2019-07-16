@@ -3274,25 +3274,28 @@ public class DDLTask extends Task<DDLWork> implements Serializable {
   }
 
   private int showTxns(Hive db, ShowTxnsDesc desc) throws HiveException {
+    SessionState sessionState = SessionState.get();
     // Call the metastore to get the currently queued and running compactions.
     GetOpenTxnsInfoResponse rsp = db.showTransactions();
 
     // Write the results into the file
     DataOutputStream os = getOutputStream(desc.getResFile());
     try {
-      // Write a header
-      os.writeBytes("Transaction ID");
-      os.write(separator);
-      os.writeBytes("Transaction State");
-      os.write(separator);
-      os.writeBytes("Started Time");
-      os.write(separator);
-      os.writeBytes("Last Heartbeat Time");
-      os.write(separator);
-      os.writeBytes("User");
-      os.write(separator);
-      os.writeBytes("Hostname");
-      os.write(terminator);
+      if(!sessionState.isHiveServerQuery()) {
+        // Write a header
+        os.writeBytes("Transaction ID");
+        os.write(separator);
+        os.writeBytes("Transaction State");
+        os.write(separator);
+        os.writeBytes("Started Time");
+        os.write(separator);
+        os.writeBytes("Last Heartbeat Time");
+        os.write(separator);
+        os.writeBytes("User");
+        os.write(separator);
+        os.writeBytes("Hostname");
+        os.write(terminator);
+      }
 
       for (TxnInfo txn : rsp.getOpen_txns()) {
         os.writeBytes(Long.toString(txn.getId()));
