@@ -508,7 +508,7 @@ STAGE PLANS:
                 input vertices:
                   1 Map 4
                 Statistics: Num rows: ###Masked### Data size: ###Masked### Basic stats: COMPLETE Column stats: NONE
-                HybridGraceHashJoin: true
+                DynamicPartitionHashJoin: true
                 Reduce Output Operator
                   key expressions: _col2 (type: int)
                   sort order: +
@@ -644,7 +644,7 @@ STAGE PLANS:
                 input vertices:
                   1 Map 4
                 Statistics: Num rows: ###Masked### Data size: ###Masked### Basic stats: COMPLETE Column stats: NONE
-                HybridGraceHashJoin: true
+                DynamicPartitionHashJoin: true
                 Group By Operator
                   aggregations: count()
                   mode: hash
@@ -781,7 +781,7 @@ STAGE PLANS:
                 input vertices:
                   1 Map 5
                 Statistics: Num rows: ###Masked### Data size: ###Masked### Basic stats: COMPLETE Column stats: NONE
-                HybridGraceHashJoin: true
+                DynamicPartitionHashJoin: true
                 Group By Operator
                   aggregations: count()
                   keys: _col0 (type: smallint)
