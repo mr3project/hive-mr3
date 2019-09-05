@@ -982,7 +982,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
   protected void initializeOp(Configuration hconf) throws HiveException {
     super.initializeOp(hconf);
     isLlap = LlapProxy.isDaemon();
-    VectorExpression.doTransientInit(keyExpressions);
+    VectorExpression.doTransientInit(keyExpressions, hconf);
 
     List<ObjectInspector> objectInspectors = new ArrayList<ObjectInspector>();
 
@@ -1021,7 +1021,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
            throw new HiveException("Failed to create " + vecAggrClass.getSimpleName() +
                "(VectorAggregationDesc) object ", e);
         }
-        VectorExpression.doTransientInit(vecAggrExpr.getInputExpression());
+        VectorExpression.doTransientInit(vecAggrExpr.getInputExpression(), hconf);
         aggregators[i] = vecAggrExpr;
 
         ObjectInspector objInsp =
