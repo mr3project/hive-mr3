@@ -314,9 +314,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
   private final List<ColumnStatsAutoGatherContext> columnStatsAutoGatherContexts;
   private final Map<JoinOperator, QBJoinTree> joinContext;
   private final Map<SMBMapJoinOperator, QBJoinTree> smbMapJoinContext;
-  private final HashMap<TableScanOperator, Table> topToTable;
   private final List<ReduceSinkOperator> reduceSinkOperatorsAddedByEnforceBucketingSorting;
-  private final HashMap<TableScanOperator, Map<String, String>> topToTableProps;
   private QB qb;
   private ASTNode ast;
   private int destTableId;
@@ -426,9 +424,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     joinContext = new HashMap<JoinOperator, QBJoinTree>();
     smbMapJoinContext = new HashMap<SMBMapJoinOperator, QBJoinTree>();
     // Must be deterministic order map for consistent q-test output across Java versions
-    topToTable = new LinkedHashMap<TableScanOperator, Table>();
     reduceSinkOperatorsAddedByEnforceBucketingSorting = new ArrayList<ReduceSinkOperator>();
-    topToTableProps = new HashMap<TableScanOperator, Map<String, String>>();
     destTableId = 1;
     uCtx = null;
     listMapJoinOpsNoReducer = new ArrayList<AbstractMapJoinOperator<? extends MapJoinDesc>>();
@@ -447,7 +443,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     mergeIsDirect = true;
     noscan = false;
     tabNameToTabObject = new HashMap<>();
-    defaultJoinMerge = false == HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_MERGE_NWAY_JOINS);
+    defaultJoinMerge = !HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_MERGE_NWAY_JOINS);
     disableJoinMerge = defaultJoinMerge;
   }
 
@@ -483,7 +479,6 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     groupOpToInputTables.clear();
     disableJoinMerge = defaultJoinMerge;
     aliasToCTEs.clear();
-    topToTable.clear();
     opToPartPruner.clear();
     opToPartList.clear();
     opToPartToSkewedPruner.clear();
@@ -498,7 +493,6 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     globalLimitCtx.disableOpt();
     viewAliasToInput.clear();
     reduceSinkOperatorsAddedByEnforceBucketingSorting.clear();
-    topToTableProps.clear();
     listMapJoinOpsNoReducer.clear();
     unparseTranslator.clear();
     queryProperties.clear();
@@ -11073,11 +11067,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       // scan
       topOps.put(alias_id, top);
 
-      // Add a mapping from the table scan operator to Table
-      topToTable.put(top, tab);
-
       if (properties != null) {
-        topToTableProps.put(top, properties);
         tsDesc.setOpProps(properties);
       }
 
