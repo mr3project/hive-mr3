@@ -982,6 +982,12 @@ public class ConvertJoinMapJoin implements NodeProcessor {
     }
     Set<Integer> bigTableCandidateSet =
         MapJoinProcessor.getBigTableCandidates(joinOp.getConf().getConds());
+
+    if (bigTableCandidateSet.isEmpty()) {
+      LOG.warn("bigTableCandidateSet is empty, so cannot determine a big table position");
+      return -1;
+    }
+
     int bigTablePosition = -1;
     // big input cumulative row count
     long bigInputCumulativeCardinality = -1L;
@@ -1087,6 +1093,11 @@ public class ConvertJoinMapJoin implements NodeProcessor {
         bigInputStat = currInputStat;
       }
 
+    }
+
+    if (bigTablePosition == -1) {
+      LOG.debug("No big table selected, no MapJoin");
+      return -1;
     }
 
     // Check if size of data to shuffle (larger table) is less than given max size
