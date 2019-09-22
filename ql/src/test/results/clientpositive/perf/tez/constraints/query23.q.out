@@ -122,14 +122,14 @@ Plan optimized by CBO.
 
 Vertex dependency in root stage
 Map 1 <- Reducer 9 (BROADCAST_EDGE)
-Map 15 <- Reducer 27 (BROADCAST_EDGE)
-Map 28 <- Reducer 7 (BROADCAST_EDGE)
-Map 30 <- Reducer 36 (BROADCAST_EDGE)
-Map 38 <- Reducer 14 (BROADCAST_EDGE)
-Map 39 <- Reducer 13 (BROADCAST_EDGE)
-Reducer 10 <- Map 38 (SIMPLE_EDGE), Map 8 (SIMPLE_EDGE)
+Map 15 <- Reducer 7 (BROADCAST_EDGE)
+Map 19 <- Reducer 26 (BROADCAST_EDGE)
+Map 27 <- Reducer 33 (BROADCAST_EDGE)
+Map 35 <- Reducer 14 (BROADCAST_EDGE)
+Map 36 <- Reducer 13 (BROADCAST_EDGE)
+Reducer 10 <- Map 35 (SIMPLE_EDGE), Map 8 (SIMPLE_EDGE)
 Reducer 11 <- Reducer 10 (SIMPLE_EDGE), Reducer 24 (SIMPLE_EDGE)
-Reducer 12 <- Reducer 11 (SIMPLE_EDGE), Reducer 34 (SIMPLE_EDGE), Union 5 (CONTAINS)
+Reducer 12 <- Reducer 11 (SIMPLE_EDGE), Reducer 31 (SIMPLE_EDGE), Union 5 (CONTAINS)
 Reducer 13 <- Reducer 10 (CUSTOM_SIMPLE_EDGE)
 Reducer 14 <- Map 8 (CUSTOM_SIMPLE_EDGE)
 Reducer 16 <- Map 15 (SIMPLE_EDGE), Map 26 (SIMPLE_EDGE)
@@ -137,22 +137,20 @@ Reducer 17 <- Reducer 16 (SIMPLE_EDGE)
 Reducer 18 <- Reducer 17 (CUSTOM_SIMPLE_EDGE)
 Reducer 19 <- Reducer 18 (CUSTOM_SIMPLE_EDGE), Reducer 21 (CUSTOM_SIMPLE_EDGE)
 Reducer 2 <- Map 1 (SIMPLE_EDGE), Map 8 (SIMPLE_EDGE)
-Reducer 20 <- Reducer 19 (CUSTOM_SIMPLE_EDGE), Reducer 29 (CUSTOM_SIMPLE_EDGE)
-Reducer 21 <- Reducer 17 (CUSTOM_SIMPLE_EDGE)
-Reducer 22 <- Reducer 17 (CUSTOM_SIMPLE_EDGE)
-Reducer 23 <- Reducer 22 (CUSTOM_SIMPLE_EDGE), Reducer 25 (CUSTOM_SIMPLE_EDGE)
-Reducer 24 <- Reducer 23 (CUSTOM_SIMPLE_EDGE), Reducer 40 (CUSTOM_SIMPLE_EDGE)
-Reducer 25 <- Reducer 17 (CUSTOM_SIMPLE_EDGE)
-Reducer 27 <- Map 26 (CUSTOM_SIMPLE_EDGE)
-Reducer 29 <- Map 28 (SIMPLE_EDGE)
-Reducer 3 <- Reducer 2 (SIMPLE_EDGE), Reducer 20 (SIMPLE_EDGE)
-Reducer 31 <- Map 30 (SIMPLE_EDGE), Map 35 (SIMPLE_EDGE)
-Reducer 32 <- Map 37 (SIMPLE_EDGE), Reducer 31 (SIMPLE_EDGE)
-Reducer 33 <- Reducer 32 (SIMPLE_EDGE)
-Reducer 34 <- Reducer 32 (SIMPLE_EDGE)
-Reducer 36 <- Map 35 (CUSTOM_SIMPLE_EDGE)
-Reducer 4 <- Reducer 3 (SIMPLE_EDGE), Reducer 33 (SIMPLE_EDGE), Union 5 (CONTAINS)
-Reducer 40 <- Map 39 (SIMPLE_EDGE)
+Reducer 20 <- Map 19 (SIMPLE_EDGE), Map 25 (SIMPLE_EDGE)
+Reducer 21 <- Reducer 20 (SIMPLE_EDGE)
+Reducer 22 <- Reducer 21 (CUSTOM_SIMPLE_EDGE)
+Reducer 23 <- Reducer 22 (CUSTOM_SIMPLE_EDGE), Reducer 37 (CUSTOM_SIMPLE_EDGE)
+Reducer 24 <- Reducer 23 (SIMPLE_EDGE)
+Reducer 26 <- Map 25 (CUSTOM_SIMPLE_EDGE)
+Reducer 28 <- Map 27 (SIMPLE_EDGE), Map 32 (SIMPLE_EDGE)
+Reducer 29 <- Map 34 (SIMPLE_EDGE), Reducer 28 (SIMPLE_EDGE)
+Reducer 3 <- Reducer 18 (SIMPLE_EDGE), Reducer 2 (SIMPLE_EDGE)
+Reducer 30 <- Reducer 29 (SIMPLE_EDGE)
+Reducer 31 <- Reducer 29 (SIMPLE_EDGE)
+Reducer 33 <- Map 32 (CUSTOM_SIMPLE_EDGE)
+Reducer 37 <- Map 36 (SIMPLE_EDGE)
+Reducer 4 <- Reducer 3 (SIMPLE_EDGE), Reducer 30 (SIMPLE_EDGE), Union 5 (CONTAINS)
 Reducer 6 <- Union 5 (CUSTOM_SIMPLE_EDGE)
 Reducer 7 <- Reducer 2 (CUSTOM_SIMPLE_EDGE)
 Reducer 9 <- Map 8 (CUSTOM_SIMPLE_EDGE)
@@ -212,9 +210,9 @@ Stage-0
                                             Output:["_col0","_col1","_col2"],aggregations:["min(_col0)","max(_col0)","bloom_filter(_col0, expectedEntries=1000000)"]
                                             Select Operator [SEL_465] (rows=50 width=4)
                                               Output:["_col0"]
-                                               Please refer to the previous Select Operator [SEL_461]
-                      <-Reducer 24 [SIMPLE_EDGE]
-                        SHUFFLE [RS_194]
+                                               Please refer to the previous Select Operator [SEL_375]
+                      <-Reducer 24 [SIMPLE_EDGE] vectorized
+                        SHUFFLE [RS_456]
                           PartitionCols:_col0
                           Group By Operator [GBY_455] (rows=225322 width=3)
                             Output:["_col0"],keys:KEY._col0
@@ -411,9 +409,9 @@ Stage-0
                                             Output:["_col0","_col1","_col2"],aggregations:["min(_col0)","max(_col0)","bloom_filter(_col0, expectedEntries=1000000)"]
                                             Select Operator [SEL_463] (rows=50 width=4)
                                               Output:["_col0"]
-                                               Please refer to the previous Select Operator [SEL_461]
-                      <-Reducer 20 [SIMPLE_EDGE]
-                        SHUFFLE [RS_93]
+                                               Please refer to the previous Select Operator [SEL_375]
+                      <-Reducer 18 [SIMPLE_EDGE] vectorized
+                        SHUFFLE [RS_419]
                           PartitionCols:_col0
                           Group By Operator [GBY_418] (rows=225322 width=3)
                             Output:["_col0"],keys:KEY._col0
