@@ -1723,10 +1723,11 @@ STAGE PLANS:
     Tez
 #### A masked pattern was here ####
       Edges:
-        Map 5 <- Reducer 4 (BROADCAST_EDGE)
-        Reducer 2 <- Map 1 (SIMPLE_EDGE), Map 5 (SIMPLE_EDGE), Map 6 (SIMPLE_EDGE)
-        Reducer 3 <- Reducer 2 (CUSTOM_SIMPLE_EDGE)
-        Reducer 4 <- Map 1 (CUSTOM_SIMPLE_EDGE)
+        Map 6 <- Reducer 5 (BROADCAST_EDGE)
+        Reducer 2 <- Map 1 (SIMPLE_EDGE), Map 6 (SIMPLE_EDGE)
+        Reducer 3 <- Map 7 (SIMPLE_EDGE), Reducer 2 (SIMPLE_EDGE)
+        Reducer 4 <- Reducer 3 (CUSTOM_SIMPLE_EDGE)
+        Reducer 5 <- Map 1 (CUSTOM_SIMPLE_EDGE)
 #### A masked pattern was here ####
       Vertices:
         Map 1 
@@ -2771,10 +2772,11 @@ STAGE PLANS:
     Tez
 #### A masked pattern was here ####
       Edges:
-        Map 4 <- Reducer 6 (BROADCAST_EDGE)
-        Reducer 2 <- Map 1 (SIMPLE_EDGE), Map 4 (SIMPLE_EDGE), Map 5 (SIMPLE_EDGE)
-        Reducer 3 <- Reducer 2 (CUSTOM_SIMPLE_EDGE)
-        Reducer 6 <- Map 5 (CUSTOM_SIMPLE_EDGE)
+        Map 5 <- Reducer 7 (BROADCAST_EDGE)
+        Reducer 2 <- Map 1 (SIMPLE_EDGE), Map 5 (SIMPLE_EDGE)
+        Reducer 3 <- Map 6 (SIMPLE_EDGE), Reducer 2 (SIMPLE_EDGE)
+        Reducer 4 <- Reducer 3 (CUSTOM_SIMPLE_EDGE)
+        Reducer 7 <- Map 6 (CUSTOM_SIMPLE_EDGE)
 #### A masked pattern was here ####
       Vertices:
         Map 1 
@@ -3176,7 +3178,7 @@ STAGE PLANS:
         Reducer 3 <- Reducer 2 (SIMPLE_EDGE)
         Reducer 4 <- Reducer 2 (SIMPLE_EDGE)
         Reducer 5 <- Reducer 2 (SIMPLE_EDGE)
-        Reducer 6 <- Reducer 2 (CUSTOM_SIMPLE_EDGE)
+        Reducer 6 <- Reducer 2 (SIMPLE_EDGE)
         Reducer 7 <- Reducer 6 (CUSTOM_SIMPLE_EDGE)
         Reducer 9 <- Map 8 (CUSTOM_SIMPLE_EDGE)
 #### A masked pattern was here ####
@@ -3525,7 +3527,7 @@ STAGE PLANS:
         Reducer 3 <- Reducer 2 (SIMPLE_EDGE)
         Reducer 4 <- Reducer 2 (SIMPLE_EDGE)
         Reducer 5 <- Reducer 2 (SIMPLE_EDGE)
-        Reducer 6 <- Reducer 2 (CUSTOM_SIMPLE_EDGE)
+        Reducer 6 <- Reducer 2 (SIMPLE_EDGE)
         Reducer 7 <- Reducer 6 (CUSTOM_SIMPLE_EDGE)
         Reducer 9 <- Map 8 (CUSTOM_SIMPLE_EDGE)
 #### A masked pattern was here ####
