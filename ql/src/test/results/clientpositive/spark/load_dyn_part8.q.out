@@ -81,9 +81,181 @@ STAGE PLANS:
                       expressions: key (type: string), value (type: string), ds (type: string), hr (type: string)
                       outputColumnNames: _col0, _col1, _col2, _col3
                       Statistics: Num rows: 666 Data size: 7075 Basic stats: COMPLETE Column stats: NONE
-                      File Output Operator
-                        compressed: false
-                        GlobalTableId: 1
+                      Reduce Output Operator
+                        key expressions: _col2 (type: string), _col3 (type: string)
+                        null sort order: aa
+                        sort order: ++
+                        Map-reduce partition columns: _col2 (type: string), _col3 (type: string)
+                        Statistics: Num rows: 666 Data size: 7075 Basic stats: COMPLETE Column stats: NONE
+                        tag: -1
+                        value expressions: _col0 (type: string), _col1 (type: string)
+                        auto parallelism: false
+            Execution mode: vectorized
+            Path -> Alias:
+#### A masked pattern was here ####
+            Path -> Partition:
+#### A masked pattern was here ####
+                Partition
+                  base file name: hr=11
+                  input format: org.apache.hadoop.mapred.TextInputFormat
+                  output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                  partition values:
+                    ds 2008-04-08
+                    hr 11
+                  properties:
+                    COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true","value":"true"}}
+                    bucket_count -1
+                    column.name.delimiter ,
+                    columns key,value
+                    columns.comments 'default','default'
+                    columns.types string:string
+#### A masked pattern was here ####
+                    name default.srcpart
+                    numFiles 1
+                    numRows 500
+                    partition_columns ds/hr
+                    partition_columns.types string:string
+                    rawDataSize 5312
+                    serialization.ddl struct srcpart { string key, string value}
+                    serialization.format 1
+                    serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                    totalSize 5812
+#### A masked pattern was here ####
+                  serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                
+                    input format: org.apache.hadoop.mapred.TextInputFormat
+                    output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                    properties:
+                      bucket_count -1
+                      bucketing_version 2
+                      column.name.delimiter ,
+                      columns key,value
+                      columns.comments 'default','default'
+                      columns.types string:string
+#### A masked pattern was here ####
+                      name default.srcpart
+                      partition_columns ds/hr
+                      partition_columns.types string:string
+                      serialization.ddl struct srcpart { string key, string value}
+                      serialization.format 1
+                      serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+#### A masked pattern was here ####
+                    serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                    name: default.srcpart
+                  name: default.srcpart
+#### A masked pattern was here ####
+                Partition
+                  base file name: hr=12
+                  input format: org.apache.hadoop.mapred.TextInputFormat
+                  output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                  partition values:
+                    ds 2008-04-08
+                    hr 12
+                  properties:
+                    COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true","value":"true"}}
+                    bucket_count -1
+                    column.name.delimiter ,
+                    columns key,value
+                    columns.comments 'default','default'
+                    columns.types string:string
+#### A masked pattern was here ####
+                    name default.srcpart
+                    numFiles 1
+                    numRows 500
+                    partition_columns ds/hr
+                    partition_columns.types string:string
+                    rawDataSize 5312
+                    serialization.ddl struct srcpart { string key, string value}
+                    serialization.format 1
+                    serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                    totalSize 5812
+#### A masked pattern was here ####
+                  serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                
+                    input format: org.apache.hadoop.mapred.TextInputFormat
+                    output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                    properties:
+                      bucket_count -1
+                      bucketing_version 2
+                      column.name.delimiter ,
+                      columns key,value
+                      columns.comments 'default','default'
+                      columns.types string:string
+#### A masked pattern was here ####
+                      name default.srcpart
+                      partition_columns ds/hr
+                      partition_columns.types string:string
+                      serialization.ddl struct srcpart { string key, string value}
+                      serialization.format 1
+                      serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+#### A masked pattern was here ####
+                    serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                    name: default.srcpart
+                  name: default.srcpart
+#### A masked pattern was here ####
+                Partition
+                  base file name: hr=11
+                  input format: org.apache.hadoop.mapred.TextInputFormat
+                  output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                  partition values:
+                    ds 2008-04-09
+                    hr 11
+                  properties:
+                    COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true","value":"true"}}
+                    bucket_count -1
+                    column.name.delimiter ,
+                    columns key,value
+                    columns.comments 'default','default'
+                    columns.types string:string
+#### A masked pattern was here ####
+                    name default.srcpart
+                    numFiles 1
+                    numRows 500
+                    partition_columns ds/hr
+                    partition_columns.types string:string
+                    rawDataSize 5312
+                    serialization.ddl struct srcpart { string key, string value}
+                    serialization.format 1
+                    serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                    totalSize 5812
+#### A masked pattern was here ####
+                  serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                
+                    input format: org.apache.hadoop.mapred.TextInputFormat
+                    output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                    properties:
+                      bucket_count -1
+                      bucketing_version 2
+                      column.name.delimiter ,
+                      columns key,value
+                      columns.comments 'default','default'
+                      columns.types string:string
+#### A masked pattern was here ####
+                      name default.srcpart
+                      partition_columns ds/hr
+                      partition_columns.types string:string
+                      serialization.ddl struct srcpart { string key, string value}
+                      serialization.format 1
+                      serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+#### A masked pattern was here ####
+                    serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                    name: default.srcpart
+                  name: default.srcpart
+#### A masked pattern was here ####
+                Partition
+                  base file name: hr=12
+                  input format: org.apache.hadoop.mapred.TextInputFormat
+                  output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+                  partition values:
+                    ds 2008-04-09
+                    hr 12
+                  properties:
+                    COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true","value":"true"}}
+                    bucket_count -1
+                    column.name.delimiter ,
+                    columns key,value
+                    columns.comments 'default','default'
+                    columns.types string:string
 #### A masked pattern was here ####
                         NumFilesPerFileSink: 1
                         Statistics: Num rows: 666 Data size: 7075 Basic stats: COMPLETE Column stats: NONE
@@ -118,36 +290,15 @@ STAGE PLANS:
                       expressions: key (type: string), value (type: string), hr (type: string)
                       outputColumnNames: _col0, _col1, _col2
                       Statistics: Num rows: 666 Data size: 7075 Basic stats: COMPLETE Column stats: NONE
-                      File Output Operator
-                        compressed: false
-                        GlobalTableId: 2
-#### A masked pattern was here ####
-                        NumFilesPerFileSink: 1
-                        Static Partition Specification: ds=2008-12-31/
+                      Reduce Output Operator
+                        key expressions: _col2 (type: string)
+                        null sort order: a
+                        sort order: +
+                        Map-reduce partition columns: _col2 (type: string)
                         Statistics: Num rows: 666 Data size: 7075 Basic stats: COMPLETE Column stats: NONE
-#### A masked pattern was here ####
-                        table:
-                            input format: org.apache.hadoop.mapred.TextInputFormat
-                            output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
-                            properties:
-                              bucket_count -1
-                              column.name.delimiter ,
-                              columns key,value
-                              columns.comments 'default','default'
-                              columns.types string:string
-#### A masked pattern was here ####
-                              name default.nzhang_part8_n0
-                              partition_columns ds/hr
-                              partition_columns.types string:string
-                              serialization.ddl struct nzhang_part8_n0 { string key, string value}
-                              serialization.format 1
-                              serialization.lib org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-#### A masked pattern was here ####
-                            serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                            name: default.nzhang_part8_n0
-                        TotalFiles: 1
-                        GatherStats: true
-                        MultiFileSpray: false
+                        tag: -1
+                        value expressions: _col0 (type: string), _col1 (type: string)
+                        auto parallelism: false
             Execution mode: vectorized
             Path -> Alias:
 #### A masked pattern was here ####
