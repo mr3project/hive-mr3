@@ -125,9 +125,9 @@ Stage-0
                           Output:["_col0","_col1"]
                           Filter Operator [FIL_168] (rows=1151982528066248 width=185)
                             predicate:((rank_window_0 < 11) and _col2 is not null)
-                            PTF Operator [PTF_167] (rows=3455947584198744 width=185)
-                              Function definitions:[{},{"name:":"windowingtablefunction","order by:":"_col3 ASC NULLS FIRST","partition by:":"0"}]
-                              Select Operator [SEL_166] (rows=3455947584198744 width=185)
+                            PTF Operator [PTF_192] (rows=20854 width=116)
+                              Function definitions:[{},{"name:":"windowingtablefunction","order by:":"_col3 ASC NULLS LAST","partition by:":"0"}]
+                              Select Operator [SEL_191] (rows=20854 width=116)
                                 Output:["_col2","_col3"]
                               <-Reducer 9 [SIMPLE_EDGE]
                                 SHUFFLE [RS_38]
