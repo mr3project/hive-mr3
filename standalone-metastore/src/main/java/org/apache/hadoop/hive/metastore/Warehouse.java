@@ -702,7 +702,7 @@ public class Warehouse {
     try {
       Path path = new Path(location);
       FileSystem fileSys = path.getFileSystem(conf);
-      return FileUtils.getFileStatusRecurse(path, -1, fileSys);
+      return FileUtils.getFileStatusRecurse(path, fileSys);
     } catch (IOException ioe) {
       MetaStoreUtils.logAndThrowMetaException(ioe);
     }
@@ -720,7 +720,7 @@ public class Warehouse {
     Path tablePath = getDnsPath(new Path(table.getSd().getLocation()));
     try {
       FileSystem fileSys = tablePath.getFileSystem(conf);
-      return FileUtils.getFileStatusRecurse(tablePath, -1, fileSys);
+      return FileUtils.getFileStatusRecurse(tablePath, fileSys);
     } catch (IOException ioe) {
       MetaStoreUtils.logAndThrowMetaException(ioe);
     }
