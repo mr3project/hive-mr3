@@ -20,7 +20,7 @@ package org.apache.hadoop.hive.metastore;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.hadoop.hive.metastore.events.AlterPartitionEvent;
 import org.apache.hadoop.hive.metastore.events.AlterTableEvent;
@@ -941,7 +941,7 @@ public class HiveAlterHandler implements AlterHandler {
       throw new InvalidOperationException(
           "The following columns have types incompatible with the existing " +
               "columns in their respective positions :\n" +
-              org.apache.commons.lang.StringUtils.join(incompatibleCols, ',')
+              org.apache.commons.lang3.StringUtils.join(incompatibleCols, ',')
       );
     }
   }

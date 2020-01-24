@@ -29,7 +29,7 @@ import org.apache.commons.collections.ListUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.StatsSetupConst;
@@ -215,8 +215,8 @@ public class MetaStoreUtils {
   private static final com.google.common.base.Function<String,String> transFormNullsToEmptyString
       = new com.google.common.base.Function<String, String>() {
     @Override
-    public java.lang.String apply(@Nullable java.lang.String string) {
-      return org.apache.commons.lang.StringUtils.defaultString(string);
+    public String apply(@Nullable String string) {
+      return org.apache.commons.lang3.StringUtils.defaultString(string);
     }
   };
 
@@ -432,7 +432,7 @@ public class MetaStoreUtils {
         SortedSet<String> sortedOuterList = new TreeSet<>();
         for (List<String> innerList : skewed.getSkewedColValues()) {
           SortedSet<String> sortedInnerList = new TreeSet<>(innerList);
-          sortedOuterList.add(org.apache.commons.lang.StringUtils.join(sortedInnerList, "."));
+          sortedOuterList.add(org.apache.commons.lang3.StringUtils.join(sortedInnerList, "."));
         }
         for (String colval : sortedOuterList) {
           md.update(colval.getBytes(ENCODING));
@@ -442,7 +442,7 @@ public class MetaStoreUtils {
         SortedMap<String, String> sortedMap = new TreeMap<>();
         for (Map.Entry<List<String>, String> smap : skewed.getSkewedColValueLocationMaps().entrySet()) {
           SortedSet<String> sortedKey = new TreeSet<>(smap.getKey());
-          sortedMap.put(org.apache.commons.lang.StringUtils.join(sortedKey, "."), smap.getValue());
+          sortedMap.put(org.apache.commons.lang3.StringUtils.join(sortedKey, "."), smap.getValue());
         }
         for (Map.Entry<String, String> e : sortedMap.entrySet()) {
           md.update(e.getKey().getBytes(ENCODING));

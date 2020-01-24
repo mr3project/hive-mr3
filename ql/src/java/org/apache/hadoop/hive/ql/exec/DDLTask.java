@@ -18,7 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec;
 
-import static org.apache.commons.lang.StringUtils.join;
+import static org.apache.commons.lang3.StringUtils.join;
 import static org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_STORAGE;
 
 import java.io.BufferedWriter;
@@ -59,7 +59,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.apache.calcite.rel.RelNode;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -3425,7 +3425,7 @@ public class DDLTask extends Task<DDLWork> implements Serializable {
         if (descFunc.isExtended()) {
           Set<String> synonyms = FunctionRegistry.getFunctionSynonyms(funcName);
           if (synonyms.size() > 0) {
-            outStream.writeBytes("\nSynonyms: " + join(synonyms, ", "));
+            outStream.writeBytes("\nSynonyms: " + StringUtils.join(synonyms, ", "));
           }
           if (desc.extended().length() > 0) {
             outStream.writeBytes("\n"
