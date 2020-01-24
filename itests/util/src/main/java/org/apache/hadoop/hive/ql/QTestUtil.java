@@ -68,7 +68,7 @@ import org.apache.avro.io.EncoderFactory;
 import org.apache.avro.specific.SpecificDatumWriter;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.ByteArrayOutputStream;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileStatus;
@@ -1920,7 +1920,7 @@ public class QTestUtil {
 
   private static QTestProcessExecResult executeCmd(String[] args, String outFile,
                                             String errFile) throws Exception {
-    System.out.println("Running: " + org.apache.commons.lang.StringUtils.join(args, ' '));
+    System.out.println("Running: " + StringUtils.join(args, ' '));
 
     PrintStream out = outFile == null ?
       SessionState.getConsole().getChildOutStream() :

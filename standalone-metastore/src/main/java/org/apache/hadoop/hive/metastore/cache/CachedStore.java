@@ -221,7 +221,7 @@ public class CachedStore implements RawStore, Configurable {
       try {
         catalogsToCache = catalogsToCache(rawStore);
         LOG.info("Going to cache catalogs: "
-            + org.apache.commons.lang.StringUtils.join(catalogsToCache, ", "));
+            + org.apache.commons.lang3.StringUtils.join(catalogsToCache, ", "));
         List<Catalog> catalogs = new ArrayList<>(catalogsToCache.size());
         for (String catName : catalogsToCache) {
           catalogs.add(rawStore.getCatalog(catName));

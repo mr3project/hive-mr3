@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.hive.metastore.dbinstall;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.metastore.HiveMetaException;
 import org.apache.hadoop.hive.metastore.MetaStoreSchemaInfoFactory;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;

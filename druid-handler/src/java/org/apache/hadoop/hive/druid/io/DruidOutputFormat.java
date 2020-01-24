@@ -31,7 +31,7 @@ import io.druid.segment.indexing.RealtimeTuningConfig;
 import io.druid.segment.indexing.granularity.GranularitySpec;
 import io.druid.segment.realtime.plumber.CustomVersioningPolicy;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.Constants;
