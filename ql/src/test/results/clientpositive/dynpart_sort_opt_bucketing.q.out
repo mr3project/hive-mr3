@@ -1,0 +1,239 @@
+PREHOOK: query: drop table if exists t1_staging
+PREHOOK: type: DROPTABLE
+POSTHOOK: query: drop table if exists t1_staging
+POSTHOOK: type: DROPTABLE
+PREHOOK: query: create table t1_staging(
+a string,
+b int,
+c int,
+d string)
+partitioned by (e  string)
+clustered by(a)
+sorted by(a desc)
+into 256 buckets stored as textfile
+PREHOOK: type: CREATETABLE
+PREHOOK: Output: database:default
+PREHOOK: Output: default@t1_staging
+POSTHOOK: query: create table t1_staging(
+a string,
+b int,
+c int,
+d string)
+partitioned by (e  string)
+clustered by(a)
+sorted by(a desc)
+into 256 buckets stored as textfile
+POSTHOOK: type: CREATETABLE
+POSTHOOK: Output: database:default
+POSTHOOK: Output: default@t1_staging
+PREHOOK: query: load data local inpath '../../data/files/sortdp/000000_0' overwrite into table t1_staging partition (e='epart')
+PREHOOK: type: LOAD
+#### A masked pattern was here ####
+PREHOOK: Output: default@t1_staging
+POSTHOOK: query: load data local inpath '../../data/files/sortdp/000000_0' overwrite into table t1_staging partition (e='epart')
+POSTHOOK: type: LOAD
+#### A masked pattern was here ####
+POSTHOOK: Output: default@t1_staging
+POSTHOOK: Output: default@t1_staging@e=epart
+PREHOOK: query: drop table t1_n147
+PREHOOK: type: DROPTABLE
+POSTHOOK: query: drop table t1_n147
+POSTHOOK: type: DROPTABLE
+PREHOOK: query: create table t1_n147(
+a string,
+b int,
+c int,
+d string)
+partitioned by (e string)
+clustered by(a)
+sorted by(a desc) into 10 buckets stored as textfile
+PREHOOK: type: CREATETABLE
+PREHOOK: Output: database:default
+PREHOOK: Output: default@t1_n147
+POSTHOOK: query: create table t1_n147(
+a string,
+b int,
+c int,
+d string)
+partitioned by (e string)
+clustered by(a)
+sorted by(a desc) into 10 buckets stored as textfile
+POSTHOOK: type: CREATETABLE
+POSTHOOK: Output: database:default
+POSTHOOK: Output: default@t1_n147
+PREHOOK: query: insert overwrite table t1_n147 partition(e) select a,b,c,d,'epart' from t1_staging
+PREHOOK: type: QUERY
+PREHOOK: Input: default@t1_staging
+PREHOOK: Input: default@t1_staging@e=epart
+PREHOOK: Output: default@t1_n147
+POSTHOOK: query: insert overwrite table t1_n147 partition(e) select a,b,c,d,'epart' from t1_staging
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@t1_staging
+POSTHOOK: Input: default@t1_staging@e=epart
+POSTHOOK: Output: default@t1_n147@e=epart
+POSTHOOK: Lineage: t1_n147 PARTITION(e=epart).a SIMPLE [(t1_staging)t1_staging.FieldSchema(name:a, type:string, comment:null), ]
+POSTHOOK: Lineage: t1_n147 PARTITION(e=epart).b SIMPLE [(t1_staging)t1_staging.FieldSchema(name:b, type:int, comment:null), ]
+POSTHOOK: Lineage: t1_n147 PARTITION(e=epart).c SIMPLE [(t1_staging)t1_staging.FieldSchema(name:c, type:int, comment:null), ]
+POSTHOOK: Lineage: t1_n147 PARTITION(e=epart).d SIMPLE [(t1_staging)t1_staging.FieldSchema(name:d, type:string, comment:null), ]
+PREHOOK: query: select 'bucket_0'
+PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+POSTHOOK: query: select 'bucket_0'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+bucket_0
+fff06c6e0fd675ebeff09350e6b7a3900115f72341fd353e5e185e8983d10534002015-01-21
+PREHOOK: query: select 'bucket_2'
+PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+POSTHOOK: query: select 'bucket_2'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+bucket_2
+ffff67aef705abda0b89d899e408c28ef230fd0bb2cb0bb23b057e946ba9ca91\N\N2015-01-21
+fff3474e56ee23c0df629b538268a438d74da36208bdb114bda2da4253f0b4c9\N\N2015-01-21
+PREHOOK: query: select 'bucket_4'
+PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+POSTHOOK: query: select 'bucket_4'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+bucket_4
+fffcb494aa56beb88fddb83cc3b0296d417d3ab7782be76c8c12d33e3f3d6a3c\N\N2015-01-21
+fffad1074d813e6db5c23302a9170fe472c2968844499c90445cbc8559d64fe1082015-01-21
+fff03007f38c32085bb4c9389270b965d371168032845555b663b7d4653ec8ee\N\N2015-01-21
+ffefa017a261a0b3e94c2386e0c47a015e2095e5d56b0f4fca2033d9755c9e45012015-01-21
+PREHOOK: query: select 'bucket_6'
+PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+POSTHOOK: query: select 'bucket_6'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+bucket_6
+fffee943d640a7714d09f9bd50dba08a9d0ebdd146655e4642c293a4396cb385\N\N2015-01-21
+fffc0450ec9b28bae495dffc87a37cc3eea6d2d067ccea8b333185d28847ae2a\N\N2015-01-21
+PREHOOK: query: select 'bucket_8'
+PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+POSTHOOK: query: select 'bucket_8'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+bucket_8
+fffcf74695669d1f444936243869f3586418c6d61d3abb5cc9acb67a3ad7bd2f002015-01-21
+fffbe3c110c390ec20218e5ad4a026ff515668ed55488b717319b556daa962a1002015-01-21
+fffb1b226efc3cfaac8d73647ce4fa4e82413d67265fb55366ac3a4996518738012015-01-21
+fff56191e39b15f0e2f04984c70152fb1bde2ecba52ff5a73b4c28bf4d58c017002015-01-21
+fff4166378aa9d94cd4f8a9cd543375890a61b4f09a57dbfb31a66b33b3e3fd9\N\N2015-01-21
+PREHOOK: query: drop table t1_n147
+PREHOOK: type: DROPTABLE
+PREHOOK: Input: default@t1_n147
+PREHOOK: Output: default@t1_n147
+POSTHOOK: query: drop table t1_n147
+POSTHOOK: type: DROPTABLE
+POSTHOOK: Input: default@t1_n147
+POSTHOOK: Output: default@t1_n147
+PREHOOK: query: create table t1_n147(
+a string,
+b int,
+c int,
+d string)
+partitioned by (e string)
+clustered by(a)
+sorted by(a desc) into 10 buckets stored as textfile
+PREHOOK: type: CREATETABLE
+PREHOOK: Output: database:default
+PREHOOK: Output: default@t1_n147
+POSTHOOK: query: create table t1_n147(
+a string,
+b int,
+c int,
+d string)
+partitioned by (e string)
+clustered by(a)
+sorted by(a desc) into 10 buckets stored as textfile
+POSTHOOK: type: CREATETABLE
+POSTHOOK: Output: database:default
+POSTHOOK: Output: default@t1_n147
+PREHOOK: query: insert overwrite table t1_n147 partition(e) select a,b,c,d,'epart' from t1_staging
+PREHOOK: type: QUERY
+PREHOOK: Input: default@t1_staging
+PREHOOK: Input: default@t1_staging@e=epart
+PREHOOK: Output: default@t1_n147
+POSTHOOK: query: insert overwrite table t1_n147 partition(e) select a,b,c,d,'epart' from t1_staging
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@t1_staging
+POSTHOOK: Input: default@t1_staging@e=epart
+POSTHOOK: Output: default@t1_n147@e=epart
+POSTHOOK: Lineage: t1_n147 PARTITION(e=epart).a SIMPLE [(t1_staging)t1_staging.FieldSchema(name:a, type:string, comment:null), ]
+POSTHOOK: Lineage: t1_n147 PARTITION(e=epart).b SIMPLE [(t1_staging)t1_staging.FieldSchema(name:b, type:int, comment:null), ]
+POSTHOOK: Lineage: t1_n147 PARTITION(e=epart).c SIMPLE [(t1_staging)t1_staging.FieldSchema(name:c, type:int, comment:null), ]
+POSTHOOK: Lineage: t1_n147 PARTITION(e=epart).d SIMPLE [(t1_staging)t1_staging.FieldSchema(name:d, type:string, comment:null), ]
+PREHOOK: query: select 'bucket_0'
+PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+POSTHOOK: query: select 'bucket_0'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+bucket_0
+fff06c6e0fd675ebeff09350e6b7a3900115f72341fd353e5e185e8983d10534002015-01-21
+PREHOOK: query: select 'bucket_2'
+PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+POSTHOOK: query: select 'bucket_2'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+bucket_2
+ffff67aef705abda0b89d899e408c28ef230fd0bb2cb0bb23b057e946ba9ca91\N\N2015-01-21
+fff3474e56ee23c0df629b538268a438d74da36208bdb114bda2da4253f0b4c9\N\N2015-01-21
+PREHOOK: query: select 'bucket_4'
+PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+POSTHOOK: query: select 'bucket_4'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+bucket_4
+fffcb494aa56beb88fddb83cc3b0296d417d3ab7782be76c8c12d33e3f3d6a3c\N\N2015-01-21
+fffad1074d813e6db5c23302a9170fe472c2968844499c90445cbc8559d64fe1082015-01-21
+fff03007f38c32085bb4c9389270b965d371168032845555b663b7d4653ec8ee\N\N2015-01-21
+ffefa017a261a0b3e94c2386e0c47a015e2095e5d56b0f4fca2033d9755c9e45012015-01-21
+PREHOOK: query: select 'bucket_6'
+PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+POSTHOOK: query: select 'bucket_6'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+bucket_6
+fffee943d640a7714d09f9bd50dba08a9d0ebdd146655e4642c293a4396cb385\N\N2015-01-21
+fffc0450ec9b28bae495dffc87a37cc3eea6d2d067ccea8b333185d28847ae2a\N\N2015-01-21
+PREHOOK: query: select 'bucket_8'
+PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+POSTHOOK: query: select 'bucket_8'
+POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
+#### A masked pattern was here ####
+bucket_8
+fffcf74695669d1f444936243869f3586418c6d61d3abb5cc9acb67a3ad7bd2f002015-01-21
+fffbe3c110c390ec20218e5ad4a026ff515668ed55488b717319b556daa962a1002015-01-21
+fffb1b226efc3cfaac8d73647ce4fa4e82413d67265fb55366ac3a4996518738012015-01-21
+fff56191e39b15f0e2f04984c70152fb1bde2ecba52ff5a73b4c28bf4d58c017002015-01-21
+fff4166378aa9d94cd4f8a9cd543375890a61b4f09a57dbfb31a66b33b3e3fd9\N\N2015-01-21
