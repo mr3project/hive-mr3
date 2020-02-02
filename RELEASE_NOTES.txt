@@ -1,0 +1,62 @@
+Release Notes - Hive - Version 1.2.2
+
+** Sub-task
+    * [HIVE-15126] - Branch-1.2: Fix TestCliDriver.join_merge_multi_expressions.q
+    * [HIVE-15133] - Branch-1.2: Investigate TestBeelineArgParsing
+
+** Bug
+    * [HIVE-9013] - Hive set command exposes metastore db password
+    * [HIVE-10996] - Aggregation / Projection over Multi-Join Inner Query producing incorrect results
+    * [HIVE-11028] - Tez: table self join and join with another table fails with IndexOutOfBoundsException
+    * [HIVE-11050] - testCliDriver_vector_outer_join.* failures in Unit tests due to unstable data creation queries
+    * [HIVE-11059] - hcatalog-server-extensions tests scope should depend on hive-exec
+    * [HIVE-11060] - Make test windowing.q robust
+    * [HIVE-11066] - Ensure tests don't share directories on FS
+    * [HIVE-11074] - Update tests for HIVE-9302 after removing binaries
+    * [HIVE-11151] - Calcite transitive predicate inference rule should not transitively add not null filter on non-nullable input
+    * [HIVE-11171] - Join reordering algorithm might introduce projects between joins
+    * [HIVE-11172] - Vectorization wrong results for aggregate query with where clause without group by
+    * [HIVE-11216] - UDF GenericUDFMapKeys throws NPE when a null map value is passed in
+    * [HIVE-11224] - AggregateStatsCache triggers java.util.ConcurrentModificationException under some conditions
+    * [HIVE-11301] - thrift metastore issue when getting stats results in disconnect
+    * [HIVE-11344] - HIVE-9845 makes HCatSplit.write modify the split so that PartInfo objects are unusable after it
+    * [HIVE-11470] - NPE in DynamicPartFileRecordWriterContainer on null part-keys.
+    * [HIVE-11517] - Vectorized auto_smb_mapjoin_14.q produces different results
+    * [HIVE-11605] - Incorrect results with bucket map join in tez.
+    * [HIVE-11606] - Bucket map joins fail at hash table construction time
+    * [HIVE-11745] - Alter table Exchange partition with multiple partition_spec is not working
+    * [HIVE-11802] - Float-point numbers are displayed with different precision in Beeline/JDBC
+    * [HIVE-11829] - Create test for HIVE-11216
+    * [HIVE-11832] - HIVE-11802 breaks compilation in JDK 8
+    * [HIVE-11841] - KeyValuesInputMerger creates huge logs
+    * [HIVE-11975] - mssql scripts contains invalid 'GO' statement
+    * [HIVE-11988] - [hive] security issue with hive & ranger for import table command
+    * [HIVE-12021] - HivePreFilteringRule may introduce wrong common operands
+    * [HIVE-12083] - HIVE-10965 introduces thrift error if partNames or colNames are empty
+    * [HIVE-12344] - Wrong types inferred for SemiJoin generation in CBO
+    * [HIVE-12345] - Followup for HIVE-9013 : Hidden conf vars still visible through beeline
+    * [HIVE-12875] - Verify sem.getInputs() and sem.getOutputs()
+    * [HIVE-12937] - DbNotificationListener unable to clean up old notification events
+    * [HIVE-12981] - ThriftCLIService uses incompatible getShortName() implementation
+    * [HIVE-12992] - Hive on tez: Bucket map join plan is incorrect
+    * [HIVE-13020] - Hive Metastore and HiveServer2 to Zookeeper fails with IBM JDK
+    * [HIVE-13115] - MetaStore Direct SQL getPartitions call fail when the columns schemas for a partition are null
+    * [HIVE-13390] - HiveServer2: Add more test to ZK service discovery using MiniHS2
+    * [HIVE-13394] - Analyze table fails in tez on empty partitions/files/tables
+    * [HIVE-13645] - Beeline needs null-guard around hiveVars and hiveConfVars read
+    * [HIVE-13738] - Bump up httpcomponent.*.version deps in branch-1.2 to 4.4
+    * [HIVE-13948] - Incorrect timezone handling in Writable results in wrong dates in queries
+    * [HIVE-14210] - ExecDriver should call jobclient.close() to trigger cleanup
+    * [HIVE-14964] - Failing Test: Fix TestBeelineArgParsing tests
+
+** Improvement
+    * [HIVE-9583] - Rolling upgrade of Hive MetaStore Server
+    * [HIVE-11076] - Explicitly set hive.cbo.enable=true for some tests
+    * [HIVE-11780] - Add "set role none" support
+
+** New Feature
+    * [HIVE-15691] - Create StrictRegexWriter to work with RegexSerializer for Flume Hive Sink
+
+** Test
+    * [HIVE-11048] - Make test cbo_windowing robust
+    * [HIVE-11083] - Make test cbo_windowing robust
