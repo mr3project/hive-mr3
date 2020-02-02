@@ -1,0 +1,8 @@
+Release Notes - Hive - Version 2.3.6
+
+** Bug
+  * [HIVE-21809] - Backport HIVE-21786 to branch-2.3
+** Improvement
+  * [HIVE-21859] - Backport HIVE-17466 (get_partition_values) to branch-2.3
+  * [HIVE-22096] - Backport HIVE-21584 to branch-2.3
+

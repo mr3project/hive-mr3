@@ -1,0 +1,32 @@
+PREHOOK: query: create table source_table like srcpart
+PREHOOK: type: CREATETABLE
+PREHOOK: Output: database:default
+PREHOOK: Output: default@source_table
+POSTHOOK: query: create table source_table like srcpart
+POSTHOOK: type: CREATETABLE
+POSTHOOK: Output: database:default
+POSTHOOK: Output: default@source_table
+PREHOOK: query: create table dest_table like srcpart
+PREHOOK: type: CREATETABLE
+PREHOOK: Output: database:default
+PREHOOK: Output: default@dest_table
+POSTHOOK: query: create table dest_table like srcpart
+POSTHOOK: type: CREATETABLE
+POSTHOOK: Output: database:default
+POSTHOOK: Output: default@dest_table
+PREHOOK: query: load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE source_table partition(ds='2008-04-08', hr=11)
+PREHOOK: type: LOAD
+#### A masked pattern was here ####
+PREHOOK: Output: default@source_table
+POSTHOOK: query: load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE source_table partition(ds='2008-04-08', hr=11)
+POSTHOOK: type: LOAD
+#### A masked pattern was here ####
+POSTHOOK: Output: default@source_table
+POSTHOOK: Output: default@source_table@ds=2008-04-08/hr=11
+PREHOOK: query: insert overwrite table dest_table partition (ds, hr) select key, hr, ds, value from source_table where ds='2008-04-08' and value='val_129' order by value asc
+PREHOOK: type: QUERY
+PREHOOK: Input: default@source_table
+PREHOOK: Input: default@source_table@ds=2008-04-08/hr=11
+PREHOOK: Output: default@dest_table
+#### A masked pattern was here ####
+FAILED: Execution Error, return code 2 from org.apache.hadoop.hive.ql.exec.mr.MapRedTask
