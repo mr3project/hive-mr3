@@ -24,7 +24,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.hive.llap.LlapDaemonInfo;
 import org.apache.hadoop.hive.ql.exec.MemoryMonitorInfo;
 import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionError;
 import org.slf4j.Logger;
@@ -156,12 +155,6 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
     long effectiveThreshold = 0;
     if (memoryMonitorInfo != null) {
       effectiveThreshold = memoryMonitorInfo.getEffectiveThreshold(desc.getMaxMemoryAvailable());
-
-      // hash table loading happens in server side, LlapDecider could kick out some fragments to run outside of LLAP.
-      // Flip the flag at runtime in case if we are running outside of LLAP
-      if (!LlapDaemonInfo.INSTANCE.isLlap()) {
-        memoryMonitorInfo.setLlap(false);
-      }
       if (memoryMonitorInfo.doMemoryMonitoring()) {
         doMemCheck = true;
         if (LOG.isInfoEnabled()) {
@@ -169,6 +162,9 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
         }
       }
     }
+
+    long interruptCheckInterval = HiveConf.getLongVar(hconf, HiveConf.ConfVars.MR3_MAPJOIN_INTERRUPT_CHECK_INTERVAL);
+    LOG.info("interruptCheckInterval = " + interruptCheckInterval);
 
     if (!doMemCheck) {
       if (LOG.isInfoEnabled()) {
@@ -241,6 +237,9 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
         while (kvReader.next()) {
           tableContainer.putRow((Writable) kvReader.getCurrentKey(), (Writable) kvReader.getCurrentValue());
           numEntries++;
+          if ((numEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
+            throw new InterruptedException("Hash table loading interrupted");
+          }
           if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
             final long estMemUsage = tableContainer.getEstimatedMemorySize();
             if (estMemUsage > effectiveThreshold) {

@@ -99,9 +99,10 @@ public class GlobalWorkMapFactory {
   DummyMap<Path, BaseWork> dummy = new DummyMap<Path, BaseWork>();
 
   public Map<Path, BaseWork> get(Configuration conf) {
-    if (LlapProxy.isDaemon()
-        || (SessionState.get() != null && SessionState.get().isHiveServerQuery())
-        || HiveConf.getVar(conf, ConfVars.HIVE_EXECUTION_ENGINE).equals("spark")) {
+    String engine = HiveConf.getVar(conf, ConfVars.HIVE_EXECUTION_ENGINE);
+    if ((engine.equals("mr3") || engine.equals("tez"))
+        || LlapProxy.isDaemon()
+        || (SessionState.get() != null && SessionState.get().isHiveServerQuery())) {
       if (threadLocalWorkMap == null) {
         threadLocalWorkMap = new ThreadLocal<Map<Path, BaseWork>>() {
           @Override

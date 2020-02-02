@@ -190,7 +190,7 @@ public class InPlaceUpdate {
     String engine = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
     boolean inPlaceUpdates = false;
 
-    if (engine.equals("tez")) {
+    if (engine.equals("mr3") || engine.equals("tez")) {
       inPlaceUpdates = HiveConf.getBoolVar(conf, HiveConf.ConfVars.TEZ_EXEC_INPLACE_PROGRESS);
     }
 

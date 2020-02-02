@@ -420,7 +420,8 @@ public final class HiveUtils {
   }
 
   public static String getLocalDirList(Configuration conf) {
-    if (HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+    String engine = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+    if (engine.equals("mr3") || engine.equals("tez")) {
       TezContext tezContext = (TezContext) TezContext.get();
       if (tezContext != null && tezContext.getTezProcessorContext() != null) {
         return StringUtils.arrayToString(tezContext.getTezProcessorContext().getWorkDirs());

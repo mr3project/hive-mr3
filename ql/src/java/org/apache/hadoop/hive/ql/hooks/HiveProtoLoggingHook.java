@@ -545,7 +545,7 @@ public class HiveProtoLoggingHook implements ExecuteWithHookContext {
       if (instance == null) {
         synchronized (EventLogger.class) {
           if (instance == null) {
-            instance = new EventLogger(conf, SystemClock.getInstance());
+            instance = new EventLogger(conf, new SystemClock());
             ShutdownHookManager.addShutdownHook(instance::shutdown);
           }
         }

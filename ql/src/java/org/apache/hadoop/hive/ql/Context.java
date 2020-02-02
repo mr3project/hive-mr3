@@ -979,7 +979,8 @@ public class Context {
     // Always allow spark to run in a cluster mode. Without this, depending on
     // user's local hadoop settings, true may be returned, which causes plan to be
     // stored in local path.
-    if (HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("spark")) {
+    String engine = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+    if (engine.equals("spark") || (engine.equals("mr3") || engine.equals("tez"))) {
       return false;
     }
 

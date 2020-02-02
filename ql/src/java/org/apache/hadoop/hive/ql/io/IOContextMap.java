@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.hive.ql.io;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
@@ -56,6 +58,15 @@ public class IOContextMap {
     protected IOContext initialValue() { return new IOContext(); }
   };
 
+  /** Used for MR3 */
+  private static final ThreadLocal<Map<String, IOContext>> mr3ThreadLocal =
+      new ThreadLocal<Map<String, IOContext>>(){
+        @Override
+        protected synchronized Map<String, IOContext> initialValue() {
+          return new HashMap<String, IOContext>();
+        }
+      };
+
   /** Used for Tez+LLAP */
   private static final ConcurrentHashMap<String, ConcurrentHashMap<String, IOContext>> attemptMap =
       new ConcurrentHashMap<String, ConcurrentHashMap<String, IOContext>>();
@@ -89,6 +100,17 @@ public class IOContextMap {
     if (inputName == null) {
       inputName = DEFAULT_CONTEXT;
     }
+
+    String engine = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+    if (engine.equals("mr3") || engine.equals("tez")) {
+      Map<String, IOContext> inputNameIOContextMap = mr3ThreadLocal.get();
+      if (!inputNameIOContextMap.containsKey(inputName)) {
+        IOContext ioContext = new IOContext();
+        inputNameIOContextMap.put(inputName, ioContext);
+      }
+      return inputNameIOContextMap.get(inputName);
+    }
+
     String attemptId = threadAttemptId.get();
     ConcurrentHashMap<String, IOContext> map;
     if (attemptId == null) {
@@ -113,6 +135,7 @@ public class IOContextMap {
 
   public static void clear() {
     sparkThreadLocal.remove();
+    mr3ThreadLocal.remove();
     globalMap.clear();
   }
 }

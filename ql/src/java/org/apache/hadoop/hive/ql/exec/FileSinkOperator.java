@@ -1260,12 +1260,12 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
     }
 
     if (!bDynParts && !filesCreated) {
-      boolean isTez = "tez".equalsIgnoreCase(
-          HiveConf.getVar(hconf, ConfVars.HIVE_EXECUTION_ENGINE));
+      String engine = HiveConf.getVar(hconf, ConfVars.HIVE_EXECUTION_ENGINE);
+      boolean isMr3 = engine.equalsIgnoreCase("mr3") || engine.equalsIgnoreCase("tez");
       Class<?> clazz = conf.getTableInfo().getOutputFileFormatClass();
       boolean isStreaming = StreamingOutputFormat.class.isAssignableFrom(clazz);
-
-      if (!isTez || isStreaming || this.isInsertOverwrite) {
+      
+      if (!isMr3 || isStreaming || this.isInsertOverwrite) {
         createBucketFiles(fsp);
       }
     }

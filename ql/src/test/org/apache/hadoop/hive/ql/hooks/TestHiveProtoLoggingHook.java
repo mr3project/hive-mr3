@@ -94,7 +94,7 @@ public class TestHiveProtoLoggingHook {
   @Test
   public void testPreEventLog() throws Exception {
     context.setHookType(HookType.PRE_EXEC_HOOK);
-    EventLogger evtLogger = new EventLogger(conf, SystemClock.getInstance());
+    EventLogger evtLogger = new EventLogger(conf, new SystemClock());
     evtLogger.handle(context);
     evtLogger.shutdown();
 
@@ -189,7 +189,7 @@ public class TestHiveProtoLoggingHook {
     context.getPerfLogger().PerfLogBegin("test", "LogTest");
     context.getPerfLogger().PerfLogEnd("test", "LogTest");
 
-    EventLogger evtLogger = new EventLogger(conf, SystemClock.getInstance());
+    EventLogger evtLogger = new EventLogger(conf, new SystemClock());
     evtLogger.handle(context);
     evtLogger.shutdown();
 
@@ -212,7 +212,7 @@ public class TestHiveProtoLoggingHook {
   public void testFailureEventLog() throws Exception {
     context.setHookType(HookType.ON_FAILURE_HOOK);
 
-    EventLogger evtLogger = new EventLogger(conf, SystemClock.getInstance());
+    EventLogger evtLogger = new EventLogger(conf, new SystemClock());
     evtLogger.handle(context);
     evtLogger.shutdown();
 
@@ -270,7 +270,7 @@ public class TestHiveProtoLoggingHook {
     status = fs.listStatus(status[0].getPath());
     Assert.assertEquals(1, status.length);
     DatePartitionedLogger<HiveHookEventProto> logger = new DatePartitionedLogger<>(
-        HiveHookEventProto.PARSER, path, conf, SystemClock.getInstance());
+        HiveHookEventProto.PARSER, path, conf, new SystemClock());
     return logger.getReader(status[0].getPath());
   }
 

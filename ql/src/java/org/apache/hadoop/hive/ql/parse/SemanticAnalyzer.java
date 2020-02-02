@@ -1159,7 +1159,9 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
   }
 
   private void assertCombineInputFormat(Tree numerator, String message) throws SemanticException {
-    String inputFormat = conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez") ?
+    String engine = conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+    String inputFormat =
+        (engine.equals("mr3") || engine.equals("tez")) ?
         HiveConf.getVar(conf, HiveConf.ConfVars.HIVETEZINPUTFORMAT):
         HiveConf.getVar(conf, HiveConf.ConfVars.HIVEINPUTFORMAT);
     if (!inputFormat.equals(CombineHiveInputFormat.class.getName())) {
@@ -9571,8 +9573,9 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       ASTNode hint = (ASTNode) hints.getChild(pos);
       if (((ASTNode) hint.getChild(0)).getToken().getType() == HintParser.TOK_MAPJOIN) {
         // the user has specified to ignore mapjoin hint
+        String engine = conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
         if (!conf.getBoolVar(HiveConf.ConfVars.HIVEIGNOREMAPJOINHINT)
-            && !conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+            && !(engine.equals("mr3") || engine.equals("tez"))) {
           ASTNode hintTblNames = (ASTNode) hint.getChild(1);
           int numCh = hintTblNames.getChildCount();
           for (int tblPos = 0; tblPos < numCh; tblPos++) {
@@ -9691,8 +9694,9 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     }
     joinTree.setJoinCond(condn);
 
+    String engine = conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
     if ((qb.getParseInfo().getHints() != null)
-        && !(conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez"))) {
+        && !(engine.equals("mr3") || engine.equals("tez"))) {
       LOG.info("STREAMTABLE hint honored.");
       parseStreamTables(joinTree, qb);
     }
@@ -9988,7 +9992,8 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
 
       joinTree.setMapAliases(mapAliases);
 
-      if (!(conf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez"))) {
+      String engine = conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+      if (!(engine.equals("mr3") || engine.equals("tez"))) {
         parseStreamTables(joinTree, qb);
       }
     }

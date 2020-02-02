@@ -652,9 +652,9 @@ public final class BytesBytesMultiHashMap implements MemoryEstimate {
       slot = (int)(probeSlot & bucketMask);
     }
     if (largestNumberOfSteps < i) {
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Probed " + i + " slots (the longest so far) to find space");
-      }
+      // if (LOG.isDebugEnabled()) {
+      //   LOG.debug("Probed " + i + " slots (the longest so far) to find space");
+      // }
       largestNumberOfSteps = i;
       // debugDumpKeyProbe(keyOffset, keyLength, hashCode, slot);
     }

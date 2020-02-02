@@ -289,7 +289,7 @@ public class ReduceWork extends BaseWork {
 
   // Use LinkedHashSet to give predictable display order.
   private static Set<String> reduceVectorizableEngines =
-      new LinkedHashSet<String>(Arrays.asList("tez", "spark"));
+      new LinkedHashSet<String>(Arrays.asList("mr3", "tez", "spark"));
 
   public class ReduceExplainVectorization extends BaseExplainVectorization {
 

@@ -68,7 +68,7 @@ public class TxnManagerFactory {
     // Instantiate the chosen transaction manager
     try {
       HiveTxnManagerImpl impl = (HiveTxnManagerImpl)ReflectionUtils.newInstance(
-            conf.getClassByName(txnMgrName), conf);
+              conf.getClassByName(txnMgrName), conf);
       impl.setHiveConf(conf);
       txnMgr = impl;
     } catch (ClassNotFoundException e) {

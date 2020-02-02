@@ -402,10 +402,9 @@ public class ExecDriver extends Task<MapredWork> implements Serializable, Hadoop
       Utilities.createTmpDirs(job, rWork);
 
       SessionState ss = SessionState.get();
-      // TODO: why is there a TezSession in MR ExecDriver?
-      if (ss != null && HiveConf.getVar(job, ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
-        // TODO: this is the only place that uses keepTmpDir. Why?
-        TezSessionPoolManager.closeIfNotDefault(ss.getTezSession(), true);
+      String engine = HiveConf.getVar(job, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+      if ((engine.equals("mr3") || engine.equals("tez")) && ss != null) {
+        // TODO: close MR3 Session, since we are executing MR Task, not MR3
       }
 
       HiveConfUtil.updateJobCredentialProviders(job);

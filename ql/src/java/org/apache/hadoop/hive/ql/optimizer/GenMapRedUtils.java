@@ -1339,11 +1339,12 @@ public final class GenMapRedUtils {
     if (isBlockMerge) {
       cplan = GenMapRedUtils.createMergeTask(fsInputDesc, finalName,
           dpCtx != null && dpCtx.getNumDPCols() > 0, fsInput.getCompilationOpContext());
-      if (conf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+      String engine = conf.getVar(ConfVars.HIVE_EXECUTION_ENGINE); 	   
+      if (engine.equals("mr3") || engine.equals("tez")) {
         work = new TezWork(conf.getVar(HiveConf.ConfVars.HIVEQUERYID), conf);
         cplan.setName("File Merge");
         ((TezWork) work).add(cplan);
-      } else if (conf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("spark")) {
+      } else if (engine.equals("spark")) {
         work = new SparkWork(conf.getVar(HiveConf.ConfVars.HIVEQUERYID));
         cplan.setName("Spark Merge File Work");
         ((SparkWork) work).add(cplan);
@@ -1352,11 +1353,12 @@ public final class GenMapRedUtils {
       }
     } else {
       cplan = createMRWorkForMergingFiles(conf, tsMerge, fsInputDesc);
-      if (conf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+      String engine = conf.getVar(ConfVars.HIVE_EXECUTION_ENGINE);
+      if (engine.equals("mr3") || engine.equals("tez")) {
         work = new TezWork(conf.getVar(HiveConf.ConfVars.HIVEQUERYID), conf);
         cplan.setName("File Merge");
         ((TezWork)work).add(cplan);
-      } else if (conf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("spark")) {
+      } else if (engine.equals("spark")) {
         work = new SparkWork(conf.getVar(HiveConf.ConfVars.HIVEQUERYID));
         cplan.setName("Spark Merge File Work");
         ((SparkWork) work).add(cplan);

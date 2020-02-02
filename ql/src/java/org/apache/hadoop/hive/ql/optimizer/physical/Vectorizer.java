@@ -4261,7 +4261,7 @@ public class Vectorizer implements PhysicalPlanResolver {
     boolean isOkArrowFileSink =
         serdeClassName.equals("org.apache.hadoop.hive.ql.io.arrow.ArrowColumnarBatchSerDe") &&
         isVectorizationFileSinkArrowNativeEnabled &&
-        engine.equalsIgnoreCase("tez");
+        (engine.equalsIgnoreCase("mr3") || engine.equalsIgnoreCase("tez"));
 
     return isOkArrowFileSink;
   }

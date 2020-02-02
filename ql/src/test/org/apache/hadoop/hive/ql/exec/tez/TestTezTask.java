@@ -154,7 +154,7 @@ public class TestTezTask {
     work.connect(mws[1], rws[0], edgeProp);
     work.connect(rws[0], rws[1], edgeProp);
 
-    task = new TezTask(utils);
+    task = new TezTask();
     task.setWork(work);
     task.setConsole(mock(LogHelper.class));
     QueryPlan mockQueryPlan = mock(QueryPlan.class);
@@ -186,65 +186,6 @@ public class TestTezTask {
     task = null;
     path = null;
     fs = null;
-  }
-
-  @Test
-  public void testBuildDag() throws IllegalArgumentException, IOException, Exception {
-    DAG dag = task.build(conf, work, path, new Context(conf),
-        DagUtils.createTezLrMap(appLr, null));
-    for (BaseWork w: work.getAllWork()) {
-      Vertex v = dag.getVertex(w.getName());
-      assertNotNull(v);
-      List<Vertex> outs = v.getOutputVertices();
-      for (BaseWork x: work.getChildren(w)) {
-        boolean found = false;
-        for (Vertex u: outs) {
-          if (u.getName().equals(x.getName())) {
-            found = true;
-            break;
-          }
-        }
-        assertTrue(found);
-      }
-    }
-  }
-
-  @Test
-  public void testEmptyWork() throws IllegalArgumentException, IOException, Exception {
-    DAG dag = task.build(conf, new TezWork("", null), path, new Context(conf),
-        DagUtils.createTezLrMap(appLr, null));
-    assertEquals(dag.getVertices().size(), 0);
-  }
-
-  @Test
-  public void testSubmit() throws Exception {
-    DAG dag = DAG.create("test");
-    task.submit(dag, Ref.from(sessionState));
-    // validate close/reopen
-    verify(sessionState, times(1)).reopen();
-    verify(session, times(2)).submitDAG(any(DAG.class));
-  }
-
-  @Test
-  public void testClose() throws HiveException {
-    task.close(work, 0, null);
-    verify(op, times(4)).jobClose(any(Configuration.class), eq(true));
-  }
-
-  @Test
-  public void testExistingSessionGetsStorageHandlerResources() throws Exception {
-    final String jarFilePath = "file:///tmp/foo.jar";
-    final String[] inputOutputJars = new String[] {jarFilePath};
-    LocalResource res = createResource(inputOutputJars[0]);
-    final Map<String, LocalResource> resources = Collections.singletonMap(jarFilePath, res);
-
-    when(utils.localizeTempFiles(anyString(), any(Configuration.class), eq(inputOutputJars),
-        any(String[].class))).thenReturn(resources);
-    when(sessionState.isOpen()).thenReturn(true);
-    when(sessionState.isOpening()).thenReturn(false);
-    task.ensureSessionHasResources(sessionState, inputOutputJars);
-    // TODO: ideally we should have a test for session itself.
-    verify(sessionState).ensureLocalResources(any(Configuration.class), eq(inputOutputJars));
   }
 
   private static LocalResource createResource(String url) {

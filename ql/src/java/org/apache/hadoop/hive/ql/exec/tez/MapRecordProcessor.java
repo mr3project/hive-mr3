@@ -280,11 +280,14 @@ public class MapRecordProcessor extends RecordProcessor {
 
       // set memory available for operators
       long memoryAvailableToTask = processorContext.getTotalMemoryAvailableToTask();
+      int estimateNumExecutors = processorContext.getEstimateNumExecutors();
       if (mapOp.getConf() != null) {
         mapOp.getConf().setMaxMemoryAvailable(memoryAvailableToTask);
-        LOG.info("Memory available for operators set to {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask));
+        mapOp.getConf().setEstimateNumExecutors(estimateNumExecutors);
+        LOG.info("Memory available for operators set to {} {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask), estimateNumExecutors);
       }
       OperatorUtils.setMemoryAvailable(mapOp.getChildOperators(), memoryAvailableToTask);
+      OperatorUtils.setEstimateNumExecutors(mapOp.getChildOperators(), estimateNumExecutors);
 
       mapOp.initializeLocalWork(jconf);
 

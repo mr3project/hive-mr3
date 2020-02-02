@@ -1347,7 +1347,9 @@ public class AcidUtils {
      */
     Collections.sort(original, (HdfsFileStatusWithId o1, HdfsFileStatusWithId o2) -> {
       //this does "Path.uri.compareTo(that.uri)"
-      return o1.getFileStatus().compareTo(o2.getFileStatus());
+      return o1.getFileStatus().getPath().compareTo(o2.getFileStatus().getPath());
+      // TODO: for Hadoop 2.8+
+      // return o1.getFileStatus().compareTo(o2.getFileStatus());
     });
     return new DirectoryImpl(abortedDirectories, isBaseInRawFormat, original,
         obsolete, deltas, base);

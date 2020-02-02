@@ -794,7 +794,13 @@ public class TezCompiler extends TaskCompiler {
     }
 
     if ("llap".equalsIgnoreCase(conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_MODE))) {
-      LlapClusterStateForCompile llapInfo = LlapClusterStateForCompile.getClusterInfo(conf);
+      LlapClusterStateForCompile llapInfo;
+      String engine = HiveConf.getVar(conf, ConfVars.HIVE_EXECUTION_ENGINE);
+      if (!(engine.equals("mr3") || engine.equals("tez"))) {
+        llapInfo = LlapClusterStateForCompile.getClusterInfo(conf);
+      } else {
+        llapInfo = null;
+      }
       physicalCtx = new LlapDecider(llapInfo).resolve(physicalCtx);
     } else {
       LOG.debug("Skipping llap decider");

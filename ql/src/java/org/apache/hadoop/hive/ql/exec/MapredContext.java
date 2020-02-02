@@ -50,8 +50,9 @@ public class MapredContext {
   }
 
   public static MapredContext init(boolean isMap, JobConf jobConf) {
+    String engine = HiveConf.getVar(jobConf, ConfVars.HIVE_EXECUTION_ENGINE);
     MapredContext context =
-        HiveConf.getVar(jobConf, ConfVars.HIVE_EXECUTION_ENGINE).equals("tez") ?
+        (engine.equals("mr3") || engine.equals("tez")) ?
             new TezContext(isMap, jobConf) : new MapredContext(isMap, jobConf);
     contexts.set(context);
     if (logger.isDebugEnabled()) {

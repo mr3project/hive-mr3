@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Future;
@@ -75,6 +76,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorConverters.C
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.common.util.ReflectionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -234,9 +236,30 @@ public class MapJoinOperator extends AbstractMapJoinOperator<MapJoinDesc> implem
         LOG.debug("This is not bucket map join, so cache");
       }
 
+      // The reason that we execute loadHashTable() inside the current UGI is that loadHashTable() may
+      // create LocalFileSystem (e.g., in ShuffleManager.localFs), which is stored in FileSystem.CACHE[].
+      // However, Keys for FileSystem.CACHE[] use UGI, so the first DAG's UGI bound to the Thread in
+      // LlapObjectCache.staticPool is reused for all subsequent DAGs. In other words, Threads in
+      // LlapObjectCache.staticPool never change their UGI. As a result, FileSystem.closeAllForUGI() after
+      // the first DAG has no effect (because Key of FileSystem.CACHE[] always uses the UGI of the first DAG).
+      // This leads to memory leak of DAGClassLoader and destroys the semantic correctness.
+      UserGroupInformation ugi;
+      try {
+        ugi = UserGroupInformation.getCurrentUser();
+      } catch (IOException e) {
+        throw new HiveException("ugi", e);
+      }
+
       Future<Pair<MapJoinTableContainer[], MapJoinTableContainerSerDe[]>> future =
-          cache.retrieveAsync(
-              cacheKey, () ->loadHashTable(mapContext, mrContext));
+        cache.retrieveAsync(cacheKey, () ->
+            ugi.doAs(new PrivilegedExceptionAction<Pair<MapJoinTableContainer[], MapJoinTableContainerSerDe[]>>() {
+              @Override
+              public Pair<MapJoinTableContainer[], MapJoinTableContainerSerDe[]> run() throws Exception {
+                return loadHashTable(mapContext, mrContext);
+              }
+            })
+        );
+
       asyncInitOperations.add(future);
     } else if (!isInputFileChangeSensitive(mapContext)) {
       loadHashTable(mapContext, mrContext);

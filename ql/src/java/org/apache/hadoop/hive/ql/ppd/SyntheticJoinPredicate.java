@@ -77,7 +77,7 @@ public class SyntheticJoinPredicate extends Transform {
     boolean enabled = false;
     String queryEngine = pctx.getConf().getVar(ConfVars.HIVE_EXECUTION_ENGINE);
 
-    if (queryEngine.equals("tez")
+    if ((queryEngine.equals("mr3") || queryEngine.equals("tez"))
         && pctx.getConf().getBoolVar(ConfVars.TEZ_DYNAMIC_PARTITION_PRUNING)) {
       enabled = true;
     } else if ((queryEngine.equals("spark")

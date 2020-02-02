@@ -137,8 +137,8 @@ public class HiveSplitGenerator extends InputInitializer {
     this.work = Utilities.getMapWork(jobConf);
 
     this.splitLocationProvider =
-        Utils.getSplitLocationProvider(conf, work.getCacheAffinity(), LOG);
-    LOG.info("SplitLocationProvider: " + splitLocationProvider);
+        Utils.getSplitLocationProvider(conf, work.getCacheAffinity(), initializerContext, LOG);
+    LOG.info(initializerContext.getDAGName() + "/" + initializerContext.getInputName() + ": " + splitLocationProvider);
 
     // Events can start coming in the moment the InputInitializer is created. The pruner
     // must be setup and initialized here so that it sets up it's structures to start accepting events.

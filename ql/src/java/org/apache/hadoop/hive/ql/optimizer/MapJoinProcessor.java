@@ -523,12 +523,12 @@ public class MapJoinProcessor extends Transform {
         HiveConf.getVar(
             hiveConf,
             HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
-    final boolean isTezEngine = engine.equalsIgnoreCase("tez");
-    if (!isTezEngine) {
+    final boolean isMr3Engine = engine.equalsIgnoreCase("mr3") || engine.equalsIgnoreCase("tez");
+    if (!isMr3Engine) {
 
-      // Only Tez for now.
+      // Only MR3 for now.
       if (LOG.isDebugEnabled()) {
-        LOG.debug("FULL OUTER MapJoin not enabled: Only Tez engine supported");
+        LOG.debug("FULL OUTER MapJoin not enabled: Only MR3 engine supported");
       }
       return false;
     }

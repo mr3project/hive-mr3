@@ -52,6 +52,7 @@ import org.apache.hive.service.cli.GetInfoType;
 import org.apache.hive.service.cli.GetInfoValue;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.JobProgressUpdate;
+import org.apache.hive.service.cli.MR3ProgressMonitorStatusMapper;
 import org.apache.hive.service.cli.OperationHandle;
 import org.apache.hive.service.cli.OperationStatus;
 import org.apache.hive.service.cli.OperationType;
@@ -711,10 +712,11 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       }
       JobProgressUpdate progressUpdate = operationStatus.jobProgressUpdate();
       ProgressMonitorStatusMapper mapper = ProgressMonitorStatusMapper.DEFAULT;
-      if ("tez".equals(hiveConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE))) {
-        mapper = new TezProgressMonitorStatusMapper();
+      String engine = hiveConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE);
+      if (engine.equals("mr3") || engine.equals("tez")) {
+        mapper = new MR3ProgressMonitorStatusMapper();
       }
-      if ("spark".equals(hiveConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE))) {
+      if (engine.equals("spark")) {
         mapper = new SparkProgressMonitorStatusMapper();
       }
       TJobExecutionStatus executionStatus =

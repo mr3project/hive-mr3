@@ -1602,6 +1602,7 @@ public class DagUtils {
 
   public static String getUserSpecifiedDagName(Configuration conf) {
     String name = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEQUERYNAME);
+    // TODO: use MRJobConfig.JOB_NAME instead of "mapred.job.name"
     return (name != null) ? name : conf.get("mapred.job.name");
   }
 

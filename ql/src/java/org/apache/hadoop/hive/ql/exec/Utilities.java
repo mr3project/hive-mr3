@@ -1395,10 +1395,11 @@ public final class Utilities {
 
   private static boolean shouldAvoidRename(FileSinkDesc conf, Configuration hConf) {
     // we are avoiding rename/move only if following conditions are met
-    //  * execution engine is tez
+    //  * execution engine is MR3
     //  * if it is select query
+    String engine = HiveConf.getVar(hConf, ConfVars.HIVE_EXECUTION_ENGINE);
     if (conf != null && conf.getIsQuery() && conf.getFilesToFetch() != null
-        && HiveConf.getVar(hConf, ConfVars.HIVE_EXECUTION_ENGINE).equalsIgnoreCase("tez")){
+        && (engine.equalsIgnoreCase("mr3") || engine.equalsIgnoreCase("tez"))){
       return true;
     }
     return false;
@@ -1705,8 +1706,9 @@ public final class Utilities {
   // TODO: not clear why two if conditions are different. Preserve the existing logic for now.
   private static void addBucketFileToResults2(HashMap<String, FileStatus> taskIDToFile,
       int numBuckets, Configuration hconf, List<Path> result) {
+    String engine = hconf.get(ConfVars.HIVE_EXECUTION_ENGINE.varname);
     if (MapUtils.isNotEmpty(taskIDToFile) && (numBuckets > taskIDToFile.size())
-        && !"tez".equalsIgnoreCase(hconf.get(ConfVars.HIVE_EXECUTION_ENGINE.varname))) {
+        && !(engine.equalsIgnoreCase("mr3") || engine.equalsIgnoreCase("tez"))) {
         addBucketsToResultsCommon(taskIDToFile, numBuckets, result);
     }
   }
@@ -1715,8 +1717,9 @@ public final class Utilities {
   private static void addBucketFileToResults(HashMap<String, FileStatus> taskIDToFile,
       int numBuckets, Configuration hconf, List<Path> result) {
     // if the table is bucketed and enforce bucketing, we should check and generate all buckets
+    String engine = hconf.get(ConfVars.HIVE_EXECUTION_ENGINE.varname);
     if (numBuckets > 0 && taskIDToFile != null
-        && !"tez".equalsIgnoreCase(hconf.get(ConfVars.HIVE_EXECUTION_ENGINE.varname))) {
+        && !(engine.equalsIgnoreCase("mr3") || engine.equalsIgnoreCase("tez"))) {
       addBucketsToResultsCommon(taskIDToFile, numBuckets, result);
     }
   }
@@ -3548,7 +3551,9 @@ public final class Utilities {
    * Set hive input format, and input format file if necessary.
    */
   public static void setInputAttributes(Configuration conf, MapWork mWork) {
-    HiveConf.ConfVars var = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez") ?
+    String engine = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+    HiveConf.ConfVars var =
+      (engine.equals("mr3") || engine.equals("tez")) ?
       HiveConf.ConfVars.HIVETEZINPUTFORMAT : HiveConf.ConfVars.HIVEINPUTFORMAT;
     if (mWork.getInputformat() != null) {
       HiveConf.setVar(conf, var, mWork.getInputformat());

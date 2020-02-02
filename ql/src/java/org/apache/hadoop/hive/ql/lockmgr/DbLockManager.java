@@ -99,7 +99,8 @@ public final class DbLockManager implements HiveLockManager{
     MAX_SLEEP = Math.max(15000, conf.getTimeVar(HiveConf.ConfVars.HIVE_LOCK_SLEEP_BETWEEN_RETRIES, TimeUnit.MILLISECONDS));
     int maxNumWaits = Math.max(0, conf.getIntVar(HiveConf.ConfVars.HIVE_LOCK_NUMRETRIES));
     try {
-      LOG.info("Requesting: queryId=" + queryId + " " + lock);
+      // TODO: currently do not print lock
+      LOG.info("Requesting: queryId=" + queryId);
       LockResponse res = txnManager.getMS().lock(lock);
       //link lockId to queryId
       LOG.info("Response to queryId=" + queryId + " " + res);

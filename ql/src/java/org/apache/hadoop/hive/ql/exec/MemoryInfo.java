@@ -21,7 +21,6 @@ package org.apache.hadoop.hive.ql.exec;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.llap.LlapUtil;
-import org.apache.hadoop.hive.ql.optimizer.physical.LlapClusterStateForCompile;
 import org.apache.tez.mapreduce.hadoop.MRJobConfig;
 
 /**
@@ -32,31 +31,22 @@ import org.apache.tez.mapreduce.hadoop.MRJobConfig;
 public class MemoryInfo {
 
   private Configuration conf;
-  private boolean isTez;
+  private boolean isMr3;
   private boolean isLlap;
   private long maxExecutorMemory;
   private long mapJoinMemoryThreshold;
   private long dynPartJoinMemoryThreshold;
 
   public MemoryInfo(Configuration conf) {
-    this.isTez = "tez".equalsIgnoreCase(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE));
-    this.isLlap = "llap".equalsIgnoreCase(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_MODE));
-    if (isLlap) {
-      LlapClusterStateForCompile llapInfo = LlapClusterStateForCompile.getClusterInfo(conf);
-      llapInfo.initClusterInfo();
-      if (llapInfo.hasClusterInfo()) {
-        this.maxExecutorMemory = llapInfo.getMemoryPerExecutor();
-      } else {
-        long memPerInstance =
-            HiveConf.getLongVar(conf, HiveConf.ConfVars.LLAP_DAEMON_MEMORY_PER_INSTANCE_MB) * 1024L * 1024L;
-        long numExecutors = HiveConf.getIntVar(conf, HiveConf.ConfVars.LLAP_DAEMON_NUM_EXECUTORS);
-        this.maxExecutorMemory = memPerInstance / numExecutors;
-      }
-    } else {
-      if (isTez) {
-        float heapFraction = HiveConf.getFloatVar(conf, HiveConf.ConfVars.TEZ_CONTAINER_MAX_JAVA_HEAP_FRACTION);
-        int containerSizeMb = HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVETEZCONTAINERSIZE) > 0 ?
-            HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVETEZCONTAINERSIZE) :
+    this.isMr3= 
+      "mr3".equalsIgnoreCase(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE)) ||
+      "tez".equalsIgnoreCase(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE));
+    this.isLlap = false;
+    {
+      if (isMr3) {
+        float heapFraction = HiveConf.getFloatVar(conf, HiveConf.ConfVars.MR3_CONTAINER_MAX_JAVA_HEAP_FRACTION);
+        int containerSizeMb = HiveConf.getIntVar(conf, HiveConf.ConfVars.MR3_MAP_TASK_MEMORY_MB) > 0 ?
+            HiveConf.getIntVar(conf, HiveConf.ConfVars.MR3_MAP_TASK_MEMORY_MB) :
             conf.getInt(MRJobConfig.MAP_MEMORY_MB, MRJobConfig.DEFAULT_MAP_MEMORY_MB);
         // this can happen when config is explicitly set to "-1", in which case defaultValue also does not work
         if (containerSizeMb < 0) {
@@ -82,8 +72,8 @@ public class MemoryInfo {
     this.conf = conf;
   }
 
-  public boolean isTez() {
-    return isTez;
+  public boolean isMr3() {
+    return isMr3;
   }
 
   public boolean isLlap() {
@@ -104,8 +94,7 @@ public class MemoryInfo {
 
   @Override
   public String toString() {
-    return "MEMORY INFO - { isTez: " + isTez() +
-        ", isLlap: " + isLlap() +
+    return "MEMORY INFO - { isMr3: " + isMr3() +
         ", maxExecutorMemory: " + LlapUtil.humanReadableByteCount(getMaxExecutorMemory()) +
         ", mapJoinMemoryThreshold: "+ LlapUtil.humanReadableByteCount(getMapJoinMemoryThreshold()) +
         ", dynPartJoinMemoryThreshold: " + LlapUtil.humanReadableByteCount(getDynPartJoinMemoryThreshold()) +
