@@ -981,11 +981,11 @@ public class DAGUtils {
       HiveConf.ConfVars sizeKey, String mrSizeKey, int mrSizeDefault,
       HiveConf.ConfVars coresKey, String mrCoresKey, int mrCoresDefault) {
     int memory = HiveConf.getIntVar(conf, sizeKey);
-    if (memory <= 0) {
+    if (memory < 0) {   // Task memory of 0 is allowed in hive-site.xml
       memory = conf.getInt(mrSizeKey, mrSizeDefault);
     }
     int cpus = HiveConf.getIntVar(conf, coresKey);
-    if (cpus <= 0) {
+    if (cpus < 0) {     // Task cpus of 0 is allowed in hive-site.xml
       cpus = conf.getInt(mrCoresKey, mrCoresDefault);
     }
     return Resource.newInstance(memory, cpus);
