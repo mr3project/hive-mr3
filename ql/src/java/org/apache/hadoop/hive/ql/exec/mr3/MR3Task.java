@@ -52,6 +52,7 @@ import org.apache.tez.common.counters.TezCounter;
 import org.apache.tez.common.counters.TezCounters;
 import org.apache.tez.dag.library.vertexmanager.ShuffleVertexManager;
 import org.apache.tez.dag.app.dag.impl.RootInputVertexManager;
+import org.apache.tez.runtime.library.api.TezRuntimeConfiguration;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -462,6 +463,19 @@ public class MR3Task {
     TezWork.VertexType vertexType = tezWork.getVertexType(baseWork);
     boolean isFinal = tezWork.getLeaves().contains(baseWork);
     Vertex vertex = dagUtils.createVertex(vertexJobConf, baseWork, mr3ScratchDir, isFinal, vertexType, tezWork);
+    int numChildren = tezWork.getChildren(baseWork).size();
+    if (numChildren > 1) {  // added from HIVE-22744
+      String value = vertexJobConf.get(TezRuntimeConfiguration.TEZ_RUNTIME_IO_SORT_MB);
+      int originalValue = 0;
+      if(value == null) {
+        originalValue = TezRuntimeConfiguration.TEZ_RUNTIME_IO_SORT_MB_DEFAULT;
+      } else {
+        originalValue = Integer.valueOf(value);
+      }
+      int newValue = (int) (originalValue / numChildren);
+      vertexJobConf.set(TezRuntimeConfiguration.TEZ_RUNTIME_IO_SORT_MB, Integer.toString(newValue));
+      LOG.info("Modified " + TezRuntimeConfiguration.TEZ_RUNTIME_IO_SORT_MB + " to " + newValue);
+    }
     dag.addVertex(vertex);
 
     Set<Path> paths = dagUtils.getPathsForCredentials(baseWork);
