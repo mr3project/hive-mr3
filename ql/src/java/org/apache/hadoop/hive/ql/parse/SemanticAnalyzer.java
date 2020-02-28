@@ -13766,8 +13766,9 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         }
       }
 
-      for (int i = next.getChildren().size() - 1; i >= 0; i--) {
-        stack.push((ASTNode)next.getChildren().get(i));
+      ArrayList childrenList = next.getChildren();
+      for (int i = childrenList.size() - 1; i >= 0; i--) {
+        stack.push((ASTNode)childrenList.get(i));
       }
     }
   }
