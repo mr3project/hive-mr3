@@ -1335,8 +1335,9 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
       boolean isMr3 = engine.equalsIgnoreCase("mr3") || engine.equalsIgnoreCase("tez");
       Class<?> clazz = conf.getTableInfo().getOutputFileFormatClass();
       boolean isStreaming = StreamingOutputFormat.class.isAssignableFrom(clazz);
-      
-      if (!isMr3 || isStreaming || this.isInsertOverwrite) {
+
+      // let empty file generation for mm/acid table as a quick and dirty workaround for HIVE-22941
+      if (!isMr3 || isStreaming || (this.isInsertOverwrite && (conf.isMmTable() || conf.isFullAcidTable()))) {
         createBucketFiles(fsp);
       }
     }
