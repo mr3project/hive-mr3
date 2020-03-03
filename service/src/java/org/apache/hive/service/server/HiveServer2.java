@@ -239,8 +239,8 @@ public class HiveServer2 extends CompositeService {
       throw new Error("Unable to initialize HiveServer2", t);
     }
 
-    // Initialize metadata provider class
-    CalcitePlanner.initializeMetadataProviderClass();
+    // Initialize metadata provider class and trimmer
+    CalcitePlanner.warmup();
 
     // Create views registry
     HiveMaterializedViewsRegistry.get().init();
