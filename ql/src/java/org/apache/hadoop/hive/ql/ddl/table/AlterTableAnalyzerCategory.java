@@ -16,8 +16,21 @@
  * limitations under the License.
  */
 
-/**
- * Package consisting the tests for the program LlapServiceDriver and other classes used by it.
- */
-package org.apache.hadoop.hive.llap.cli.service;
+package org.apache.hadoop.hive.ql.ddl.table;
 
+import org.apache.hadoop.hive.ql.ddl.DDLSemanticAnalyzerFactory.DDLSemanticAnalyzerCategory;
+import org.apache.hadoop.hive.ql.ddl.DDLSemanticAnalyzerFactory.DDLType;
+import org.apache.hadoop.hive.ql.parse.ASTNode;
+import org.apache.hadoop.hive.ql.parse.HiveParser;
+
+/**
+ * Alter Table category helper. It derives the actual type of the command from the root element, by selecting the type
+ * of the second child, ad the Alter Table commands have this structure: tableName command partitionSpec?
+ */
+@DDLType(type=HiveParser.TOK_ALTERTABLE)
+public class AlterTableAnalyzerCategory implements DDLSemanticAnalyzerCategory {
+  @Override
+  public int getType(ASTNode root) {
+    return root.getChild(1).getType();
+  }
+}

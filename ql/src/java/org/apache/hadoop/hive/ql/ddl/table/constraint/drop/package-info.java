@@ -16,8 +16,5 @@
  * limitations under the License.
  */
 
-/**
- * Package consisting the tests for the program LlapStatusServiceDriver and other classes used by it.
- */
-package org.apache.hadoop.hive.llap.cli.status;
-
+/** Drop constraint DDL operation. */
+package org.apache.hadoop.hive.ql.ddl.table.constraint.drop;

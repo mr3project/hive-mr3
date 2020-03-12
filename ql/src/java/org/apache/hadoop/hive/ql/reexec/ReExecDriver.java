@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.ql.QueryDisplay;
 import org.apache.hadoop.hive.ql.QueryInfo;
 import org.apache.hadoop.hive.ql.QueryPlan;
 import org.apache.hadoop.hive.ql.QueryState;
+import org.apache.hadoop.hive.ql.exec.ExplainTask;
 import org.apache.hadoop.hive.ql.exec.FetchTask;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.parse.ASTNode;
@@ -103,10 +104,9 @@ public class ReExecDriver implements IDriver {
     return executionIndex == 0;
   }
 
-  public ReExecDriver(QueryState queryState, String userName, QueryInfo queryInfo,
-      ArrayList<IReExecutionPlugin> plugins) {
+  public ReExecDriver(QueryState queryState, QueryInfo queryInfo, ArrayList<IReExecutionPlugin> plugins) {
     this.queryState = queryState;
-    coreDriver = new Driver(queryState, userName, queryInfo, null);
+    coreDriver = new Driver(queryState, queryInfo, null);
     coreDriver.getHookRunner().addSemanticAnalyzerHook(new HandleReOptimizationExplain());
     this.plugins = plugins;
 
@@ -253,8 +253,8 @@ public class ReExecDriver implements IDriver {
 
   @Override
   public Schema getSchema() {
-    if(explainReOptimization) {
-      return coreDriver.getExplainSchema();
+    if (explainReOptimization) {
+      return new Schema(ExplainTask.getResultSchema(), null);
     }
     return coreDriver.getSchema();
   }

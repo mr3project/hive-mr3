@@ -16,8 +16,19 @@
  * limitations under the License.
  */
 
-/**
- * Test classes for registry implementations.
- */
+package org.apache.hadoop.hive.ql.util;
 
-package org.apache.hadoop.hive.llap.registry.impl;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.junit.Before;
+
+/**
+ * TestUpgradeToolWithRerturnPath.
+ */
+public class TestUpgradeToolRerturnPath extends TestUpgradeTool {
+  @Before
+  @Override
+  public void setUp() throws Exception {
+    super.setUp();
+    hiveConf.setBoolVar(HiveConf.ConfVars.HIVE_CBO_RETPATH_HIVEOP, true);
+  }
+}

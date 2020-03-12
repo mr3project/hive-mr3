@@ -714,7 +714,8 @@ public class ObjectStore implements RawStore, Configurable {
     if (db == null) {
       LOG.debug("Failed to get database {}.{}, returning NoSuchObjectException",
           catalogName, name, ex);
-      throw new NoSuchObjectException(name + (ex == null ? "" : (": " + ex.getMessage())));
+      final String errorMessage = (ex == null ? "" : (": " + ex.getMessage()));
+      throw new NoSuchObjectException("database " + catalogName + "." + name + errorMessage);
     }
     return db;
   }
@@ -9679,7 +9680,7 @@ public class ObjectStore implements RawStore, Configurable {
 
   private void debugLog(final String message) {
     if (LOG.isDebugEnabled()) {
-      LOG.debug("{}", message, new Exception());
+      LOG.debug("{}", message, new Exception("Debug Dump Stack Trace (Not an Exception)"));
     }
   }
 

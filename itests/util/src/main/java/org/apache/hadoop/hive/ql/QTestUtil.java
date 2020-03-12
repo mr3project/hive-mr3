@@ -27,6 +27,7 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.management.ManagementFactory;
 import java.net.URL;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -77,9 +78,11 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.processors.HiveCommand;
 import org.apache.hadoop.hive.ql.qoption.QTestOptionDispatcher;
 import org.apache.hadoop.hive.ql.qoption.QTestReplaceHandler;
+import org.apache.hadoop.hive.ql.qoption.QTestSysDbHandler;
 import org.apache.hadoop.hive.ql.scheduled.QTestScheduledQueryCleaner;
 import org.apache.hadoop.hive.ql.scheduled.QTestScheduledQueryServiceProvider;
 import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hive.common.util.ProcessUtils;
 import org.junit.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -207,8 +210,10 @@ public class QTestUtil {
     datasetHandler = new QTestDatasetHandler(conf);
     testFiles = datasetHandler.getDataDir(conf);
     conf.set("test.data.dir", datasetHandler.getDataDir(conf));
+    conf.setVar(ConfVars.HIVE_QUERY_RESULTS_CACHE_DIRECTORY, "/tmp/hive/_resultscache_" + ProcessUtils.getPid());
     dispatcher.register("dataset", datasetHandler);
     dispatcher.register("replace", replaceHandler);
+    dispatcher.register("sysdb", new QTestSysDbHandler());
     dispatcher.register("scheduledqueryservice", new QTestScheduledQueryServiceProvider(conf));
     dispatcher.register("scheduledquerycleaner", new QTestScheduledQueryCleaner());
 
@@ -762,7 +767,7 @@ public class QTestUtil {
           return response;
         } catch (CommandProcessorException e) {
           SessionState.getConsole().printError(e.toString(),
-                  e.getException() != null ? Throwables.getStackTraceAsString(e.getException()) : "");
+                  e.getCause() != null ? Throwables.getStackTraceAsString(e.getCause()) : "");
           throw e;
         }
       } else {

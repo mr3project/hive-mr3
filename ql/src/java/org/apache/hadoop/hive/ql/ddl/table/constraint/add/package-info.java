@@ -16,5 +16,5 @@
  * limitations under the License.
  */
 
-/** Table constraint related DDL operation descriptions and operations. */
-package org.apache.hadoop.hive.ql.ddl.table.constaint;
+/** Add constraint DDL operation. */
+package org.apache.hadoop.hive.ql.ddl.table.constraint.add;

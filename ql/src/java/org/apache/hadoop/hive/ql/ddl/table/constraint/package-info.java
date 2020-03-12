@@ -16,8 +16,5 @@
  * limitations under the License.
  */
 
-/**
- * Test classes for metrics package.
- */
-
-package org.apache.hadoop.hive.llap.metrics;
+/** Table constraint related DDL operation descriptions and operations. */
+package org.apache.hadoop.hive.ql.ddl.table.constraint;

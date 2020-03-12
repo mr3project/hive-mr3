@@ -2491,8 +2491,11 @@ public class HiveConf extends Configuration {
     // standard error allowed for ndv estimates for FM-sketch. A lower value indicates higher accuracy and a
     // higher compute cost.
     HIVE_STATS_NDV_ERROR("hive.stats.ndv.error", (float)20.0,
-        "Standard error expressed in percentage. Provides a tradeoff between accuracy and compute cost. \n" +
-        "A lower value for error indicates higher accuracy and a higher compute cost."),
+            "The standard error allowed for NDV estimates, expressed in percentage. This provides a tradeoff \n" +
+                    "between accuracy and compute cost. A lower value for the error indicates higher accuracy and a \n" +
+                    "higher compute cost. (NDV means the number of distinct values.). It only affects the FM-Sketch \n" +
+                    "(not the HLL algorithm which is the default), where it computes the number of necessary\n" +
+                    " bitvectors to achieve the accuracy."),
     /**
      * @deprecated Use MetastoreConf.STATS_NDV_TUNER
      */
@@ -2770,6 +2773,9 @@ public class HiveConf extends Configuration {
     HIVE_COMPACTOR_ABORTEDTXN_THRESHOLD("hive.compactor.abortedtxn.threshold", 1000,
         "Number of aborted transactions involving a given table or partition that will trigger\n" +
         "a major compaction."),
+
+    HIVE_COMPACTOR_WAIT_TIMEOUT("hive.compactor.wait.timeout", 300000L, "Time out in "
+        + "milliseconds for blocking compaction. It's value has to be higher than 2000 milliseconds. "),
     /**
      * @deprecated Use MetastoreConf.COMPACTOR_INITIATOR_FAILED_THRESHOLD
      */
