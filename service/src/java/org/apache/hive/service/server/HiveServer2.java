@@ -293,6 +293,7 @@ public class HiveServer2 extends CompositeService {
     }
 
     try {
+      logCompactionParameters(hiveConf);
       maybeStartCompactorThreads(hiveConf);
     } catch (Exception e) {
       throw new RuntimeException(e);
@@ -443,6 +444,17 @@ public class HiveServer2 extends CompositeService {
 
     // Add a shutdown hook for catching SIGTERM & SIGINT
     ShutdownHookManager.addShutdownHook(() -> hiveServer2.stop());
+  }
+
+  private void logCompactionParameters(HiveConf hiveConf) {
+    LOG.info("Compaction HS2 parameters:");
+    String runWorkerIn = MetastoreConf.getVar(hiveConf, MetastoreConf.ConfVars.HIVE_METASTORE_RUNWORKER_IN);
+    LOG.info("hive.metastore.runworker.in = {}", runWorkerIn);
+    int numWorkers = MetastoreConf.getIntVar(hiveConf, MetastoreConf.ConfVars.COMPACTOR_WORKER_THREADS);
+    LOG.info("metastore.compactor.worker.threads = {}", numWorkers);
+    if ("hs2".equals(runWorkerIn) && numWorkers < 1) {
+      LOG.warn("Invalid number of Compactor Worker threads({}) on HS2", numWorkers);
+    }
   }
 
   private WMFullResourcePlan createTestResourcePlan() {
@@ -623,10 +635,8 @@ public class HiveServer2 extends CompositeService {
    */
   public boolean isDeregisteredWithZooKeeper() {
     if (serviceDiscovery && !activePassiveHA) {
-      synchronized(this) {
-        if (zooKeeperHelper != null) {
-          return zooKeeperHelper.isDeregisteredWithZooKeeper();
-        }
+      if (zooKeeperHelper != null) {
+        return zooKeeperHelper.isDeregisteredWithZooKeeper();
       }
     }
     return false;
@@ -1020,6 +1030,7 @@ public class HiveServer2 extends CompositeService {
         Worker w = new Worker();
         CompactorThread.initializeAndStartThread(w, hiveConf);
       }
+      LOG.info("This HS2 instance will act as Compactor Worker with {} threads", numWorkers);
     }
   }
 

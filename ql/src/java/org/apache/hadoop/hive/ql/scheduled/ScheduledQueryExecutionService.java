@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hive.conf.Constants;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -44,17 +45,26 @@ public class ScheduledQueryExecutionService implements Closeable {
 
   private static final Logger LOG = LoggerFactory.getLogger(ScheduledQueryExecutionService.class);
 
+  private static ScheduledQueryExecutionService INSTANCE = null;
+
   private ScheduledQueryExecutionContext context;
   private ScheduledQueryExecutor worker;
+  private AtomicInteger forcedScheduleCheckCounter = new AtomicInteger();
 
   public static ScheduledQueryExecutionService startScheduledQueryExecutorService(HiveConf conf0) {
-    HiveConf conf = new HiveConf(conf0);
-    MetastoreBasedScheduledQueryService qService = new MetastoreBasedScheduledQueryService(conf);
-    ExecutorService executor =
-        Executors.newCachedThreadPool(
-            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("Scheduled Query Thread %d").build());
-    ScheduledQueryExecutionContext ctx = new ScheduledQueryExecutionContext(executor, conf, qService);
-    return new ScheduledQueryExecutionService(ctx);
+    synchronized (ScheduledQueryExecutionService.class) {
+      if (INSTANCE != null) {
+        throw new IllegalStateException(
+            "There is already a ScheduledQueryExecutionService in service; check it and close it explicitly if neccessary");
+      }
+      HiveConf conf = new HiveConf(conf0);
+      MetastoreBasedScheduledQueryService qService = new MetastoreBasedScheduledQueryService(conf);
+      ExecutorService executor = Executors.newCachedThreadPool(
+          new ThreadFactoryBuilder().setDaemon(true).setNameFormat("Scheduled Query Thread %d").build());
+      ScheduledQueryExecutionContext ctx = new ScheduledQueryExecutionContext(executor, conf, qService);
+      INSTANCE = new ScheduledQueryExecutionService(ctx);
+      return INSTANCE;
+    }
   }
 
   public ScheduledQueryExecutionService(ScheduledQueryExecutionContext ctx) {
@@ -64,7 +74,7 @@ public class ScheduledQueryExecutionService implements Closeable {
   }
 
   static boolean isTerminalState(QueryState state) {
-    return state == QueryState.FINISHED || state == QueryState.ERRORED;
+    return state == QueryState.FINISHED || state == QueryState.FAILED;
   }
 
   class ScheduledQueryExecutor implements Runnable {
@@ -83,12 +93,21 @@ public class ScheduledQueryExecutionService implements Closeable {
           }
         } else {
           try {
-            Thread.sleep(context.getIdleSleepTime());
+            sleep(context.getIdleSleepTime());
           } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            LOG.info("interrupted");
-            break;
+            LOG.warn("interrupt discarded");
           }
+        }
+      }
+    }
+
+    private void sleep(long idleSleepTime) throws InterruptedException {
+      long checkIntrvalMs = 1000;
+      int origResets = forcedScheduleCheckCounter.get();
+      for (long i = 0; i < idleSleepTime; i += checkIntrvalMs) {
+        Thread.sleep(checkIntrvalMs);
+        if (forcedScheduleCheckCounter.get() != origResets) {
+          return;
         }
       }
     }
@@ -106,6 +125,9 @@ public class ScheduledQueryExecutionService implements Closeable {
 
     private void processQuery(ScheduledQueryPollResponse q) {
       SessionState state = null;
+      info = new ScheduledQueryProgressInfo();
+      info.setScheduledExecutionId(q.getExecutionId());
+      info.setState(QueryState.EXECUTING);
       try {
         HiveConf conf = new HiveConf(context.conf);
         conf.set(Constants.HIVE_QUERY_EXCLUSIVE_LOCK, lockNameFor(q.getScheduleKey()));
@@ -113,19 +135,17 @@ public class ScheduledQueryExecutionService implements Closeable {
         conf.unset(HiveConf.ConfVars.HIVESESSIONID.varname);
         state = new SessionState(conf, q.getUser());
         SessionState.start(state);
-        info = new ScheduledQueryProgressInfo();
-        info.setScheduledExecutionId(q.getExecutionId());
-        info.setState(QueryState.EXECUTING);
         reportQueryProgress();
         try (
           IDriver driver = DriverFactory.newDriver(DriverFactory.getNewQueryState(conf), null)) {
           info.setExecutorQueryId(driver.getQueryState().getQueryId());
+          reportQueryProgress();
           driver.run(q.getQuery());
           info.setState(QueryState.FINISHED);
         }
       } catch (Throwable t) {
         info.setErrorMessage(getErrorStringForException(t));
-        info.setState(QueryState.ERRORED);
+        info.setState(QueryState.FAILED);
       } finally {
         if (state != null) {
           try {
@@ -160,9 +180,13 @@ public class ScheduledQueryExecutionService implements Closeable {
         try {
           Thread.sleep(context.getProgressReporterSleepTime());
         } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
+          LOG.warn("interrupt discarded");
         }
-        worker.reportQueryProgress();
+        try {
+          worker.reportQueryProgress();
+        } catch (Exception e) {
+          LOG.error("ProgressReporter encountered exception ", e);
+        }
       }
     }
   }
@@ -170,15 +194,27 @@ public class ScheduledQueryExecutionService implements Closeable {
   @VisibleForTesting
   @Override
   public void close() throws IOException {
-    context.executor.shutdown();
-    try {
-      context.executor.awaitTermination(1, TimeUnit.SECONDS);
-      context.executor.shutdownNow();
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
+    synchronized (ScheduledQueryExecutionService.class) {
+      if (INSTANCE == null || INSTANCE != this) {
+        throw new IllegalStateException("The current ScheduledQueryExecutionService INSTANCE is invalid");
+      }
+      INSTANCE = null;
+      context.executor.shutdown();
+      try {
+        context.executor.awaitTermination(1, TimeUnit.SECONDS);
+        context.executor.shutdownNow();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
     }
-
-
   }
 
+  public static void forceScheduleCheck() {
+    INSTANCE.forcedScheduleCheckCounter.incrementAndGet();
+  }
+
+  @VisibleForTesting
+  public static int getForcedScheduleCheckCount() {
+    return INSTANCE.forcedScheduleCheckCounter.get();
+  }
 }

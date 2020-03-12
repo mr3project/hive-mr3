@@ -50,7 +50,7 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipOutputStream;
 
 import org.apache.commons.io.FilenameUtils;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.tez.mapreduce.common.MRInputSplitDistributor;
 import org.apache.tez.mapreduce.hadoop.InputSplitInfo;
 import org.apache.tez.mapreduce.protos.MRRuntimeProtos;
@@ -87,12 +87,12 @@ import org.apache.hadoop.hive.ql.io.merge.MergeFileOutputFormat;
 import org.apache.hadoop.hive.ql.io.merge.MergeFileWork;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.DefaultRuleDispatcher;
-import org.apache.hadoop.hive.ql.lib.Dispatcher;
-import org.apache.hadoop.hive.ql.lib.GraphWalker;
+import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
+import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.NodeProcessor;
+import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
-import org.apache.hadoop.hive.ql.lib.Rule;
+import org.apache.hadoop.hive.ql.lib.SemanticRule;
 import org.apache.hadoop.hive.ql.lib.RuleRegExp;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
@@ -106,6 +106,7 @@ import org.apache.hadoop.hive.ql.plan.TezEdgeProperty;
 import org.apache.hadoop.hive.ql.plan.TezEdgeProperty.EdgeType;
 import org.apache.hadoop.hive.ql.plan.TezWork;
 import org.apache.hadoop.hive.ql.plan.TezWork.VertexType;
+import org.apache.hadoop.hive.ql.plan.UnionWork;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.ql.stats.StatsCollectionContext;
 import org.apache.hadoop.hive.ql.stats.StatsFactory;
@@ -187,7 +188,7 @@ public class DagUtils {
    */
   private final ConcurrentHashMap<String, Object> copyNotifiers = new ConcurrentHashMap<>();
 
-  class CollectFileSinkUrisNodeProcessor implements NodeProcessor {
+  class CollectFileSinkUrisNodeProcessor implements SemanticNodeProcessor {
 
     private final Set<URI> uris;
 
@@ -217,7 +218,7 @@ public class DagUtils {
     }
   }
 
-  private void addCollectFileSinkUrisRules(Map<Rule, NodeProcessor> opRules, NodeProcessor np) {
+  private void addCollectFileSinkUrisRules(Map<SemanticRule, SemanticNodeProcessor> opRules, SemanticNodeProcessor np) {
     opRules.put(new RuleRegExp("R1", FileSinkOperator.getOperatorName() + ".*"), np);
   }
 
@@ -225,11 +226,11 @@ public class DagUtils {
 
     CollectFileSinkUrisNodeProcessor np = new CollectFileSinkUrisNodeProcessor(uris);
 
-    Map<Rule, NodeProcessor> opRules = new LinkedHashMap<Rule, NodeProcessor>();
+    Map<SemanticRule, SemanticNodeProcessor> opRules = new LinkedHashMap<SemanticRule, SemanticNodeProcessor>();
     addCollectFileSinkUrisRules(opRules, np);
 
-    Dispatcher disp = new DefaultRuleDispatcher(np, opRules, null);
-    GraphWalker ogw = new DefaultGraphWalker(disp);
+    SemanticDispatcher disp = new DefaultRuleDispatcher(np, opRules, null);
+    SemanticGraphWalker ogw = new DefaultGraphWalker(disp);
 
     try {
       ogw.startWalking(topNodes, null);
@@ -238,58 +239,75 @@ public class DagUtils {
     }
   }
 
-  private void addCredentials(MapWork mapWork, DAG dag) {
-    Set<Path> paths = mapWork.getPathToAliases().keySet();
-    if (!paths.isEmpty()) {
-      Iterator<URI> pathIterator = Iterators.transform(paths.iterator(), new Function<Path, URI>() {
-        @Override
-        public URI apply(Path path) {
-          return path.toUri();
-        }
-      });
 
-      Set<URI> uris = new HashSet<URI>();
-      Iterators.addAll(uris, pathIterator);
+  /**
+   * Set up credentials for the base work on secure clusters
+   */
+  public void addCredentials(BaseWork work, DAG dag) {
+    if (work instanceof MapWork){
+      Set<Path> paths = ((MapWork)work).getPathToAliases().keySet();
+      if (!paths.isEmpty()) {
+        Iterator<URI> pathIterator = Iterators.transform(paths.iterator(), new Function<Path, URI>() {
+          @Override
+          public URI apply(Path path) {
+            return path.toUri();
+          }
+        });
 
-      if (LOG.isDebugEnabled()) {
-        for (URI uri: uris) {
-          LOG.debug("Marking MapWork input URI as needing credentials: " + uri);
+        Set<URI> uris = new HashSet<URI>();
+        Iterators.addAll(uris, pathIterator);
+
+        if (LOG.isDebugEnabled()) {
+          for (URI uri: uris) {
+            LOG.debug("Marking MapWork input URI as needing credentials: " + uri);
+          }
         }
+        dag.addURIsForCredentials(uris);
       }
-      dag.addURIsForCredentials(uris);
     }
 
+    getCredentialsForFileSinks(work, dag);
+  }
+
+  private void getCredentialsForFileSinks(BaseWork baseWork, DAG dag) {
     Set<URI> fileSinkUris = new HashSet<URI>();
 
-    List<Node> topNodes = new ArrayList<Node>();
-    Map<String, Operator<? extends OperatorDesc>> aliasToWork = mapWork.getAliasToWork();
-    for (Operator<? extends OperatorDesc> operator : aliasToWork.values()) {
-      topNodes.add(operator);
-    }
+    List<Node> topNodes = getTopNodes(baseWork);
+
+    LOG.debug("Collecting file sink uris for {} topnodes: {}", baseWork.getClass(), topNodes);
     collectFileSinkUris(topNodes, fileSinkUris);
 
     if (LOG.isDebugEnabled()) {
-      for (URI fileSinkUri: fileSinkUris) {
-        LOG.debug("Marking MapWork output URI as needing credentials: " + fileSinkUri);
+      for (URI fileSinkUri : fileSinkUris) {
+        LOG.debug("Marking {} output URI as needing credentials (filesink): {}",
+            baseWork.getClass(), fileSinkUri);
       }
     }
     dag.addURIsForCredentials(fileSinkUris);
   }
 
-  private void addCredentials(ReduceWork reduceWork, DAG dag) {
-
-    Set<URI> fileSinkUris = new HashSet<URI>();
-
+  private List<Node> getTopNodes(BaseWork work) {
     List<Node> topNodes = new ArrayList<Node>();
-    topNodes.add(reduceWork.getReducer());
-    collectFileSinkUris(topNodes, fileSinkUris);
 
-    if (LOG.isDebugEnabled()) {
-      for (URI fileSinkUri: fileSinkUris) {
-        LOG.debug("Marking ReduceWork output URI as needing credentials: " + fileSinkUri);
+    if (work instanceof MapWork) {
+      Map<String, Operator<? extends OperatorDesc>> aliasToWork = ((MapWork) work).getAliasToWork();
+      for (Operator<? extends OperatorDesc> operator : aliasToWork.values()) {
+        topNodes.add(operator);
+      }
+    } else if (work instanceof ReduceWork) {
+      topNodes.add(((ReduceWork) work).getReducer());
+    } else if (work instanceof MergeJoinWork) {
+      for (Operator<? extends OperatorDesc> operator : ((MergeJoinWork) work)
+          .getAllRootOperators()) {
+        topNodes.add(operator);
+      }
+    } else if (work instanceof UnionWork) {
+      for (Operator<? extends OperatorDesc> operator : ((UnionWork) work).getAllRootOperators()) {
+        topNodes.add(operator);
       }
     }
-    dag.addURIsForCredentials(fileSinkUris);
+
+    return topNodes;
   }
 
   /*
@@ -1499,18 +1517,6 @@ public class DagUtils {
     }
 
     return v;
-  }
-
-  /**
-   * Set up credentials for the base work on secure clusters
-   */
-  public void addCredentials(BaseWork work, DAG dag) throws IOException {
-    dag.getCredentials().mergeAll(UserGroupInformation.getCurrentUser().getCredentials());
-    if (work instanceof MapWork) {
-      addCredentials((MapWork) work, dag);
-    } else if (work instanceof ReduceWork) {
-      addCredentials((ReduceWork) work, dag);
-    }
   }
 
   /**

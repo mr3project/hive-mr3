@@ -24,7 +24,7 @@ import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.SelectOperator;
 import org.apache.hadoop.hive.ql.exec.TopNKeyOperator;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.NodeProcessor;
+import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
@@ -48,7 +48,7 @@ import static org.apache.hadoop.hive.ql.optimizer.topnkey.TopNKeyProcessor.copyD
 /**
  * Implementation of TopNKey operator pushdown.
  */
-public class TopNKeyPushdownProcessor implements NodeProcessor {
+public class TopNKeyPushdownProcessor implements SemanticNodeProcessor {
   private static final Logger LOG = LoggerFactory.getLogger(TopNKeyPushdownProcessor.class);
 
   @Override
@@ -153,19 +153,13 @@ public class TopNKeyPushdownProcessor implements NodeProcessor {
     final GroupByDesc groupByDesc = groupBy.getConf();
     final TopNKeyDesc topNKeyDesc = topNKey.getConf();
 
-    // Check grouping sets
-    if (groupByDesc.isGroupingSetsPresent()) {
-      return;
-    }
-
     CommonKeyPrefix commonKeyPrefix = CommonKeyPrefix.map(topNKeyDesc, groupByDesc);
-    if (commonKeyPrefix.isEmpty()) {
+    if (commonKeyPrefix.isEmpty() || commonKeyPrefix.size() == topNKeyDesc.getPartitionKeyColumns().size()) {
       return;
     }
 
     LOG.debug("Pushing a copy of {} through {}", topNKey.getName(), groupBy.getName());
-    final TopNKeyDesc newTopNKeyDesc = new TopNKeyDesc(topNKeyDesc.getTopN(), commonKeyPrefix.getMappedOrder(),
-            commonKeyPrefix.getMappedNullOrder(), commonKeyPrefix.getMappedColumns());
+    final TopNKeyDesc newTopNKeyDesc = topNKeyDesc.combine(commonKeyPrefix);
     pushdown(copyDown(groupBy, newTopNKeyDesc));
 
     if (topNKeyDesc.getKeyColumns().size() == commonKeyPrefix.size()) {
@@ -189,13 +183,12 @@ public class TopNKeyPushdownProcessor implements NodeProcessor {
     final TopNKeyDesc topNKeyDesc = topNKey.getConf();
 
     CommonKeyPrefix commonKeyPrefix = CommonKeyPrefix.map(topNKeyDesc, reduceSinkDesc);
-    if (commonKeyPrefix.isEmpty()) {
+    if (commonKeyPrefix.isEmpty() || commonKeyPrefix.size() == topNKeyDesc.getPartitionKeyColumns().size()) {
       return;
     }
 
     LOG.debug("Pushing a copy of {} through {}", topNKey.getName(), reduceSink.getName());
-    final TopNKeyDesc newTopNKeyDesc = new TopNKeyDesc(topNKeyDesc.getTopN(),
-            commonKeyPrefix.getMappedOrder(), commonKeyPrefix.getMappedNullOrder(), commonKeyPrefix.getMappedColumns());
+    final TopNKeyDesc newTopNKeyDesc = topNKeyDesc.combine(commonKeyPrefix);
     pushdown(copyDown(reduceSink, newTopNKeyDesc));
 
     if (topNKeyDesc.getKeyColumns().size() == commonKeyPrefix.size()) {
@@ -247,14 +240,13 @@ public class TopNKeyPushdownProcessor implements NodeProcessor {
             reduceSinkDesc.getColumnExprMap(),
             reduceSinkDesc.getOrder(),
             reduceSinkDesc.getNullOrder());
-    if (commonKeyPrefix.isEmpty()) {
+    if (commonKeyPrefix.isEmpty() || commonKeyPrefix.size() == topNKeyDesc.getPartitionKeyColumns().size()) {
       return;
     }
 
     LOG.debug("Pushing a copy of {} through {} and {}",
             topNKey.getName(), join.getName(), reduceSinkOperator.getName());
-    final TopNKeyDesc newTopNKeyDesc = new TopNKeyDesc(topNKeyDesc.getTopN(),
-            commonKeyPrefix.getMappedOrder(), commonKeyPrefix.getMappedNullOrder(), commonKeyPrefix.getMappedColumns());
+    final TopNKeyDesc newTopNKeyDesc = topNKeyDesc.combine(commonKeyPrefix);
     pushdown(copyDown(reduceSinkOperator, newTopNKeyDesc));
 
     if (topNKeyDesc.getKeyColumns().size() == commonKeyPrefix.size()) {

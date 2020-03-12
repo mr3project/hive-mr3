@@ -25,7 +25,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.metastore.tools.schematool.MetastoreSchemaTool;
 import org.junit.rules.ExternalResource;
 import org.slf4j.Logger;
@@ -60,6 +60,10 @@ public abstract class DatabaseRule extends ExternalResource {
   public abstract String getJdbcUrl();
 
   private boolean verbose;
+
+  public DatabaseRule() {
+    verbose = System.getProperty("verbose.schematool") != null;
+  }
 
   public DatabaseRule setVerbose(boolean verbose) {
     this.verbose = verbose;

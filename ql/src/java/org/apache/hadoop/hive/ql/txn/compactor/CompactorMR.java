@@ -25,7 +25,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.regex.Matcher;
 
 import org.apache.hadoop.conf.Configuration;
@@ -132,7 +131,7 @@ public class CompactorMR {
     job.setOutputCommitter(CompactorOutputCommitter.class);
 
     job.set(FINAL_LOCATION, sd.getLocation());
-    job.set(TMP_LOCATION, generateTmpPath(sd));
+    job.set(TMP_LOCATION, QueryCompactor.Util.generateTmpPath(sd));
     job.set(INPUT_FORMAT_CLASS_NAME, sd.getInputFormat());
     job.set(OUTPUT_FORMAT_CLASS_NAME, sd.getOutputFormat());
     job.setBoolean(IS_COMPRESSED, sd.isCompressed());
@@ -232,11 +231,10 @@ public class CompactorMR {
     }
 
     JobConf job = createBaseJobConf(conf, jobName, t, sd, writeIds, ci);
+    if (!QueryCompactor.Util.isEnoughToCompact(ci.isMajorCompaction(), dir, sd)) {
+      return;
+    }
 
-    // Figure out and encode what files we need to read.  We do this before getSplits
-    // because as part of this we discover our minimum and maximum transactions,
-    // and discovering that in getSplits is too late as we then have no way to pass it to our
-    // mapper.
     List<AcidUtils.ParsedDelta> parsedDeltas = dir.getCurrentDirectories();
     int maxDeltasToHandle = conf.getIntVar(HiveConf.ConfVars.COMPACTOR_MAX_NUM_DELTA);
     if (parsedDeltas.size() > maxDeltasToHandle) {
@@ -294,10 +292,6 @@ public class CompactorMR {
       dir.getCurrentDirectories().size(), dir.getObsolete().size(), conf, msc, ci.id, jobName);
 
     su.gatherStats();
-  }
-
-  private String generateTmpPath(StorageDescriptor sd) {
-    return sd.getLocation() + "/" + TMPDIR + "_" + UUID.randomUUID().toString();
   }
 
   /**
@@ -645,16 +639,34 @@ public class CompactorMR {
         }
       }
 
+      boolean isTableBucketed = entries.getInt(NUM_BUCKETS, -1) != -1;
 
       List<InputSplit> splits = new ArrayList<InputSplit>(splitToBucketMap.size());
       for (Map.Entry<Integer, BucketTracker> e : splitToBucketMap.entrySet()) {
         BucketTracker bt = e.getValue();
+        // For non-bucketed tables we might not have a 00000x_0 in all the delta dirs e.g. after
+        // multiple ingestions of various sizes.
+        Path[] deltasForSplit = isTableBucketed ? deltaDirs : getDeltaDirsFromBucketTracker(bt);
         splits.add(new CompactorInputSplit(entries, e.getKey(), bt.buckets,
-            bt.sawBase ? baseDir : null, deltaDirs));
+            bt.sawBase ? baseDir : null, deltasForSplit));
       }
 
       LOG.debug("Returning " + splits.size() + " splits");
       return splits.toArray(new InputSplit[splits.size()]);
+    }
+
+    private static Path[] getDeltaDirsFromBucketTracker(BucketTracker bucketTracker) {
+      List<Path> resultList = new ArrayList<>(bucketTracker.buckets.size());
+
+      for (int i = 0; i < bucketTracker.buckets.size(); ++i) {
+        Path p = bucketTracker.buckets.get(i).getParent();
+        if (p.getName().startsWith(AcidUtils.DELTA_PREFIX) ||
+            p.getName().startsWith(AcidUtils.DELETE_DELTA_PREFIX)) {
+          resultList.add(p);
+        }
+      }
+
+      return resultList.toArray(new Path[0]);
     }
 
     @Override

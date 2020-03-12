@@ -23,15 +23,17 @@ import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.RowSchema;
 import org.apache.hadoop.hive.ql.exec.TopNKeyOperator;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.NodeProcessor;
+import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
+import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.TopNKeyDesc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Stack;
 
@@ -39,10 +41,12 @@ import java.util.Stack;
  * TopNKeyProcessor is a processor for TopNKeyOperator.
  * A TopNKeyOperator will be placed before any ReduceSinkOperator which has a topN property >= 0.
  */
-public class TopNKeyProcessor implements NodeProcessor {
+public class TopNKeyProcessor implements SemanticNodeProcessor {
   private static final Logger LOG = LoggerFactory.getLogger(TopNKeyProcessor.class);
+  private final int maxTopNAllowed;
 
-  public TopNKeyProcessor() {
+  public TopNKeyProcessor(int maxTopNAllowed) {
+    this.maxTopNAllowed = maxTopNAllowed;
   }
 
   @Override
@@ -58,9 +62,7 @@ public class TopNKeyProcessor implements NodeProcessor {
       return null;
     }
 
-    // Currently, per partitioning top n key is not supported
-    // in TopNKey operator
-    if (reduceSinkDesc.isPTFReduceSink()) {
+    if (reduceSinkDesc.getTopN() > maxTopNAllowed) {
       return null;
     }
 
@@ -70,8 +72,19 @@ public class TopNKeyProcessor implements NodeProcessor {
       return null;
     }
 
+    List<ExprNodeDesc> partitionCols = Collections.emptyList();
+    if (reduceSinkDesc.isPTFReduceSink()) {
+      // All keys are partition keys or no keys at all
+      // Note: partition cols are prefix of key cols
+      if (reduceSinkDesc.getPartitionCols().size() >= reduceSinkDesc.getKeyCols().size()) {
+        return null;
+      }
+
+      partitionCols = reduceSinkDesc.getPartitionCols();
+    }
+
     TopNKeyDesc topNKeyDesc = new TopNKeyDesc(reduceSinkDesc.getTopN(), reduceSinkDesc.getOrder(),
-            reduceSinkDesc.getNullOrder(), reduceSinkDesc.getKeyCols());
+            reduceSinkDesc.getNullOrder(), reduceSinkDesc.getKeyCols(), partitionCols);
 
     copyDown(reduceSinkOperator, topNKeyDesc);
     return null;

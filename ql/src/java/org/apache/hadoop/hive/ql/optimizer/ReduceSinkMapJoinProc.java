@@ -38,7 +38,7 @@ import org.apache.hadoop.hive.ql.exec.RowSchema;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.lib.Node;
-import org.apache.hadoop.hive.ql.lib.NodeProcessor;
+import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.parse.GenTezProcContext;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
@@ -58,12 +58,13 @@ import org.apache.hadoop.hive.ql.plan.TezEdgeProperty.EdgeType;
 import org.apache.hadoop.hive.ql.plan.TezWork;
 import org.apache.hadoop.hive.ql.plan.TezWork.VertexType;
 import org.apache.hadoop.hive.ql.stats.StatsUtils;
+import org.apache.hadoop.hive.ql.util.NullOrdering;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Sets;
 
-public class ReduceSinkMapJoinProc implements NodeProcessor {
+public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
 
   private final static Logger LOG = LoggerFactory.getLogger(ReduceSinkMapJoinProc.class.getName());
 
@@ -349,7 +350,7 @@ public class ReduceSinkMapJoinProc implements NodeProcessor {
     StringBuilder keyNullOrder = new StringBuilder();
     for (ExprNodeDesc k: keyCols) {
       keyOrder.append("+");
-      keyNullOrder.append("a");
+      keyNullOrder.append(NullOrdering.defaultNullOrder(context.conf).getSign());
     }
     TableDesc keyTableDesc = PlanUtils.getReduceKeyTableDesc(PlanUtils
         .getFieldSchemasFromColumnList(keyCols, "mapjoinkey"), keyOrder.toString(),

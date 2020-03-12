@@ -1923,7 +1923,7 @@ public class Hive {
       long defaultTimeWindow, List<String> tablesUsed, boolean forceMVContentsUpToDate) {
     // Check if materialization defined its own invalidation time window
     String timeWindowString = materializedViewTable.getProperty(MATERIALIZED_VIEW_REWRITING_TIME_WINDOW);
-    long timeWindow = org.apache.commons.lang.StringUtils.isEmpty(timeWindowString) ? defaultTimeWindow :
+    long timeWindow = org.apache.commons.lang3.StringUtils.isEmpty(timeWindowString) ? defaultTimeWindow :
         HiveConf.toTime(timeWindowString,
             HiveConf.getDefaultTimeUnit(HiveConf.ConfVars.HIVE_MATERIALIZED_VIEW_REWRITING_TIME_WINDOW),
             TimeUnit.MILLISECONDS);
@@ -2369,7 +2369,7 @@ public class Hive {
           // base_x.  (there is Insert Overwrite and Load Data Overwrite)
           boolean isAutoPurge = "true".equalsIgnoreCase(tbl.getProperty("auto.purge"));
           boolean needRecycle = !tbl.isTemporary()
-                  && ReplChangeManager.isSourceOfReplication(Hive.get().getDatabase(tbl.getDbName()));
+                  && ReplChangeManager.shouldEnableCm(Hive.get().getDatabase(tbl.getDbName()), tbl.getTTable());
           replaceFiles(tbl.getPath(), loadPath, destPath, oldPartPath, getConf(), isSrcLocal,
               isAutoPurge, newFiles, FileUtils.HIDDEN_FILES_PATH_FILTER, needRecycle, isManaged, isInsertOverwrite);
         } else {
@@ -2997,9 +2997,9 @@ private void constructOneLBLocationMap(FileStatus fSta,
                       .collect(Collectors.toList()), tableSnapshot);
 
     } catch (InterruptedException | ExecutionException e) {
-      throw new HiveException("Exception when loading " + validPartitions.size()
+      throw new HiveException("Exception when loading " + validPartitions.size() + " partitions"
               + " in table " + tbl.getTableName()
-              + " with loadPath=" + loadPath);
+              + " with loadPath=" + loadPath, e);
     } catch (TException e) {
       LOG.error(StringUtils.stringifyException(e));
       throw new HiveException(e);
@@ -3024,7 +3024,7 @@ private void constructOneLBLocationMap(FileStatus fSta,
     }
 
     try {
-      if (isAcid) {
+      if (isTxnTable) {
         List<String> partNames =
                 result.values().stream().map(Partition::getName).collect(Collectors.toList());
         getMSC().addDynamicPartitions(parentSession.getTxnMgr().getCurrentTxnId(), writeId,
@@ -3123,7 +3123,7 @@ private void constructOneLBLocationMap(FileStatus fSta,
         //for fullAcid we don't want to delete any files even for OVERWRITE see HIVE-14988/HIVE-17361
         boolean isAutopurge = "true".equalsIgnoreCase(tbl.getProperty("auto.purge"));
         boolean needRecycle = !tbl.isTemporary()
-                && ReplChangeManager.isSourceOfReplication(Hive.get().getDatabase(tbl.getDbName()));
+                && ReplChangeManager.shouldEnableCm(Hive.get().getDatabase(tbl.getDbName()), tbl.getTTable());
         replaceFiles(tblPath, loadPath, destPath, tblPath, conf, isSrcLocal, isAutopurge,
             newFiles, FileUtils.HIDDEN_FILES_PATH_FILTER, needRecycle, isManaged, isInsertOverwrite);
       } else {

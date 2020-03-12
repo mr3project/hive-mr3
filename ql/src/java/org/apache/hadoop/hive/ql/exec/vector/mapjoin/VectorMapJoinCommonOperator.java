@@ -23,7 +23,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map.Entry;
 
-import org.apache.commons.lang.ArrayUtils;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.hadoop.hive.common.type.DataTypePhysicalVariation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -540,10 +540,8 @@ private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
         outputKeysSize > 0) {
 
       smallTableKeyOuterVectorDeserializeRow =
-          new VectorDeserializeRow<BinarySortableDeserializeRead>(
-              new BinarySortableDeserializeRead(
-                  smallTableKeyTypeInfos,
-                  /* useExternalBuffer */ true));
+          new VectorDeserializeRow<BinarySortableDeserializeRead>(BinarySortableDeserializeRead.with(
+                          smallTableKeyTypeInfos, true, getConf().getKeyTblDesc().getProperties()));
       smallTableKeyOuterVectorDeserializeRow.init(
           allSmallTableKeyColumnNums, allSmallTableKeyColumnIncluded);
     }
@@ -699,7 +697,7 @@ private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
     // Now, add any scratch columns needed for children operators.
     int outputColumn = initialColumnCount;
     for (String typeName : vOutContext.getScratchColumnTypeNames()) {
-      allocateOverflowBatchColumnVector(overflowBatch, outputColumn++, typeName, vOutContext.getDataTypePhysicalVariation(outputColumn));
+      allocateOverflowBatchColumnVector(overflowBatch, outputColumn, typeName, vOutContext.getDataTypePhysicalVariation(outputColumn++));
     }
 
     overflowBatch.projectedColumns = outputProjection;

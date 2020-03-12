@@ -22,7 +22,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.common.ZooKeeperHiveHelper;
@@ -461,6 +461,11 @@ public class HiveConf extends Configuration {
     REPLCMRETIAN("hive.repl.cm.retain","24h",
         new TimeValidator(TimeUnit.HOURS),
         "Time to retain removed files in cmrootdir."),
+    REPLCMENCRYPTEDDIR("hive.repl.cm.encryptionzone.rootdir", ".cmroot",
+            "Root dir for ChangeManager if encryption zones are enabled, used for deleted files."),
+    REPLCMFALLBACKNONENCRYPTEDDIR("hive.repl.cm.nonencryptionzone.rootdir",
+            "/user/${system:user.name}/cmroot/",
+            "Root dir for ChangeManager for non encrypted paths if hive.repl.cmrootdir is encrypted."),
     REPLCMINTERVAL("hive.repl.cm.interval","3600s",
         new TimeValidator(TimeUnit.SECONDS),
         "Inteval for cmroot cleanup thread."),
@@ -605,6 +610,10 @@ public class HiveConf extends Configuration {
         "Maximum number of dynamic partitions allowed to be created in total."),
     DYNAMICPARTITIONMAXPARTSPERNODE("hive.exec.max.dynamic.partitions.pernode", 100,
         "Maximum number of dynamic partitions allowed to be created in each mapper/reducer node."),
+    DYNAMICPARTITIONCONVERT("hive.exec.dynamic.partition.type.conversion", true,
+        "Whether to check and cast a dynamic partition column before creating the partition " +
+        "directory. For example, if partition p is type int and we insert string '001', then if " +
+        "this value is true, directory p=1 will be created; if false, p=001"),
     MAXCREATEDFILES("hive.exec.max.created.files", 100000L,
         "Maximum number of HDFS files created by all mappers/reducers in a MapReduce job."),
     DEFAULTPARTITIONNAME("hive.exec.default.partition.name", "__HIVE_DEFAULT_PARTITION__",
@@ -2393,6 +2402,8 @@ public class HiveConf extends Configuration {
         "would change the query plan to take care of it, and hive.optimize.skewjoin will be a no-op."),
 
     HIVE_OPTIMIZE_TOPNKEY("hive.optimize.topnkey", true, "Whether to enable top n key optimizer."),
+    HIVE_MAX_TOPN_ALLOWED("hive.optimize.topnkey.max", 128, "Maximum topN value allowed by top n key optimizer.\n" +
+      "If the LIMIT is greater than this value then top n key optimization won't be used."),
 
     HIVE_SHARED_WORK_OPTIMIZATION("hive.optimize.shared.work", true,
         "Whether to enable shared work optimizer. The optimizer finds scan operator over the same table\n" +
@@ -2653,10 +2664,17 @@ public class HiveConf extends Configuration {
         "In nonstrict mode, for non-ACID resources, INSERT will only acquire shared lock, which\n" +
         "allows two concurrent writes to the same partition but still lets lock manager prevent\n" +
         "DROP TABLE etc. when the table is being written to"),
+    HIVE_TXN_NONACID_READ_LOCKS("hive.txn.nonacid.read.locks", true,
+        "Flag to turn off the read locks for non-ACID tables, when set to false.\n" +
+        "Could be exercised to improve the performance of non-ACID tables in clusters where read locking " +
+        "is enabled globally to support ACID. Can cause issues with concurrent DDL operations, or slow S3 writes."),
+    HIVE_TXN_READ_LOCKS("hive.txn.read.locks", true,
+        "Flag to turn off the read locks, when set to false. Although its not recommended, \n" +
+        "but in performance critical scenarios this option may be exercised."),
     TXN_OVERWRITE_X_LOCK("hive.txn.xlock.iow", true,
         "Ensures commands with OVERWRITE (such as INSERT OVERWRITE) acquire Exclusive locks for\n" +
-            "transactional tables.  This ensures that inserts (w/o overwrite) running concurrently\n" +
-            "are not hidden by the INSERT OVERWRITE."),
+        "transactional tables. This ensures that inserts (w/o overwrite) running concurrently\n" +
+        "are not hidden by the INSERT OVERWRITE."),
     HIVE_TXN_STATS_ENABLED("hive.txn.stats.enabled", true,
         "Whether Hive supports transactional stats (accurate stats for transactional tables)"),
 
@@ -2759,6 +2777,10 @@ public class HiveConf extends Configuration {
         "is needed requires several calls to the NameNode for each table or partition that\n" +
         "has had a transaction done on it since the last major compaction. So decreasing this\n" +
         "value will increase the load on the NameNode."),
+
+    HIVE_COMPACTOR_REQUEST_QUEUE("hive.compactor.request.queue", 1,
+        "Enables parallelization of the checkForCompaction operation, that includes many file metadata checks\n" +
+        "and may be expensive"),
 
     HIVE_COMPACTOR_DELTA_NUM_THRESHOLD("hive.compactor.delta.num.threshold", 10,
         "Number of delta directories in a table or partition that will trigger a minor\n" +
@@ -3375,7 +3397,7 @@ public class HiveConf extends Configuration {
         "launched on each of the queues specified by \"hive.server2.tez.default.queues\".\n" +
         "Determines the parallelism on each queue."),
     HIVE_SERVER2_TEZ_INITIALIZE_DEFAULT_SESSIONS("hive.server2.tez.initialize.default.sessions",
-        false,
+        true,
         "This flag is used in HiveServer2 to enable a user to use HiveServer2 without\n" +
         "turning on Tez for HiveServer2. The user could potentially want to run queries\n" +
         "over Tez without the pool of sessions."),
@@ -3670,15 +3692,15 @@ public class HiveConf extends Configuration {
          "Whether enable loading UDFs from metastore on demand; this is mostly relevant for\n" +
          "HS2 and was the default behavior before Hive 1.2. Off by default."),
 
-    HIVE_SERVER2_SESSION_CHECK_INTERVAL("hive.server2.session.check.interval", "6h",
+    HIVE_SERVER2_SESSION_CHECK_INTERVAL("hive.server2.session.check.interval", "15m",
         new TimeValidator(TimeUnit.MILLISECONDS, 3000l, true, null, false),
         "The check interval for session/operation timeout, which can be disabled by setting to zero or negative value."),
     HIVE_SERVER2_CLOSE_SESSION_ON_DISCONNECT("hive.server2.close.session.on.disconnect", true,
       "Session will be closed when connection is closed. Set this to false to have session outlive its parent connection."),
-    HIVE_SERVER2_IDLE_SESSION_TIMEOUT("hive.server2.idle.session.timeout", "7d",
+    HIVE_SERVER2_IDLE_SESSION_TIMEOUT("hive.server2.idle.session.timeout", "4h",
         new TimeValidator(TimeUnit.MILLISECONDS),
         "Session will be closed when it's not accessed for this duration, which can be disabled by setting to zero or negative value."),
-    HIVE_SERVER2_IDLE_OPERATION_TIMEOUT("hive.server2.idle.operation.timeout", "5d",
+    HIVE_SERVER2_IDLE_OPERATION_TIMEOUT("hive.server2.idle.operation.timeout", "2h",
         new TimeValidator(TimeUnit.MILLISECONDS),
         "Operation will be closed when it's not accessed for this duration of time, which can be disabled by setting to zero value.\n" +
         "  With positive value, it's checked for operations in terminal state only (FINISHED, CANCELED, CLOSED, ERROR).\n" +
@@ -4817,6 +4839,8 @@ public class HiveConf extends Configuration {
         new TimeValidator(TimeUnit.SECONDS),
         "While scheduled queries are in flight; "
             + "a background update happens periodically to report the actual state of the query"),
+    HIVE_SCHEDULED_QUERIES_CREATE_AS_ENABLED("hive.scheduled.queries.create.as.enabled", true,
+        "This option sets the default behaviour of newly created scheduled queries."),
     HIVE_SECURITY_AUTHORIZATION_SCHEDULED_QUERIES_SUPPORTED("hive.security.authorization.scheduled.queries.supported",
         false,
         "Enable this if the configured authorizer is able to handle scheduled query related calls."),
@@ -5598,7 +5622,9 @@ public class HiveConf extends Configuration {
   public String getLogIdVar(String defaultValue) {
     String retval = getVar(ConfVars.HIVE_LOG_TRACE_ID);
     if (StringUtils.EMPTY.equals(retval)) {
-      LOG.info("Using the default value passed in for log id: {}", defaultValue);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Using the default value passed in for log id: {}", defaultValue);
+      }
       retval = defaultValue;
     }
     if (retval.length() > LOG_PREFIX_LENGTH) {
