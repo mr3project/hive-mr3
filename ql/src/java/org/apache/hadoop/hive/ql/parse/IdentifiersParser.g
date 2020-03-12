@@ -224,9 +224,9 @@ function
         (STAR) => (star=STAR)
         | (dist=KW_DISTINCT | KW_ALL)? (selectExpression (COMMA selectExpression)*)?
       )
-    RPAREN ((KW_OVER ws=window_specification) | (within=KW_WITHIN KW_GROUP LPAREN KW_ORDER KW_BY colRef=columnRefOrder RPAREN))?
+    RPAREN ((KW_OVER ws=window_specification) | (within=KW_WITHIN KW_GROUP LPAREN ordBy=orderByClause RPAREN))?
            -> {$star != null}? ^(TOK_FUNCTIONSTAR functionName $ws?)
-           -> {$within != null}? ^(TOK_FUNCTION functionName (selectExpression+)? ^(TOK_WITHIN_GROUP $colRef))
+           -> {$within != null}? ^(TOK_FUNCTION functionName (selectExpression+)? ^(TOK_WITHIN_GROUP $ordBy))
            -> {$dist == null}? ^(TOK_FUNCTION functionName (selectExpression+)? $ws?)
                             -> ^(TOK_FUNCTIONDI functionName (selectExpression+)? $ws?)
     ;
@@ -865,6 +865,7 @@ nonReserved
     | KW_TIMESTAMPTZ
     | KW_DEFAULT
     | KW_REOPTIMIZATION
+    | KW_EXECUTED | KW_SCHEDULED | KW_CRON
     | KW_RESOURCE | KW_PLAN | KW_PLANS | KW_QUERY_PARALLELISM | KW_ACTIVATE | KW_MOVE | KW_DO
     | KW_POOL | KW_ALLOC_FRACTION | KW_SCHEDULING_POLICY | KW_PATH | KW_MAPPING | KW_WORKLOAD | KW_MANAGEMENT | KW_ACTIVE | KW_UNMANAGED
     | KW_UNKNOWN

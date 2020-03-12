@@ -42,7 +42,7 @@ import org.apache.hadoop.hive.metastore.HiveMetaStoreUtils;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
 import org.apache.hadoop.hive.metastore.utils.MetaStoreUtils;
-import org.apache.hadoop.hive.ql.ddl.table.creation.CreateTableDesc;
+import org.apache.hadoop.hive.ql.ddl.table.create.CreateTableDesc;
 import org.apache.hadoop.hive.ql.ddl.view.create.CreateViewDesc;
 import org.apache.hadoop.hive.ql.exec.ColumnInfo;
 import org.apache.hadoop.hive.ql.exec.RowSchema;
@@ -368,9 +368,9 @@ public final class PlanUtils {
               crtTblDesc.getNullFormat());
       }
 
-      if (crtTblDesc.getTableName() != null && crtTblDesc.getDatabaseName() != null) {
+      if (crtTblDesc.getDbTableName() != null && crtTblDesc.getDatabaseName() != null) {
         properties.setProperty(org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_NAME,
-            crtTblDesc.getTableName());
+            crtTblDesc.getDbTableName());
       }
 
       if (crtTblDesc.getTblProps() != null) {

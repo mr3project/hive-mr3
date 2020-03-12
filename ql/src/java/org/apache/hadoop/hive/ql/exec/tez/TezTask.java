@@ -21,7 +21,8 @@ package org.apache.hadoop.hive.ql.exec.tez;
 import org.apache.hadoop.hive.common.metrics.common.Metrics;
 import org.apache.hadoop.hive.common.metrics.common.MetricsConstant;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.DriverContext;
+import org.apache.hadoop.hive.ql.Context;
+import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.mr3.MR3Task;
@@ -61,19 +62,19 @@ public class TezTask extends Task<TezWork> {
 
 
   @Override
-  public int execute(DriverContext driverContext) {
+  public int execute() {
     String engine = conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
-    if(engine.equals("mr3")) {
-      return executeMr3(driverContext);
+    if (engine.equals("mr3")) {
+      return executeMr3(context);
     } else {
       LOG.warn("Run MR3 instead of Tez");
-      return executeMr3(driverContext);
+      return executeMr3(context);
     }
   }
 
-  private int executeMr3(DriverContext driverContext) {
+  private int executeMr3(Context context) {
     MR3Task mr3Task = new MR3Task(conf, console, isShutdown);
-    int returnCode = mr3Task.execute(driverContext, this.getWork());
+    int returnCode = mr3Task.execute(context, this.getWork());
     counters = mr3Task.getTezCounters();
     Throwable exFromMr3 = mr3Task.getException();
     if (exFromMr3 != null) {

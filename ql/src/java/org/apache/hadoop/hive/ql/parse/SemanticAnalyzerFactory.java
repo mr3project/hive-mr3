@@ -50,7 +50,7 @@ public final class SemanticAnalyzerFactory {
     }
     return sem;
   }
-  
+
   private static BaseSemanticAnalyzer getInternal(QueryState queryState, ASTNode tree)
       throws SemanticException {
     if (tree.getToken() == null) {
@@ -105,14 +105,12 @@ public final class SemanticAnalyzerFactory {
         queryState.setCommandType(HiveOperation.ALTERVIEW_AS);
         return new SemanticAnalyzer(queryState);
       }
-      case HiveParser.TOK_DROPTABLE:
       case HiveParser.TOK_DESCTABLE:
       case HiveParser.TOK_MSCK:
       case HiveParser.TOK_SHOWTABLES:
       case HiveParser.TOK_SHOWCOLUMNS:
       case HiveParser.TOK_SHOW_TABLESTATUS:
       case HiveParser.TOK_SHOW_TBLPROPERTIES:
-      case HiveParser.TOK_SHOW_CREATETABLE:
       case HiveParser.TOK_SHOWPARTITIONS:
       case HiveParser.TOK_SHOWLOCKS:
       case HiveParser.TOK_SHOWDBLOCKS:
@@ -122,7 +120,6 @@ public final class SemanticAnalyzerFactory {
       case HiveParser.TOK_LOCKTABLE:
       case HiveParser.TOK_UNLOCKTABLE:
       case HiveParser.TOK_TRUNCATETABLE:
-      case HiveParser.TOK_CACHE_METADATA:
         return new DDLSemanticAnalyzer(queryState);
 
       case HiveParser.TOK_ANALYZE:
@@ -134,6 +131,11 @@ public final class SemanticAnalyzerFactory {
 
       case HiveParser.TOK_MERGE:
         return new MergeSemanticAnalyzer(queryState);
+
+      case HiveParser.TOK_ALTER_SCHEDULED_QUERY:
+      case HiveParser.TOK_CREATE_SCHEDULED_QUERY:
+      case HiveParser.TOK_DROP_SCHEDULED_QUERY:
+        return new ScheduledQueryAnalyzer(queryState);
 
       case HiveParser.TOK_START_TRANSACTION:
       case HiveParser.TOK_COMMIT:

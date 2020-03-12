@@ -127,7 +127,7 @@
     <avatica.version>1.12.0</avatica.version>
     <avro.version>1.8.2</avro.version>
     <bonecp.version>0.8.0.RELEASE</bonecp.version>
-    <calcite.version>1.19.0</calcite.version>
+    <calcite.version>1.21.0</calcite.version>
     <datanucleus-api-jdo.version>4.2.4</datanucleus-api-jdo.version>
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <datanucleus-rdbms.version>4.1.19</datanucleus-rdbms.version>
@@ -135,7 +135,7 @@
     <commons-cli.version>1.2</commons-cli.version>
     <commons-codec.version>1.7</commons-codec.version>
     <commons-collections.version>3.2.2</commons-collections.version>
-    <commons-compress.version>1.18</commons-compress.version>
+    <commons-compress.version>1.19</commons-compress.version>
     <commons-exec.version>1.1</commons-exec.version>
     <commons-io.version>2.6</commons-io.version>
     <commons-lang3.version>3.9</commons-lang3.version>
@@ -187,8 +187,9 @@
     <libfb303.version>0.9.3</libfb303.version>
     <libthrift.version>0.9.3-1</libthrift.version>
     <log4j2.version>2.12.1</log4j2.version>
+    <mariadb.version>2.5.0</mariadb.version>
     <opencsv.version>2.3</opencsv.version>
-    <orc.version>1.5.6</orc.version>
+    <orc.version>1.5.8</orc.version>
     <mockito-core.version>1.10.19</mockito-core.version>
     <powermock.version>1.7.4</powermock.version>
     <mina.version>2.0.0-M5</mina.version>
@@ -450,6 +451,26 @@
         <version>${activemq.version}</version>
       </dependency>
       <dependency>
+          <groupId>org.apache.calcite.avatica</groupId>
+          <artifactId>avatica</artifactId>
+          <version>${avatica.version}</version>
+      </dependency>
+      <dependency>
+          <groupId>org.apache.calcite.avatica</groupId>
+          <artifactId>avatica-core</artifactId>
+          <version>${avatica.version}</version>
+      </dependency>
+      <dependency>
+          <groupId>org.apache.calcite.avatica</groupId>
+          <artifactId>avatica-metrics</artifactId>
+          <version>${avatica.version}</version>
+      </dependency>
+      <dependency>
+          <groupId>org.apache.calcite.avatica</groupId>
+          <artifactId>avatica-server</artifactId>
+          <version>${avatica.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.avro</groupId>
         <artifactId>avro</artifactId>
         <version>${avro.version}</version>
@@ -484,6 +505,21 @@
         <groupId>stax</groupId>
         <artifactId>stax-api</artifactId>
         <version>${stax.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.calcite</groupId>
+        <artifactId>calcite-core</artifactId>
+        <version>${calcite.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.calcite</groupId>
+        <artifactId>calcite-linq4j</artifactId>
+        <version>${calcite.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.calcite</groupId>
+        <artifactId>calcite-druid</artifactId>
+        <version>${calcite.version}</version>
       </dependency>
        <dependency>
         <groupId>org.apache.orc</groupId>
@@ -645,6 +681,11 @@
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-webapp</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-util</artifactId>
         <version>${jetty.version}</version>
       </dependency>
       <dependency>
@@ -968,7 +1009,6 @@
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
-      <version>${slf4j.version}</version>
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>

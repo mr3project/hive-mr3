@@ -19,7 +19,6 @@
 package org.apache.hive.hcatalog.cli.SemanticAnalysis;
 
 import java.io.IOException;
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +28,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.ql.ddl.DDLDesc;
 import org.apache.hadoop.hive.ql.ddl.DDLTask;
-import org.apache.hadoop.hive.ql.ddl.table.creation.CreateTableDesc;
+import org.apache.hadoop.hive.ql.ddl.table.create.CreateTableDesc;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -175,7 +174,7 @@ final class CreateTableHook extends HCatSemanticAnalyzerBase {
     }
 
     try {
-      Table table = context.getHive().newTable(desc.getTableName());
+      Table table = context.getHive().newTable(desc.getDbTableName());
       if (desc.getLocation() != null) {
         table.setDataLocation(new Path(desc.getLocation()));
       }

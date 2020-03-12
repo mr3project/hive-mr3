@@ -45,6 +45,7 @@ STAGE PLANS:
               Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
               Reduce Output Operator
                 key expressions: _col0 (type: string), _col1 (type: string)
+                null sort order: zz
                 sort order: ++
                 Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
                 TopN Hash Memory Usage: 0.1
@@ -70,6 +71,7 @@ STAGE PLANS:
           TableScan
             Reduce Output Operator
               key expressions: _col0 (type: string), _col1 (type: string)
+              null sort order: zz
               sort order: ++
               Statistics: Num rows: 10 Data size: 1780 Basic stats: COMPLETE Column stats: COMPLETE
               TopN Hash Memory Usage: 0.1
@@ -116,10 +118,10 @@ STAGE PLANS:
   Stage: Stage-5
     Create Table
       columns: k string, value string
+      name: default.nzhang_CTAS1
       input format: org.apache.hadoop.mapred.TextInputFormat
       output format: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
       serde name: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-      name: default.nzhang_CTAS1
 
   Stage: Stage-3
     Stats Work
@@ -134,6 +136,7 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             Reduce Output Operator
+              null sort order: 
               sort order: 
               Statistics: Num rows: 1 Data size: 880 Basic stats: COMPLETE Column stats: COMPLETE
               value expressions: _col0 (type: struct<columntype:string,maxlength:bigint,sumlength:bigint,count:bigint,countnulls:bigint,bitvector:binary>), _col1 (type: struct<columntype:string,maxlength:bigint,sumlength:bigint,count:bigint,countnulls:bigint,bitvector:binary>)
@@ -248,6 +251,7 @@ STAGE PLANS:
               Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
               Reduce Output Operator
                 key expressions: _col0 (type: string), _col1 (type: string)
+                null sort order: zz
                 sort order: ++
                 Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
                 TopN Hash Memory Usage: 0.1
@@ -273,6 +277,7 @@ STAGE PLANS:
           TableScan
             Reduce Output Operator
               key expressions: _col0 (type: string), _col1 (type: string)
+              null sort order: zz
               sort order: ++
               Statistics: Num rows: 10 Data size: 1780 Basic stats: COMPLETE Column stats: COMPLETE
               TopN Hash Memory Usage: 0.1
@@ -319,10 +324,10 @@ STAGE PLANS:
   Stage: Stage-5
     Create Table
       columns: key string, value string
+      name: default.nzhang_ctas2
       input format: org.apache.hadoop.mapred.TextInputFormat
       output format: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
       serde name: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-      name: default.nzhang_ctas2
 
   Stage: Stage-3
     Stats Work
@@ -337,6 +342,7 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             Reduce Output Operator
+              null sort order: 
               sort order: 
               Statistics: Num rows: 1 Data size: 880 Basic stats: COMPLETE Column stats: COMPLETE
               value expressions: _col0 (type: struct<columntype:string,maxlength:bigint,sumlength:bigint,count:bigint,countnulls:bigint,bitvector:binary>), _col1 (type: struct<columntype:string,maxlength:bigint,sumlength:bigint,count:bigint,countnulls:bigint,bitvector:binary>)
@@ -451,6 +457,7 @@ STAGE PLANS:
               Statistics: Num rows: 500 Data size: 96000 Basic stats: COMPLETE Column stats: COMPLETE
               Reduce Output Operator
                 key expressions: _col0 (type: double), _col1 (type: string)
+                null sort order: zz
                 sort order: ++
                 Statistics: Num rows: 500 Data size: 96000 Basic stats: COMPLETE Column stats: COMPLETE
                 TopN Hash Memory Usage: 0.1
@@ -476,6 +483,7 @@ STAGE PLANS:
           TableScan
             Reduce Output Operator
               key expressions: _col0 (type: double), _col1 (type: string)
+              null sort order: zz
               sort order: ++
               Statistics: Num rows: 10 Data size: 1920 Basic stats: COMPLETE Column stats: COMPLETE
               TopN Hash Memory Usage: 0.1
@@ -522,10 +530,10 @@ STAGE PLANS:
   Stage: Stage-5
     Create Table
       columns: half_key double, conb string
+      name: default.nzhang_ctas3
       input format: org.apache.hadoop.hive.ql.io.RCFileInputFormat
       output format: org.apache.hadoop.hive.ql.io.RCFileOutputFormat
       serde name: org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe
-      name: default.nzhang_ctas3
 
   Stage: Stage-3
     Stats Work
@@ -540,6 +548,7 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             Reduce Output Operator
+              null sort order: 
               sort order: 
               Statistics: Num rows: 1 Data size: 864 Basic stats: COMPLETE Column stats: COMPLETE
               value expressions: _col0 (type: struct<columntype:string,min:double,max:double,countnulls:bigint,bitvector:binary>), _col1 (type: struct<columntype:string,maxlength:bigint,sumlength:bigint,count:bigint,countnulls:bigint,bitvector:binary>)
@@ -718,6 +727,7 @@ STAGE PLANS:
               Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
               Reduce Output Operator
                 key expressions: _col0 (type: string), _col1 (type: string)
+                null sort order: zz
                 sort order: ++
                 Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
                 TopN Hash Memory Usage: 0.1
@@ -743,6 +753,7 @@ STAGE PLANS:
           TableScan
             Reduce Output Operator
               key expressions: _col0 (type: string), _col1 (type: string)
+              null sort order: zz
               sort order: ++
               Statistics: Num rows: 10 Data size: 1780 Basic stats: COMPLETE Column stats: COMPLETE
               TopN Hash Memory Usage: 0.1
@@ -789,11 +800,11 @@ STAGE PLANS:
   Stage: Stage-5
     Create Table
       columns: key string, value string
+      name: default.nzhang_ctas4
       field delimiter: ,
       input format: org.apache.hadoop.mapred.TextInputFormat
       output format: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
       serde name: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-      name: default.nzhang_ctas4
 
   Stage: Stage-3
     Stats Work
@@ -808,6 +819,7 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             Reduce Output Operator
+              null sort order: 
               sort order: 
               Statistics: Num rows: 1 Data size: 880 Basic stats: COMPLETE Column stats: COMPLETE
               value expressions: _col0 (type: struct<columntype:string,maxlength:bigint,sumlength:bigint,count:bigint,countnulls:bigint,bitvector:binary>), _col1 (type: struct<columntype:string,maxlength:bigint,sumlength:bigint,count:bigint,countnulls:bigint,bitvector:binary>)
@@ -923,6 +935,7 @@ STAGE PLANS:
               Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
               Reduce Output Operator
                 key expressions: _col0 (type: string), _col1 (type: string)
+                null sort order: zz
                 sort order: ++
                 Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
                 TopN Hash Memory Usage: 0.1
@@ -948,6 +961,7 @@ STAGE PLANS:
           TableScan
             Reduce Output Operator
               key expressions: _col0 (type: string), _col1 (type: string)
+              null sort order: zz
               sort order: ++
               Statistics: Num rows: 10 Data size: 1780 Basic stats: COMPLETE Column stats: COMPLETE
               TopN Hash Memory Usage: 0.1
@@ -994,13 +1008,13 @@ STAGE PLANS:
   Stage: Stage-5
     Create Table
       columns: key string, value string
+      name: default.nzhang_ctas5
       field delimiter: ,
       input format: org.apache.hadoop.mapred.TextInputFormat
       line delimiter: 
 
       output format: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
       serde name: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-      name: default.nzhang_ctas5
 
   Stage: Stage-3
     Stats Work
@@ -1015,6 +1029,7 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             Reduce Output Operator
+              null sort order: 
               sort order: 
               Statistics: Num rows: 1 Data size: 880 Basic stats: COMPLETE Column stats: COMPLETE
               value expressions: _col0 (type: struct<columntype:string,maxlength:bigint,sumlength:bigint,count:bigint,countnulls:bigint,bitvector:binary>), _col1 (type: struct<columntype:string,maxlength:bigint,sumlength:bigint,count:bigint,countnulls:bigint,bitvector:binary>)

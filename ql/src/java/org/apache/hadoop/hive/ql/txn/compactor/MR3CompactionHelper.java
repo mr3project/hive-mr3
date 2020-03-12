@@ -99,7 +99,7 @@ public class MR3CompactionHelper {
     jobConf.setCredentials(UserGroupInformation.getCurrentUser().getCredentials());
     TezWork tezWork = createTezWork(jobConf);
     MR3Task mr3Task = new MR3Task(hiveConf, new SessionState.LogHelper(LOG), new AtomicBoolean(false));
-    int returnCode = mr3Task.execute(new DriverContext(), tezWork);  // blocking
+    int returnCode = mr3Task.execute(null, tezWork);  // blocking
 
     if (returnCode != 0) {
       throw new HiveException("Compaction using MR3 failed", mr3Task.getException());

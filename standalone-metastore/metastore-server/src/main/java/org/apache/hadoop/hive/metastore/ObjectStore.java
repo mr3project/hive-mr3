@@ -31,6 +31,7 @@ import java.sql.SQLException;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.sql.Statement;
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -43,6 +44,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -98,6 +100,11 @@ import org.slf4j.LoggerFactory;
 
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
+import com.cronutils.model.CronType;
+import com.cronutils.model.definition.CronDefinition;
+import com.cronutils.model.definition.CronDefinitionBuilder;
+import com.cronutils.model.time.ExecutionTime;
+import com.cronutils.parser.CronParser;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -512,7 +519,7 @@ public class ObjectStore implements RawStore, Configurable {
 
   @Override
   public void createCatalog(Catalog cat) throws MetaException {
-    LOG.debug("Creating catalog " + cat.getName());
+    LOG.debug("Creating catalog {}", cat);
     boolean committed = false;
     MCatalog mCat = catToMCat(cat);
     try {
@@ -553,7 +560,7 @@ public class ObjectStore implements RawStore, Configurable {
 
   @Override
   public Catalog getCatalog(String catalogName) throws NoSuchObjectException, MetaException {
-    LOG.debug("Fetching catalog " + catalogName);
+    LOG.debug("Fetching catalog {}", catalogName);
     MCatalog mCat = getMCatalog(catalogName);
     if (mCat == null) {
       throw new NoSuchObjectException("No catalog " + catalogName);
@@ -585,7 +592,7 @@ public class ObjectStore implements RawStore, Configurable {
 
   @Override
   public void dropCatalog(String catalogName) throws NoSuchObjectException, MetaException {
-    LOG.debug("Dropping catalog " + catalogName);
+    LOG.debug("Dropping catalog {}", catalogName);
     boolean committed = false;
     try {
       openTransaction();
@@ -705,7 +712,7 @@ public class ObjectStore implements RawStore, Configurable {
       ex = e;
     }
     if (db == null) {
-      LOG.warn("Failed to get database {}.{}, returning NoSuchObjectException",
+      LOG.debug("Failed to get database {}.{}, returning NoSuchObjectException",
           catalogName, name, ex);
       throw new NoSuchObjectException(name + (ex == null ? "" : (": " + ex.getMessage())));
     }
@@ -1022,7 +1029,7 @@ public class ObjectStore implements RawStore, Configurable {
       PrincipalPrivilegeSet principalPrivs = tbl.getPrivileges();
       List<Object> toPersistPrivObjs = new ArrayList<>();
       if (principalPrivs != null) {
-        int now = (int)(System.currentTimeMillis()/1000);
+        int now = (int) (System.currentTimeMillis() / 1000);
 
         Map<String, List<PrivilegeGrantInfo>> userPrivs = principalPrivs.getUserPrivileges();
         putPersistentPrivObjects(mtbl, toPersistPrivObjs, now, userPrivs, PrincipalType.USER, "SQL");
@@ -1405,8 +1412,9 @@ public class ObjectStore implements RawStore, Configurable {
       query = pm.newQuery(MTable.class, filterBuilder.toString());
       query.setResult("tableName");
       query.setOrdering("tableName ascending");
-      if (limit >= 0)
+      if (limit >= 0) {
         query.setRange(0, limit);
+      }
       Collection<String> names = (Collection<String>) query.executeWithArray(parameterVals.toArray(new String[0]));
       tbls = new ArrayList<>(names);
       commited = commitTransaction();
@@ -1526,7 +1534,7 @@ public class ObjectStore implements RawStore, Configurable {
       }
 
       if (LOG.isDebugEnabled()) {
-        LOG.debug("getTableMeta with filter " + filterBuilder.toString() + " params: " +
+        LOG.debug("getTableMeta with filter " + filterBuilder + " params: " +
             StringUtils.join(parameterVals, ", "));
       }
       // Add the fetch group here which retrieves the database object along with the MTable
@@ -1628,8 +1636,10 @@ public class ObjectStore implements RawStore, Configurable {
       query.declareParameters(
           "java.lang.String table, java.lang.String db, java.lang.String catname");
       query.setUnique(true);
-      LOG.debug("Executing getMTable for " +
-          TableName.getQualified(catName, db, table));
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Executing getMTable for {}",
+            TableName.getQualified(catName, db, table));
+      }
       mtbl = (MTable) query.execute(table, db, catName);
       pm.retrieve(mtbl);
       // Retrieving CD can be expensive and unnecessary, so do it only when required.
@@ -2088,7 +2098,7 @@ public class ObjectStore implements RawStore, Configurable {
         MPartition mpart = convertToMPart(part, table, true);
 
         toPersist.add(mpart);
-        int now = (int)(System.currentTimeMillis()/1000);
+        int now = (int) (System.currentTimeMillis() / 1000);
         if (tabGrants != null) {
           for (MTablePrivilege tab: tabGrants) {
             toPersist.add(new MPartitionPrivilege(tab.getPrincipalName(),
@@ -2155,7 +2165,7 @@ public class ObjectStore implements RawStore, Configurable {
 
       PartitionSpecProxy.PartitionIterator iterator = partitionSpec.getPartitionIterator();
 
-      int now = (int)(System.currentTimeMillis()/1000);
+      int now = (int) (System.currentTimeMillis() / 1000);
 
       List<FieldSchema> partitionKeys = convertToFieldSchemas(table.getPartitionKeys());
       while (iterator.hasNext()) {
@@ -2213,7 +2223,7 @@ public class ObjectStore implements RawStore, Configurable {
       MPartition mpart = convertToMPart(part, table, true);
       pm.makePersistent(mpart);
 
-      int now = (int)(System.currentTimeMillis()/1000);
+      int now = (int) (System.currentTimeMillis() / 1000);
       List<Object> toPersist = new ArrayList<>();
       if (tabGrants != null) {
         for (MTablePrivilege tab: tabGrants) {
@@ -3623,9 +3633,7 @@ public class ObjectStore implements RawStore, Configurable {
         message = ex.toString() + "; error building a better message: " + t.getMessage();
       }
       LOG.warn(message); // Don't log the exception, people just get confused.
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Full DirectSQL callstack for debugging (note: this is not an error)", ex);
-      }
+      LOG.debug("Full DirectSQL callstack for debugging (not an error)", ex);
       if (!allowJdo) {
         if (ex instanceof MetaException) {
           throw (MetaException)ex;
@@ -4215,17 +4223,25 @@ public class ObjectStore implements RawStore, Configurable {
    */
   public static String verifyStatsChangeCtx(String fullTableName, Map<String, String> oldP, Map<String, String> newP,
                                             long writeId, String validWriteIds, boolean isColStatsChange) {
-    if (validWriteIds != null && writeId > 0) return null; // We have txn context.
+    if (validWriteIds != null && writeId > 0) {
+      return null; // We have txn context.
+    }
     String oldVal = oldP == null ? null : oldP.get(StatsSetupConst.COLUMN_STATS_ACCURATE);
     String newVal = newP == null ? null : newP.get(StatsSetupConst.COLUMN_STATS_ACCURATE);
     // We don't need txn context is that stats state is not being changed.
-    if (StringUtils.isEmpty(oldVal) && StringUtils.isEmpty(newVal)) return null;
+    if (StringUtils.isEmpty(oldVal) && StringUtils.isEmpty(newVal)) {
+      return null;
+    }
     if (StringUtils.equalsIgnoreCase(oldVal, newVal)) {
-      if (!isColStatsChange) return null; // No change in col stats or parameters => assume no change.
+      if (!isColStatsChange) {
+        return null; // No change in col stats or parameters => assume no change.
+      }
       // Col stats change while json stays "valid" implies stats change. If the new value is invalid,
       // then we don't care. This is super ugly and idiotic.
       // It will all become better when we get rid of JSON and store a flag and write ID per stats.
-      if (!StatsSetupConst.areBasicStatsUptoDate(newP)) return null;
+      if (!StatsSetupConst.areBasicStatsUptoDate(newP)) {
+        return null;
+      }
     }
     // Some change to the stats state is being made; it can only be made with a write ID.
     // Note - we could do this:  if (writeId > 0 && (validWriteIds != null || !StatsSetupConst.areBasicStatsUptoDate(newP))) { return null;
@@ -4270,12 +4286,21 @@ public class ObjectStore implements RawStore, Configurable {
    * @param newPart Partition object containing new information
    */
   private Partition alterPartitionNoTxn(String catName, String dbname, String name,
-    List<String> part_vals, Partition newPart, String validWriteIds, Ref<MColumnDescriptor> oldCd)
+      List<String> part_vals, Partition newPart, String validWriteIds, Ref<MColumnDescriptor> oldCd)
+      throws InvalidObjectException, MetaException {
+    MTable table = this.getMTable(newPart.getCatName(), newPart.getDbName(), newPart.getTableName());
+    return alterPartitionNoTxn(catName, dbname, name, part_vals, newPart,
+        validWriteIds, oldCd, table);
+  }
+
+  private Partition alterPartitionNoTxn(String catName, String dbname,
+      String name, List<String> part_vals, Partition newPart,
+      String validWriteIds,
+      Ref<MColumnDescriptor> oldCd, MTable table)
       throws InvalidObjectException, MetaException {
     catName = normalizeIdentifier(catName);
     name = normalizeIdentifier(name);
     dbname = normalizeIdentifier(dbname);
-    MTable table = this.getMTable(newPart.getCatName(), newPart.getDbName(), newPart.getTableName());
     MPartition oldp = getMPartition(catName, dbname, name, part_vals);
     MPartition newp = convertToMPart(newPart, table, false);
     MColumnDescriptor oldCD = null;
@@ -5241,7 +5266,7 @@ public class ObjectStore implements RawStore, Configurable {
       if (nameCheck != null) {
         throw new InvalidObjectException("Role " + roleName + " already exists.");
       }
-      int now = (int)(System.currentTimeMillis()/1000);
+      int now = (int) (System.currentTimeMillis() / 1000);
       MRole mRole = new MRole(roleName, now, ownerName);
       pm.makePersistent(mRole);
       commited = commitTransaction();
@@ -6436,8 +6461,8 @@ public class ObjectStore implements RawStore, Configurable {
         break;
       case COLUMN:
         Preconditions.checkArgument(objToRefresh.getColumnName()==null, "columnName must be null");
-        grants = convertTableCols(listTableAllColumnGrants(catName,
-            objToRefresh.getDbName(), objToRefresh.getObjectName(), authorizer));
+        grants = getTableAllColumnGrants(catName, objToRefresh.getDbName(),
+                objToRefresh.getObjectName(), authorizer);
         break;
       default:
         throw new MetaException("Unexpected object type " + objToRefresh.getObjectType());
@@ -6455,18 +6480,24 @@ public class ObjectStore implements RawStore, Configurable {
         }
       }
       if (!revokePrivilegeSet.isEmpty()) {
+        LOG.debug("Found " + revokePrivilegeSet.size() + " new revoke privileges to be synced.");
         PrivilegeBag remainingRevokePrivileges = new PrivilegeBag();
         for (HiveObjectPrivilege revokePrivilege : revokePrivilegeSet) {
           remainingRevokePrivileges.addToPrivileges(revokePrivilege);
         }
         revokePrivileges(remainingRevokePrivileges, false);
+      } else {
+        LOG.debug("No new revoke privileges are required to be synced.");
       }
       if (!grantPrivilegeSet.isEmpty()) {
+        LOG.debug("Found " + grantPrivilegeSet.size() + " new grant privileges to be synced.");
         PrivilegeBag remainingGrantPrivileges = new PrivilegeBag();
         for (HiveObjectPrivilege grantPrivilege : grantPrivilegeSet) {
           remainingGrantPrivileges.addToPrivileges(grantPrivilege);
         }
         grantPrivileges(remainingGrantPrivileges);
+      } else {
+        LOG.debug("No new grant privileges are required to be synced.");
       }
       committed = commitTransaction();
     } finally {
@@ -6475,6 +6506,30 @@ public class ObjectStore implements RawStore, Configurable {
       }
     }
     return committed;
+  }
+
+  private List<HiveObjectPrivilege> getTableAllColumnGrants(String catName, String dbName,
+                                                            String tableName, String authorizer)
+          throws MetaException, NoSuchObjectException {
+    return new GetListHelper<HiveObjectPrivilege>(normalizeIdentifier(catName),
+            normalizeIdentifier(dbName), normalizeIdentifier(tableName), true, true) {
+
+      @Override
+      protected String describeResult() {
+        return "Table column privileges.";
+      }
+
+      @Override
+      protected List<HiveObjectPrivilege> getSqlResult(GetHelper<List<HiveObjectPrivilege>> ctx)
+              throws MetaException {
+        return directSql.getTableAllColumnGrants(catName, dbName, tblName, authorizer);
+      }
+
+      @Override
+      protected List<HiveObjectPrivilege> getJdoResult(GetHelper<List<HiveObjectPrivilege>> ctx) {
+        return convertTableCols(listTableAllColumnGrants(catName, dbName, tblName, authorizer));
+      }
+    }.run(false);
   }
 
   public List<MRoleMap> listMRoleMembers(String roleName) {
@@ -6848,12 +6903,16 @@ public class ObjectStore implements RawStore, Configurable {
         query.declareParameters("java.lang.String t1, java.lang.String t2, java.lang.String t3");
         mPrivs = (List<MTableColumnPrivilege>) query.executeWithArray(tableName, dbName, catName);
       }
+      LOG.debug("Query to obtain objects for listTableAllColumnGrants finished");
       pm.retrieveAll(mPrivs);
+      LOG.debug("RetrieveAll on all the objects for listTableAllColumnGrants finished");
       success = commitTransaction();
+      LOG.debug("Transaction running query to obtain objects for listTableAllColumnGrants " +
+              "committed");
 
       mTblColPrivilegeList.addAll(mPrivs);
 
-      LOG.debug("Done retrieving all objects for listTableAllColumnGrants");
+      LOG.debug("Done retrieving " + mPrivs.size() + " objects for listTableAllColumnGrants");
     } finally {
       rollbackAndCleanup(success, query);
     }
@@ -8679,7 +8738,8 @@ public class ObjectStore implements RawStore, Configurable {
       committed = commitTransaction();
       return result;
     } finally {
-      LOG.debug("Done executing getTableColumnStatistics with status : {}", committed);
+      LOG.debug("Done executing getTableColumnStatistics with status : {}",
+          committed);
       rollbackAndCleanup(committed, query);
     }
   }
@@ -8785,7 +8845,8 @@ public class ObjectStore implements RawStore, Configurable {
       committed = commitTransaction();
       return result;
     } finally {
-      LOG.debug("Done executing getTableColumnStatistics with status : {}", committed);
+      LOG.debug("Done executing getTableColumnStatistics with status : {}",
+          committed);
       rollbackAndCleanup(committed, query);
     }
   }
@@ -8913,8 +8974,9 @@ public class ObjectStore implements RawStore, Configurable {
 
         if (!isCurrentStatsValidForTheQuery(part, part.getWriteId(), writeIdList, false)) {
           String partName = Warehouse.makePartName(table.getPartitionKeys(), part.getValues());
-          LOG.debug("The current metastore transactional partition column statistics for " + dbName
-              + "." + tblName + "." + partName + " is not valid for the current query");
+          LOG.debug("The current metastore transactional partition column "
+              + "statistics for {}.{}.{} is not valid for the current query",
+              dbName, tblName, partName);
           return null;
         }
       }
@@ -9615,25 +9677,10 @@ public class ObjectStore implements RawStore, Configurable {
     return this.getMPartition(catName, dbName, tableName, name) != null;
   }
 
-  private void debugLog(String message) {
+  private void debugLog(final String message) {
     if (LOG.isDebugEnabled()) {
-      LOG.debug("{} {}", message, getCallStack());
+      LOG.debug("{}", message, new Exception());
     }
-  }
-
-  private static final int stackLimit = 3;
-
-  private String getCallStack() {
-    StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
-    int thislimit = Math.min(stackLimit, stackTrace.length);
-    StringBuilder sb = new StringBuilder();
-    sb.append(" at:");
-    // Offset by 4 because the first 4 frames are just calls to get down here.
-    for (int i = 4; i < thislimit + 4; i++) {
-      sb.append("\n\t");
-      sb.append(stackTrace[i].toString());
-    }
-    return sb.toString();
   }
 
   private Function convertToFunction(MFunction mfunc) {
@@ -11115,7 +11162,7 @@ public class ObjectStore implements RawStore, Configurable {
         parameters.put("colType", type);
       }
       if (LOG.isDebugEnabled()) {
-        LOG.debug("getSchemaVersionsByColumns going to execute query " + sql.toString());
+        LOG.debug("getSchemaVersionsByColumns going to execute query {}", sql);
         LOG.debug("With parameters");
         for (Map.Entry<String, String> p : parameters.entrySet()) {
           LOG.debug(p.getKey() + " : " + p.getValue());
@@ -12435,7 +12482,7 @@ public class ObjectStore implements RawStore, Configurable {
 
   @Override
   public void addRuntimeStat(RuntimeStat stat) throws MetaException {
-    LOG.debug("runtimeStat: " + stat);
+    LOG.debug("runtimeStat: {}", stat);
     MRuntimeStat mStat = MRuntimeStat.fromThrift(stat);
     boolean committed = false;
     openTransaction();
@@ -12590,5 +12637,309 @@ public class ObjectStore implements RawStore, Configurable {
     }
 
     return false;
+  }
+
+  @Override
+  public ScheduledQueryPollResponse scheduledQueryPoll(ScheduledQueryPollRequest request) {
+    String namespace = request.getClusterNamespace();
+    boolean commited = false;
+    ScheduledQueryPollResponse ret = new ScheduledQueryPollResponse();
+    try {
+      openTransaction();
+      Query q = pm.newQuery(MScheduledQuery.class,
+          "nextExecution <= now && enabled && clusterNamespace == ns");
+      q.setSerializeRead(true);
+      q.declareParameters("java.lang.Integer now, java.lang.String ns");
+      q.setOrdering("nextExecution");
+      int now = (int) (System.currentTimeMillis() / 1000);
+      List<MScheduledQuery> results = (List<MScheduledQuery>) q.execute(now, request.getClusterNamespace());
+      if (results == null || results.isEmpty()) {
+        return new ScheduledQueryPollResponse();
+      }
+      MScheduledQuery schq = results.get(0);
+      Integer plannedExecutionTime = schq.getNextExecution();
+      schq.setNextExecution(computeNextExecutionTime(schq.getSchedule()));
+
+      MScheduledExecution execution = new MScheduledExecution();
+      execution.setScheduledQuery(schq);
+      execution.setState(QueryState.INITED);
+      execution.setStartTime(now);
+      execution.setLastUpdateTime(now);
+      pm.makePersistent(execution);
+      pm.makePersistent(schq);
+      ObjectStoreTestHook.onScheduledQueryPoll();
+      commited = commitTransaction();
+      ret.setScheduleKey(schq.getScheduleKey());
+      ret.setQuery(schq.getQuery());
+      ret.setUser(schq.getUser());
+      int executionId = ((IntIdentity) pm.getObjectId(execution)).getKey();
+      ret.setExecutionId(executionId);
+    } catch (JDOException e) {
+      LOG.debug("Caught jdo exception; exclusive", e);
+      commited = false;
+    } finally {
+      if (commited) {
+        return ret;
+      } else {
+        rollbackTransaction();
+        return new ScheduledQueryPollResponse();
+      }
+    }
+  }
+
+  @Override
+  public void scheduledQueryProgress(ScheduledQueryProgressInfo info) throws InvalidOperationException {
+    boolean commited = false;
+    try {
+      openTransaction();
+      MScheduledExecution execution = pm.getObjectById(MScheduledExecution.class, info.getScheduledExecutionId());
+      if (!validateStateChange(execution.getState(), info.getState())) {
+        throw new InvalidOperationException("Invalid state change: " + execution.getState() + "=>" + info.getState());
+      }
+      execution.setState(info.getState());
+      if (info.isSetExecutorQueryId()) {
+        execution.setExecutorQueryId(info.getExecutorQueryId());
+      }
+      if (info.isSetErrorMessage()) {
+        execution.setErrorMessage(info.getErrorMessage());
+      }
+
+      switch (info.getState()) {
+      case INITED:
+      case EXECUTING:
+        execution.setLastUpdateTime((int) (System.currentTimeMillis() / 1000));
+        break;
+      case ERRORED:
+      case FINISHED:
+      case TIMED_OUT:
+        execution.setEndTime((int) (System.currentTimeMillis() / 1000));
+        execution.setLastUpdateTime(null);
+        break;
+      default:
+        throw new InvalidOperationException("invalid state: " + info.getState());
+      }
+      pm.makePersistent(execution);
+      commited = commitTransaction();
+    } finally {
+      if (!commited) {
+        rollbackTransaction();
+      }
+    }
+  }
+
+  private boolean validateStateChange(QueryState from, QueryState to) {
+    switch (from) {
+    case INITED:
+      return to != QueryState.INITED;
+    case EXECUTING:
+      return to == QueryState.FINISHED
+          || to == QueryState.EXECUTING
+          || to == QueryState.ERRORED;
+    default:
+      return false;
+    }
+  }
+
+  private Integer computeNextExecutionTime(String schedule) throws InvalidInputException {
+    CronType cronType = CronType.QUARTZ;
+
+    CronDefinition cronDefinition = CronDefinitionBuilder.instanceDefinitionFor(cronType);
+    CronParser parser = new CronParser(cronDefinition);
+
+    // Get date for last execution
+    try {
+      ZonedDateTime now = ZonedDateTime.now();
+      ExecutionTime executionTime = ExecutionTime.forCron(parser.parse(schedule));
+      Optional<ZonedDateTime> nextExecution = executionTime.nextExecution(now);
+      if (!nextExecution.isPresent()) {
+        // no valid next execution time.
+        return null;
+      }
+      return (int) nextExecution.get().toEpochSecond();
+    } catch (IllegalArgumentException iae) {
+      String message = "Invalid " + cronType + " schedule expression: '" + schedule + "'";
+      LOG.error(message, iae);
+      throw new InvalidInputException(message);
+    }
+  }
+
+  @Override
+  public void scheduledQueryMaintenance(ScheduledQueryMaintenanceRequest request)
+      throws MetaException, NoSuchObjectException, AlreadyExistsException, InvalidInputException {
+    switch (request.getType()) {
+    case CREATE:
+      scheduledQueryInsert(request.getScheduledQuery());
+      break;
+    case ALTER:
+      scheduledQueryUpdate(request.getScheduledQuery());
+      break;
+    case DROP:
+      scheduledQueryDelete(request.getScheduledQuery());
+      break;
+    default:
+      throw new MetaException("invalid request");
+    }
+  }
+
+  public void scheduledQueryInsert(ScheduledQuery scheduledQuery)
+      throws NoSuchObjectException, AlreadyExistsException, InvalidInputException {
+    MScheduledQuery schq = MScheduledQuery.fromThrift(scheduledQuery);
+    boolean commited = false;
+    try {
+      Optional<MScheduledQuery> existing = getMScheduledQuery(scheduledQuery.getScheduleKey());
+      if (existing.isPresent()) {
+        throw new AlreadyExistsException(
+            "Scheduled query with name: " + scheduledQueryKeyRef(scheduledQuery.getScheduleKey()) + " already exists.");
+      }
+      openTransaction();
+      Integer nextExecutionTime = computeNextExecutionTime(schq.getSchedule());
+      if (nextExecutionTime == null) {
+        throw new InvalidInputException("Invalid schedule: " + schq.getSchedule());
+      }
+      schq.setNextExecution(nextExecutionTime);
+      pm.makePersistent(schq);
+      commited = commitTransaction();
+    } finally {
+      if (!commited) {
+        rollbackTransaction();
+      }
+    }
+  }
+
+  public void scheduledQueryDelete(ScheduledQuery scheduledQuery) throws NoSuchObjectException, AlreadyExistsException {
+    MScheduledQuery schq = MScheduledQuery.fromThrift(scheduledQuery);
+    boolean commited = false;
+    try {
+      openTransaction();
+      Optional<MScheduledQuery> existing = getMScheduledQuery(scheduledQuery.getScheduleKey());
+      if (!existing.isPresent()) {
+        throw new NoSuchObjectException(
+            "Scheduled query with name: " + scheduledQueryKeyRef(schq.getScheduleKey()) + " doesn't exists.");
+      }
+      MScheduledQuery persisted = existing.get();
+      pm.deletePersistent(persisted);
+      commited = commitTransaction();
+    } finally {
+      if (!commited) {
+        rollbackTransaction();
+      }
+    }
+  }
+
+  public void scheduledQueryUpdate(ScheduledQuery scheduledQuery)
+      throws NoSuchObjectException, AlreadyExistsException, InvalidInputException {
+    MScheduledQuery schq = MScheduledQuery.fromThrift(scheduledQuery);
+    boolean commited = false;
+    try {
+      Optional<MScheduledQuery> existing = getMScheduledQuery(scheduledQuery.getScheduleKey());
+      if (!existing.isPresent()) {
+        throw new NoSuchObjectException(
+            "Scheduled query with name: " + scheduledQueryKeyRef(scheduledQuery.getScheduleKey()) + " doesn't exists.");
+      }
+      openTransaction();
+      MScheduledQuery persisted = existing.get();
+      persisted.doUpdate(schq);
+      Integer nextExecutionTime = computeNextExecutionTime(schq.getSchedule());
+      if (nextExecutionTime == null) {
+        throw new InvalidInputException("Invalid schedule: " + schq.getSchedule());
+      }
+      persisted.setNextExecution(nextExecutionTime);
+      pm.makePersistent(persisted);
+      commited = commitTransaction();
+    } finally {
+      if (!commited) {
+        rollbackTransaction();
+      }
+    }
+  }
+
+  @Override
+  public ScheduledQuery getScheduledQuery(ScheduledQueryKey key) throws NoSuchObjectException {
+    Optional<MScheduledQuery> mScheduledQuery = getMScheduledQuery(key);
+    if (!mScheduledQuery.isPresent()) {
+      throw new NoSuchObjectException(
+          "There is no scheduled query for: " + scheduledQueryKeyRef(key));
+    }
+    return mScheduledQuery.get().toThrift();
+
+  }
+
+  private String scheduledQueryKeyRef(ScheduledQueryKey key) {
+    return key.getScheduleName() + "@" + key.getClusterNamespace();
+  }
+
+  public Optional<MScheduledQuery> getMScheduledQuery(ScheduledQueryKey key) {
+    MScheduledQuery s = null;
+    boolean commited = false;
+    Query query = null;
+    try {
+      openTransaction();
+      query = pm.newQuery(MScheduledQuery.class, "scheduleName == sName && clusterNamespace == ns");
+      query.declareParameters("java.lang.String sName, java.lang.String ns");
+      query.setUnique(true);
+      s = (MScheduledQuery) query.execute(key.getScheduleName(), key.getClusterNamespace());
+      pm.retrieve(s);
+      commited = commitTransaction();
+    } finally {
+      rollbackAndCleanup(commited, query);
+    }
+    return Optional.ofNullable(s);
+  }
+
+  @Override
+  public int deleteScheduledExecutions(int maxRetainSecs) {
+    if (maxRetainSecs < 0) {
+      LOG.debug("scheduled executions retention is disabled");
+      return 0;
+    }
+    boolean committed = false;
+    try {
+      openTransaction();
+      int maxCreateTime = (int) (System.currentTimeMillis() / 1000) - maxRetainSecs;
+      Query q = pm.newQuery(MScheduledExecution.class);
+      q.setFilter("startTime <= maxCreateTime");
+      q.declareParameters("int maxCreateTime");
+      long deleted = q.deletePersistentAll(maxCreateTime);
+      committed = commitTransaction();
+      return (int) deleted;
+    } finally {
+      if (!committed) {
+        rollbackTransaction();
+      }
+    }
+  }
+
+  @Override
+  public int markScheduledExecutionsTimedOut(int timeoutSecs) throws InvalidOperationException {
+    if (timeoutSecs < 0) {
+      LOG.debug("scheduled executions - time_out mark is disabled");
+      return 0;
+    }
+    boolean committed = false;
+    try {
+      openTransaction();
+      int maxLastUpdateTime = (int) (System.currentTimeMillis() / 1000) - timeoutSecs;
+      Query q = pm.newQuery(MScheduledExecution.class);
+      q.setFilter("lastUpdateTime <= maxLastUpdateTime && (state == 'INITED' || state == 'EXECUTING')");
+      q.declareParameters("int maxLastUpdateTime");
+
+      List<MScheduledExecution> results = (List<MScheduledExecution>) q.execute(maxLastUpdateTime);
+      for (MScheduledExecution e : results) {
+
+        ScheduledQueryProgressInfo info = new ScheduledQueryProgressInfo();
+        info.setScheduledExecutionId(e.getScheduledExecutionId());
+        info.setState(QueryState.TIMED_OUT);
+        info.setErrorMessage(
+            "Query stuck in: " + e.getState() + " state for >" + timeoutSecs + " seconds. Execution timed out.");
+        //        info.set
+        scheduledQueryProgress(info);
+      }
+      committed = commitTransaction();
+      return results.size();
+    } finally {
+      if (!committed) {
+        rollbackTransaction();
+      }
+    }
   }
 }

@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
+import org.apache.hadoop.hive.common.TableName;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.Warehouse;
@@ -39,7 +40,7 @@ import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.metastore.txn.TxnUtils;
 import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.ddl.DDLWork;
-import org.apache.hadoop.hive.ql.ddl.table.creation.DropTableDesc;
+import org.apache.hadoop.hive.ql.ddl.table.drop.DropTableDesc;
 import org.apache.hadoop.hive.ql.ddl.table.partition.AlterTableAddPartitionDesc;
 import org.apache.hadoop.hive.ql.exec.ReplCopyTask;
 import org.apache.hadoop.hive.ql.exec.Task;
@@ -327,7 +328,7 @@ public class ImportSemanticAnalyzer extends BaseSemanticAnalyzer {
     }
 
     if (StringUtils.isNotBlank(parsedTableName)) {
-      tblDesc.setTableName(parsedTableName);
+      tblDesc.setTableName(TableName.fromString(parsedTableName, null, dbname));
     }
 
     if (tblDesc.getTableName() == null) {

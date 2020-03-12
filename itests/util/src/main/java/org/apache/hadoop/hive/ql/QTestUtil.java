@@ -52,7 +52,6 @@ import org.apache.hadoop.hive.common.io.SessionStream;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
-import org.apache.hadoop.hive.metastore.txn.TxnDbUtil;
 import org.apache.hadoop.hive.ql.QTestMiniClusters.FsType;
 import org.apache.hadoop.hive.ql.cache.results.QueryResultsCache;
 import org.apache.hadoop.hive.ql.dataset.QTestDatasetHandler;
@@ -78,6 +77,8 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.processors.HiveCommand;
 import org.apache.hadoop.hive.ql.qoption.QTestOptionDispatcher;
 import org.apache.hadoop.hive.ql.qoption.QTestReplaceHandler;
+import org.apache.hadoop.hive.ql.scheduled.QTestScheduledQueryCleaner;
+import org.apache.hadoop.hive.ql.scheduled.QTestScheduledQueryServiceProvider;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.junit.Assert;
 import org.slf4j.Logger;
@@ -196,9 +197,8 @@ public class QTestUtil {
       System.out.println("Setting hive-site: " + HiveConf.getHiveSiteLocation());
     }
 
-    QueryState queryState = new QueryState.Builder().withHiveConf(new HiveConf(IDriver.class)).build();
-    conf = queryState.getConf();
-    sem = new SemanticAnalyzer(queryState);
+    conf = new HiveConf(IDriver.class);
+    setMetaStoreProperties();
 
     this.miniClusters.setup(testArgs, conf, getScriptsDir(), logDir);
 
@@ -209,14 +209,29 @@ public class QTestUtil {
     conf.set("test.data.dir", datasetHandler.getDataDir(conf));
     dispatcher.register("dataset", datasetHandler);
     dispatcher.register("replace", replaceHandler);
+    dispatcher.register("scheduledqueryservice", new QTestScheduledQueryServiceProvider(conf));
+    dispatcher.register("scheduledquerycleaner", new QTestScheduledQueryCleaner());
 
     String scriptsDir = getScriptsDir();
 
     this.initScript = scriptsDir + File.separator + testArgs.getInitScript();
     this.cleanupScript = scriptsDir + File.separator + testArgs.getCleanupScript();
 
-    postInit();
     savedConf = new HiveConf(conf);
+
+  }
+
+  private void setMetaStoreProperties() {
+    setMetastoreConfPropertyFromSystemProperty(MetastoreConf.ConfVars.CONNECT_URL_KEY);
+    setMetastoreConfPropertyFromSystemProperty(MetastoreConf.ConfVars.CONNECTION_DRIVER);
+    setMetastoreConfPropertyFromSystemProperty(MetastoreConf.ConfVars.CONNECTION_USER_NAME);
+    setMetastoreConfPropertyFromSystemProperty(MetastoreConf.ConfVars.PWD);
+  }
+
+  private void setMetastoreConfPropertyFromSystemProperty(MetastoreConf.ConfVars var) {
+    if (System.getProperty(var.getVarname()) != null) {
+      MetastoreConf.setVar(conf, var, System.getProperty(var.getVarname()));
+    }
   }
 
   private String getScriptsDir() {
@@ -257,6 +272,7 @@ public class QTestUtil {
    * Clear out any side effects of running tests
    */
   public void clearPostTestEffects() throws Exception {
+    dispatcher.afterTest(this);
     miniClusters.postTest(conf);
   }
 
@@ -412,8 +428,6 @@ public class QTestUtil {
     clearUDFsCreatedDuringTests();
     clearKeysCreatedInTests();
     StatsSources.clearGlobalStats();
-    TxnDbUtil.cleanDb(conf);
-    TxnDbUtil.prepDb(conf);
     dispatcher.afterTest(this);
   }
 
@@ -435,11 +449,13 @@ public class QTestUtil {
     }
     conf.setBoolean("hive.test.shutdown.phase", true);
 
-    clearTablesCreatedDuringTests();
-    clearUDFsCreatedDuringTests();
     clearKeysCreatedInTests();
 
-    cleanupFromFile();
+    String metastoreDb = QTestSystemProperties.getMetaStoreDb();
+    if (metastoreDb == null || "derby".equalsIgnoreCase(metastoreDb)) {
+      // otherwise, the docker container is already destroyed by this time
+      cleanupFromFile();
+    }
 
     // delete any contents in the warehouse dir
     Path p = new Path(testWarehouse);
@@ -514,8 +530,10 @@ public class QTestUtil {
     }
   }
 
-  private void postInit() throws Exception {
+  public void postInit() throws Exception {
     miniClusters.postInit(conf);
+
+    sem = new SemanticAnalyzer(new QueryState.Builder().withHiveConf(conf).build());
 
     testWarehouse = conf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE);
 
@@ -552,6 +570,7 @@ public class QTestUtil {
 
     dispatcher.process(file);
     dispatcher.beforeTest(this);
+
 
     if (qTestResultProcessor.shouldNotReuseSession(fileName)) {
       newSession(false);
