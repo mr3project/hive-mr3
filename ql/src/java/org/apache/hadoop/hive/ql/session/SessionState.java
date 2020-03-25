@@ -123,7 +123,7 @@ import com.google.common.collect.Maps;
  * from any point in the code to interact with the user and to retrieve
  * configuration information
  */
-public class SessionState {
+public class SessionState implements ISessionAuthState{
   private static final Logger LOG = LoggerFactory.getLogger(SessionState.class);
 
   public static final String TMP_PREFIX = "_tmp_space.db";
@@ -331,6 +331,7 @@ public class SessionState {
 
   private final AtomicLong sparkSessionId = new AtomicLong();
 
+  @Override
   public HiveConf getConf() {
     return sessionConf;
   }
@@ -1876,6 +1877,7 @@ public class SessionState {
     // tezSessionState is never used
   }
 
+  @Override
   public String getUserName() {
     return userName;
   }
