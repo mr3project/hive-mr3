@@ -1476,7 +1476,6 @@ public class AcidUtils {
       }
       return dirToSnapshots;
     } catch (IOException e) {
-      e.printStackTrace();
       throw new IOException(e);
     }
   }
