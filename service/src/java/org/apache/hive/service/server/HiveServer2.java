@@ -66,6 +66,7 @@ import org.apache.hadoop.hive.common.cli.CommonCliOptions;
 import org.apache.hadoop.hive.common.metrics.common.MetricsFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
+import org.apache.hadoop.hive.conf.HiveServer2TransportMode;
 import org.apache.hadoop.hive.llap.coordinator.LlapCoordinator;
 import org.apache.hadoop.hive.llap.registry.impl.LlapRegistryService;
 import org.apache.hadoop.hive.metastore.api.WMFullResourcePlan;
@@ -227,12 +228,18 @@ public class HiveServer2 extends CompositeService {
         hiveServer2.stop();
       }
     };
-    if (isHTTPTransportMode(hiveConf)) {
+
+    boolean isHttpTransportMode = isHttpTransportMode(hiveConf);
+    boolean isAllTransportMode = isAllTransportMode(hiveConf);
+    if (isHttpTransportMode || isAllTransportMode) {
       thriftCLIService = new ThriftHttpCLIService(cliService, oomHook);
-    } else {
-      thriftCLIService = new ThriftBinaryCLIService(cliService, oomHook);
+      addService(thriftCLIService);
     }
-    addService(thriftCLIService);
+    if (!isHttpTransportMode || isAllTransportMode)  {
+      thriftCLIService = new ThriftBinaryCLIService(cliService, oomHook);
+      addService(thriftCLIService); //thriftCliService instance is used for zookeeper purposes
+    }
+
     super.init(hiveConf);
     // Set host name in conf
     try {
@@ -433,12 +440,24 @@ public class HiveServer2 extends CompositeService {
     return resourcePlan;
   }
 
-  public static boolean isHTTPTransportMode(Configuration hiveConf) {
+  public static boolean isHttpTransportMode(HiveConf hiveConf) {
     String transportMode = System.getenv("HIVE_SERVER2_TRANSPORT_MODE");
     if (transportMode == null) {
-      transportMode = hiveConf.get(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.varname);
+      transportMode = hiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_TRANSPORT_MODE);
     }
-    if (transportMode != null && (transportMode.equalsIgnoreCase("http"))) {
+    if (transportMode != null
+        && (transportMode.equalsIgnoreCase(HiveServer2TransportMode.http.toString()))) {
+      return true;
+    }
+    return false;
+  }
+
+  public static boolean isAllTransportMode(HiveConf hiveConf) {
+    String transportMode = System.getenv("HIVE_SERVER2_TRANSPORT_MODE");
+    if (transportMode == null) {
+      transportMode = hiveConf.getVar(HiveConf.ConfVars.HIVE_SERVER2_TRANSPORT_MODE);
+    }
+    if (transportMode != null && (transportMode.equalsIgnoreCase(HiveServer2TransportMode.all.toString()))) {
       return true;
     }
     return false;
@@ -582,12 +601,16 @@ public class HiveServer2 extends CompositeService {
     confsToPublish.put(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.varname,
         hiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE));
     // Transport specific confs
-    if (isHTTPTransportMode(hiveConf)) {
+    boolean isHttpTransportMode = isHttpTransportMode(hiveConf);
+    boolean isAllTransportMode = isAllTransportMode(hiveConf);
+
+    if (isHttpTransportMode || isAllTransportMode) {
       confsToPublish.put(ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT.varname,
           Integer.toString(hiveConf.getIntVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT)));
       confsToPublish.put(ConfVars.HIVE_SERVER2_THRIFT_HTTP_PATH.varname,
           hiveConf.getVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_PATH));
-    } else {
+    }
+    if (!isHttpTransportMode || isAllTransportMode) {
       confsToPublish.put(ConfVars.HIVE_SERVER2_THRIFT_PORT.varname,
           Integer.toString(hiveConf.getIntVar(ConfVars.HIVE_SERVER2_THRIFT_PORT)));
       confsToPublish.put(ConfVars.HIVE_SERVER2_THRIFT_SASL_QOP.varname,

@@ -180,13 +180,19 @@ public class MiniHiveKdc {
   */
  public static MiniHS2 getMiniHS2WithKerb(MiniHiveKdc miniHiveKdc, HiveConf hiveConf,
      String authType) throws Exception {
-   String hivePrincipal =
-       miniHiveKdc.getFullyQualifiedServicePrincipal(MiniHiveKdc.HIVE_SERVICE_PRINCIPAL);
-   String hiveKeytab = miniHiveKdc.getKeyTabFile(
-       miniHiveKdc.getServicePrincipalForUser(MiniHiveKdc.HIVE_SERVICE_PRINCIPAL));
+    String hivePrincipal =
+            miniHiveKdc.getFullyQualifiedServicePrincipal(MiniHiveKdc.HIVE_SERVICE_PRINCIPAL);
+    String hiveKeytab = miniHiveKdc.getKeyTabFile(
+            miniHiveKdc.getServicePrincipalForUser(MiniHiveKdc.HIVE_SERVICE_PRINCIPAL));
 
-   return new MiniHS2.Builder().withConf(hiveConf).withMiniKdc(hivePrincipal, hiveKeytab).
-       withAuthenticationType(authType).build();
+    MiniHS2.Builder miniHS2Builder = new MiniHS2.Builder()
+                                              .withConf(hiveConf)
+                                              .withMiniKdc(hivePrincipal, hiveKeytab)
+                                              .withAuthenticationType(authType);
+    if (HiveServer2.isHttpTransportMode(hiveConf)) {
+      miniHS2Builder.withHTTPTransport();
+    }
+    return miniHS2Builder.build();
  }
 
   /**
