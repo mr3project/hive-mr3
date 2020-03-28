@@ -53,8 +53,9 @@ final class QueryCompactorFactory {
         .getBoolVar(configuration, HiveConf.ConfVars.COMPACTOR_CRUD_QUERY_BASED)) {
       if (compactionInfo.isMajorCompaction()) {
         return new MajorQueryCompactor();
-      } else if (!compactionInfo.isMajorCompaction() && "tez"
-          .equalsIgnoreCase(HiveConf.getVar(configuration, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE))) {
+      } else if (!compactionInfo.isMajorCompaction() && 
+          ("mr3".equalsIgnoreCase(HiveConf.getVar(configuration, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE)) ||
+           "tez".equalsIgnoreCase(HiveConf.getVar(configuration, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE)))) {
         // query based minor compaction is only supported on tez
         return new MinorQueryCompactor();
       }
