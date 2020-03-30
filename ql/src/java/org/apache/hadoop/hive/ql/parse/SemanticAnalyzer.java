@@ -7529,7 +7529,9 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       destTableIsFullAcid = tblDesc != null && AcidUtils.isFullAcidTable(tblDesc);
 
       boolean isDestTempFile = true;
-      if (!ctx.isMRTmpFileURI(dest_path.toUri().toString())) {
+      if (ctx.isMRTmpFileURI(dest_path.toUri().toString()) == false
+          && ctx.isResultCacheDir(dest_path) == false) {
+        // not a temp dir and not a result cache dir
         idToTableNameMap.put(String.valueOf(destTableId), dest_path.toUri().toString());
         currentTableId = destTableId;
         destTableId++;
