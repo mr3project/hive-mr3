@@ -1212,4 +1212,9 @@ public class DummyRawStoreControlledCommit implements RawStore, Configurable {
       NoSuchObjectException {
     return null;
   }
+
+  @Override
+  public List<String> isPartOfMaterializedView(String catName, String dbName, String tblName) {
+    return objectStore.isPartOfMaterializedView(catName, dbName, tblName);
+  }
 }

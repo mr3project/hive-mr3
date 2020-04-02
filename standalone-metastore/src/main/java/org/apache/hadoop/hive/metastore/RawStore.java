@@ -1665,4 +1665,12 @@ public interface RawStore extends Configurable {
   Map<String, List<String>> getPartitionColsWithStats(String catName, String dbName,
       String tableName) throws MetaException, NoSuchObjectException;
 
+  /**
+   * Checking if table is part of a materialized view.
+   * @param catName catalog the table is in
+   * @param dbName database the table is in
+   * @param tblName table name
+   * @return list of materialized views that uses the table
+   */
+  List<String> isPartOfMaterializedView(String catName, String dbName, String tblName);
 }

@@ -2532,4 +2532,9 @@ public class CachedStore implements RawStore, Configurable {
       String dbName, String tableName) throws MetaException, NoSuchObjectException {
     return rawStore.getPartitionColsWithStats(catName, dbName, tableName);
   }
+
+  @Override
+  public List<String> isPartOfMaterializedView(String catName, String dbName, String tblName) {
+     return rawStore.isPartOfMaterializedView(catName, dbName, tblName);
+  }
 }

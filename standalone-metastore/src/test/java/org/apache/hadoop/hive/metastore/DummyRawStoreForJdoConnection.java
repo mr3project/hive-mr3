@@ -1199,4 +1199,9 @@ public class DummyRawStoreForJdoConnection implements RawStore {
       NoSuchObjectException {
     return null;
   }
+
+  @Override
+  public List<String> isPartOfMaterializedView(String catName, String dbName, String tblName) {
+    throw new RuntimeException("unimplemented");
+  }
 }
