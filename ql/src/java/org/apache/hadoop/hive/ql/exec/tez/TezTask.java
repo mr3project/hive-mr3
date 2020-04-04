@@ -77,6 +77,9 @@ public class TezTask extends Task<TezWork> {
     return counters;
   }
 
+  public void setTezCounters(final TezCounters counters) {
+    this.counters = counters;
+  }
 
   @Override
   public int execute() {

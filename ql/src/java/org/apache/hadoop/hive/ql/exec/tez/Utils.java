@@ -34,6 +34,7 @@ import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.split.SplitLocationProvider;
 import org.apache.hive.common.util.Murmur3;
 import org.apache.tez.runtime.api.InputInitializerContext;
+import org.apache.tez.common.counters.TezCounters;
 import org.slf4j.Logger;
 
 public class Utils {
@@ -157,5 +158,30 @@ public class Utils {
       }
     }
     return new HostAffinitySplitLocationProvider(locations);
+  }
+
+
+  /**
+   * Merges two different tez counters into one
+   *
+   * @param counter1 - tez counter 1
+   * @param counter2 - tez counter 2
+   * @return - merged tez counter
+   */
+  public static TezCounters mergeTezCounters(final TezCounters counter1, final TezCounters counter2) {
+    TezCounters merged = new TezCounters();
+    if (counter1 != null) {
+      for (String counterGroup : counter1.getGroupNames()) {
+        merged.addGroup(counter1.getGroup(counterGroup));
+      }
+    }
+
+    if (counter2 != null) {
+      for (String counterGroup : counter2.getGroupNames()) {
+        merged.addGroup(counter2.getGroup(counterGroup));
+      }
+    }
+
+    return merged;
   }
 }
