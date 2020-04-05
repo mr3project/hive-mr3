@@ -48,6 +48,7 @@ import org.apache.hadoop.hive.ql.exec.FetchTask;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.TaskFactory;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.mr3.MR3Task;
 import org.apache.hadoop.hive.ql.exec.spark.session.SparkSession;
 import org.apache.hadoop.hive.ql.lock.CompileLock;
 import org.apache.hadoop.hive.ql.lock.CompileLockFactory;
@@ -184,6 +185,12 @@ public class Driver implements IDriver {
     driverContext.setPlan(plan);
 
     compileFinished(deferClose);
+
+    // Before resetting SessionState.PerfLogger, we store compile start/end times in SessionState's HiveConf.
+    PerfLogger currentPerfLogger = SessionState.getPerfLogger(false);
+    HiveConf sessionConf = SessionState.get().getConf();
+    sessionConf.setLong(MR3Task.HIVE_CONF_COMPILE_START_TIME, currentPerfLogger.getStartTime(PerfLogger.COMPILE));
+    sessionConf.setLong(MR3Task.HIVE_CONF_COMPILE_END_TIME, currentPerfLogger.getEndTime(PerfLogger.COMPILE));
   }
 
   private void compileFinished(boolean deferClose) {

@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.monitoring;
 
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.exec.mr3.MR3Task;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.session.SessionState;
 
@@ -31,17 +33,14 @@ class QueryExecutionBreakdownSummary implements PrintSummary {
   private static final String OPERATION = "OPERATION";
   private static final String DURATION = "DURATION";
 
-
   private DecimalFormat decimalFormat = new DecimalFormat("#0.00");
-  private PerfLogger perfLogger;
+  private final PerfLogger perfLogger;
 
-  private final Long compileEndTime;
   private final Long dagSubmitStartTime;
   private final Long submitToRunningDuration;
 
   QueryExecutionBreakdownSummary(PerfLogger perfLogger) {
     this.perfLogger = perfLogger;
-    this.compileEndTime = perfLogger.getEndTime(PerfLogger.COMPILE);
     this.dagSubmitStartTime = perfLogger.getStartTime(PerfLogger.MR3_SUBMIT_DAG);
     this.submitToRunningDuration = perfLogger.getDuration(PerfLogger.MR3_SUBMIT_TO_RUNNING);
   }
@@ -62,8 +61,12 @@ class QueryExecutionBreakdownSummary implements PrintSummary {
     console.printInfo(execBreakdownHeader);
     console.printInfo(SEPARATOR);
 
+    HiveConf sessionConf = SessionState.get().getConf();
+    long compileStartTime = sessionConf.getLong(MR3Task.HIVE_CONF_COMPILE_START_TIME, 0l);
+    long compileEndTime = sessionConf.getLong(MR3Task.HIVE_CONF_COMPILE_END_TIME, 0l);
+
     // parse, analyze, optimize and compile
-    long compile = compileEndTime - perfLogger.getStartTime(PerfLogger.COMPILE);
+    long compile = compileEndTime - compileStartTime;
     console.printInfo(format("Compile Query", compile));
 
     // prepare plan for submission (building DAG, adding resources, creating scratch dirs etc.)

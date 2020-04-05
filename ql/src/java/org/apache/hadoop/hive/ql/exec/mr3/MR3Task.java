@@ -78,6 +78,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class MR3Task {
 
+  public static final String HIVE_CONF_COMPILE_START_TIME = "hive.conf.compile.start.time";
+  public static final String HIVE_CONF_COMPILE_END_TIME = "hive.conf.compile.end.time";
+
   private static final String CLASS_NAME = MR3Task.class.getName();
   private final PerfLogger perfLogger = SessionState.getPerfLogger();
   private static final Log LOG = LogFactory.getLog(MR3Task.class);
