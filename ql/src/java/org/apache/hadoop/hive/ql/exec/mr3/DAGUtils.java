@@ -1256,11 +1256,13 @@ public class DAGUtils {
     }
 
     // Cf. HIVE-21171
-    // in the case of Hive-MR3, we create mr3ScratchDir even though ConfVars.HIVE_RPC_QUERY_PLAN == true
+    // ConfVars.HIVE_RPC_QUERY_PLAN == true, so do not create mr3ScratchDir
     Path mr3ScratchDir = getMr3ScratchDir(new Path(scratchDir, userName));
-    FileSystem fs = mr3ScratchDir.getFileSystem(conf);
-    LOG.info("mr3ScratchDir path set " + mr3ScratchDir + " for user: " + userName);
-    fs.mkdirs(mr3ScratchDir, new FsPermission(SessionState.TASK_SCRATCH_DIR_PERMISSION));
+    if (!HiveConf.getBoolVar(conf, ConfVars.HIVE_RPC_QUERY_PLAN)) {
+      FileSystem fs = mr3ScratchDir.getFileSystem(conf);
+      LOG.info("mr3ScratchDir path set " + mr3ScratchDir + " for user: " + userName);
+      fs.mkdirs(mr3ScratchDir, new FsPermission(SessionState.TASK_SCRATCH_DIR_PERMISSION));
+    }
 
     return mr3ScratchDir;
   }
