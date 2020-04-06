@@ -48,13 +48,7 @@ import org.apache.hadoop.hive.ql.exec.mr3.dag.EntityDescriptor;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.GroupInputEdge;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.Vertex;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
-import org.apache.hadoop.hive.ql.exec.tez.CustomPartitionEdge;
-import org.apache.hadoop.hive.ql.exec.tez.CustomPartitionVertex;
-import org.apache.hadoop.hive.ql.exec.tez.HiveSplitGenerator;
-import org.apache.hadoop.hive.ql.exec.tez.MapTezProcessor;
-import org.apache.hadoop.hive.ql.exec.tez.MergeFileTezProcessor;
-import org.apache.hadoop.hive.ql.exec.tez.ReduceTezProcessor;
-import org.apache.hadoop.hive.ql.exec.tez.TezSessionState;
+import org.apache.hadoop.hive.ql.exec.tez.*;
 import org.apache.hadoop.hive.ql.exec.tez.tools.TezMergedLogicalInput;
 import org.apache.hadoop.hive.ql.io.BucketizedHiveInputFormat;
 import org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
@@ -267,12 +261,19 @@ public class DAGUtils {
       throw new HiveException(ErrorMsg.GENERIC_ERROR.getErrorCodedMsg());
     }
 
-    initializeStatsPublisher(jobConf, work); 
+    initializeStatsPublisher(jobConf, work);
 
+    final Class outputKlass;
+    if (HiveOutputFormatImpl.class.getName().equals(jobConf.get("mapred.output.format.class"))) {
+      // Hive uses this output format, when it is going to write all its data through FS operator
+      outputKlass = NullMROutput.class;
+    } else {
+      outputKlass = MROutput.class;
+    }
     // final vertices need to have at least one output
     if (isFinal && !(work instanceof CompactWork)) {
       EntityDescriptor logicalOutputDescriptor = new EntityDescriptor(
-          MROutput.class.getName(),
+          outputKlass.getName(),
           org.apache.tez.common.TezUtils.createByteStringFromConf(jobConf));
       // no need to set OutputCommitter, Hive will handle moving temporary files to permanent locations
       vertex.addDataSink("out_" + work.getName(), logicalOutputDescriptor);
