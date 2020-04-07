@@ -217,26 +217,27 @@ public class DAGUtils {
    * @param conf JobConf to be used to this execution unit
    * @param work The instance of BaseWork representing the actual work to be performed
    * by this vertex.
-   * @param scratchDir HDFS scratch dir for this execution unit.
+   * @param mr3ScratchDir HDFS scratch dir for this execution unit.
    * @param fileSystem FS corresponding to scratchDir and LocalResources
    * @param ctx This query's context
    * @return Vertex
    */
+  // we do not write anything to mr3ScratchDir, but still need it for the path to Plan
   @SuppressWarnings("deprecation")
   public Vertex createVertex(
       JobConf jobConf, BaseWork work,
-      Path scratchDir, FileSystem fileSystem,
+      Path mr3ScratchDir,
       boolean isFinal,
       VertexType vertexType, TezWork tezWork) throws Exception {
 
     Vertex vertex = null;
     // simply dispatch the call to the right method for the actual (sub-) type of BaseWork
     if (work instanceof MapWork) {
-      vertex = createMapVertex(jobConf, (MapWork) work, scratchDir, fileSystem, vertexType);
+      vertex = createMapVertex(jobConf, (MapWork) work, mr3ScratchDir, vertexType);
     } else if (work instanceof ReduceWork) {
-      vertex = createReduceVertex(jobConf, (ReduceWork) work, scratchDir);
+      vertex = createReduceVertex(jobConf, (ReduceWork) work, mr3ScratchDir);
     } else if (work instanceof MergeJoinWork) {
-      vertex = createMergeJoinVertex(jobConf, (MergeJoinWork) work, scratchDir, fileSystem, vertexType);
+      vertex = createMergeJoinVertex(jobConf, (MergeJoinWork) work, mr3ScratchDir, vertexType);
 
       // set VertexManagerPlugin if whether it's a cross product destination vertex
       List<String> crossProductSources = new ArrayList<>();
@@ -314,17 +315,16 @@ public class DAGUtils {
 
   private Vertex createMergeJoinVertex(
       JobConf jobConf, MergeJoinWork mergeJoinWork,
-      Path scratchDir,
-      FileSystem fs,
+      Path mr3ScratchDir,
       VertexType vertexType) throws Exception {
 
     // jobConf updated 
-    Utilities.setMergeWork(jobConf, mergeJoinWork, scratchDir, false);
+    Utilities.setMergeWork(jobConf, mergeJoinWork, mr3ScratchDir, false);
 
     if (mergeJoinWork.getMainWork() instanceof MapWork) {
       List<BaseWork> mapWorkList = mergeJoinWork.getBaseWorkList();
       MapWork mapWork = (MapWork) (mergeJoinWork.getMainWork());
-      Vertex mergeVx = createMapVertex(jobConf, mapWork, scratchDir, fs, vertexType);
+      Vertex mergeVx = createMapVertex(jobConf, mapWork, mr3ScratchDir, vertexType);
 
       jobConf.setClass("mapred.input.format.class", HiveInputFormat.class, InputFormat.class);
       // mapreduce.tez.input.initializer.serialize.event.payload should be set
@@ -371,7 +371,7 @@ public class DAGUtils {
       return mergeVx;
     } else {
       Vertex mergeVx =
-          createReduceVertex(jobConf, (ReduceWork) mergeJoinWork.getMainWork(), scratchDir);
+          createReduceVertex(jobConf, (ReduceWork) mergeJoinWork.getMainWork(), mr3ScratchDir);
       return mergeVx;
     }
   }
@@ -381,11 +381,11 @@ public class DAGUtils {
    */
   private Vertex createMapVertex(
       JobConf jobConf, MapWork mapWork,
-      Path scratchDir, FileSystem fs,
+      Path mr3ScratchDir,
       VertexType vertexType) throws Exception {
 
     // set up the operator plan
-    Utilities.cacheMapWork(jobConf, mapWork, scratchDir);
+    Utilities.cacheMapWork(jobConf, mapWork, mr3ScratchDir);
 
     // create the directories FileSinkOperators need
     Utilities.createTmpDirs(jobConf, mapWork);
@@ -440,7 +440,7 @@ public class DAGUtils {
     if (HiveConf.getBoolVar(jobConf, ConfVars.HIVE_AM_SPLIT_GENERATION)) {
 
       // set up the operator plan. (before setting up splits on the AM)
-      Utilities.setMapWork(jobConf, mapWork, scratchDir, false);
+      Utilities.setMapWork(jobConf, mapWork, mr3ScratchDir, false);
 
       // if we're generating the splits in the AM, we just need to set
       // the correct plugin.
@@ -487,7 +487,7 @@ public class DAGUtils {
       numTasks = inputSplitInfo.getNumTasks();
 
       // set up the operator plan. (after generating splits - that changes configs)
-      Utilities.setMapWork(jobConf, mapWork, scratchDir, false);
+      Utilities.setMapWork(jobConf, mapWork, mr3ScratchDir, false);
     }
 
     String procClassName = MapTezProcessor.class.getName();
@@ -523,11 +523,11 @@ public class DAGUtils {
    */
   private Vertex createReduceVertex(
       JobConf jobConf, ReduceWork reduceWork,
-      Path scratchDir) throws Exception {
+      Path mr3ScratchDir) throws Exception {
 
     // set up operator plan
     jobConf.set(Utilities.INPUT_NAME, reduceWork.getName());
-    Utilities.setReduceWork(jobConf, reduceWork, scratchDir, false);
+    Utilities.setReduceWork(jobConf, reduceWork, mr3ScratchDir, false);
 
     // create the directories FileSinkOperators need
     Utilities.createTmpDirs(jobConf, reduceWork);
@@ -1413,7 +1413,7 @@ public class DAGUtils {
   /**
    * Creates the mr3 Scratch dir for MR3Tasks
    */
-  public Path createMr3ScratchDir(Path scratchDir, Configuration conf)
+  public Path createMr3ScratchDir(Path scratchDir, Configuration conf, boolean createDir)
       throws IOException {
     UserGroupInformation ugi;
     String userName;
@@ -1425,11 +1425,13 @@ public class DAGUtils {
     }
 
     // Cf. HIVE-21171
-    // ConfVars.HIVE_RPC_QUERY_PLAN == true, so do not create mr3ScratchDir
+    // ConfVars.HIVE_RPC_QUERY_PLAN == true, so we do not need mr3ScratchDir to store DAG Plans.
+    // However, we may still need mr3ScratchDir if TezWork.configureJobConfAndExtractJars() returns
+    // a non-empty list in MR3Task.
     Path mr3ScratchDir = getMr3ScratchDir(new Path(scratchDir, userName));
-    if (!HiveConf.getBoolVar(conf, ConfVars.HIVE_RPC_QUERY_PLAN)) {
+    LOG.info("mr3ScratchDir path " + mr3ScratchDir + " for user " + userName);
+    if (createDir) {
       FileSystem fs = mr3ScratchDir.getFileSystem(conf);
-      LOG.info("mr3ScratchDir path set " + mr3ScratchDir + " for user: " + userName);
       fs.mkdirs(mr3ScratchDir, new FsPermission(SessionState.TASK_SCRATCH_DIR_PERMISSION));
     }
 

@@ -22,11 +22,9 @@ import com.google.protobuf.ByteString;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
-import org.apache.hadoop.hive.ql.DriverContext;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
@@ -51,7 +49,6 @@ import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.records.LocalResource;
 import org.apache.hadoop.yarn.util.ConverterUtils;
-import com.datamonad.mr3.api.security.DAGAccessControls;
 import org.apache.tez.common.counters.CounterGroup;
 import org.apache.tez.common.counters.TezCounter;
 import org.apache.tez.common.counters.TezCounters;
@@ -92,7 +89,11 @@ public class MR3Task {
 
   // updated in setupSubmit()
   private MR3Session mr3Session = null;
+  // mr3ScratchDir is always set to a directory on HDFS.
+  // we create mr3ScratchDir only if TezWork.configureJobConfAndExtractJars() returns a non-empty list.
+  // note that we always need mr3ScratchDir for the path to Map/Reduce Plans.
   private Path mr3ScratchDir = null;
+  private boolean mr3ScratchDirCreated = false;
   private Map<String, LocalResource> amDagCommonLocalResources = null;
 
   public MR3Task(HiveConf conf, SessionState.LogHelper console, AtomicBoolean isShutdown) {
@@ -159,7 +160,7 @@ public class MR3Task {
           // 1. simulate completing the current call to execute()
           Utilities.clearWork(conf);
           // no need to call cleanContextIfNecessary(cleanContext, context)
-          if (mr3ScratchDir != null) {
+          if (mr3ScratchDir != null && mr3ScratchDirCreated) {
             dagUtils.cleanMr3Dir(mr3ScratchDir, conf);
           }
           // 2. call again
@@ -205,7 +206,7 @@ public class MR3Task {
       
       // TODO: clean before close()?
       // Make sure tmp files from task can be moved in this.close(tezWork, returnCode).
-      if (mr3ScratchDir != null) {
+      if (mr3ScratchDir != null && mr3ScratchDirCreated) {
         dagUtils.cleanMr3Dir(mr3ScratchDir, conf);
       }
 
@@ -226,7 +227,7 @@ public class MR3Task {
     // sessionScratchDir is not null because mr3Session has started:
     //   if shareMr3Session == false, this MR3Task/thread owns mr3Session, which must have started.
     //   if shareMr3Session == true, close() is called only from MR3Session.shutdown() in the end.
-    mr3ScratchDir = dagUtils.createMr3ScratchDir(sessionScratchDir, conf);
+    // mr3ScratchDir is created in buildDag() if necessary.
 
     // 1. read confLocalResources
     // confLocalResource = specific to this MR3Task obtained from conf
@@ -238,7 +239,7 @@ public class MR3Task {
     amDagCommonLocalResources = dagUtils.convertLocalResourceListToMap(confLocalResources);
 
     // 3. create DAG
-    DAG dag = buildDag(jobConf, tezWork, mr3ScratchDir, context, amDagCommonLocalResources);
+    DAG dag = buildDag(jobConf, tezWork, context, amDagCommonLocalResources, sessionScratchDir);
     console.printInfo("Finished building DAG, now submitting: " + tezWork.getName());
 
     if (this.isShutdown.get()) {
@@ -311,8 +312,8 @@ public class MR3Task {
   }
 
   private DAG buildDag(
-      JobConf jobConf, TezWork tezWork, Path scratchDir, Context context,
-      Map<String, LocalResource> amDagCommonLocalResources) throws Exception {
+      JobConf jobConf, TezWork tezWork, Context context,
+      Map<String, LocalResource> amDagCommonLocalResources, Path sessionScratchDir) throws Exception {
     perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.MR3_BUILD_DAG);
     Map<BaseWork, Vertex> workToVertex = new HashMap<BaseWork, Vertex>();
     Map<BaseWork, JobConf> workToConf = new HashMap<BaseWork, JobConf>();
@@ -326,11 +327,18 @@ public class MR3Task {
     // jobConf updated with "tmpjars" and credentials
     String[] inputOutputJars = tezWork.configureJobConfAndExtractJars(jobConf);
 
-    // localize Jars to HDFS
-    Map<String, LocalResource> inputOutputLocalResources =
-        getDagLocalResources(inputOutputJars, scratchDir, jobConf);
-
-    FileSystem fs = scratchDir.getFileSystem(jobConf);  // may raise IOException
+    Map<String, LocalResource> inputOutputLocalResources;
+    if (inputOutputJars.length > 0) {
+      // we create mr3ScratchDir to localize inputOutputJars[] to HDFS
+      mr3ScratchDir = dagUtils.createMr3ScratchDir(sessionScratchDir, conf, true);
+      mr3ScratchDirCreated = true;
+      inputOutputLocalResources = getDagLocalResources(inputOutputJars, mr3ScratchDir, jobConf);
+    } else {
+      // no need to create mr3ScratchDir (because DAG Plans are passed via RPC)
+      mr3ScratchDir = dagUtils.createMr3ScratchDir(sessionScratchDir, conf, false);
+      mr3ScratchDirCreated = false;
+      inputOutputLocalResources = new HashMap<String, LocalResource>();
+    }
 
     // the name of the dag is what is displayed in the AM/Job UI
     String dagName = tezWork.getName();
@@ -358,7 +366,7 @@ public class MR3Task {
             dag, tezWork, (UnionWork) w, workToVertex, workToConf);
       } else {
         buildRegularVertexEdge(
-            jobConf, dag, tezWork, w, workToVertex, workToConf, scratchDir, fs, context);
+            jobConf, dag, tezWork, w, workToVertex, workToConf, mr3ScratchDir, context);
       }
 
       perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.MR3_CREATE_VERTEX + w.getName());
@@ -443,14 +451,14 @@ public class MR3Task {
   private void buildRegularVertexEdge(
       JobConf jobConf,
       DAG dag, TezWork tezWork, BaseWork baseWork,
-      Map<BaseWork, Vertex> workToVertex, 
+      Map<BaseWork, Vertex> workToVertex,
       Map<BaseWork, JobConf> workToConf,
-      Path scratchDir, FileSystem fs,
+      Path mr3ScratchDir,
       Context context) throws Exception {
     JobConf vertexJobConf = dagUtils.initializeVertexConf(jobConf, context, baseWork);
     TezWork.VertexType vertexType = tezWork.getVertexType(baseWork);
     boolean isFinal = tezWork.getLeaves().contains(baseWork);
-    Vertex vertex = dagUtils.createVertex(vertexJobConf, baseWork, scratchDir, fs, isFinal, vertexType, tezWork);
+    Vertex vertex = dagUtils.createVertex(vertexJobConf, baseWork, mr3ScratchDir, isFinal, vertexType, tezWork);
     dag.addVertex(vertex);
 
     Set<Path> paths = dagUtils.getPathsForCredentials(baseWork);
