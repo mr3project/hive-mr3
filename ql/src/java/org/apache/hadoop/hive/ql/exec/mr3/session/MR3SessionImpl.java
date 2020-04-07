@@ -172,7 +172,7 @@ public class MR3SessionImpl implements MR3Session {
     sessionScratchDir = createSessionScratchDir(sessionId);
     setAmStagingDir(sessionScratchDir);
 
-    // 1. read hiveJarLocalResources and confLocalResources
+    // 1. read hiveJarLocalResources
 
     // getSessionInitJars() returns hive-exec.jar + HIVEAUXJARS
     List<LocalResource> hiveJarLocalResources =
