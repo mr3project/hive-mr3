@@ -328,7 +328,7 @@ public class MR3Task {
     String[] inputOutputJars = tezWork.configureJobConfAndExtractJars(jobConf);
 
     Map<String, LocalResource> inputOutputLocalResources;
-    if (inputOutputJars.length > 0) {
+    if (inputOutputJars != null && inputOutputJars.length > 0) {
       // we create mr3ScratchDir to localize inputOutputJars[] to HDFS
       mr3ScratchDir = dagUtils.createMr3ScratchDir(sessionScratchDir, conf, true);
       mr3ScratchDirCreated = true;
