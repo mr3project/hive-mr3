@@ -20,8 +20,6 @@ package org.apache.hadoop.hive.ql.exec.mr3;
 
 import com.datamonad.mr3.api.common.MR3Conf$;
 import com.datamonad.mr3.api.common.MR3ConfBuilder;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
@@ -42,13 +40,15 @@ import com.datamonad.mr3.api.common.MR3Conf;
 import com.datamonad.mr3.api.common.MR3Exception;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.tez.dag.api.TezConfiguration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import scala.Option;
 
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class HiveMR3ClientImpl implements HiveMR3Client {
-  protected static final Log LOG = LogFactory.getLog(HiveMR3ClientImpl.class);
+  protected static final Logger LOG = LoggerFactory.getLogger(HiveMR3ClientImpl.class);
 
   // HiveMR3Client can be shared by several threads (from MR3Tasks), and can be closed by any of these
   // threads at any time. After mr3Client.close() is called, all subsequent calls to mr3Client end up

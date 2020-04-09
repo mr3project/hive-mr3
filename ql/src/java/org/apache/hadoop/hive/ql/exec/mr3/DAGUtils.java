@@ -21,9 +21,7 @@ package org.apache.hadoop.hive.ql.exec.mr3;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import org.apache.commons.io.FilenameUtils;
-import org.apache.commons.lang.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -128,6 +126,8 @@ import org.apache.tez.runtime.library.api.Partitioner;
 import org.apache.tez.runtime.library.cartesianproduct.CartesianProductConfig;
 import org.apache.tez.runtime.library.cartesianproduct.CartesianProductEdgeManager;
 import org.apache.tez.runtime.library.cartesianproduct.CartesianProductVertexManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import javax.security.auth.login.LoginException;
@@ -151,7 +151,7 @@ import java.util.concurrent.TimeUnit;
  * objects, file localization and vertex/edge creation.
  */
 public class DAGUtils {
-  private static final Log LOG = LogFactory.getLog(DAGUtils.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(DAGUtils.class.getName());
   private static DAGUtils instance;
 
   private static final String MR3_DIR = "_mr3_scratch_dir";
