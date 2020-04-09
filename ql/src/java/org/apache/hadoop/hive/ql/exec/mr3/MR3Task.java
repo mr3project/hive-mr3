@@ -19,8 +19,6 @@
 package org.apache.hadoop.hive.ql.exec.mr3;
 
 import com.google.protobuf.ByteString;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -55,6 +53,8 @@ import org.apache.tez.common.counters.TezCounters;
 import org.apache.tez.dag.library.vertexmanager.ShuffleVertexManager;
 import org.apache.tez.dag.app.dag.impl.RootInputVertexManager;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -80,7 +80,7 @@ public class MR3Task {
 
   private static final String CLASS_NAME = MR3Task.class.getName();
   private final PerfLogger perfLogger = SessionState.getPerfLogger();
-  private static final Log LOG = LogFactory.getLog(MR3Task.class);
+  private static final Logger LOG = LoggerFactory.getLogger(MR3Task.class);
 
   private final HiveConf conf;
   private final SessionState.LogHelper console;
