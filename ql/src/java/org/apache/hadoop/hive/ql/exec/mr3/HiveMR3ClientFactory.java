@@ -18,16 +18,16 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.yarn.api.records.LocalResource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
 public class HiveMR3ClientFactory {
-  protected static final transient Log LOG = LogFactory.getLog(HiveMR3ClientFactory.class);
+  protected static final transient Logger LOG = LoggerFactory.getLogger(HiveMR3ClientFactory.class);
 
   public static void initialize(HiveConf hiveConf) {
     LOG.info("Initializing HiveMR3ClientFactory");

@@ -18,8 +18,6 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.llap;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.llap.io.api.LlapProxy;
 import org.apache.tez.common.TezUtils;
@@ -31,6 +29,8 @@ import org.apache.tez.runtime.api.ProcessorContext;
 import org.apache.tez.runtime.api.events.TaskAttemptStopRequestEvent;
 import org.apache.tez.runtime.api.events.TaskAttemptDAGJoiningEvent;
 import org.apache.tez.runtime.api.events.TaskAttemptDAGLeavingEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.List;
@@ -38,7 +38,7 @@ import java.util.Map;
 
 public class LLAPDaemonProcessor extends AbstractLogicalIOProcessor {
 
-  private static final Log LOG = LogFactory.getLog(LLAPDaemonProcessor.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(LLAPDaemonProcessor.class.getName());
 
   public LLAPDaemonProcessor(ProcessorContext context) {
     super(context);
