@@ -109,8 +109,7 @@ public class AlterTableConcatenateOperation extends DDLOperation<AlterTableConca
   }
 
   private Task<?> getTask(MergeFileWork mergeWork) {
-    String engine = context.getConf().getVar(ConfVars.HIVE_EXECUTION_ENGINE);
-    if (engine.equals("mr3") || engine.equals("tez")) {
+    String engine = context.getConf().getVar(ConfVars.HIVE_EXECUTION_ENGINE); if (engine.equals("mr3") || engine.equals("tez")) {
       TezWork tezWork = new TezWork(context.getQueryState().getQueryId(), context.getConf());
       mergeWork.setName("File Merge");
       tezWork.add(mergeWork);

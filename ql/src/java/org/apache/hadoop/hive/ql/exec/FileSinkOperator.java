@@ -745,15 +745,15 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
       Set<Integer> seenBuckets = new HashSet<Integer>();
       for (int idx = 0; idx < totalFiles; idx++) {
         if (this.getExecContext() != null && this.getExecContext().getFileId() != null) {
-          if (LOG.isInfoEnabled()) {
+          // if (LOG.isInfoEnabled()) {
             LOG.info("replace taskId from execContext ");
-          }
+          // }
 
           taskId = Utilities.replaceTaskIdFromFilename(taskId, this.getExecContext().getFileId());
 
-          if (LOG.isInfoEnabled()) {
+          // if (LOG.isInfoEnabled()) {
             LOG.info("new taskId: FS " + taskId);
-          }
+          // }
 
           assert !multiFileSpray;
           assert totalFiles == 1;
