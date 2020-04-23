@@ -230,7 +230,6 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     taskAttemptIdBuilder
       .append(taskIdFormat.format(processorContext.getTaskIndex()))
       .append("_")
-      .append(processorContext.getTaskVertexIndex())                  // new for HIVE-21164
       .append(processorContext.getTaskAttemptNumber());
 
     // In MR, mapreduce.task.attempt.id is same as mapred.task.id. Go figure.
