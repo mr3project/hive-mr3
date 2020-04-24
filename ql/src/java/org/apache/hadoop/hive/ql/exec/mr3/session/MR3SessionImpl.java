@@ -19,8 +19,6 @@
 package org.apache.hadoop.hive.ql.exec.mr3.session;
 
 import com.google.common.base.Preconditions;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -49,6 +47,8 @@ import com.datamonad.mr3.api.common.MR3Conf;
 import com.datamonad.mr3.api.common.MR3Conf$;
 import com.datamonad.mr3.api.common.MR3ConfBuilder;
 import com.datamonad.mr3.common.fs.StagingDirUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -64,7 +64,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class MR3SessionImpl implements MR3Session {
 
   private static final String CLASS_NAME = MR3SessionImpl.class.getName();
-  private static final Log LOG = LogFactory.getLog(MR3Session.class);
+  private static final Logger LOG = LoggerFactory.getLogger(MR3Session.class);
   private static final String MR3_DIR = "_mr3_session_dir";
   private static final String MR3_AM_STAGING_DIR = "staging";
 
@@ -172,7 +172,7 @@ public class MR3SessionImpl implements MR3Session {
     sessionScratchDir = createSessionScratchDir(sessionId);
     setAmStagingDir(sessionScratchDir);
 
-    // 1. read hiveJarLocalResources and confLocalResources
+    // 1. read hiveJarLocalResources
 
     // getSessionInitJars() returns hive-exec.jar + HIVEAUXJARS
     List<LocalResource> hiveJarLocalResources =

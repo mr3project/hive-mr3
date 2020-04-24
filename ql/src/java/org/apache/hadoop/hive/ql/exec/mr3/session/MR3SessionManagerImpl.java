@@ -18,8 +18,6 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.session;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3ClientFactory;
@@ -27,6 +25,8 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
@@ -42,7 +42,7 @@ import java.util.UUID;
  *   - MR3Session is reused if the userName in new conf and user name in session conf match.
  */
 public class MR3SessionManagerImpl implements MR3SessionManager {
-  private static final Log LOG = LogFactory.getLog(MR3SessionManagerImpl.class);
+  private static final Logger LOG = LoggerFactory.getLogger(MR3SessionManagerImpl.class);
 
   // guard with synchronize{}
   private HiveConf hiveConf = null;

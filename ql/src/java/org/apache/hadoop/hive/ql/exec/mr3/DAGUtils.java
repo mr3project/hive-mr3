@@ -18,17 +18,14 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3;
 
-import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Iterators;
 import com.google.protobuf.ByteString;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hive.common.FileUtils;
@@ -53,8 +50,8 @@ import org.apache.hadoop.hive.ql.exec.tez.CustomPartitionVertex;
 import org.apache.hadoop.hive.ql.exec.tez.HiveSplitGenerator;
 import org.apache.hadoop.hive.ql.exec.tez.MapTezProcessor;
 import org.apache.hadoop.hive.ql.exec.tez.MergeFileTezProcessor;
+import org.apache.hadoop.hive.ql.exec.tez.NullMROutput;
 import org.apache.hadoop.hive.ql.exec.tez.ReduceTezProcessor;
-import org.apache.hadoop.hive.ql.exec.tez.TezSessionState;
 import org.apache.hadoop.hive.ql.exec.tez.tools.TezMergedLogicalInput;
 import org.apache.hadoop.hive.ql.io.BucketizedHiveInputFormat;
 import org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
@@ -65,7 +62,6 @@ import org.apache.hadoop.hive.ql.io.HiveOutputFormatImpl;
 import org.apache.hadoop.hive.ql.io.merge.MergeFileMapper;
 import org.apache.hadoop.hive.ql.io.merge.MergeFileOutputFormat;
 import org.apache.hadoop.hive.ql.io.merge.MergeFileWork;
-import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.MapWork;
@@ -99,7 +95,6 @@ import org.apache.hadoop.yarn.util.Records;
 import com.datamonad.mr3.api.common.MR3UncheckedException;
 import com.datamonad.mr3.common.security.TokenCache;
 import org.apache.tez.common.TezUtils;
-import org.apache.tez.dag.api.DAG;
 import org.apache.tez.dag.api.DataSourceDescriptor;
 import org.apache.tez.dag.api.EdgeManagerPluginDescriptor;
 import org.apache.tez.dag.api.InputDescriptor;
@@ -131,6 +126,8 @@ import org.apache.tez.runtime.library.api.Partitioner;
 import org.apache.tez.runtime.library.cartesianproduct.CartesianProductConfig;
 import org.apache.tez.runtime.library.cartesianproduct.CartesianProductEdgeManager;
 import org.apache.tez.runtime.library.cartesianproduct.CartesianProductVertexManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import javax.security.auth.login.LoginException;
@@ -142,7 +139,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -155,7 +151,7 @@ import java.util.concurrent.TimeUnit;
  * objects, file localization and vertex/edge creation.
  */
 public class DAGUtils {
-  private static final Log LOG = LogFactory.getLog(DAGUtils.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(DAGUtils.class.getName());
   private static DAGUtils instance;
 
   private static final String MR3_DIR = "_mr3_scratch_dir";
@@ -221,26 +217,27 @@ public class DAGUtils {
    * @param conf JobConf to be used to this execution unit
    * @param work The instance of BaseWork representing the actual work to be performed
    * by this vertex.
-   * @param scratchDir HDFS scratch dir for this execution unit.
+   * @param mr3ScratchDir HDFS scratch dir for this execution unit.
    * @param fileSystem FS corresponding to scratchDir and LocalResources
    * @param ctx This query's context
    * @return Vertex
    */
+  // we do not write anything to mr3ScratchDir, but still need it for the path to Plan
   @SuppressWarnings("deprecation")
   public Vertex createVertex(
       JobConf jobConf, BaseWork work,
-      Path scratchDir, FileSystem fileSystem,
+      Path mr3ScratchDir,
       boolean isFinal,
       VertexType vertexType, TezWork tezWork) throws Exception {
 
     Vertex vertex = null;
     // simply dispatch the call to the right method for the actual (sub-) type of BaseWork
     if (work instanceof MapWork) {
-      vertex = createMapVertex(jobConf, (MapWork) work, scratchDir, fileSystem, vertexType);
+      vertex = createMapVertex(jobConf, (MapWork) work, mr3ScratchDir, vertexType);
     } else if (work instanceof ReduceWork) {
-      vertex = createReduceVertex(jobConf, (ReduceWork) work, scratchDir);
+      vertex = createReduceVertex(jobConf, (ReduceWork) work, mr3ScratchDir);
     } else if (work instanceof MergeJoinWork) {
-      vertex = createMergeJoinVertex(jobConf, (MergeJoinWork) work, scratchDir, fileSystem, vertexType);
+      vertex = createMergeJoinVertex(jobConf, (MergeJoinWork) work, mr3ScratchDir, vertexType);
 
       // set VertexManagerPlugin if whether it's a cross product destination vertex
       List<String> crossProductSources = new ArrayList<>();
@@ -267,12 +264,19 @@ public class DAGUtils {
       throw new HiveException(ErrorMsg.GENERIC_ERROR.getErrorCodedMsg());
     }
 
-    initializeStatsPublisher(jobConf, work); 
+    initializeStatsPublisher(jobConf, work);
 
+    final Class outputKlass;
+    if (HiveOutputFormatImpl.class.getName().equals(jobConf.get("mapred.output.format.class"))) {
+      // Hive uses this output format, when it is going to write all its data through FS operator
+      outputKlass = NullMROutput.class;
+    } else {
+      outputKlass = MROutput.class;
+    }
     // final vertices need to have at least one output
     if (isFinal && !(work instanceof CompactWork)) {
       EntityDescriptor logicalOutputDescriptor = new EntityDescriptor(
-          MROutput.class.getName(),
+          outputKlass.getName(),
           org.apache.tez.common.TezUtils.createByteStringFromConf(jobConf));
       // no need to set OutputCommitter, Hive will handle moving temporary files to permanent locations
       vertex.addDataSink("out_" + work.getName(), logicalOutputDescriptor);
@@ -311,17 +315,16 @@ public class DAGUtils {
 
   private Vertex createMergeJoinVertex(
       JobConf jobConf, MergeJoinWork mergeJoinWork,
-      Path scratchDir,
-      FileSystem fs,
+      Path mr3ScratchDir,
       VertexType vertexType) throws Exception {
 
     // jobConf updated 
-    Utilities.setMergeWork(jobConf, mergeJoinWork, scratchDir, false);
+    Utilities.setMergeWork(jobConf, mergeJoinWork, mr3ScratchDir, false);
 
     if (mergeJoinWork.getMainWork() instanceof MapWork) {
       List<BaseWork> mapWorkList = mergeJoinWork.getBaseWorkList();
       MapWork mapWork = (MapWork) (mergeJoinWork.getMainWork());
-      Vertex mergeVx = createMapVertex(jobConf, mapWork, scratchDir, fs, vertexType);
+      Vertex mergeVx = createMapVertex(jobConf, mapWork, mr3ScratchDir, vertexType);
 
       jobConf.setClass("mapred.input.format.class", HiveInputFormat.class, InputFormat.class);
       // mapreduce.tez.input.initializer.serialize.event.payload should be set
@@ -368,7 +371,7 @@ public class DAGUtils {
       return mergeVx;
     } else {
       Vertex mergeVx =
-          createReduceVertex(jobConf, (ReduceWork) mergeJoinWork.getMainWork(), scratchDir);
+          createReduceVertex(jobConf, (ReduceWork) mergeJoinWork.getMainWork(), mr3ScratchDir);
       return mergeVx;
     }
   }
@@ -378,11 +381,11 @@ public class DAGUtils {
    */
   private Vertex createMapVertex(
       JobConf jobConf, MapWork mapWork,
-      Path scratchDir, FileSystem fs,
+      Path mr3ScratchDir,
       VertexType vertexType) throws Exception {
 
     // set up the operator plan
-    Utilities.cacheMapWork(jobConf, mapWork, scratchDir);
+    Utilities.cacheMapWork(jobConf, mapWork, mr3ScratchDir);
 
     // create the directories FileSinkOperators need
     Utilities.createTmpDirs(jobConf, mapWork);
@@ -437,7 +440,7 @@ public class DAGUtils {
     if (HiveConf.getBoolVar(jobConf, ConfVars.HIVE_AM_SPLIT_GENERATION)) {
 
       // set up the operator plan. (before setting up splits on the AM)
-      Utilities.setMapWork(jobConf, mapWork, scratchDir, false);
+      Utilities.setMapWork(jobConf, mapWork, mr3ScratchDir, false);
 
       // if we're generating the splits in the AM, we just need to set
       // the correct plugin.
@@ -484,7 +487,7 @@ public class DAGUtils {
       numTasks = inputSplitInfo.getNumTasks();
 
       // set up the operator plan. (after generating splits - that changes configs)
-      Utilities.setMapWork(jobConf, mapWork, scratchDir, false);
+      Utilities.setMapWork(jobConf, mapWork, mr3ScratchDir, false);
     }
 
     String procClassName = MapTezProcessor.class.getName();
@@ -520,11 +523,11 @@ public class DAGUtils {
    */
   private Vertex createReduceVertex(
       JobConf jobConf, ReduceWork reduceWork,
-      Path scratchDir) throws Exception {
+      Path mr3ScratchDir) throws Exception {
 
     // set up operator plan
     jobConf.set(Utilities.INPUT_NAME, reduceWork.getName());
-    Utilities.setReduceWork(jobConf, reduceWork, scratchDir, false);
+    Utilities.setReduceWork(jobConf, reduceWork, mr3ScratchDir, false);
 
     // create the directories FileSinkOperators need
     Utilities.createTmpDirs(jobConf, reduceWork);
@@ -883,7 +886,9 @@ public class DAGUtils {
       edgeManagerDescriptor.setUserPayload(cpConfig.toUserPayload(new TezConfiguration(conf)));
       UnorderedPartitionedKVEdgeConfig cpEdgeConf =
         UnorderedPartitionedKVEdgeConfig.newBuilder(keyClass, valClass,
-          ValueHashPartitioner.class.getName()).build();
+          ValueHashPartitioner.class.getName())
+            .setFromConfiguration(conf)
+            .build();
       return cpEdgeConf.createDefaultCustomEdgeProperty(edgeManagerDescriptor);
     case SIMPLE_EDGE:
       // fallthrough
@@ -1308,7 +1313,12 @@ public class DAGUtils {
         return createLocalResource(destFS, dest, type, LocalResourceVisibility.PRIVATE);
       }
       try {
-        destFS.copyFromLocalFile(false, false, src, dest);
+        if (src.toUri().getScheme()!=null) {
+          FileUtil.copy(src.getFileSystem(conf), src, destFS, dest, false, false, conf);
+        }
+        else {
+          destFS.copyFromLocalFile(false, false, src, dest);
+        }
         synchronized (notifier) {
           notifier.notifyAll(); // Notify if we have successfully copied the file.
         }
@@ -1403,7 +1413,7 @@ public class DAGUtils {
   /**
    * Creates the mr3 Scratch dir for MR3Tasks
    */
-  public Path createMr3ScratchDir(Path scratchDir, Configuration conf)
+  public Path createMr3ScratchDir(Path scratchDir, Configuration conf, boolean createDir)
       throws IOException {
     UserGroupInformation ugi;
     String userName;
@@ -1415,11 +1425,15 @@ public class DAGUtils {
     }
 
     // Cf. HIVE-21171
-    // in the case of Hive-MR3, we create mr3ScratchDir even though ConfVars.HIVE_RPC_QUERY_PLAN == true
+    // ConfVars.HIVE_RPC_QUERY_PLAN == true, so we do not need mr3ScratchDir to store DAG Plans.
+    // However, we may still need mr3ScratchDir if TezWork.configureJobConfAndExtractJars() returns
+    // a non-empty list in MR3Task.
     Path mr3ScratchDir = getMr3ScratchDir(new Path(scratchDir, userName));
-    FileSystem fs = mr3ScratchDir.getFileSystem(conf);
-    LOG.info("mr3ScratchDir path set " + mr3ScratchDir + " for user: " + userName);
-    fs.mkdirs(mr3ScratchDir, new FsPermission(SessionState.TASK_SCRATCH_DIR_PERMISSION));
+    LOG.info("mr3ScratchDir path " + mr3ScratchDir + " for user " + userName);
+    if (createDir) {
+      FileSystem fs = mr3ScratchDir.getFileSystem(conf);
+      fs.mkdirs(mr3ScratchDir, new FsPermission(SessionState.TASK_SCRATCH_DIR_PERMISSION));
+    }
 
     return mr3ScratchDir;
   }
