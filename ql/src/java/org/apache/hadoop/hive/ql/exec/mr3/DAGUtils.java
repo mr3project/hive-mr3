@@ -239,7 +239,7 @@ public class DAGUtils {
     } else if (work instanceof ReduceWork) {
       vertex = createReduceVertex(jobConf, (ReduceWork) work, mr3ScratchDir);
     } else if (work instanceof MergeJoinWork) {
-      vertex = createMergeJoinVertex(jobConf, (MergeJoinWork) work, scratchDir, fileSystem, vertexType);
+      vertex = createMergeJoinVertex(jobConf, (MergeJoinWork) work, mr3ScratchDir, vertexType);
     } else {
       // something is seriously wrong if this is happening
       throw new HiveException(ErrorMsg.GENERIC_ERROR.getErrorCodedMsg());

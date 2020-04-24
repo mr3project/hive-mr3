@@ -33,7 +33,6 @@ import org.apache.hadoop.yarn.api.records.Resource;
 import com.datamonad.mr3.DAGAPI;
 import com.datamonad.mr3.common.CommonUtils;
 import com.datamonad.mr3.api.common.MR3Conf;
-import com.datamonad.mr3.api.security.DAGAccessControls;
 import com.datamonad.mr3.api.util.ProtoConverters;
 import com.datamonad.mr3.api.common.Utils$;
 import com.datamonad.mr3.tez.shufflehandler.ShuffleHandler;
@@ -57,7 +56,6 @@ public class DAG {
   final private String name;
   final private String dagInfo;
   final private Credentials dagCredentials;
-  final private DAGAccessControls dagAccessControls;
 
   final private Collection<LocalResource> localResources = new HashSet<LocalResource>();
   final private Map<String, Vertex> vertices = new HashMap<String, Vertex>();
@@ -82,20 +80,17 @@ public class DAG {
   private DAG(
       String name,
       String dagInfo,
-      @Nullable Credentials dagCredentials,
-      DAGAccessControls dagAccessControls) {
+      @Nullable Credentials dagCredentials) {
     this.name = name;
     this.dagInfo = dagInfo;
     this.dagCredentials = dagCredentials != null ? dagCredentials : new Credentials();
-    this.dagAccessControls = dagAccessControls;
   }
 
   public static DAG create(
       String name,
       String dagInfo,
-      Credentials dagCredentials,
-      DAGAccessControls dagAccessControls) {
-    return new DAG(name, dagInfo, dagCredentials, dagAccessControls);
+      Credentials dagCredentials) {
+    return new DAG(name, dagInfo, dagCredentials);
   }
 
   /**
