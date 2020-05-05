@@ -261,7 +261,7 @@ public class ContainerRunnerImpl extends CompositeService implements ContainerRu
       Configuration callableConf = new Configuration(getConfig());
       UserGroupInformation fsTaskUgi = fsUgiFactory == null ? null : fsUgiFactory.createUgi();
       TaskRunnerCallable callable = new TaskRunnerCallable(request, fragmentInfo, callableConf,
-          new ExecutionContextImpl(localAddress.get().getHostName()), env,
+          new ExecutionContextImpl(localAddress.get().getHostName(), null), env,
           credentials, memoryPerExecutor, amReporter, confParams, metrics, killedTaskHandler,
           this, tezHadoopShim, attemptId, vertex, initialEvent, fsTaskUgi,
           completionListener, socketFactory);
