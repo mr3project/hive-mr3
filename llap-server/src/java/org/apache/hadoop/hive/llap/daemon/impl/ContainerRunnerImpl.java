@@ -305,7 +305,7 @@ public class ContainerRunnerImpl extends CompositeService implements ContainerRu
       // TODO: ideally we'd register TezCounters here, but it seems impossible before registerTask.
       WmFragmentCounters wmCounters = new WmFragmentCounters(addTaskTimes);
       TaskRunnerCallable callable = new TaskRunnerCallable(request, fragmentInfo, callableConf,
-          new ExecutionContextImpl(llapHost), env,
+          new ExecutionContextImpl(llapHost, null), env,
           credentials, memoryPerExecutor, amReporter, confParams, metrics, killedTaskHandler,
           this, tezHadoopShim, attemptId, vertex, initialEvent, fsTaskUgi,
           completionListener, socketFactory, isGuaranteed, wmCounters);
