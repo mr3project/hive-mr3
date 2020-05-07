@@ -20,9 +20,11 @@ package org.apache.hive.jdbc;
 
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -30,6 +32,7 @@ import org.apache.hive.service.cli.TableSchema;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
+import org.mockito.internal.util.reflection.FieldSetter;
 
 /**
  * Test suite for {@link HiveBaseResultSet} class.
@@ -235,6 +238,13 @@ public class TestHiveBaseResultSet {
 
     Assert.assertEquals(true, resultSet.getBoolean(1));
     Assert.assertFalse(resultSet.wasNull());
+  }
+
+  @Test(expected = SQLException.class)
+  public void testFindColumnNull() throws Exception {
+    HiveBaseResultSet resultSet = Mockito.mock(HiveBaseResultSet.class);
+    when(resultSet.findColumn(null)).thenCallRealMethod();
+    Assert.assertEquals(0, resultSet.findColumn(null));
   }
 
 }
