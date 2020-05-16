@@ -212,7 +212,7 @@ public class TaskExecutorTestHelpers {
     public MockRequest(SubmitWorkRequestProto requestProto, QueryFragmentInfo fragmentInfo,
                        boolean canFinish, boolean canFinishQueue, long workTime,
                        TezEvent initialEvent, boolean isGuaranteed) {
-      super(requestProto, fragmentInfo, new Configuration(), new ExecutionContextImpl("localhost", null),
+      super(requestProto, fragmentInfo, new Configuration(), new ExecutionContextImpl("localhost", null, null),
           null, new Credentials(), 0, mock(AMReporter.class), null, mock(
           LlapDaemonExecutorMetrics.class), mock(KilledTaskHandler.class), mock(
           FragmentCompletionHandler.class), new DefaultHadoopShim(), null,
