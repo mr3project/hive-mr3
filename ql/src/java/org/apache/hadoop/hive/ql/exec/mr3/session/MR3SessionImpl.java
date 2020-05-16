@@ -384,6 +384,8 @@ public class MR3SessionImpl implements MR3Session {
         HiveConf.ConfVars.MR3_CONTAINER_STOP_CROSS_DAG_REUSE);
     int taskMaxFailedAttempts = HiveConf.getIntVar(mr3TaskConf,
         HiveConf.ConfVars.MR3_AM_TASK_MAX_FAILED_ATTEMPTS);
+    boolean deleteVertexLocalDirectory = HiveConf.getBoolVar(mr3TaskConf,
+        HiveConf.ConfVars.MR3_DAG_DELETE_VERTEX_LOCAL_DIRECTORY);
     if (shareMr3Session) {
       // TODO: if HIVE_SERVER2_ENABLE_DOAS is false, sessionUser.equals(dagUser) is always true
       boolean stopCrossDagReuse = sessionUser.equals(dagUser) && confStopCrossDagReuse;
@@ -391,6 +393,7 @@ public class MR3SessionImpl implements MR3Session {
       return new MR3ConfBuilder(false)
           .setBoolean(MR3Conf$.MODULE$.MR3_CONTAINER_STOP_CROSS_DAG_REUSE(), stopCrossDagReuse)
           .setInt(MR3Conf$.MODULE$.MR3_AM_TASK_MAX_FAILED_ATTEMPTS(), taskMaxFailedAttempts)
+          .setBoolean(MR3Conf$.MODULE$.MR3_AM_NOTIFY_DESTINATION_VERTEX_COMPLETE(), deleteVertexLocalDirectory)
           .build();
     } else {
       // add sessionConf because this session is for the DAG being submitted.
@@ -398,6 +401,7 @@ public class MR3SessionImpl implements MR3Session {
           .addResource(mr3TaskConf)
           .setBoolean(MR3Conf$.MODULE$.MR3_CONTAINER_STOP_CROSS_DAG_REUSE(), confStopCrossDagReuse)
           .setInt(MR3Conf$.MODULE$.MR3_AM_TASK_MAX_FAILED_ATTEMPTS(), taskMaxFailedAttempts)
+          .setBoolean(MR3Conf$.MODULE$.MR3_AM_NOTIFY_DESTINATION_VERTEX_COMPLETE(), deleteVertexLocalDirectory)
           .build();
     }
   }
