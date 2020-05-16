@@ -190,7 +190,7 @@ public class TaskExecutorTestHelpers {
                        boolean canFinish, boolean canFinishQueue, long workTime,
                        TezEvent initialEvent) {
       super(requestProto, fragmentInfo, new Configuration(),
-          new ExecutionContextImpl("localhost", null), null, new Credentials(), 0, mock(AMReporter.class), null, mock(
+          new ExecutionContextImpl("localhost", null, null), null, new Credentials(), 0, mock(AMReporter.class), null, mock(
               LlapDaemonExecutorMetrics.class),
           mock(KilledTaskHandler.class), mock(
               FragmentCompletionHandler.class), new DefaultHadoopShim(), null,
