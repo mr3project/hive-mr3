@@ -3483,6 +3483,10 @@ public class HiveConf extends Configuration {
     MR3_AM_TASK_MAX_FAILED_ATTEMPTS("hive.mr3.am.task.max.failed.attempts", 3,
         "Max number of attempts for each Task"),
 
+    // deleting Vertex-local directory
+    MR3_DAG_DELETE_VERTEX_LOCAL_DIRECTORY("hive.mr3.delete.vertex.local.directory", false,
+        "Delete Vertex-local directories in ContainerWork when all destination Vertexes complete"),
+
     // Kubernetes
     HIVE_MR3_LOCALIZE_SESSION_JARS("hive.mr3.localize.session.jars", true,
         "Localize session jars");
