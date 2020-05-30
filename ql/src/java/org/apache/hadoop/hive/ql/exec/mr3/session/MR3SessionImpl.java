@@ -396,7 +396,7 @@ public class MR3SessionImpl implements MR3Session {
           .setBoolean(MR3Conf$.MODULE$.MR3_AM_NOTIFY_DESTINATION_VERTEX_COMPLETE(), deleteVertexLocalDirectory)
           .build();
     } else {
-      // add sessionConf because this session is for the DAG being submitted.
+      // add mr3TaskConf because this session is for the DAG being submitted.
       return new MR3ConfBuilder(false)
           .addResource(mr3TaskConf)
           .setBoolean(MR3Conf$.MODULE$.MR3_CONTAINER_STOP_CROSS_DAG_REUSE(), confStopCrossDagReuse)
