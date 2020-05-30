@@ -369,8 +369,8 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
       serializer.initialize(unsetNestedColumnPaths(hconf), conf.getTableInfo().getProperties());
       outputClass = serializer.getSerializedClass();
 
-      if (isLogInfoEnabled) {
-        LOG.info("Using serializer : " + serializer + " and formatter : " + hiveOutputFormat +
+      if (isLogDebugEnabled) {
+        LOG.debug("Using serializer : " + serializer + " and formatter : " + hiveOutputFormat +
             (isCompressed ? " with compression" : ""));
       }
 
