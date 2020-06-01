@@ -520,6 +520,7 @@ public class MapJoinOperator extends AbstractMapJoinOperator<MapJoinDesc> implem
       }
       if (joinNeeded) {
         List<Object> value = getFilteredValue(alias, row);
+        addToAliasFilterTags(alias, value, false);
         // Add the value to the ArrayList
         storage[alias].addRow(value);
         // generate the output records
