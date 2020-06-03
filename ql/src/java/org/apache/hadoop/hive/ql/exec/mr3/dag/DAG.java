@@ -458,17 +458,14 @@ public class DAG {
         .setBoolean(MR3Conf$.MODULE$.MR3_CONTAINER_REUSE(), containerReuse)
         .setBoolean(MR3Conf$.MODULE$.MR3_CONTAINER_MIX_TASKATTEMPTS(), mixTaskAttempts);
 
-    if (useDaemonShuffleHandler) {
-      // tezConf is not null
+    builder.setBoolean(MR3Conf$.MODULE$.MR3_USE_DAEMON_SHUFFLEHANDLER(), useDaemonShuffleHandler);
+    if (tezConf != null) {
       String serviceId = tezConf.get(
           TezConfiguration.TEZ_AM_SHUFFLE_AUXILIARY_SERVICE_ID,
           TezConfiguration.TEZ_AM_SHUFFLE_AUXILIARY_SERVICE_ID_DEFAULT);
       int port = tezConf.getInt(ShuffleHandler.SHUFFLE_PORT_CONFIG_KEY, ShuffleHandler.DEFAULT_SHUFFLE_PORT);
-      builder.setBoolean(MR3Conf$.MODULE$.MR3_USE_DAEMON_SHUFFLEHANDLER(), true);
       builder.set(MR3Conf$.MODULE$.MR3_DAEMON_SHUFFLE_SERVICE_ID(), serviceId);
       builder.setInt(MR3Conf$.MODULE$.MR3_DAEMON_SHUFFLE_PORT(), port);
-    } else {
-      builder.setBoolean(MR3Conf$.MODULE$.MR3_USE_DAEMON_SHUFFLEHANDLER(), false);
     }
 
     MR3Conf containerGroupConf = builder.build();
