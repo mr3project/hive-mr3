@@ -188,17 +188,16 @@ public class DAG {
     DAGAPI.DaemonVertexProto shuffleHandlerDaemonVertexProto = null;
     TezConfiguration tezConf = null;
     if (scheme == DAG.ContainerGroupScheme.ALL_IN_ONE) {
+      tezConf = new TezConfiguration(mr3TaskConf);
       boolean useDaemonShuffleHandler = HiveConf.getBoolVar(mr3TaskConf, HiveConf.ConfVars.MR3_USE_DAEMON_SHUFFLEHANDLER);
       if (useDaemonShuffleHandler) {
-        // ShuffleHandler daemon communicates with Tez, so we pass tezConf.
-        tezConf = new TezConfiguration(mr3TaskConf);
         ByteString userPayload = org.apache.tez.common.TezUtils.createByteStringFromConf(tezConf);
         shuffleHandlerDaemonVertexProto = createShuffleHandlerDaemonVertexProto(userPayload);
       }
     }
 
     // we do not create containerGroupConf
-    // tezConf is nullable
+    // if ALL_IN_ONE, then tezConf != null
     List<DAGAPI.ContainerGroupProto> containerGroupProtos =
         createContainerGroupProtos(mr3TaskConf, scheme, vertices.values(),
             llapMemory, llapCpus, llapDaemonVertexProto,
@@ -296,6 +295,7 @@ public class DAG {
     return daemonVertexProto;
   }
 
+  // if ALL_IN_ONE, then tezConf != null
   private List<DAGAPI.ContainerGroupProto> createContainerGroupProtos(
       Configuration mr3TaskConf, ContainerGroupScheme scheme, Collection<Vertex> vertices,
       int llapMemory, int llapCpus, DAGAPI.DaemonVertexProto llapDaemonVertexProto,
@@ -326,6 +326,7 @@ public class DAG {
     return containerGroupProtos;
   }
 
+  // ALL_IN_ONE, and tezConf != null
   private DAGAPI.ContainerGroupProto createAllInOneContainerGroupProto(Configuration conf,
       int llapMemory, int llapCpus, DAGAPI.DaemonVertexProto llapDaemonVertexProto,
       DAGAPI.DaemonVertexProto shuffleHandlerDaemonVertexProto, TezConfiguration tezConf) {
@@ -444,6 +445,7 @@ public class DAG {
     return perVertexContainerGroupProto;
   }
 
+  // if ALL_IN_ONE, then tezConf != null
   private DAGAPI.ConfigurationProto getContainerGroupConfProto(
       Configuration conf, boolean useDaemonShuffleHandler, TezConfiguration tezConf) {
     boolean combineTaskAttempts = HiveConf.getBoolVar(conf,
@@ -467,6 +469,7 @@ public class DAG {
       builder.set(MR3Conf$.MODULE$.MR3_DAEMON_SHUFFLE_SERVICE_ID(), serviceId);
       builder.setInt(MR3Conf$.MODULE$.MR3_DAEMON_SHUFFLE_PORT(), port);
     }
+    // if ALL_IN_ONE, then both MR3_DAEMON_SHUFFLE_SERVICE_ID and MR3_DAEMON_SHUFFLE_PORT are set in ContainerGroupConf
 
     MR3Conf containerGroupConf = builder.build();
 
