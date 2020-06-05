@@ -33,7 +33,6 @@ import org.apache.hadoop.yarn.api.records.Resource;
 import com.datamonad.mr3.DAGAPI;
 import com.datamonad.mr3.common.CommonUtils;
 import com.datamonad.mr3.api.common.MR3Conf;
-import com.datamonad.mr3.api.security.DAGAccessControls;
 import com.datamonad.mr3.api.util.ProtoConverters;
 import com.datamonad.mr3.api.common.Utils$;
 import com.datamonad.mr3.tez.shufflehandler.ShuffleHandler;
@@ -185,23 +184,23 @@ public class DAG {
       llapDaemonVertexProto = createLlapDaemonVertexProto(userPayload, llapMemory, llapCpus);
     }
 
-    DAGAPI.DaemonVertexProto shuffleHandlerDaemonVertexProto = null;
     TezConfiguration tezConf = null;
+    List<DAGAPI.DaemonVertexProto> shuffleHandlerDaemonVertexProtos = null;
     if (scheme == DAG.ContainerGroupScheme.ALL_IN_ONE) {
       tezConf = new TezConfiguration(mr3TaskConf);
-      boolean useDaemonShuffleHandler = HiveConf.getBoolVar(mr3TaskConf, HiveConf.ConfVars.MR3_USE_DAEMON_SHUFFLEHANDLER);
-      if (useDaemonShuffleHandler) {
+      int useDaemonShuffleHandler = HiveConf.getIntVar(mr3TaskConf, HiveConf.ConfVars.MR3_USE_DAEMON_SHUFFLEHANDLER);
+      if (useDaemonShuffleHandler > 0) {
         ByteString userPayload = org.apache.tez.common.TezUtils.createByteStringFromConf(tezConf);
-        shuffleHandlerDaemonVertexProto = createShuffleHandlerDaemonVertexProto(userPayload);
+        shuffleHandlerDaemonVertexProtos = createShuffleHandlerDaemonVertexProto(useDaemonShuffleHandler, userPayload);
       }
     }
 
     // we do not create containerGroupConf
     // if ALL_IN_ONE, then tezConf != null
-    List<DAGAPI.ContainerGroupProto> containerGroupProtos =
-        createContainerGroupProtos(mr3TaskConf, scheme, vertices.values(),
-            llapMemory, llapCpus, llapDaemonVertexProto,
-            shuffleHandlerDaemonVertexProto, tezConf);
+    List<DAGAPI.ContainerGroupProto> containerGroupProtos = createContainerGroupProtos(
+        mr3TaskConf, scheme, vertices.values(),
+        llapMemory, llapCpus, llapDaemonVertexProto,
+        shuffleHandlerDaemonVertexProtos, tezConf);
 
     DAGAPI.ConfigurationProto dagConfProto = Utils$.MODULE$.createMr3ConfProto(dagConf);
 
@@ -269,7 +268,8 @@ public class DAG {
     return daemonVertexProto;
   }
 
-  private DAGAPI.DaemonVertexProto createShuffleHandlerDaemonVertexProto(
+  private List<DAGAPI.DaemonVertexProto> createShuffleHandlerDaemonVertexProto(
+        int useDaemonShuffleHandler,
         ByteString userPayload) {
     // TODO: introduce MR3_SHUFFLEHANDLER_DAEMON_TASK_MEMORY_MB and MR3_SHUFFLEHANDLER_DAEMON_TASK_VCORES,
     // but only if a performance/stability problem arises from ShuffleHandler
@@ -285,26 +285,31 @@ public class DAG {
     String pluginClassName = ShuffleHandlerDaemonVertexManagerPlugin.class.getName();
     EntityDescriptor vertexManagerPluginDescriptor = new EntityDescriptor(pluginClassName, null);
 
-    DAGAPI.DaemonVertexProto daemonVertexProto = DAGAPI.DaemonVertexProto.newBuilder()
-        .setName("ShuffleHandler")
-        .setResource(resource)
-        .setProcessor(processorDescriptor.createEntityDescriptorProto())
-        .setVertexManagerPlugin(vertexManagerPluginDescriptor.createEntityDescriptorProto())
-        .build();
+    List<DAGAPI.DaemonVertexProto> shuffleHandlerDaemonVertexProtos = new ArrayList<DAGAPI.DaemonVertexProto>();
+    for (int i = 0; i < useDaemonShuffleHandler; i++) {
+      String shuffleVertexName = "ShuffleHandler_" + (i + 1);
+      DAGAPI.DaemonVertexProto daemonVertexProto = DAGAPI.DaemonVertexProto.newBuilder()
+          .setName(shuffleVertexName)
+          .setResource(resource)
+          .setProcessor(processorDescriptor.createEntityDescriptorProto())
+          .setVertexManagerPlugin(vertexManagerPluginDescriptor.createEntityDescriptorProto())
+          .build();
+      shuffleHandlerDaemonVertexProtos.add(daemonVertexProto);
+    }
 
-    return daemonVertexProto;
+    return shuffleHandlerDaemonVertexProtos;
   }
 
   // if ALL_IN_ONE, then tezConf != null
   private List<DAGAPI.ContainerGroupProto> createContainerGroupProtos(
       Configuration mr3TaskConf, ContainerGroupScheme scheme, Collection<Vertex> vertices,
       int llapMemory, int llapCpus, DAGAPI.DaemonVertexProto llapDaemonVertexProto,
-      DAGAPI.DaemonVertexProto shuffleHandlerDaemonVertexProto, TezConfiguration tezConf) {
+      List<DAGAPI.DaemonVertexProto> shuffleHandlerDaemonVertexProtos, TezConfiguration tezConf) {
     List<DAGAPI.ContainerGroupProto> containerGroupProtos = new ArrayList<DAGAPI.ContainerGroupProto>();
 
     if (scheme == DAG.ContainerGroupScheme.ALL_IN_ONE) {
       DAGAPI.ContainerGroupProto allInOneContainerGroupProto = createAllInOneContainerGroupProto(
-          mr3TaskConf, llapMemory, llapCpus, llapDaemonVertexProto, shuffleHandlerDaemonVertexProto, tezConf);
+          mr3TaskConf, llapMemory, llapCpus, llapDaemonVertexProto, shuffleHandlerDaemonVertexProtos, tezConf);
       containerGroupProtos.add(allInOneContainerGroupProto);
 
     } else if (scheme == DAG.ContainerGroupScheme.PER_MAP_REDUCE) {
@@ -327,9 +332,10 @@ public class DAG {
   }
 
   // ALL_IN_ONE, and tezConf != null
+  // if shuffleHandlerDaemonVertexProtos != null, useDaemonShuffleHandler == shuffleHandlerDaemonVertexProtos.size()
   private DAGAPI.ContainerGroupProto createAllInOneContainerGroupProto(Configuration conf,
       int llapMemory, int llapCpus, DAGAPI.DaemonVertexProto llapDaemonVertexProto,
-      DAGAPI.DaemonVertexProto shuffleHandlerDaemonVertexProto, TezConfiguration tezConf) {
+      List<DAGAPI.DaemonVertexProto> shuffleHandlerDaemonVertexProtos, TezConfiguration tezConf) {
     int llapNativeMemoryMb = 0;
     if (llapDaemonVertexProto != null) {
       long ioMemoryBytes = HiveConf.getSizeVar(conf, HiveConf.ConfVars.LLAP_IO_MEMORY_MAX_SIZE);
@@ -350,8 +356,9 @@ public class DAG {
       allInOneContainerConf.setNativeMemoryMb(llapNativeMemoryMb);
     }
 
+    int useDaemonShuffleHandler = shuffleHandlerDaemonVertexProtos != null ? shuffleHandlerDaemonVertexProtos.size() : 0;
     DAGAPI.ConfigurationProto containerGroupConfProto =
-          getContainerGroupConfProto(conf, shuffleHandlerDaemonVertexProto != null, tezConf);
+          getContainerGroupConfProto(conf, useDaemonShuffleHandler, tezConf);
     DAGAPI.ContainerGroupProto.Builder allInOneContainerGroup =
       DAGAPI.ContainerGroupProto.newBuilder()
           .setName(ALL_IN_ONE_CONTAINER_GROUP_NAME)
@@ -359,13 +366,13 @@ public class DAG {
           .setPriority(allInOneContainerGroupPriority)
           .setContainerGroupConf(containerGroupConfProto);
 
-    if (llapDaemonVertexProto != null || shuffleHandlerDaemonVertexProto != null) {
+    if (llapDaemonVertexProto != null || shuffleHandlerDaemonVertexProtos != null) {
       List<DAGAPI.DaemonVertexProto> daemonVertexProtos = new ArrayList<>();
       if (llapDaemonVertexProto != null) {
         daemonVertexProtos.add(llapDaemonVertexProto);
       }
-      if (shuffleHandlerDaemonVertexProto != null) {
-        daemonVertexProtos.add(shuffleHandlerDaemonVertexProto);
+      if (shuffleHandlerDaemonVertexProtos != null) {
+        daemonVertexProtos.addAll(shuffleHandlerDaemonVertexProtos);
       }
       allInOneContainerGroup.addAllDaemonVertices(daemonVertexProtos);
     }
@@ -403,7 +410,7 @@ public class DAG {
           .setName(groupName)
           .setContainerConfig(perMapReduceContainerConf.build())
           .setPriority(priority)
-          .setContainerGroupConf(getContainerGroupConfProto(conf, false, null));
+          .setContainerGroupConf(getContainerGroupConfProto(conf, 0, null));
     if (isMap && llapDaemonVertexProto != null) {
       List<DAGAPI.DaemonVertexProto> daemonVertexProtos = Collections.singletonList(llapDaemonVertexProto);
       perMapReduceContainerGroup.addAllDaemonVertices(daemonVertexProtos);
@@ -439,7 +446,7 @@ public class DAG {
           .setName(vertex.getName())
           .setContainerConfig(containerConfig.build())
           .setPriority(priority)
-          .setContainerGroupConf(getContainerGroupConfProto(conf, false, null))
+          .setContainerGroupConf(getContainerGroupConfProto(conf, 0, null))
           .build();
 
     return perVertexContainerGroupProto;
@@ -447,7 +454,7 @@ public class DAG {
 
   // if ALL_IN_ONE, then tezConf != null
   private DAGAPI.ConfigurationProto getContainerGroupConfProto(
-      Configuration conf, boolean useDaemonShuffleHandler, TezConfiguration tezConf) {
+      Configuration conf, int useDaemonShuffleHandler, TezConfiguration tezConf) {
     boolean combineTaskAttempts = HiveConf.getBoolVar(conf,
         HiveConf.ConfVars.MR3_CONTAINER_COMBINE_TASKATTEMPTS);
     boolean containerReuse = HiveConf.getBoolVar(conf,
@@ -460,7 +467,7 @@ public class DAG {
         .setBoolean(MR3Conf$.MODULE$.MR3_CONTAINER_REUSE(), containerReuse)
         .setBoolean(MR3Conf$.MODULE$.MR3_CONTAINER_MIX_TASKATTEMPTS(), mixTaskAttempts);
 
-    builder.setBoolean(MR3Conf$.MODULE$.MR3_USE_DAEMON_SHUFFLEHANDLER(), useDaemonShuffleHandler);
+    builder.setInt(MR3Conf$.MODULE$.MR3_USE_DAEMON_SHUFFLEHANDLER(), useDaemonShuffleHandler);
     if (tezConf != null) {
       String serviceId = tezConf.get(
           TezConfiguration.TEZ_AM_SHUFFLE_AUXILIARY_SERVICE_ID,
