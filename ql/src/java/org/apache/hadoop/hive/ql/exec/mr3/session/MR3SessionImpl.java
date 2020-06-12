@@ -384,6 +384,8 @@ public class MR3SessionImpl implements MR3Session {
         HiveConf.ConfVars.MR3_CONTAINER_STOP_CROSS_DAG_REUSE);
     int taskMaxFailedAttempts = HiveConf.getIntVar(mr3TaskConf,
         HiveConf.ConfVars.MR3_AM_TASK_MAX_FAILED_ATTEMPTS);
+    int concurrentRunThreshold = HiveConf.getIntVar(mr3TaskConf,
+        HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
     boolean deleteVertexLocalDirectory = HiveConf.getBoolVar(mr3TaskConf,
         HiveConf.ConfVars.MR3_DAG_DELETE_VERTEX_LOCAL_DIRECTORY);
     if (shareMr3Session) {
@@ -393,6 +395,7 @@ public class MR3SessionImpl implements MR3Session {
       return new MR3ConfBuilder(false)
           .setBoolean(MR3Conf$.MODULE$.MR3_CONTAINER_STOP_CROSS_DAG_REUSE(), stopCrossDagReuse)
           .setInt(MR3Conf$.MODULE$.MR3_AM_TASK_MAX_FAILED_ATTEMPTS(), taskMaxFailedAttempts)
+          .setInt(MR3Conf$.MODULE$.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT(), concurrentRunThreshold)
           .setBoolean(MR3Conf$.MODULE$.MR3_AM_NOTIFY_DESTINATION_VERTEX_COMPLETE(), deleteVertexLocalDirectory)
           .build();
     } else {

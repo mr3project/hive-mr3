@@ -3483,6 +3483,12 @@ public class HiveConf extends Configuration {
     MR3_AM_TASK_MAX_FAILED_ATTEMPTS("hive.mr3.am.task.max.failed.attempts", 3,
         "Max number of attempts for each Task"),
 
+    // speculative execution
+    MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT("hive.mr3.am.task.concurrent.run.threshold.percent", 100,
+        "Percentage of TaskAttempts that complete before starting speculative execution. " +
+        "Can be set to an integer between 1 and 100. " +
+        "If set to 100, speculative execution of TaskAttempts is disabled."),
+
     // deleting Vertex-local directory
     MR3_DAG_DELETE_VERTEX_LOCAL_DIRECTORY("hive.mr3.delete.vertex.local.directory", false,
         "Delete Vertex-local directories in ContainerWork when all destination Vertexes complete"),
