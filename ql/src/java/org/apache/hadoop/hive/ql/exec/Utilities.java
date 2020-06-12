@@ -1260,7 +1260,7 @@ public final class Utilities {
    *          filename to extract taskid from
    */
   public static String getTaskIdFromFilename(String filename) {
-    return getTaskIdFromFilename(filename, FILE_NAME_TO_TASK_ID_REGEX);
+    return getIdFromFilename(filename, FILE_NAME_TO_TASK_ID_REGEX);
   }
 
   /**
@@ -1270,20 +1270,11 @@ public final class Utilities {
    * @param filename
    *          filename to extract taskid from
    */
-  private static String getPrefixedTaskIdFromFilename(String filename) {
-    return getTaskIdFromFilename(filename, FILE_NAME_PREFIXED_TASK_ID_REGEX);
+  public static String getPrefixedTaskIdFromFilename(String filename) {
+    return getIdFromFilename(filename, FILE_NAME_PREFIXED_TASK_ID_REGEX);
   }
 
-  private static String getTaskIdFromFilename(String filename, Pattern pattern) {
-    return getIdFromFilename(filename, pattern, 1);
-  }
-
-  private static int getAttemptIdFromFilename(String filename) {
-    String attemptStr = getIdFromFilename(filename, FILE_NAME_PREFIXED_TASK_ID_REGEX, 3);
-    return Integer.parseInt(attemptStr.substring(1));
-  }
-
-  private static String getIdFromFilename(String filename, Pattern pattern, int group) {
+  private static String getIdFromFilename(String filename, Pattern pattern) {
     String taskId = filename;
     int dirEnd = filename.lastIndexOf(Path.SEPARATOR);
     if (dirEnd != -1) {
@@ -1295,7 +1286,7 @@ public final class Utilities {
       LOG.warn("Unable to get task id from file name: {}. Using last component {}"
           + " as task id.", filename, taskId);
     } else {
-      taskId = m.group(group);
+      taskId = m.group(1);
     }
     LOG.debug("TaskId for {} = {}", filename, taskId);
     return taskId;
@@ -1954,10 +1945,10 @@ public final class Utilities {
 
   private static FileStatus compareTempOrDuplicateFiles(FileSystem fs,
       FileStatus file, FileStatus existingFile) throws IOException {
-    // Pick the one with mewest attempt ID. For sanity, check the file sizes too.
-    // If the file size of newest attempt is less than that for older one,
-    // Throw an exception as it maybe a correctness issue causing it.
-    // This breaks speculative execution if it ends prematurely.
+    // Compare the file sizes of all the attempt files for the same task, the largest win
+    // any attempt files could contain partial results (due to task failures or
+    // speculative runs), but the largest should be the correct one since the result
+    // of a successful run should never be smaller than a failed/speculative run.
     FileStatus toDelete = null, toRetain = null;
 
     // "LOAD .. INTO" and "INSERT INTO" commands will generate files with
@@ -1978,26 +1969,12 @@ public final class Utilities {
       return existingFile;
     }
 
-    int existingFileAttemptId = getAttemptIdFromFilename(existingFile.getPath().getName());
-    int fileAttemptId = getAttemptIdFromFilename(file.getPath().getName());
-
-    long existingFileSz = getFileSizeRecursively(fs, existingFile);
-    long fileSz = getFileSizeRecursively(fs, file);
-    // Files may come in any order irrespective of their attempt IDs
-    if (existingFileAttemptId > fileAttemptId &&
-        existingFileSz >= fileSz) {
-      // keep existing
-      toRetain = existingFile;
+    if (existingFile.getLen() >= file.getLen()) {
       toDelete = file;
-    } else if (existingFileAttemptId < fileAttemptId &&
-        existingFileSz <= fileSz) {
-      // keep file
-      toRetain = file;
-      toDelete = existingFile;
+      toRetain = existingFile;
     } else {
-      throw new IOException(" File " + filePath +
-        " with newer attempt ID " + fileAttemptId + " is smaller than the file "
-        + existingFile.getPath() + " with older attempt ID " + existingFileAttemptId);
+      toDelete = existingFile;
+      toRetain = file;
     }
     if (!fs.delete(toDelete.getPath(), true)) {
       throw new IOException(
@@ -2008,31 +1985,7 @@ public final class Utilities {
           + toDelete.getLen() + ". Existing file: " + toRetain.getPath() + " with length "
           + toRetain.getLen());
     }
-
     return toRetain;
-  }
-
-  // This function recurisvely fetches the size of all the files in given directory
-  private static long getFileSizeRecursively(FileSystem fs, FileStatus src)
-  throws IOException {
-    long size = 0;
-    if (src.isDirectory()) {
-      LOG.debug(" src " + src.getPath() + " is a directory");
-      // This is a directory.
-      try {
-        FileStatus[] files = fs.listStatus(src.getPath(), FileUtils.HIDDEN_FILES_PATH_FILTER);
-        // Recursively fetch sizes of each file
-        for (FileStatus file : files) {
-          size += getFileSizeRecursively(fs, file);
-        }
-      } catch (IOException e) {
-        throw new IOException("Unable to fetch files in directory " + src.getPath(), e);
-      }
-    } else {
-      size = src.getLen();
-      LOG.debug("src " + src.getPath() + " is a file of size " + size);
-    }
-    return size;
   }
 
   public static boolean isCopyFile(String filename) {
