@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
@@ -91,6 +92,7 @@ public class DynamicPartitionPruningOptimization implements NodeProcessor {
 
   static final private Logger LOG = LoggerFactory.getLogger(DynamicPartitionPruningOptimization.class
       .getName());
+  static final private AtomicInteger counter = new AtomicInteger(0);
 
   @Override
   public Object process(Node nd, Stack<Node> stack, NodeProcessorCtx procCtx, Object... nodeOutputs)
@@ -206,7 +208,7 @@ public class DynamicPartitionPruningOptimization implements NodeProcessor {
 
               // Use the tableAlias to generate keyBaseAlias
               keyBaseAlias = ctx.generator.getOperatorId() + "_" + tableAlias
-                      + "_" + colName;
+                      + "_" + colName + "_" + ((counter.getAndIncrement() % 1000 + 1000) % 1000);  // in case that another database with the same set of tables is used
               Map<String, List<SemiJoinHint>> hints = parseContext.getSemiJoinHints();
               if (hints != null) {
                 // Create semijoin optimizations ONLY for hinted columns
