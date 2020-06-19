@@ -4516,8 +4516,8 @@ public class HiveConf extends Configuration {
     MR3_EXEC_INPLACE_PROGRESS("hive.mr3.exec.inplace.progress", true,
         "Update job execution progress in-place in the terminal"),
     // daemon ShuffleHandler
-    MR3_USE_DAEMON_SHUFFLEHANDLER("hive.mr3.use.daemon.shufflehandler", false,
-        "Start a daemon ShuffleHandler in every non-local ContainerWorker"),
+    MR3_USE_DAEMON_SHUFFLEHANDLER("hive.mr3.use.daemon.shufflehandler", 0,
+        "Number of daemon ShuffleHandlers in every non-local ContainerWorker"),
     // HiveServer2
     HIVE_SERVER2_MR3_SHARE_SESSION("hive.server2.mr3.share.session", false,
         "Use a common MR3Session to be shared by all HiveSessions"),
@@ -4537,6 +4537,12 @@ public class HiveConf extends Configuration {
     // fault tolerance
     MR3_AM_TASK_MAX_FAILED_ATTEMPTS("hive.mr3.am.task.max.failed.attempts", 3,
         "Max number of attempts for each Task"),
+
+    // speculative execution
+    MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT("hive.mr3.am.task.concurrent.run.threshold.percent", 100,
+        "Percentage of TaskAttempts that complete before starting speculative execution. " +
+        "Can be set to an integer between 1 and 100. " +
+        "If set to 100, speculative execution of TaskAttempts is disabled."),
 
     // deleting Vertex-local directory
     MR3_DAG_DELETE_VERTEX_LOCAL_DIRECTORY("hive.mr3.delete.vertex.local.directory", false,
