@@ -138,8 +138,8 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
                 LOG.error(msg);
                 throw new MapJoinMemoryExhaustionError(msg);
               } else {
-                if (LOG.isInfoEnabled()) {
-                  LOG.info("Checking hash table loader memory usage for input: {} numEntries: {} " +
+                if (LOG.isDebugEnabled()) {
+                  LOG.debug("Checking hash table loader memory usage for input: {} numEntries: {} " +
                       "estimatedMemoryUsage: {} effectiveThreshold: {}", inputName, numEntries, estMemUsage,
                     effectiveThreshold);
                 }
