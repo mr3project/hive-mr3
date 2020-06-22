@@ -10260,6 +10260,7 @@ STAGE PLANS:
                     Statistics: Num rows: 1 Data size: 344 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: s (type: string), dec (type: decimal(4,2))
+                      null sort order: aa
                       sort order: +-
                       Map-reduce partition columns: s (type: string)
                       Reduce Sink Vectorization:
@@ -10293,7 +10294,7 @@ STAGE PLANS:
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
-                reduceColumnNullOrder: az
+                reduceColumnNullOrder: aa
                 reduceColumnSortOrder: +-
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -10321,7 +10322,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col9 DESC NULLS LAST
+                        order by: _col9 DESC NULLS FIRST
                         partition by: _col7
                         raw input shape:
                         window functions:
@@ -10356,6 +10357,7 @@ STAGE PLANS:
                     Statistics: Num rows: 1 Data size: 344 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: _col7 (type: string), _col8 (type: timestamp)
+                      null sort order: aa
                       sort order: +-
                       Map-reduce partition columns: _col7 (type: string)
                       Reduce Sink Vectorization:
@@ -10372,7 +10374,7 @@ STAGE PLANS:
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
-                reduceColumnNullOrder: az
+                reduceColumnNullOrder: aa
                 reduceColumnSortOrder: +-
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -10400,7 +10402,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col9 DESC NULLS LAST
+                        order by: _col9 DESC NULLS FIRST
                         partition by: _col8
                         raw input shape:
                         window functions:
@@ -10909,6 +10911,7 @@ STAGE PLANS:
                     Statistics: Num rows: 1 Data size: 336 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: _col1 (type: smallint), _col10 (type: binary)
+                      null sort order: aa
                       sort order: +-
                       Map-reduce partition columns: _col1 (type: smallint)
                       Reduce Sink Vectorization:
@@ -10925,7 +10928,7 @@ STAGE PLANS:
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
-                reduceColumnNullOrder: az
+                reduceColumnNullOrder: aa
                 reduceColumnSortOrder: +-
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -10953,7 +10956,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col11 DESC NULLS LAST
+                        order by: _col11 DESC NULLS FIRST
                         partition by: _col2
                         raw input shape:
                         window functions:

@@ -1381,6 +1381,7 @@ STAGE PLANS:
                   Statistics: Num rows: 1 Data size: 748 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: int), _col3 (type: double)
+                    null sort order: za
                     sort order: +-
                     Statistics: Num rows: 1 Data size: 748 Basic stats: COMPLETE Column stats: NONE
                     value expressions: _col0 (type: string), _col1 (type: string)
@@ -1505,6 +1506,7 @@ STAGE PLANS:
                   Statistics: Num rows: 1 Data size: 748 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: int), _col3 (type: double)
+                    null sort order: za
                     sort order: +-
                     Statistics: Num rows: 1 Data size: 748 Basic stats: COMPLETE Column stats: NONE
                     value expressions: _col0 (type: string), _col1 (type: string)
@@ -1626,6 +1628,7 @@ STAGE PLANS:
                   Statistics: Num rows: 1 Data size: 380 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: int), _col3 (type: double)
+                    null sort order: za
                     sort order: +-
                     Statistics: Num rows: 1 Data size: 380 Basic stats: COMPLETE Column stats: NONE
                     value expressions: _col0 (type: string), _col1 (type: string)
@@ -1751,6 +1754,7 @@ STAGE PLANS:
                   Statistics: Num rows: 1 Data size: 564 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: _col2 (type: int), _col3 (type: double)
+                    null sort order: za
                     sort order: +-
                     Statistics: Num rows: 1 Data size: 564 Basic stats: COMPLETE Column stats: NONE
                     value expressions: _col0 (type: string), _col1 (type: string)

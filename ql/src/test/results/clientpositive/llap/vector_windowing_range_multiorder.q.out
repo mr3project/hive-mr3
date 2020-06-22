@@ -343,6 +343,7 @@ STAGE PLANS:
                       vectorizationSchemaColumns: [0:t:tinyint, 1:si:smallint, 2:i:int, 3:b:bigint, 4:f:float, 5:d:double, 6:bo:boolean, 7:s:string, 8:ts:timestamp, 9:dec:decimal(4,2)/DECIMAL_64, 10:bin:binary, 11:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                   Reduce Output Operator
                     key expressions: si (type: smallint), bo (type: boolean), i (type: int), f (type: float)
+                    null sort order: aaza
                     sort order: +++-
                     Map-reduce partition columns: si (type: smallint), bo (type: boolean)
                     Reduce Sink Vectorization:
@@ -390,7 +391,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col2 ASC NULLS LAST, _col4 DESC NULLS LAST
+                        order by: _col2 ASC NULLS LAST, _col4 DESC NULLS FIRST
                         partition by: _col1, _col6
                         raw input shape:
                         window functions:
@@ -568,6 +569,7 @@ STAGE PLANS:
                       vectorizationSchemaColumns: [0:t:tinyint, 1:si:smallint, 2:i:int, 3:b:bigint, 4:f:float, 5:d:double, 6:bo:boolean, 7:s:string, 8:ts:timestamp, 9:dec:decimal(4,2)/DECIMAL_64, 10:bin:binary, 11:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                   Reduce Output Operator
                     key expressions: si (type: smallint), bo (type: boolean), i (type: int), f (type: float)
+                    null sort order: aaza
                     sort order: +++-
                     Map-reduce partition columns: si (type: smallint), bo (type: boolean)
                     Reduce Sink Vectorization:
@@ -615,7 +617,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col2 ASC NULLS LAST, _col4 DESC NULLS LAST
+                        order by: _col2 ASC NULLS LAST, _col4 DESC NULLS FIRST
                         partition by: _col1, _col6
                         raw input shape:
                         window functions:
@@ -11466,6 +11468,7 @@ STAGE PLANS:
                       vectorizationSchemaColumns: [0:t:tinyint, 1:si:smallint, 2:i:int, 3:b:bigint, 4:f:float, 5:d:double, 6:bo:boolean, 7:s:string, 8:ts:timestamp, 9:dec:decimal(4,2)/DECIMAL_64, 10:bin:binary, 11:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                   Reduce Output Operator
                     key expressions: s (type: string), si (type: smallint), i (type: int)
+                    null sort order: aza
                     sort order: ++-
                     Map-reduce partition columns: s (type: string)
                     Reduce Sink Vectorization:
@@ -11497,7 +11500,7 @@ STAGE PLANS:
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
-                reduceColumnNullOrder: azz
+                reduceColumnNullOrder: aza
                 reduceColumnSortOrder: ++-
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -11525,7 +11528,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col1 ASC NULLS LAST, _col2 DESC NULLS LAST
+                        order by: _col1 ASC NULLS LAST, _col2 DESC NULLS FIRST
                         partition by: _col7
                         raw input shape:
                         window functions:
@@ -11726,6 +11729,7 @@ STAGE PLANS:
                       vectorizationSchemaColumns: [0:t:tinyint, 1:si:smallint, 2:i:int, 3:b:bigint, 4:f:float, 5:d:double, 6:bo:boolean, 7:s:string, 8:ts:timestamp, 9:dec:decimal(4,2)/DECIMAL_64, 10:bin:binary, 11:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                   Reduce Output Operator
                     key expressions: si (type: smallint), bo (type: boolean), i (type: int), f (type: float)
+                    null sort order: aaza
                     sort order: +++-
                     Map-reduce partition columns: si (type: smallint), bo (type: boolean)
                     Reduce Sink Vectorization:
@@ -11757,7 +11761,7 @@ STAGE PLANS:
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
-                reduceColumnNullOrder: aazz
+                reduceColumnNullOrder: aaza
                 reduceColumnSortOrder: +++-
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -11785,7 +11789,7 @@ STAGE PLANS:
                       Windowing table definition
                         input alias: ptf_1
                         name: windowingtablefunction
-                        order by: _col2 ASC NULLS LAST, _col4 DESC NULLS LAST
+                        order by: _col2 ASC NULLS LAST, _col4 DESC NULLS FIRST
                         partition by: _col1, _col6
                         raw input shape:
                         window functions:
