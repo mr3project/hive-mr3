@@ -76,7 +76,10 @@ public class ReaderImpl extends org.apache.orc.impl.ReaderImpl
 
   @Override
   public RecordReader rowsOptions(Options options) throws IOException {
-    LOG.info("Reading ORC rows from " + path + " with " + options);
+    LOG.info("Reading ORC rows from " + path);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("with " + options);
+    }
     return new RecordReaderImpl(this, options);
   }
 
