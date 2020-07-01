@@ -1483,9 +1483,9 @@ class MetaStoreDirectSql {
           columnStatisticsObjForPartitions(catName, dbName, tableName, partNames, colNames, partsFound,
               useDensityFunctionForNDVEstimation, ndvTuner, enableBitVector);
     }
-    LOG.info("useDensityFunctionForNDVEstimation = " + useDensityFunctionForNDVEstimation
+    if (LOG.isDebugEnabled()) { LOG.debug("useDensityFunctionForNDVEstimation = " + useDensityFunctionForNDVEstimation
         + "\npartsFound = " + partsFound + "\nColumnStatisticsObj = "
-        + Arrays.toString(colStatsList.toArray()));
+        + Arrays.toString(colStatsList.toArray())); }
     return new AggrStats(colStatsList, partsFound);
   }
 
