@@ -332,6 +332,7 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
 
   // if mr3Session is alive, return null
   // if mr3Session is not alive, ***close it*** and return a new one
+  // do not update commonMr3Session and raise Exception if a new MR3Session cannot be created
   private MR3Session getNewMr3SessionIfNotAlive(MR3Session mr3Session, HiveConf mr3TaskHiveConf)
       throws HiveException, IOException, InterruptedException {
     boolean isAlive = mr3Session.isRunningFromApplicationReport();
@@ -340,31 +341,40 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
       return null;
     } else {
       LOG.info("Closing MR3Session: " + mr3Session.getSessionId());
-      mr3Session.close(true);   // okay to call several times
+      // mr3Session.close(): okay to call several times
+      // createdSessions.remove() may be executed several times for the same mr3Session if shareMr3Session == true
       synchronized (this) {
-        createdSessions.remove(mr3Session);   // may be executed several times for the same mr3Session if shareMr3Session == true
-
         if (shareMr3Session) {
           if (mr3Session == commonMr3Session) {   // reference equality
-            SessionState currentSessionState = SessionState.get();
+            SessionState currentSessionState = SessionState.get();  // cache SessionState
             commonUgi.doAs(new PrivilegedExceptionAction<Void>() {
               @Override
               public Void run() throws Exception {
                 SessionState.setCurrentSessionState(commonSessionState);
-                commonMr3Session = new MR3SessionImpl(true, commonUgi.getShortUserName());
-                commonMr3Session.start(hiveConf);
+                MR3Session newMr3Session = new MR3SessionImpl(true, commonUgi.getShortUserName());
+                newMr3Session.start(hiveConf);  // may raise Exception
+                // assign to commonMr3Session only if newSession.start() returns without raising Exception
+                commonMr3Session = newMr3Session;
                 return null;
               }
             });
-            SessionState.setCurrentSessionState(currentSessionState);
+            // now it is safe to close the previous commonMr3Session
+            mr3Session.close(true);
+            createdSessions.remove(mr3Session);
+            // register commonMr3Session
+            SessionState.setCurrentSessionState(currentSessionState);   // restore SessionState
             createdSessions.add(commonMr3Session);
             LOG.info("New common MR3Session has been created: " + commonMr3Session.getSessionId());
             return commonMr3Session;
           } else {
+            mr3Session.close(true);
+            createdSessions.remove(mr3Session);
             LOG.info("New common MR3Session already created: " + commonMr3Session.getSessionId());
             return commonMr3Session;
           }
         } else {
+          mr3Session.close(true);
+          createdSessions.remove(mr3Session);
           // this is from the thread running MR3Task, so no concurrency issue
           return createSession(mr3TaskHiveConf, false);
         }
