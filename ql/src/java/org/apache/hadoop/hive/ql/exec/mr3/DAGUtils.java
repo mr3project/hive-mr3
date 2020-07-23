@@ -551,9 +551,10 @@ public class DAGUtils {
 
   private Vertex createCompactVertex(JobConf jobConf, CompactWork compactWork) throws Exception {
     jobConf.set(Utilities.INPUT_NAME, compactWork.getName());
+    ByteString jobConfByteString = TezUtils.createByteStringFromConf(jobConf);
 
     EntityDescriptor processorDescriptor = new EntityDescriptor(
-            MRMapProcessor.class.getName(), org.apache.tez.common.TezUtils.createByteStringFromConf(jobConf));
+            MRMapProcessor.class.getName(), jobConfByteString);
     Resource taskResource = getMapTaskResource(jobConf);
     String containerEnvironment = getContainerEnvironment(jobConf);
     String containerJavaOpts = getContainerJavaOpts(jobConf);
@@ -570,10 +571,10 @@ public class DAGUtils {
 
     EntityDescriptor logicalOutputDescriptor = new EntityDescriptor(
         MROutputLegacy.class.getName(),
-        org.apache.tez.common.TezUtils.createByteStringFromConf(jobConf));
+        jobConfByteString);
     EntityDescriptor outputCommitterDescriptor = new EntityDescriptor(
         MROutputCommitter.class.getName(),
-        org.apache.tez.common.TezUtils.createByteStringFromConf(jobConf));
+        jobConfByteString);
     vertex.addDataSink("out_" + compactWork.getName(), logicalOutputDescriptor, outputCommitterDescriptor);
 
     return vertex;
