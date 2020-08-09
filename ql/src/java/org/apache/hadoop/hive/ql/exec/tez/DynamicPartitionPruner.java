@@ -298,7 +298,9 @@ public class DynamicPartitionPruner {
       }
 
       if (!values.contains(partValue)) {
-        LOG.info("Pruning path: " + p);
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Pruning path: " + p);
+        }
         it.remove();
         // work.removePathToPartitionInfo(p);
         work.removePathToAlias(p);
