@@ -160,6 +160,7 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
       return false;
     } else {
       YarnApplicationState state = applicationReport.getYarnApplicationState();
+      LOG.info("YarnApplicationState from ApplicationReport: " + state);
       switch (state) {
         case FINISHED:
         case FAILED:
