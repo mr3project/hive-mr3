@@ -476,7 +476,7 @@ public final class Utilities {
             gWork.getName(), path, humanReadableByteCount(serializedSize));
         gWorkMap.get(conf).put(path, gWork);
       } else {
-        LOG.info("Found plan in cache for name: {}", name);
+        LOG.debug("Found plan in cache for name: {}", name);
       }
       return gWork;
     } catch (FileNotFoundException fnf) {
