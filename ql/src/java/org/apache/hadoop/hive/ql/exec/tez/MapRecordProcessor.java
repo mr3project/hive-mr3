@@ -276,7 +276,7 @@ public class MapRecordProcessor extends RecordProcessor {
       checkAbortCondition();
       mapOp.setChildren(jconf);
       mapOp.passExecContext(execContext);
-      LOG.info(mapOp.dump(0));
+      LOG.debug(mapOp.dump(0));
 
       // set memory available for operators
       long memoryAvailableToTask = processorContext.getTotalMemoryAvailableToTask();

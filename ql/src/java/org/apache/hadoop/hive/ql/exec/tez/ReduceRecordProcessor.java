@@ -209,7 +209,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
 
     // initialize reduce operator tree
     try {
-      LOG.info(reducer.dump(0));
+      LOG.debug(reducer.dump(0));
 
       // Initialization isn't finished until all parents of all operators
       // are initialized. For broadcast joins that means initializing the
