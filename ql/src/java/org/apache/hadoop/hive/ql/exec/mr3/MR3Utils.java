@@ -41,11 +41,6 @@ public class MR3Utils {
       scala.Predef.<scala.Tuple2<A, B>>conforms());
   }
 
-  // TODO: expand to org.apache.tez.common.TezUtils.createByteStringFromConf()
-  public static ByteString createUserPayloadFromConf(Configuration conf) throws IOException {
-    return org.apache.tez.common.TezUtils.createByteStringFromConf(conf);
-  }
-
   public static ByteString createUserPayloadFromVertexConf(
       CustomVertexConfiguration vertexConf) throws IOException {
     DataOutputBuffer dob = new DataOutputBuffer();
