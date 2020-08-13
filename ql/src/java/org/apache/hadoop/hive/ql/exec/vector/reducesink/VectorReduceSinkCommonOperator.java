@@ -282,7 +282,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
           (vectorReduceSinkInfo.getReduceSinkPartitionExpressions() == null ? "NULL" : Arrays.toString(vectorReduceSinkInfo.getReduceSinkPartitionExpressions())));
     }
 
-    if (LOG.isDebugEnabled()) {
+    if (isLogDebugEnabled) {
       // Determine the name of our map or reduce task for debug tracing.
       BaseWork work = Utilities.getMapWork(hconf);
       if (work == null) {
@@ -300,7 +300,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     reduceSkipTag = conf.getSkipTag();
     reduceTagByte = (byte) conf.getTag();
 
-    if (LOG.isDebugEnabled()) {
+    if (isLogDebugEnabled) {
       LOG.debug("Using tag = " + (int) reduceTagByte);
     }
     numRows = 0;
