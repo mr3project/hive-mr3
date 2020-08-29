@@ -113,7 +113,9 @@ public class StatsRecordingThreadPool extends ThreadPoolExecutor {
       List<LlapUtil.StatisticsData> statsBefore = LlapUtil.cloneThreadLocalFileSystemStatistics();
       long cpuTime = mxBean == null ? -1 : mxBean.getCurrentThreadCpuTime(),
           userTime = mxBean == null ? -1 : mxBean.getCurrentThreadUserTime();
-      setupMDCFromNDC(actualCallable);
+      // RunnableWithNdc in tez-mr3 does not use NDC (with ndcStack), so do not call setupMDCFromNDC().
+      // do not call MDC.clear() because setupMDCFromNDC() is not called
+      // setupMDCFromNDC(actualCallable);
       try {
         return actualCallable.call();
       } finally {
@@ -123,7 +125,7 @@ public class StatsRecordingThreadPool extends ThreadPoolExecutor {
         }
         updateCounters(statsBefore, actualCallable, cpuTime, userTime);
 
-        MDC.clear();
+        // MDC.clear();
       }
     }
 
