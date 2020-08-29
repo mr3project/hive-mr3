@@ -175,7 +175,11 @@ public class TaskRunnerCallable extends CallableWithNdc<TaskRunner2Result> {
 
   @Override
   protected TaskRunner2Result callInternal() throws Exception {
-    setMDCFromNDC();
+    // RunnableWithNdc in tez-mr3 does not use NDC (with ndcStack), so do not call setMDCFromNDC().
+    //   Cf. Hive on MR3 does not use TaskRunnerCallable.
+    // do not call MDC.clear() because setMDCFromNDC() is not called
+
+    // setMDCFromNDC();
 
     try {
       isStarted.set(true);
@@ -285,7 +289,7 @@ public class TaskRunnerCallable extends CallableWithNdc<TaskRunner2Result> {
         IOContextMap.clearThreadAttempt(attemptId);
       }
     } finally {
-      MDC.clear();
+      // MDC.clear();
     }
   }
 
