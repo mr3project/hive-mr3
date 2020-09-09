@@ -72,8 +72,8 @@ public class DAG {
   public static final int perMapContainerGroupPriority = 0;
   public static final int perReduceContainerGroupPriority = perMapContainerGroupPriority + 3;
 
-  public static final int defaultLlapDaemonTaskMemoryMb = 1024;
-  public static final int defaultLlapDaemonTaskVcores = 1;
+  public static final int defaultLlapDaemonTaskMemoryMb = 0;
+  public static final int defaultLlapDaemonTaskVcores = 0;
 
   private int vcoresDivisor = 1;  // set in createDagProto()
 
@@ -338,7 +338,8 @@ public class DAG {
       List<DAGAPI.DaemonVertexProto> shuffleHandlerDaemonVertexProtos, TezConfiguration tezConf) {
     int llapNativeMemoryMb = 0;
     if (llapDaemonVertexProto != null) {
-      long ioMemoryBytes = HiveConf.getSizeVar(conf, HiveConf.ConfVars.LLAP_IO_MEMORY_MAX_SIZE);
+      long ioMemoryBytes = HiveConf.getBoolVar(conf, HiveConf.ConfVars.LLAP_ALLOCATOR_MAPPED) ? 0L :
+        HiveConf.getSizeVar(conf, HiveConf.ConfVars.LLAP_IO_MEMORY_MAX_SIZE);
       int headroomMb = HiveConf.getIntVar(conf, HiveConf.ConfVars.MR3_LLAP_HEADROOM_MB);
       llapNativeMemoryMb = (int)(ioMemoryBytes >> 20) + headroomMb;
     }
@@ -388,7 +389,8 @@ public class DAG {
 
     int llapNativeMemoryMb = 0;
     if (isMap && llapDaemonVertexProto != null) {
-      long ioMemoryBytes = HiveConf.getSizeVar(conf, HiveConf.ConfVars.LLAP_IO_MEMORY_MAX_SIZE);
+      long ioMemoryBytes = HiveConf.getBoolVar(conf, HiveConf.ConfVars.LLAP_ALLOCATOR_MAPPED) ? 0L :
+        HiveConf.getSizeVar(conf, HiveConf.ConfVars.LLAP_IO_MEMORY_MAX_SIZE);
       int headroomMb = HiveConf.getIntVar(conf, HiveConf.ConfVars.MR3_LLAP_HEADROOM_MB);
       llapNativeMemoryMb = (int)(ioMemoryBytes >> 20) + headroomMb;
     }
