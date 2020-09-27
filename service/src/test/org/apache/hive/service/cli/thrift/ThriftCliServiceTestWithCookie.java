@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
+import org.apache.hadoop.hive.conf.HiveServer2TransportMode;
 import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 import org.apache.hive.service.Service;
 import org.apache.hive.service.auth.HiveAuthFactory.AuthTypes;
@@ -69,7 +70,7 @@ public class ThriftCliServiceTestWithCookie {
     // Set the cookie max age to a very low value so that
     // the server sends 401 very frequently
     hiveConf.setTimeVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_MAX_AGE, 1, TimeUnit.SECONDS);
-    hiveConf.setVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE, "http");
+    hiveConf.setVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE, HiveServer2TransportMode.http.toString());
     hiveConf.setVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_PATH, "cliservice");
 
     assertNotNull(port);

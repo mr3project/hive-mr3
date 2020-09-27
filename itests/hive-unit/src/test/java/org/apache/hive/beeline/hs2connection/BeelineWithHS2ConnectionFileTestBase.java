@@ -46,7 +46,10 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
+@RunWith(Parameterized.class)
 public abstract class BeelineWithHS2ConnectionFileTestBase {
   protected MiniHS2 miniHS2;
   protected HiveConf hiveConf = new HiveConf();
@@ -63,6 +66,10 @@ public abstract class BeelineWithHS2ConnectionFileTestBase {
   protected static final String JAVA_TRUST_STORE_PASS_PROP = "javax.net.ssl.trustStorePassword";
 
   protected Map<String, String> confOverlay = new HashMap<>();
+
+  @Parameterized.Parameter
+  public String transportMode =  null;
+
 
   protected class TestBeeLine extends BeeLine {
     UserHS2ConnectionFileParser testHs2ConfigFileManager;
@@ -162,7 +169,7 @@ public abstract class BeelineWithHS2ConnectionFileTestBase {
     miniHS2 = getNewMiniHS2();
     confOverlay = new HashMap<String, String>();
     confOverlay.put(ConfVars.HIVE_SUPPORT_CONCURRENCY.varname, "false");
-    confOverlay.put(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.varname, "binary");
+    confOverlay.put(ConfVars.HIVE_SERVER2_TRANSPORT_MODE.varname, transportMode);
   }
 
   protected MiniHS2 getNewMiniHS2() throws Exception {
