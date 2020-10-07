@@ -228,8 +228,8 @@ public class HiveRelOptMaterializationValidator extends HiveRelShuttleImpl {
     return visitChildren(union);
   }
 
-  // Note: Not currently part of the HiveRelNode interface
-  private RelNode visit(HiveSortLimit sort) {
+  @Override
+  public RelNode visit(HiveSortLimit sort) {
     checkExpr(sort.getFetchExpr());
     checkExpr(sort.getOffsetExpr());
     return visitChildren(sort);

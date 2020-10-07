@@ -28,6 +28,7 @@ import org.apache.calcite.rel.core.JoinRelType;
 import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rex.LogicVisitor;
 import org.apache.calcite.rex.RexInputRef;
+import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexShuttle;
@@ -55,9 +56,11 @@ import java.util.Set;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.ql.optimizer.calcite.HiveRelFactories;
+import org.apache.hadoop.hive.ql.optimizer.calcite.HiveRelShuttleImpl;
 import org.apache.hadoop.hive.ql.optimizer.calcite.HiveSubQRemoveRelBuilder;
 import org.apache.hadoop.hive.ql.optimizer.calcite.SubqueryConf;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveFilter;
+import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveSortLimit;
 
 /**
  * NOTE: this rule is replicated from Calcite's SubqueryRemoveRule
@@ -296,10 +299,9 @@ public class HiveSubQueryRemoveRule extends RelOptRule {
       //   on e.deptno = dt.deptno
       //
 
-      builder.push(e.rel);
       final List<RexNode> fields = new ArrayList<>();
-      switch (e.getKind()) {
-      case IN:
+      if (e.getKind() == SqlKind.IN) {
+        builder.push(e.rel);
         fields.addAll(builder.fields());
         // Transformation: sq_count_check(count(*), true) FILTER is generated on top
         //  of subquery which is then joined (LEFT or INNER) with outer query
@@ -331,6 +333,19 @@ public class HiveSubQueryRemoveRule extends RelOptRule {
           offset =  offset + 1;
           builder.push(e.rel);
         }
+      } else if (e.getKind() == SqlKind.EXISTS && !variablesSet.isEmpty()) {
+        // Query has 'exists' and correlation:
+        // select * from web_sales ws1
+        // where exists (select 1 from web_sales ws2 where ws1.ws_order_number = ws2.ws_order_number limit 1);
+        //
+        // HiveRelDecorrelator will replace LogicalCorrelate with a SemiJoin. Hence the right hand side won't be
+        // evaluated for every row coming from left and SortLimit cuts the right result set incorrectly. (HIVE-24199)
+        builder.push(e.rel.accept(new HiveSortLimitRemover()));
+      } else {
+        // Query may has exists but no correlation
+        // select * from web_sales ws1
+        // where exists (select 1 from web_sales ws2 where ws2.ws_order_number = 2 limit 1);
+        builder.push(e.rel);
       }
 
       // First, the cross join
@@ -559,6 +574,26 @@ public class HiveSubQueryRemoveRule extends RelOptRule {
     }
   }
 
+  public static class HiveSortLimitRemover extends HiveRelShuttleImpl {
+    @Override
+    public RelNode visit(HiveSortLimit sort) {
+      RexNode rexNode = sort.getOffsetExpr();
+      if (rexNode != null && rexNode.getKind() == SqlKind.LITERAL) {
+        RexLiteral offsetExpr = (RexLiteral)rexNode;
+        if (!BigDecimal.ZERO.equals(offsetExpr.getValue())) {
+          throw new RuntimeException(org.apache.hadoop.hive.ql.ErrorMsg.OFFSET_NOT_SUPPORTED_IN_SUBQUERY.getMsg());
+        }
+      }
+      rexNode = sort.getFetchExpr();
+      if (rexNode != null && rexNode.getKind() == SqlKind.LITERAL) {
+        RexLiteral fetchExpr = (RexLiteral) rexNode;
+        if (BigDecimal.ZERO.equals(fetchExpr.getValue())) {
+          return super.visit(sort);
+        }
+      }
+      return super.visit(sort.getInput());
+    }
+  }
 }
 
 // End SubQueryRemoveRule.java
