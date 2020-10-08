@@ -4792,6 +4792,7 @@ abstract class TxnHandler implements TxnStore, TxnStore.MutexAPI {
     Connection dbConn = null;
     Statement stmt = null;
     ResultSet rs = null;
+    boolean needToCloseConn = true;
     try {
       try {
         String sqlStmt = sqlGenerator.addForUpdateClause("select MT_COMMENT from AUX_TABLE where MT_KEY1=" + quoteString(key) + " and MT_KEY2=0");
@@ -4829,20 +4830,21 @@ abstract class TxnHandler implements TxnStore, TxnStore.MutexAPI {
           derbySemaphore.acquire();
         }
         LOG.debug(quoteString(key) + " locked by " + quoteString(TxnHandler.hostname));
+        needToCloseConn = false;  //The connection is good, we need not close it
         //OK, so now we have a lock
         return new LockHandleImpl(dbConn, stmt, rs, key, derbySemaphore);
       } catch (SQLException ex) {
-        rollbackDBConn(dbConn);
-        close(rs, stmt, dbConn);
         checkRetryable(dbConn, ex, "acquireLock(" + key + ")");
         throw new MetaException("Unable to lock " + quoteString(key) + " due to: " + getMessage(ex) + "; " + StringUtils.stringifyException(ex));
       }
       catch(InterruptedException ex) {
-        rollbackDBConn(dbConn);
-        close(rs, stmt, dbConn);
         throw new MetaException("Unable to lock " + quoteString(key) + " due to: " + ex.getMessage() + StringUtils.stringifyException(ex));
       }
       finally {
+        if (needToCloseConn) {
+          rollbackDBConn(dbConn);
+          close(rs, stmt, dbConn);
+        }
         unlockInternal();
       }
     }
