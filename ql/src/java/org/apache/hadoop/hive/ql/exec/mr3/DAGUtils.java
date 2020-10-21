@@ -548,10 +548,7 @@ public class DAGUtils {
     // Is this required ?
     jobConf.set("mapred.reducer.class", ExecReducer.class.getName());
 
-    boolean useSpeculativeExecReducers = HiveConf.getBoolVar(jobConf,
-        HiveConf.ConfVars.HIVESPECULATIVEEXECREDUCERS);
-    jobConf.setBoolean(org.apache.hadoop.mapreduce.MRJobConfig.REDUCE_SPECULATIVE,
-        useSpeculativeExecReducers);
+    jobConf.setBoolean(org.apache.hadoop.mapreduce.MRJobConfig.REDUCE_SPECULATIVE, false);
 
     return jobConf;
   }
