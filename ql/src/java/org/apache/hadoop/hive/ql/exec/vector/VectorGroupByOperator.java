@@ -19,7 +19,6 @@
 package org.apache.hadoop.hive.ql.exec.vector;
 
 import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryMXBean;
 import java.lang.ref.SoftReference;
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
@@ -33,6 +32,7 @@ import org.apache.commons.lang.ArrayUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.type.DataTypePhysicalVariation;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.llap.LlapUtil;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.GroupByOperator;
 import org.apache.hadoop.hive.ql.exec.IConfigureJobConf;
@@ -514,8 +514,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
           keyWrappersBatch.getKeysFixedSize() +
           aggregationBatchInfo.getAggregatorsFixedSize();
 
-      MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
-      maxMemory = memoryMXBean.getHeapMemoryUsage().getMax();
+      maxMemory = getConf().getMaxMemoryAvailable();    // assume MR3, so do not use MemoryMXBean. Cf. HIVE-20648
       memoryThreshold = conf.getMemoryThreshold();
       // Tests may leave this unitialized, so better set it to 1
       if (memoryThreshold == 0.0f) {
@@ -525,13 +524,14 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       maxHashTblMemory = (int)(maxMemory * memoryThreshold);
 
       if (LOG.isDebugEnabled()) {
-        LOG.debug(String.format("maxMemory:%dMb (%d * %f) fixSize:%d (key:%d agg:%d)",
-            maxHashTblMemory/1024/1024,
-            maxMemory/1024/1024,
-            memoryThreshold,
-            fixedHashEntrySize,
-            keyWrappersBatch.getKeysFixedSize(),
-            aggregationBatchInfo.getAggregatorsFixedSize()));
+        LOG.debug("GBY memory limits - isLlap: {} maxMemory: {} ({} * {}) fixSize:{} (key:{} agg:{})",
+          true,
+          LlapUtil.humanReadableByteCount(maxHashTblMemory),
+          LlapUtil.humanReadableByteCount(maxMemory),
+          memoryThreshold,
+          fixedHashEntrySize,
+          keyWrappersBatch.getKeysFixedSize(),
+          aggregationBatchInfo.getAggregatorsFixedSize());
       }
     }
 
@@ -1230,4 +1230,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     }
   }
 
+  public long getMaxMemory() {
+    return maxMemory;
+  }
 }
