@@ -2821,13 +2821,7 @@ public class DDLSemanticAnalyzer extends BaseSemanticAnalyzer {
       }
     }
 
-    HiveTxnManager txnManager = null;
-    try {
-      txnManager = TxnManagerFactory.getTxnManagerFactory().getTxnManager(conf);
-    } catch (LockException e) {
-      throw new SemanticException(e.getMessage());
-    }
-
+    assert txnManager != null : "Transaction manager should be set before calling analyze";
     ShowLocksDesc showLocksDesc = new ShowLocksDesc(ctx.getResFile(), tableName,
         partSpec, isExtended, txnManager.useNewShowLocksFormat());
     rootTasks.add(TaskFactory.get(new DDLWork(getInputs(), getOutputs(),
@@ -2851,13 +2845,7 @@ public class DDLSemanticAnalyzer extends BaseSemanticAnalyzer {
     boolean isExtended = (ast.getChildCount() > 1);
     String dbName = stripQuotes(ast.getChild(0).getText());
 
-    HiveTxnManager txnManager = null;
-    try {
-      txnManager = TxnManagerFactory.getTxnManagerFactory().getTxnManager(conf);
-    } catch (LockException e) {
-      throw new SemanticException(e.getMessage());
-    }
-
+    assert txnManager != null : "Transaction manager should be set before calling analyze";
     ShowLocksDesc showLocksDesc = new ShowLocksDesc(ctx.getResFile(), dbName,
                                                     isExtended, txnManager.useNewShowLocksFormat());
     rootTasks.add(TaskFactory.get(new DDLWork(getInputs(), getOutputs(),
