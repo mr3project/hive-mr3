@@ -1,5 +1,6 @@
 set hive.security.authorization.manager=org.apache.hadoop.hive.ql.security.authorization.DefaultHiveAuthorizationProvider;
 set hive.cbo.enable=false;
+set hive.exec.reducers.max=1;
 
 create table src_autho_test_n9 as select * from src;
 

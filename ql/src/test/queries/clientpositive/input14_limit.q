@@ -1,4 +1,5 @@
 set hive.stats.column.autogather=false;
+set hive.exec.reducers.max=1;
 
 CREATE TABLE dest1_n13(key INT, value STRING) STORED AS TEXTFILE;
 
