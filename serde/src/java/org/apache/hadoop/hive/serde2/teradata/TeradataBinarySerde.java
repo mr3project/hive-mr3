@@ -19,8 +19,6 @@
 package org.apache.hadoop.hive.serde2.teradata;
 
 import com.google.common.collect.ImmutableMap;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.Timestamp;
@@ -63,6 +61,8 @@ import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Writable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.common.type.Date;
 
 import javax.annotation.Nullable;
@@ -107,7 +107,7 @@ import static java.lang.String.format;
  */
 @SerDeSpec(schemaProps = { serdeConstants.LIST_COLUMNS,
     serdeConstants.LIST_COLUMN_TYPES }) public class TeradataBinarySerde extends AbstractSerDe {
-  private static final Log LOG = LogFactory.getLog(TeradataBinarySerde.class);
+  private static final Logger LOG = LoggerFactory.getLogger(TeradataBinarySerde.class);
 
   public static final String TD_SCHEMA_LITERAL = "teradata.schema.literal";
 
