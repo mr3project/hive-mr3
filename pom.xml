@@ -1198,6 +1198,31 @@
               <fail>true</fail>
             </configuration>
           </execution>
+          <execution>
+            <id>check-banned-imports</id>
+            <phase>initialize</phase>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <configuration>
+              <rules>
+                <restrictImports implementation="de.skuzzle.enforcer.restrictimports.RestrictImports">
+                  <reason>Do not use commons-lang</reason>
+                  <bannedImports>
+                    <bannedImport>org.apache.commons.lang.**</bannedImport>
+                  </bannedImports>
+                  <includeTestCode>true</includeTestCode>
+                </restrictImports>
+                <restrictImports implementation="de.skuzzle.enforcer.restrictimports.RestrictImports">
+                  <reason>Do not use commons-logging; use slf4j</reason>
+                  <bannedImports>
+                    <bannedImport>org.apache.commons.logging.**</bannedImport>
+                  </bannedImports>
+                  <includeTestCode>true</includeTestCode>
+                </restrictImports>
+              </rules>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
       <plugin>
