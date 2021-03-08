@@ -3892,7 +3892,8 @@ public final class Utilities {
   public static int getHeaderCount(TableDesc table) throws IOException {
     int headerCount;
     try {
-      headerCount = Integer.parseInt(table.getProperties().getProperty(serdeConstants.HEADER_COUNT, "0"));
+      headerCount =
+          getHeaderOrFooterCount(table, serdeConstants.HEADER_COUNT);
     } catch (NumberFormatException nfe) {
       throw new IOException(nfe);
     }
@@ -3911,7 +3912,8 @@ public final class Utilities {
   public static int getFooterCount(TableDesc table, JobConf job) throws IOException {
     int footerCount;
     try {
-      footerCount = Integer.parseInt(table.getProperties().getProperty(serdeConstants.FOOTER_COUNT, "0"));
+      footerCount =
+          getHeaderOrFooterCount(table, serdeConstants.FOOTER_COUNT);
       if (footerCount > HiveConf.getIntVar(job, HiveConf.ConfVars.HIVE_FILE_MAX_FOOTER)) {
         throw new IOException("footer number exceeds the limit defined in hive.file.max.footer");
       }
@@ -3921,6 +3923,20 @@ public final class Utilities {
       throw new IOException(nfe);
     }
     return footerCount;
+  }
+
+  private static int getHeaderOrFooterCount(TableDesc table,
+      String propertyName) {
+    int count =
+        Integer.parseInt(table.getProperties().getProperty(propertyName, "0"));
+    if (count > 0 && table.getInputFileFormatClass() != null
+        && !TextInputFormat.class
+        .isAssignableFrom(table.getInputFileFormatClass())) {
+      LOG.warn(propertyName
+          + "  is only valid for TextInputFormat, ignoring the value.");
+      count = 0;
+    }
+    return count;
   }
 
   /**
