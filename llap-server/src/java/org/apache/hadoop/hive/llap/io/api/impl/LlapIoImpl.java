@@ -100,8 +100,7 @@ public class LlapIoImpl implements LlapIo<VectorizedRowBatch> {
   private final LowLevelCache dataCache;
   private final BufferUsageManager bufferManager;
   private final Configuration daemonConf;
-  private final LowLevelCacheMemoryManager memoryManager;
-
+  private LowLevelCachePolicy cachePolicy;
 
   private LlapIoImpl(Configuration conf) throws IOException {
     this.daemonConf = conf;
@@ -144,38 +143,37 @@ public class LlapIoImpl implements LlapIo<VectorizedRowBatch> {
       LowLevelCachePolicy cp = useLrfu ? new LowLevelLrfuCachePolicy(
           minAllocSize, totalMemorySize, conf) : new LowLevelFifoCachePolicy();
       boolean trackUsage = HiveConf.getBoolVar(conf, HiveConf.ConfVars.LLAP_TRACK_CACHE_USAGE);
-      LowLevelCachePolicy cachePolicyWrapper;
       if (trackUsage) {
-        cachePolicyWrapper = new CacheContentsTracker(cp);
+        this.cachePolicy = new CacheContentsTracker(cp);
       } else {
-        cachePolicyWrapper = cp;
+        this.cachePolicy = cp;
       }
       // Allocator uses memory manager to request memory, so create the manager next.
-      this.memoryManager = new LowLevelCacheMemoryManager(
-          totalMemorySize, cachePolicyWrapper, cacheMetrics);
+      LowLevelCacheMemoryManager memManager = new LowLevelCacheMemoryManager(
+          totalMemorySize, cachePolicy, cacheMetrics);
       cacheMetrics.setCacheCapacityTotal(totalMemorySize);
       // Cache uses allocator to allocate and deallocate, create allocator and then caches.
-      BuddyAllocator allocator = new BuddyAllocator(conf, memoryManager, cacheMetrics);
+      BuddyAllocator allocator = new BuddyAllocator(conf, memManager, cacheMetrics);
       this.allocator = allocator;
       this.memoryDump = allocator;
       LowLevelCacheImpl cacheImpl = new LowLevelCacheImpl(
-          cacheMetrics, cachePolicyWrapper, allocator, true);
+          cacheMetrics, cachePolicy, allocator, true);
       dataCache = cacheImpl;
       if (isEncodeEnabled) {
         SerDeLowLevelCacheImpl serdeCacheImpl = new SerDeLowLevelCacheImpl(
-            cacheMetrics, cachePolicyWrapper, allocator);
+            cacheMetrics, cachePolicy, allocator);
         serdeCache = serdeCacheImpl;
       }
 
       boolean useGapCache = HiveConf.getBoolVar(conf, ConfVars.LLAP_CACHE_ENABLE_ORC_GAP_CACHE);
       metadataCache = new MetadataCache(
-          allocator, memoryManager, cachePolicyWrapper, useGapCache, cacheMetrics);
+          allocator, memManager, cachePolicy, useGapCache, cacheMetrics);
       fileMetadataCache = metadataCache;
       // And finally cache policy uses cache to notify it of eviction. The cycle is complete!
       EvictionDispatcher e = new EvictionDispatcher(
           dataCache, serdeCache, metadataCache, allocator);
-      cachePolicyWrapper.setEvictionListener(e);
-      cachePolicyWrapper.setParentDebugDumper(e);
+      cachePolicy.setEvictionListener(e);
+      cachePolicy.setParentDebugDumper(e);
 
       cacheImpl.startThreads(); // Start the cache threads.
       bufferManager = bufferManagerOrc = cacheImpl; // Cache also serves as buffer manager.
@@ -187,7 +185,6 @@ public class LlapIoImpl implements LlapIo<VectorizedRowBatch> {
       SimpleBufferManager sbm = new SimpleBufferManager(allocator, cacheMetrics);
       bufferManager = bufferManagerOrc = bufferManagerGeneric = sbm;
       dataCache = sbm;
-      this.memoryManager = null;
     }
     // IO thread pool. Listening is used for unhandled errors for now (TODO: remove?)
     int numThreads = HiveConf.getIntVar(conf, HiveConf.ConfVars.LLAP_IO_THREADPOOL_SIZE);
@@ -219,8 +216,8 @@ public class LlapIoImpl implements LlapIo<VectorizedRowBatch> {
 
   @Override
   public long purge() {
-    if (memoryManager != null) {
-      return memoryManager.purge();
+    if (cachePolicy != null) {
+      return cachePolicy.purge();
     }
     return 0;
   }
