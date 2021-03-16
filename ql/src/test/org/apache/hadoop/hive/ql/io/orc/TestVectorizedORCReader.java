@@ -75,6 +75,9 @@ public class TestVectorizedORCReader {
     fs.setWorkingDirectory(workDir);
     testFilePath = new Path("TestVectorizedORCReader.testDump.orc");
     fs.delete(testFilePath, false);
+
+    long orcMemoryPool = 512L * 1024 * 1024;
+    OrcFile.setupOrcMemoryManager(orcMemoryPool);   // for MR3
   }
 
   @SuppressWarnings("unused")

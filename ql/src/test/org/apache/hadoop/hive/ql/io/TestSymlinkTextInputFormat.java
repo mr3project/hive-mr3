@@ -104,7 +104,7 @@ public class TestSymlinkTextInputFormat extends TestCase {
    * file, and then create one symlink file containing these 2 files. Normally
    * without combine, it will return at least 2 splits
    */
-  public void testCombine() throws Exception {
+  /* public void testCombine() throws Exception {   // ignore because TezTask is not MapRedTask
     JobConf newJob = new JobConf(job);
     FileSystem fs = dataDir1.getFileSystem(newJob);
     int symbolLinkedFileSize = 0;
@@ -199,7 +199,7 @@ public class TestSymlinkTextInputFormat extends TestCase {
         drv.run("drop table text_symlink_text").getResponseCode();
       }
     }
-  }
+  } */
 
   /**
    * Test scenario: Two data directories, one symlink file that contains two

@@ -159,7 +159,7 @@ public class CliConfigs {
         setCleanupScript("q_test_cleanup.sql");
 
         setHiveConfDir("data/conf/llap");
-        setClusterType(MiniClusterType.llap);
+        setClusterType(MiniClusterType.tez);   // for MR3
         setMetastoreType(MetastoreType.sql);
       } catch (Exception e) {
         throw new RuntimeException("can't construct cliconfig", e);
@@ -241,9 +241,8 @@ public class CliConfigs {
         setCleanupScript("q_test_cleanup.sql");
 
         setHiveConfDir("data/conf/llap");
-        setClusterType(MiniClusterType.llap_local);
+        setClusterType(MiniClusterType.tez_local);   // for MR3
         setMetastoreType(MetastoreType.sql);
-        setFsType(QTestUtil.FsType.local);
       } catch (Exception e) {
         throw new RuntimeException("can't construct cliconfig", e);
       }

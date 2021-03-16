@@ -429,24 +429,14 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
 
   protected void init(JobConf job) {
     if (mrwork == null || pathToPartitionInfo == null) {
-      if (HiveConf.getVar(job, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+      String engine = HiveConf.getVar(job, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+      if (engine.equals("mr3") || engine.equals("tez")) {
         mrwork = (MapWork) Utilities.getMergeWork(job);
         if (mrwork == null) {
           mrwork = Utilities.getMapWork(job);
         }
       } else {
         mrwork = Utilities.getMapWork(job);
-      }
-
-      // Prune partitions
-      if (HiveConf.getVar(job, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("spark")
-          && HiveConf.isSparkDPPAny(job)) {
-        SparkDynamicPartitionPruner pruner = new SparkDynamicPartitionPruner();
-        try {
-          pruner.prune(mrwork, job);
-        } catch (Exception e) {
-          throw new RuntimeException(e);
-        }
       }
 
       pathToPartitionInfo = mrwork.getPathToPartitionInfo();
@@ -654,13 +644,12 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
 
   Path[] getInputPaths(JobConf job) throws IOException {
     Path[] dirs;
-    if (HiveConf.getVar(job, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("spark")) {
-      dirs = mrwork.getPathToPartitionInfo().keySet().toArray(new Path[]{});
-    } else {
+    {
       dirs = FileInputFormat.getInputPaths(job);
       if (dirs.length == 0) {
         // on tez we're avoiding to duplicate the file info in FileInputFormat.
-        if (HiveConf.getVar(job, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+        String engine = HiveConf.getVar(job, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+        if (engine.equals("mr3") || engine.equals("tez")) {
           try {
             List<Path> paths = Utilities.getInputPathsTez(job, mrwork);
             dirs = paths.toArray(new Path[paths.size()]);

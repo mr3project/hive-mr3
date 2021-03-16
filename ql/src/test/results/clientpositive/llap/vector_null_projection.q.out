@@ -203,7 +203,7 @@ STAGE PLANS:
             Execution mode: llap
             Reduce Vectorization:
                 enabled: true
-                enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
+                enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine mr3 IN [mr3, tez] IS true
                 notVectorizedReason: Key expression for GROUPBY operator: Vectorizing data type void not supported when mode = PROJECTION
                 vectorized: false
             Reduce Operator Tree:

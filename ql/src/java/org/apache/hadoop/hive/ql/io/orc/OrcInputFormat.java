@@ -39,6 +39,7 @@ import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -174,6 +175,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
   }
 
   private static final Logger LOG = LoggerFactory.getLogger(OrcInputFormat.class);
+  private static final boolean isDebugEnabled = LOG.isDebugEnabled();
   static final HadoopShims SHIMS = ShimLoader.getHadoopShims();
 
   private static final long DEFAULT_MIN_SPLIT_SIZE = 16 * 1024 * 1024;
@@ -497,13 +499,17 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
                                 boolean isOriginal) {
     String neededColumnNames = getNeededColumnNamesString(conf);
     if (neededColumnNames == null) {
-      LOG.debug("No ORC pushdown predicate - no column names");
+      if (isDebugEnabled) {
+        LOG.debug("No ORC pushdown predicate - no column names");
+      }
       options.searchArgument(null, null);
       return;
     }
     SearchArgument sarg = ConvertAstToSearchArg.createFromConf(conf);
     if (sarg == null) {
-      LOG.debug("No ORC pushdown predicate");
+      if (isDebugEnabled) {
+        LOG.debug("No ORC pushdown predicate");
+      }
       options.searchArgument(null, null);
       return;
     }
@@ -517,11 +523,15 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
 
   static boolean canCreateSargFromConf(Configuration conf) {
     if (getNeededColumnNamesString(conf) == null) {
-      LOG.debug("No ORC pushdown predicate - no column names");
+      if (isDebugEnabled) {
+        LOG.debug("No ORC pushdown predicate - no column names");
+      }
       return false;
     }
     if (!ConvertAstToSearchArg.canCreateFromConf(conf)) {
-      LOG.debug("No ORC pushdown predicate");
+      if (isDebugEnabled) {
+        LOG.debug("No ORC pushdown predicate");
+      }
       return false;
     }
     return true;
@@ -667,9 +677,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
 
       synchronized (Context.class) {
         if (threadPool == null) {
-          threadPool = Executors.newFixedThreadPool(numThreads,
-              new ThreadFactoryBuilder().setDaemon(true)
-                  .setNameFormat("ORC_GET_SPLITS #%d").build());
+          threadPool = Executors.newFixedThreadPool(numThreads, new OrcGetSplitsThreadFactory());
         }
 
         // TODO: local cache is created once, so the configs for future queries will not be honored.
@@ -681,7 +689,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
           boolean useExternalCache = HiveConf.getBoolVar(
               conf, HiveConf.ConfVars.HIVE_ORC_MS_FOOTER_CACHE_ENABLED);
           if (useExternalCache) {
-            if (LOG.isDebugEnabled()) {
+            if (isDebugEnabled) {
               LOG.debug(
                 "Turning off hive.orc.splits.ms.footer.cache.enabled since it is not fully supported yet");
             }
@@ -1562,11 +1570,11 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
         }
         lastIdx = index;
         String debugStr = null;
-        if (LOG.isDebugEnabled()) {
+        if (isDebugEnabled) {
           debugStr = current.toString();
         }
         current = generateOrUpdateSplit(splits, current, si.getOffset(), si.getLength(), null);
-        if (LOG.isDebugEnabled()) {
+        if (isDebugEnabled) {
           LOG.debug("Updated split from {" + index + ": " + si.getOffset() + ", "
               + si.getLength() + "} and "+ debugStr + " to " + current);
         }
@@ -1767,7 +1775,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     if (readerSchema != null) {
       readerTypes = OrcUtils.getOrcTypes(readerSchema);
     }
-    if (LOG.isDebugEnabled()) {
+    if (isDebugEnabled) {
       LOG.debug("Generate splits schema evolution property " + isSchemaEvolution +
         " reader schema " + (readerSchema == null ? "NULL" : readerSchema.toString()) +
         " ACID scan property " + isAcidTableScan);
@@ -1813,7 +1821,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
             allowSyntheticFileIds);
 
         for (SplitStrategy<?> splitStrategy : splitStrategies) {
-          if (LOG.isDebugEnabled()) {
+          if (isDebugEnabled) {
             LOG.debug("Split strategy: {}", splitStrategy);
           }
 
@@ -1856,7 +1864,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
           + context.numFilesCounter.get());
     }
 
-    if (LOG.isDebugEnabled()) {
+    if (isDebugEnabled) {
       for (OrcSplit split : splits) {
         LOG.debug(split + " projected_columns_uncompressed_size: "
             + split.getColumnarProjectionSize());
@@ -1928,7 +1936,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
   @Override
   public InputSplit[] getSplits(JobConf job,
                                 int numSplits) throws IOException {
-    if (LOG.isDebugEnabled()) {
+    if (isDebugEnabled) {
       LOG.debug("getSplits started");
     }
     Configuration conf = job;
@@ -1938,7 +1946,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     }
     List<OrcSplit> result = generateSplitsInfo(conf,
         new Context(conf, numSplits, createExternalCaches()));
-    if (LOG.isDebugEnabled()) {
+    if (isDebugEnabled) {
       LOG.debug("getSplits finished");
     }
     return result.toArray(new InputSplit[result.size()]);
@@ -2210,7 +2218,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     for (int i = 0; i < includeStripe.length; ++i) {
       includeStripe[i] = (i >= stripeStats.size()) ||
           isStripeSatisfyPredicate(stripeStats.get(i), sarg, filterColumns, evolution);
-      if (LOG.isDebugEnabled() && !includeStripe[i]) {
+      if (isDebugEnabled && !includeStripe[i]) {
         LOG.debug("Eliminating ORC stripe-" + i + " of file '" + filePath
             + "'  as it did not satisfy predicate condition.");
       }

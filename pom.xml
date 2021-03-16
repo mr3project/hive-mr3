@@ -96,7 +96,7 @@
     <!-- Plugin and Plugin Dependency Versions -->
     <ant.contrib.version>1.0b3</ant.contrib.version>
     <datanucleus.maven.plugin.version>3.3.0-release</datanucleus.maven.plugin.version>
-    <maven.test.jvm.args>-Xmx2048m</maven.test.jvm.args>
+    <maven.test.jvm.args>-Xmx20480m</maven.test.jvm.args>
     <maven.antrun.plugin.version>1.7</maven.antrun.plugin.version>
     <maven.assembly.plugin.version>2.3</maven.assembly.plugin.version>
     <maven.checkstyle.plugin.version>2.17</maven.checkstyle.plugin.version>
@@ -147,7 +147,7 @@
     <guava.version>19.0</guava.version>
     <groovy.version>2.4.11</groovy.version>
     <h2database.version>1.3.166</h2database.version>
-    <hadoop.version>3.1.0</hadoop.version>
+    <hadoop.version>3.1.2</hadoop.version>
     <hadoop.bin.path>${basedir}/${hive.path.to.root}/testutils/hadoop</hadoop.bin.path>
     <hamcrest.version>1.3</hamcrest.version>
     <hbase.version>2.0.0-alpha4</hbase.version>
@@ -159,7 +159,7 @@
     <httpcomponents.client.version>4.5.2</httpcomponents.client.version>
     <httpcomponents.core.version>4.4.4</httpcomponents.core.version>
     <ivy.version>2.4.0</ivy.version>
-    <jackson.version>2.9.5</jackson.version>
+    <jackson.version>2.9.9</jackson.version>
     <jamon.plugin.version>2.3.4</jamon.plugin.version>
     <jamon-runtime.version>2.3.1</jamon-runtime.version>
     <javaewah.version>0.3.2</javaewah.version>
@@ -180,7 +180,7 @@
     <junit.version>4.11</junit.version>
     <kryo.version>3.0.3</kryo.version>
     <libfb303.version>0.9.3</libfb303.version>
-    <libthrift.version>0.9.3</libthrift.version>
+    <libthrift.version>0.9.3-1</libthrift.version>
     <log4j2.version>2.10.0</log4j2.version>
     <opencsv.version>2.3</opencsv.version>
     <orc.version>1.5.6</orc.version>
@@ -188,20 +188,20 @@
     <powermock.version>1.7.4</powermock.version>
     <mina.version>2.0.0-M5</mina.version>
     <netty.version>4.1.17.Final</netty.version>
-    <netty3.version>3.10.5.Final</netty3.version>
+    <netty3.version>3.10.6.Final</netty3.version>
     <parquet.version>1.10.0</parquet.version>
     <pig.version>0.16.0</pig.version>
     <plexus.version>1.5.6</plexus.version>
     <protobuf.version>2.5.0</protobuf.version>
     <stax.version>1.0.1</stax.version>
-    <slf4j.version>1.7.10</slf4j.version>
+    <slf4j.version>1.7.30</slf4j.version>
     <ST4.version>4.0.4</ST4.version>
-    <storage-api.version>2.7.0</storage-api.version>
-    <tez.version>0.9.1</tez.version>
+    <storage-api.version>2.6.1.mr3</storage-api.version>
+    <tez.version>0.9.1.mr3.1.0</tez.version>
     <super-csv.version>2.2.0</super-csv.version>
     <spark.version>2.3.0</spark.version>
     <scala.binary.version>2.11</scala.binary.version>
-    <scala.version>2.11.8</scala.version>
+    <scala.version>2.11.12</scala.version>
     <tempus-fugit.version>1.1</tempus-fugit.version>
     <snappy.version>1.1.4</snappy.version>
     <wadl-resourcedoc-doclet.version>1.4</wadl-resourcedoc-doclet.version>
@@ -214,6 +214,7 @@
     <jsr305.version>3.0.0</jsr305.version>
     <tephra.version>0.6.0</tephra.version>
     <gson.version>2.2.4</gson.version>
+    <mr3.version>1.0</mr3.version>
   </properties>
 
   <repositories>
@@ -1190,7 +1191,7 @@
                   <onlyWhenRelease>true</onlyWhenRelease>
                 </requireReleaseDeps>
               </rules>
-              <fail>true</fail>
+              <fail>false</fail>
             </configuration>
           </execution>
           <execution>

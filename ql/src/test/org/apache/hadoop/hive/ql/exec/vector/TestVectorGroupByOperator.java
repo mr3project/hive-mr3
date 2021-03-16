@@ -288,6 +288,10 @@ public class TestVectorGroupByOperator {
         (VectorGroupByOperator) Vectorizer.vectorizeGroupByOperator(groupByOp, ctx, vectorDesc);
 
     FakeCaptureVectorToRowOutputOperator out = FakeCaptureVectorToRowOutputOperator.addCaptureOutputChild(cCtx, vgo);
+
+    // MR3 always uses getMaxMemoryAvailable()
+    vgo.getConf().setMaxMemoryAvailable(maxMemory);
+
     vgo.initialize(hconf, null);
 
     long expected = vgo.getMaxMemory();
@@ -1933,6 +1937,10 @@ public class TestVectorGroupByOperator {
         (VectorGroupByOperator) Vectorizer.vectorizeGroupByOperator(groupByOp, ctx, vectorGroupByDesc);
 
     FakeCaptureVectorToRowOutputOperator out = FakeCaptureVectorToRowOutputOperator.addCaptureOutputChild(cCtx, vgo);
+
+    // MR3 always uses getMaxMemoryAvailable()
+    vgo.getConf().setMaxMemoryAvailable(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax());
+
     vgo.initialize(hconf, null);
     out.setOutputInspector(new FakeCaptureVectorToRowOutputOperator.OutputInspector() {
 
@@ -2058,6 +2066,10 @@ public class TestVectorGroupByOperator {
     }
 
     FakeCaptureVectorToRowOutputOperator out = FakeCaptureVectorToRowOutputOperator.addCaptureOutputChild(cCtx, vgo);
+
+    // MR3 always uses getMaxMemoryAvailable()
+    vgo.getConf().setMaxMemoryAvailable(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax());
+
     vgo.initialize(hconf, null);
     out.setOutputInspector(new FakeCaptureVectorToRowOutputOperator.OutputInspector() {
 
@@ -2108,7 +2120,6 @@ public class TestVectorGroupByOperator {
         }
 
         String keyValueAsString = String.format("%s", keyValue);
-
         assertTrue(expected.containsKey(keyValue));
         Object expectedValue = expected.get(keyValue);
         Object value = fields[1];
@@ -2473,6 +2484,10 @@ public class TestVectorGroupByOperator {
         (VectorGroupByOperator) Vectorizer.vectorizeGroupByOperator(groupByOp, ctx, vectorDesc);
 
     FakeCaptureVectorToRowOutputOperator out = FakeCaptureVectorToRowOutputOperator.addCaptureOutputChild(cCtx, vgo);
+
+    // MR3 always uses getMaxMemoryAvailable()
+    vgo.getConf().setMaxMemoryAvailable(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax());
+
     vgo.initialize(hconf, null);
 
     for (VectorizedRowBatch unit: data) {
@@ -2509,6 +2524,10 @@ public class TestVectorGroupByOperator {
         (VectorGroupByOperator) Vectorizer.vectorizeGroupByOperator(groupByOp, ctx, vectorDesc);
 
     FakeCaptureVectorToRowOutputOperator out = FakeCaptureVectorToRowOutputOperator.addCaptureOutputChild(cCtx, vgo);
+
+    // MR3 always uses getMaxMemoryAvailable()
+    vgo.getConf().setMaxMemoryAvailable(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax());
+
     vgo.initialize(hconf, null);
 
     for (VectorizedRowBatch unit: data) {
@@ -2547,6 +2566,10 @@ public class TestVectorGroupByOperator {
         (VectorGroupByOperator) Vectorizer.vectorizeGroupByOperator(groupByOp, ctx, vectorDesc);
 
     FakeCaptureVectorToRowOutputOperator out = FakeCaptureVectorToRowOutputOperator.addCaptureOutputChild(cCtx, vgo);
+
+    // MR3 always uses getMaxMemoryAvailable()
+    vgo.getConf().setMaxMemoryAvailable(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax());
+
     vgo.initialize(hconf, null);
 
     for (VectorizedRowBatch unit: data) {
@@ -2585,6 +2608,10 @@ public class TestVectorGroupByOperator {
         (VectorGroupByOperator) Vectorizer.vectorizeGroupByOperator(groupByOp, ctx, vectorDesc);
 
     FakeCaptureVectorToRowOutputOperator out = FakeCaptureVectorToRowOutputOperator.addCaptureOutputChild(cCtx, vgo);
+
+    // MR3 always uses getMaxMemoryAvailable()
+    vgo.getConf().setMaxMemoryAvailable(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax());
+
     vgo.initialize(hconf, null);
 
     for (VectorizedRowBatch unit : data) {
@@ -2624,6 +2651,10 @@ public class TestVectorGroupByOperator {
         (VectorGroupByOperator) Vectorizer.vectorizeGroupByOperator(groupByOp, ctx, vectorDesc);
 
     FakeCaptureVectorToRowOutputOperator out = FakeCaptureVectorToRowOutputOperator.addCaptureOutputChild(cCtx, vgo);
+
+    // MR3 always uses getMaxMemoryAvailable()
+    vgo.getConf().setMaxMemoryAvailable(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax());
+
     vgo.initialize(hconf, null);
 
     for (VectorizedRowBatch unit: data) {
@@ -2661,6 +2692,10 @@ public class TestVectorGroupByOperator {
         (VectorGroupByOperator) Vectorizer.vectorizeGroupByOperator(groupByOp, ctx, vectorDesc);
 
     FakeCaptureVectorToRowOutputOperator out = FakeCaptureVectorToRowOutputOperator.addCaptureOutputChild(cCtx, vgo);
+
+    // MR3 always uses getMaxMemoryAvailable()
+    vgo.getConf().setMaxMemoryAvailable(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax());
+
     vgo.initialize(hconf, null);
 
     for (VectorizedRowBatch unit: data) {
@@ -2702,6 +2737,10 @@ public class TestVectorGroupByOperator {
         (VectorGroupByOperator) Vectorizer.vectorizeGroupByOperator(groupByOp, ctx, vectorDesc);
 
     FakeCaptureVectorToRowOutputOperator out = FakeCaptureVectorToRowOutputOperator.addCaptureOutputChild(cCtx, vgo);
+
+    // MR3 always uses getMaxMemoryAvailable()
+    vgo.getConf().setMaxMemoryAvailable(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax());
+
     vgo.initialize(hconf, null);
     out.setOutputInspector(new FakeCaptureVectorToRowOutputOperator.OutputInspector() {
 
@@ -2774,6 +2813,10 @@ public class TestVectorGroupByOperator {
         (VectorGroupByOperator) Vectorizer.vectorizeGroupByOperator(groupByOp, ctx, vectorDesc);
 
     FakeCaptureVectorToRowOutputOperator out = FakeCaptureVectorToRowOutputOperator.addCaptureOutputChild(cCtx, vgo);
+
+    // MR3 always uses getMaxMemoryAvailable()
+    vgo.getConf().setMaxMemoryAvailable(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax());
+
     vgo.initialize(hconf, null);
     out.setOutputInspector(new FakeCaptureVectorToRowOutputOperator.OutputInspector() {
 
