@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
@@ -100,8 +101,7 @@ public class Timestamp implements Comparable<Timestamp> {
 
   private LocalDateTime localDateTime;
 
-  /* Private constructor */
-  private Timestamp(LocalDateTime localDateTime) {
+  public Timestamp(LocalDateTime localDateTime) {
     this.localDateTime = localDateTime != null ? localDateTime : EPOCH;
   }
 
@@ -160,6 +160,10 @@ public class Timestamp implements Comparable<Timestamp> {
     return localDateTime.toInstant(ZoneOffset.UTC).toEpochMilli();
   }
 
+  public long toEpochMilli(ZoneId id) {
+    return localDateTime.atZone(id).toInstant().toEpochMilli();
+  }
+
   public void setTimeInMillis(long epochMilli) {
     localDateTime = LocalDateTime.ofInstant(
         Instant.ofEpochMilli(epochMilli), ZoneOffset.UTC);
@@ -208,6 +212,11 @@ public class Timestamp implements Comparable<Timestamp> {
   public static Timestamp ofEpochMilli(long epochMilli) {
     return new Timestamp(LocalDateTime
         .ofInstant(Instant.ofEpochMilli(epochMilli), ZoneOffset.UTC));
+  }
+
+  public static Timestamp ofEpochMilli(long epochMilli, ZoneId id) {
+    return new Timestamp(LocalDateTime
+        .ofInstant(Instant.ofEpochMilli(epochMilli), id));
   }
 
   public static Timestamp ofEpochMilli(long epochMilli, int nanos) {
