@@ -55,6 +55,7 @@ import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.exec.FetchTask;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.Hive;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde.serdeConstants;
@@ -314,7 +315,11 @@ public class SQLOperation extends ExecuteStatementOperation {
         @Override
         public Object run() throws HiveSQLException {
           assert (!parentHive.allowClose());
-          Hive.set(parentHive);
+          try {
+            Hive.set(parentSessionState.getHiveDb());
+          } catch (HiveException e) {
+            throw new HiveSQLException(e);
+          }
           // TODO: can this result in cross-thread reuse of session state?
           SessionState.setCurrentSessionState(parentSessionState);
           PerfLogger.setPerfLogger(SessionState.getPerfLogger());
