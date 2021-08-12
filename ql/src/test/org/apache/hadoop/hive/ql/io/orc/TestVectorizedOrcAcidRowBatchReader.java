@@ -101,6 +101,9 @@ public class TestVectorizedOrcAcidRowBatchReader {
     conf.setBoolean(HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED.varname, true);
     conf.set(HiveConf.ConfVars.HIVE_ORC_SPLIT_STRATEGY.varname, "BI");
 
+    long orcMemoryPool = 512L * 1024 * 1024;
+    OrcFile.setupOrcMemoryManager(orcMemoryPool);   // for MR3
+
     Path workDir = new Path(System.getProperty("test.tmp.dir",
         "target" + File.separator + "test" + File.separator + "tmp"));
     root = new Path(workDir, "TestVectorizedOrcAcidRowBatch.testDump");

@@ -51,7 +51,8 @@ public class HiveDefaultRelMetadataProvider {
 
     // Create cost metadata provider
     final HiveCostModel cm;
-    if (HiveConf.getVar(this.hiveConf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")
+    String engine = HiveConf.getVar(this.hiveConf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+    if ((engine.equals("mr3") || engine.equals("tez"))
             && HiveConf.getBoolVar(this.hiveConf, HiveConf.ConfVars.HIVE_CBO_EXTENDED_COST_MODEL)) {
       cm = HiveOnTezCostModel.getCostModel(hiveConf);
     } else {

@@ -61,8 +61,8 @@ public class Optimizer {
    */
   public void initialize(HiveConf hiveConf) {
 
-    boolean isTezExecEngine = HiveConf.getVar(hiveConf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez");
-    boolean isSparkExecEngine = HiveConf.getVar(hiveConf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("spark");
+    String engine = HiveConf.getVar(hiveConf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+    boolean isMR3ExecEngine = engine.equals("mr3") || engine.equals("tez");
     boolean bucketMapJoinOptimizer = false;
 
     transformations = new ArrayList<Transform>();
@@ -139,11 +139,11 @@ public class Optimizer {
     }
     transformations.add(new ColumnPruner());
     if (HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVECOUNTDISTINCTOPTIMIZER)
-        && (HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVE_IN_TEST) || isTezExecEngine)) {
+        && (HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVE_IN_TEST) || isMR3ExecEngine)) {
       transformations.add(new CountDistinctRewriteProc());
     }
     if (HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVE_OPTIMIZE_SKEWJOIN_COMPILETIME)) {
-      if (!isTezExecEngine) {
+      if (!isMR3ExecEngine) {
         transformations.add(new SkewJoinOptimizer());
       } else {
         LOG.warn("Skew join is currently not supported in tez! Disabling the skew join optimization.");
@@ -151,12 +151,11 @@ public class Optimizer {
     }
     transformations.add(new SamplePruner());
 
-    MapJoinProcessor mapJoinProcessor = isSparkExecEngine ? new SparkMapJoinProcessor()
-      : new MapJoinProcessor();
+    MapJoinProcessor mapJoinProcessor = new MapJoinProcessor();
     transformations.add(mapJoinProcessor);
 
     if ((HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVEOPTBUCKETMAPJOIN))
-      && !isTezExecEngine && !isSparkExecEngine) {
+      && !isMR3ExecEngine) {
       transformations.add(new BucketMapJoinOptimizer());
       bucketMapJoinOptimizer = true;
     }
@@ -164,7 +163,7 @@ public class Optimizer {
     // If optimize hive.optimize.bucketmapjoin.sortedmerge is set, add both
     // BucketMapJoinOptimizer and SortedMergeBucketMapJoinOptimizer
     if ((HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVEOPTSORTMERGEBUCKETMAPJOIN))
-        && !isTezExecEngine && !isSparkExecEngine) {
+        && !isMR3ExecEngine) {
       if (!bucketMapJoinOptimizer) {
         // No need to add BucketMapJoinOptimizer twice
         transformations.add(new BucketMapJoinOptimizer());
@@ -205,7 +204,7 @@ public class Optimizer {
     if(HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVEOPTCORRELATION) &&
         !HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVEGROUPBYSKEW) &&
         !HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVE_OPTIMIZE_SKEWJOIN_COMPILETIME) &&
-        !isTezExecEngine && !isSparkExecEngine) {
+        !isMR3ExecEngine) {
       transformations.add(new CorrelationOptimizer());
     }
     if (HiveConf.getFloatVar(hiveConf, HiveConf.ConfVars.HIVELIMITPUSHDOWNMEMORYUSAGE) > 0) {
@@ -214,7 +213,7 @@ public class Optimizer {
     if(HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVEOPTIMIZEMETADATAQUERIES)) {
       transformations.add(new StatsOptimizer());
     }
-    if (pctx.getContext().isExplainSkipExecution() && !isTezExecEngine && !isSparkExecEngine) {
+    if (pctx.getContext().isExplainSkipExecution() && !isMR3ExecEngine) {
       transformations.add(new AnnotateWithStatistics());
       transformations.add(new AnnotateWithOpTraits());
     }

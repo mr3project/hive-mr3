@@ -573,25 +573,47 @@ public class CompactorMR {
       mrJob = job;
     }
 
-    LOG.info("Submitting " + compactionType + " compaction job '" +
-      job.getJobName() + "' to " + job.getQueueName() + " queue.  " +
-      "(current delta dirs count=" + curDirNumber +
-      ", obsolete delta dirs count=" + obsoleteDirNumber + ". TxnIdRange[" + minTxn + "," + maxTxn + "]");
-    JobClient jc = null;
-    try {
-      jc = new JobClient(job);
-      RunningJob rj = jc.submitJob(job);
-      LOG.info("Submitted compaction job '" + job.getJobName() +
-          "' with jobID=" + rj.getID() + " compaction ID=" + id);
-      txnHandler.setHadoopJobId(rj.getID().toString(), id);
-      rj.waitForCompletion();
-      if (!rj.isSuccessful()) {
-        throw new IOException((compactionType == CompactionType.MAJOR ? "Major" : "Minor") +
-               " compactor job failed for " + jobName + "! Hadoop JobId: " + rj.getID());
+    boolean submitJobUsingMr3 = hiveConf.getBoolVar(ConfVars.HIVE_MR3_COMPACTION_USING_MR3);
+    if (submitJobUsingMr3) {
+      try {
+        job.setJobName("MR3-compaction-" + id);
+        LOG.info("Submitting " + compactionType + " compaction job '" +
+              job.getJobName() + "' to MR3 " +
+              "(current delta dirs count=" + curDirNumber +
+              ", obsolete delta dirs count=" + obsoleteDirNumber + ". TxnIdRange[" + minTxn + "," + maxTxn + "]");
+        txnHandler.setHadoopJobId(job.getJobName(), id);
+        // Each compaction job creates its own MR3CompactionHelper and discards it because:
+        //  1. the retry logic is already implemented inside the compaction thread itself.
+        //  2. MR3CompactionHelper is not created frequently.
+        new MR3CompactionHelper(hiveConf).submitJobToMr3(job);
+      } catch (Exception e) {
+        LOG.info("Compaction using MR3 failed. Retrying compaction using MR", e);
+        submitJobUsingMr3 = false;
       }
-    } finally {
-      if (jc!=null) {
-        jc.close();
+    }
+
+    if (!submitJobUsingMr3) {
+      job.setJobName("MR-compaction-" + id);
+      LOG.info("Submitting " + compactionType + " compaction job '" +
+              job.getJobName() + "' to " + job.getQueueName() + " queue.  " +
+              "(current delta dirs count=" + curDirNumber +
+              ", obsolete delta dirs count=" + obsoleteDirNumber + ". TxnIdRange[" + minTxn + "," + maxTxn + "]");
+      JobClient jc = null;
+      try {
+        jc = new JobClient(job);
+        RunningJob rj = jc.submitJob(job);
+        LOG.info("Submitted compaction job '" + job.getJobName() +
+                "' with jobID=" + rj.getID() + " compaction ID=" + id);
+        txnHandler.setHadoopJobId(rj.getID().toString(), id);
+        rj.waitForCompletion();
+        if (!rj.isSuccessful()) {
+          throw new IOException((compactionType == CompactionType.MAJOR ? "Major" : "Minor") +
+                  " compactor job failed for " + jobName + "! Hadoop JobId: " + rj.getID());
+        }
+      } finally {
+        if (jc != null) {
+          jc.close();
+        }
       }
     }
   }
