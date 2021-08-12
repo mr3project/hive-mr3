@@ -28,7 +28,6 @@ EXPLAIN select *
 -- both join parts of srcpart_date_n3 and srcpart2 scans will result in partition pruning sink
 -- scan with srcpart2 will get split resulting in additional spark jobs
 -- expectation: 3 spark jobs
-set hive.spark.dynamic.partition.pruning=true;
 EXPLAIN select *
  from srcpart
  join srcpart_date_n3 on (srcpart.ds = srcpart_date_n3.ds)
@@ -38,8 +37,6 @@ EXPLAIN select *
 
 -- Restrict dpp to be enabled only for map joins
 -- expectation: 2 spark jobs
-set hive.spark.dynamic.partition.pruning.map.join.only=true;
-set hive.spark.dynamic.partition.pruning=false;
 EXPLAIN select *
  from srcpart
  join srcpart_date_n3 on (srcpart.ds = srcpart_date_n3.ds)

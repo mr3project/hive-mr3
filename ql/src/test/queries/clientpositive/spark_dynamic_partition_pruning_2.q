@@ -1,7 +1,6 @@
 SET hive.vectorized.execution.enabled=false;
 set hive.optimize.ppd=true;
 set hive.ppd.remove.duplicatefilters=true;
-set hive.spark.dynamic.partition.pruning=true;
 set hive.optimize.metadataonly=false;
 set hive.optimize.index.filter=true;
 set hive.auto.convert.join=true;
@@ -46,7 +45,6 @@ d1.label in ('foo', 'bar')
 GROUP BY d1.label
 ORDER BY d1.label;
 
-set hive.spark.dynamic.partition.pruning.max.data.size=1;
 
 EXPLAIN SELECT d1.label, count(*), sum(agg.amount)
 FROM agg_01_n0 agg,
@@ -88,7 +86,6 @@ dim_shops_n0 d1
 WHERE agg.dim_shops_id = d1.id
 and agg.dim_shops_id = 1;
 
-set hive.spark.dynamic.partition.pruning.max.data.size=1000000;
 
 EXPLAIN SELECT d1.label, count(*), sum(agg.amount)
 FROM agg_01_n0 agg,
@@ -118,7 +115,6 @@ SELECT amount FROM agg_01_n0, dim_shops_n0 WHERE dim_shops_id = id AND label = '
 UNION ALL
 SELECT amount FROM agg_01_n0, dim_shops_n0 WHERE dim_shops_id = id AND label = 'bar';
 
-set hive.spark.dynamic.partition.pruning.max.data.size=10000;
 -- Dynamic partition pruning will be removed as data size exceeds the limit;
 -- and for self join on partitioning column, it should not fail (HIVE-10559).
 explain

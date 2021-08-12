@@ -1,5 +1,4 @@
 set hive.mapred.mode=nonstrict;
-set hive.spark.use.op.stats=false;
 set hive.auto.convert.join=false;
 set hive.exec.reducers.bytes.per.reducer=500;
 

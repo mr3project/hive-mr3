@@ -174,7 +174,7 @@ public class HiveProtoLoggingHook implements ExecuteWithHookContext {
   }
 
   public enum ExecutionMode {
-    MR, TEZ, LLAP, SPARK, NONE
+    MR, TEZ, LLAP, NONE
   }
 
   static class EventLogger {
@@ -461,8 +461,6 @@ public class HiveProtoLoggingHook implements ExecuteWithHookContext {
         return ExecutionMode.TEZ;
       } else if (mrTasks.size() > 0) {
         return ExecutionMode.MR;
-      } else if (Utilities.getSparkTasks(plan.getRootTasks()).size() > 0) {
-        return ExecutionMode.SPARK;
       } else {
         return ExecutionMode.NONE;
       }
