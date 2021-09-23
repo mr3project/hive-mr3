@@ -13552,7 +13552,11 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       rootTasks.add(TaskFactory.get(new DDLWork(getInputs(), getOutputs(),
           createVwDesc)));
       addDbAndTabToOutputs(qualTabName, TableType.VIRTUAL_VIEW, false, tblProps);
-      queryState.setCommandType(HiveOperation.CREATEVIEW);
+      if (isAlterViewAs) {
+        queryState.setCommandType(HiveOperation.ALTERVIEW_AS);
+      } else {
+        queryState.setCommandType(HiveOperation.CREATEVIEW);
+      }
     }
     qb.setViewDesc(createVwDesc);
 
