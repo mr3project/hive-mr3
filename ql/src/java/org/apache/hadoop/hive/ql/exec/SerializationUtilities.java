@@ -53,8 +53,6 @@ import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.MapredWork;
 import org.apache.hadoop.hive.ql.plan.ReduceWork;
-import org.apache.hadoop.hive.ql.plan.SparkEdgeProperty;
-import org.apache.hadoop.hive.ql.plan.SparkWork;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde2.Serializer;
@@ -252,8 +250,6 @@ public class SerializationUtilities {
       kryo.register(SequenceFileInputFormat.class);
       kryo.register(RCFileInputFormat.class);
       kryo.register(HiveSequenceFileOutputFormat.class);
-      kryo.register(SparkEdgeProperty.class);
-      kryo.register(SparkWork.class);
       kryo.register(Pair.class);
       kryo.register(MemoryMonitorInfo.class);
 

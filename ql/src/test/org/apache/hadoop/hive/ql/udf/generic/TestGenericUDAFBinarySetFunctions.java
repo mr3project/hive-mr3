@@ -38,7 +38,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-import jersey.repackaged.com.google.common.collect.Lists;
+
 
 @RunWith(Parameterized.class)
 public class TestGenericUDAFBinarySetFunctions {
@@ -88,7 +88,9 @@ public class TestGenericUDAFBinarySetFunctions {
       Object r1 = runComplete(values);
       Object r2 = runPartialFinal(values);
       Object r3 = runPartial2Final(values);
-      return Lists.newArrayList(r1, r2, r3);
+      List<Object> ret = new ArrayList<>();
+      ret.add(r1); ret.add(r2); ret.add(r3);
+      return ret;
     }
 
     private Object runComplete(List<Object[]> values) throws SemanticException, HiveException {

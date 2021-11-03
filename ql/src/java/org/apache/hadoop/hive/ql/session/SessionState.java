@@ -74,7 +74,6 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManager;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
-import org.apache.hadoop.hive.ql.exec.spark.session.SparkSession;
 import org.apache.hadoop.hive.ql.exec.tez.TezSessionState;
 import org.apache.hadoop.hive.ql.history.HiveHistory;
 import org.apache.hadoop.hive.ql.history.HiveHistoryImpl;
@@ -1781,10 +1780,6 @@ public class SessionState {
     }
   }
 
-  public void closeSparkSession() {
-    // sparkSession is never used
-  }
-
   public AuthorizationMode getAuthorizationMode(){
     setupAuth();
     if(authorizer != null){
@@ -1871,15 +1866,6 @@ public class SessionState {
    */
   public void setUserIpAddress(String userIpAddress) {
     this.userIpAddress = userIpAddress;
-  }
-
-  public SparkSession getSparkSession() {
-    // sparkSession is never used
-    return null;
-  }
-
-  public void setSparkSession(SparkSession sparkSession) {
-    // sparkSession is never used
   }
 
   public MR3Session getMr3Session() {

@@ -1,6 +1,4 @@
 SET hive.vectorized.execution.enabled=false;
-set hive.spark.dynamic.partition.pruning=true;
-set hive.combine.equivalent.work.optimization=true;
 
 -- This qfile tests whether equivalent DPP sink works are combined.
 -- When combined, one DPP sink operator will have multiple target columns/works.
@@ -32,14 +30,12 @@ union all
   (select part2_n1.key, part2_n1.value from part2_n1 join src on part2_n1.p=src.key);
 
 -- verify result
-set hive.spark.dynamic.partition.pruning=false;
 
 select * from
   (select part1.key, part1.value from part1 join src on part1.p=src.key) a
 union all
   (select part2_n1.key, part2_n1.value from part2_n1 join src on part2_n1.p=src.key);
 
-set hive.spark.dynamic.partition.pruning=true;
 
 -- dpp works should be combined
 explain
@@ -54,14 +50,12 @@ union all
   (select part2_n1.key, part2_n1.value from part2_n1 join src on part2_n1.q=src.key);
 
 -- verify result
-set hive.spark.dynamic.partition.pruning=false;
 
 select * from
   (select part1.key, part1.value from part1 join src on part1.p=src.key) a
 union all
   (select part2_n1.key, part2_n1.value from part2_n1 join src on part2_n1.q=src.key);
 
-set hive.spark.dynamic.partition.pruning=true;
 
 -- target works are already combined
 explain
@@ -106,7 +100,6 @@ union all
   (select part2_n1.key, part2_n1.value from part2_n1 join top on part2_n1.q=top.key);
   
 -- verify result
-set hive.spark.dynamic.partition.pruning=false;
 
 with top as
 (select key from src order by key limit 200)
@@ -115,7 +108,6 @@ select * from
 union all
   (select part2_n1.key, part2_n1.value from part2_n1 join top on part2_n1.q=top.key);
   
-set hive.spark.dynamic.partition.pruning=true;
 
 -- dpp works should be combined
 explain
@@ -134,7 +126,6 @@ union all
   (select part2_n1.key, part2_n1.value from part2_n1 join top on part2_n1.p=top.key and part2_n1.q=top.key);
 
 -- verify result
-set hive.spark.dynamic.partition.pruning=false;
 
 with top as
 (select key, value from src order by key, value limit 200)
@@ -143,7 +134,6 @@ select * from
 union all
   (select part2_n1.key, part2_n1.value from part2_n1 join top on part2_n1.p=top.key and part2_n1.q=top.key);
 
-set hive.spark.dynamic.partition.pruning=true;
 
 -- dpp works shouldn't be combined
 explain
