@@ -3,7 +3,7 @@ set hive.explain.user=false;
 set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.fetch.task.conversion=none;
 
-SET hive.llap.io.enabled=false;
+SET hive.llap.io.enabled=true;
 set hive.llap.cache.allow.synthetic.fileid=true;
 
 -- SORT_QUERY_RESULTS

@@ -32,10 +32,9 @@ public class HashTableLoaderFactory {
   }
 
   public static HashTableLoader getLoader(Configuration hconf) {
-    if (HiveConf.getVar(hconf, ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+    String engine = HiveConf.getVar(hconf, ConfVars.HIVE_EXECUTION_ENGINE);
+    if (engine.equals("mr3") || engine.equals("tez")) {
       return new org.apache.hadoop.hive.ql.exec.tez.HashTableLoader();
-    } else if (HiveConf.getVar(hconf, ConfVars.HIVE_EXECUTION_ENGINE).equals("spark")) {
-      return new org.apache.hadoop.hive.ql.exec.spark.HashTableLoader();
     } else {
       return new org.apache.hadoop.hive.ql.exec.mr.HashTableLoader();
     }

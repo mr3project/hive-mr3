@@ -531,6 +531,9 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
   public void abort() {
     LOG.info("Received abort in operator: {}", getName());
     abortOp.set(true);
+    for (Operator<? extends OperatorDesc> op : childOperators) {
+      op.abort();
+    }
   }
 
   /**
