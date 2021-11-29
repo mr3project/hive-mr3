@@ -77,6 +77,8 @@ public class OrcFileFormatProxy implements FileFormatProxy {
   public ByteBuffer getMetadataToCache(
       FileSystem fs, Path path, ByteBuffer[] addedVals) throws IOException {
     // For now, there's nothing special to return in addedVals. Just return the footer.
-    return OrcFile.createReader(fs, path).getSerializedFileFooter();
+    try (Reader reader = OrcFile.createReader(fs, path)) {
+      return reader.getSerializedFileFooter();
+    }
   }
 }

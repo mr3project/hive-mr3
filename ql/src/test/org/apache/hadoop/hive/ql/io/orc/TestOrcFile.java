@@ -555,6 +555,7 @@ public class TestOrcFile {
     boolean[] expected = new boolean[] {false};
     boolean[] included = OrcUtils.includeColumns("", writer.getSchema());
     assertEquals(true, Arrays.equals(expected, included));
+    rows.close();
   }
 
   @Test
@@ -591,6 +592,7 @@ public class TestOrcFile {
     assertEquals(2, stats[0].getNumberOfValues());
     assertEquals(0, stats[1].getNumberOfValues());
     assertEquals(true, stats[1].hasNull());
+    rows.close();
   }
 
   @Test
@@ -659,6 +661,7 @@ public class TestOrcFile {
     assertEquals(HiveDecimal.create(1), ((DecimalColumnStatistics) stats[1]).getMinimum());
     assertEquals(HiveDecimal.create(6), ((DecimalColumnStatistics) stats[1]).getSum());
     assertEquals(true, stats[1].hasNull());
+    rows.close();
   }
 
   @Test
@@ -853,6 +856,7 @@ public class TestOrcFile {
     items = index[1].getEntryList();
     assertEquals(2,
         items.get(0).getStatistics().getIntStatistics().getMaximum());
+    reader.close();
   }
 
   @Test
@@ -1233,6 +1237,7 @@ public class TestOrcFile {
     assertEquals(false, reader.getMetadataKeys().iterator().hasNext());
     assertEquals(3, reader.getContentLength());
     assertEquals(false, reader.getStripes().iterator().hasNext());
+    reader.close();
   }
 
   @Test
@@ -1287,6 +1292,7 @@ public class TestOrcFile {
     assertEquals(3, i);
     int numStripes = reader.getStripeStatistics().size();
     assertEquals(1, numStripes);
+    reader.close();
   }
 
   /**
@@ -1338,6 +1344,7 @@ public class TestOrcFile {
             row.getFieldValue(1));
       }
     }
+    rows.close();
   }
 
   @Test
@@ -2000,6 +2007,7 @@ public class TestOrcFile {
     }
     assertEquals(25, i);
     assertEquals(2500, reader.getNumberOfRows());
+    reader.close();
   }
 
   @Test
@@ -2040,6 +2048,7 @@ public class TestOrcFile {
     // compared to 25 stripes in version 0.11 (above test case)
     assertEquals(3, i);
     assertEquals(2500, reader.getNumberOfRows());
+    reader.close();
   }
 
   @Test
@@ -2126,6 +2135,7 @@ public class TestOrcFile {
     }
     assertTrue(!rows.hasNext());
     assertEquals(3500, rows.getRowNumber());
+    rows.close();
   }
 
   @Test
@@ -2158,6 +2168,7 @@ public class TestOrcFile {
       Object row = rows.next(null);
       Assert.assertEquals(input.get(idx++).longValue(), ((LongWritable) row).get());
     }
+    rows.close();
   }
 
   static class MyList {
