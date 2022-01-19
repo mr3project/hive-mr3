@@ -46,7 +46,7 @@ public class KillTriggerActionHandler implements TriggerActionHandler<TezSession
                       sessionState.getConf());
             }
           } catch (HiveException e) {
-            LOG.warn("Unable to kill query {} for trigger violation");
+            LOG.warn("Unable to kill query {} for trigger violation", queryId);
           }
           break;
         default:

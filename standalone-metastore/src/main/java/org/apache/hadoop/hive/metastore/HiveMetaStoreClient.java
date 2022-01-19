@@ -1971,7 +1971,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
       String catName, String dbName, String tableName, List<String> partNames,
       List<String> colNames) throws TException {
     PartitionsStatsRequest rqst = new PartitionsStatsRequest(dbName, tableName, colNames,
-        partNames);
+        partNames == null ? new ArrayList<String>() : partNames);
     rqst.setCatName(catName);
     return client.get_partitions_statistics_req(rqst).getPartStats();
   }
