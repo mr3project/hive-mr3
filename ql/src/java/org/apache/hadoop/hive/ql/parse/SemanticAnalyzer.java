@@ -7445,8 +7445,6 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     case QBMetaData.DEST_DFS_FILE: {
       dest_path = new Path(qbm.getDestFileForAlias(dest));
 
-      ArrayList<ColumnInfo> colInfos = inputRR.getColumnInfos();
-
       // CTAS case: the file output format and serde are defined by the create
       // table command rather than taking the default value
       List<FieldSchema> field_schemas = null;
