@@ -929,6 +929,9 @@ public class ExprNodeDescUtils {
       return false;
     }
     for (int i = 0; i < first.size(); i++) {
+      if (first.get(i) == null || second.get(i) == null) {
+        return false;
+      }
       if (!first.get(i).isSame(second.get(i))) {
         return false;
       }
