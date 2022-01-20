@@ -95,8 +95,7 @@ public abstract class AbstractMapJoin {
     // Prepare data.  Good for ANY implementation variation.
     testData = new MapJoinTestData(rowCount, testDesc, seed, seed * 10);
 
-    ObjectRegistryImpl objectRegistry = new ObjectRegistryImpl();
-    ObjectCache.setupObjectRegistry(objectRegistry);
+    ObjectCache.setupObjectRegistryDummy();
   
     operator = setupBenchmarkImplementation(
         mapJoinImplementation, testDesc, testData);

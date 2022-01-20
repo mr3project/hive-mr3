@@ -1,4 +1,4 @@
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 select  ss_customer_sk
             ,sum(act_sales) sumsales
       from (select ss_item_sk
@@ -19,7 +19,7 @@ PREHOOK: Input: default@reason
 PREHOOK: Input: default@store_returns
 PREHOOK: Input: default@store_sales
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 select  ss_customer_sk
             ,sum(act_sales) sumsales
       from (select ss_item_sk

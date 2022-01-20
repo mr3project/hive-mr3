@@ -1,4 +1,4 @@
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 select   
          w_warehouse_name
  	,w_warehouse_sq_ft
@@ -226,7 +226,7 @@ PREHOOK: Input: default@time_dim
 PREHOOK: Input: default@warehouse
 PREHOOK: Input: default@web_sales
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 select   
          w_warehouse_name
  	,w_warehouse_sq_ft

@@ -802,7 +802,7 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree  ~/dev/hiverwgit/itests/h
     HiveConf confForTez = new HiveConf(hiveConf); // make a clone of existing hive conf
     HiveConf confForMR = new HiveConf(hiveConf);  // make a clone of existing hive conf
 
-    if (engine.equals("tez")) {
+    if (engine.equals("tez") || engine.equals("mr3")) {
       setupTez(confForTez); // one-time setup to make query able to run with Tez
     }
 
@@ -836,7 +836,7 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree  ~/dev/hiverwgit/itests/h
     List<String> rs = null;
 
     for (String query : queries) {
-      if (engine.equals("tez")) {
+      if (engine.equals("tez") || engine.equals("mr3")) {
         explain = runStatementOnDriver("explain " + query, confForTez);
         if (joinType.equals("MergeJoin")) {
           TestTxnCommands2.assertExplainHasString("Merge Join Operator", explain, "Didn't find " + joinType);

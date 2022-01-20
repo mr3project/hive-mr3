@@ -1,4 +1,4 @@
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 with wss as 
  (select d_week_seq,
         ss_store_sk,
@@ -45,7 +45,7 @@ PREHOOK: Input: default@date_dim
 PREHOOK: Input: default@store
 PREHOOK: Input: default@store_sales
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 with wss as 
  (select d_week_seq,
         ss_store_sk,
