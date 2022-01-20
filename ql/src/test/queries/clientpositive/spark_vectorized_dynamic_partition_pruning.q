@@ -1,6 +1,5 @@
 set hive.optimize.ppd=true;
 set hive.ppd.remove.duplicatefilters=true;
-set hive.spark.dynamic.partition.pruning=true;
 set hive.optimize.metadataonly=false;
 set hive.optimize.index.filter=true;
 set hive.vectorized.execution.enabled=true;
@@ -19,19 +18,15 @@ create table srcpart_double_hour stored as orc as select (hr*2) as hr, hr as hou
 -- single column, single key
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_date_n0 on (srcpart.ds = srcpart_date_n0.ds) where srcpart_date_n0.`date` = '2008-04-08';
 select count(*) from srcpart join srcpart_date_n0 on (srcpart.ds = srcpart_date_n0.ds) where srcpart_date_n0.`date` = '2008-04-08';
-set hive.spark.dynamic.partition.pruning=false;
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_date_n0 on (srcpart.ds = srcpart_date_n0.ds) where srcpart_date_n0.`date` = '2008-04-08';
 select count(*) from srcpart join srcpart_date_n0 on (srcpart.ds = srcpart_date_n0.ds) where srcpart_date_n0.`date` = '2008-04-08';
-set hive.spark.dynamic.partition.pruning=true;
 select count(*) from srcpart where ds = '2008-04-08';
 
 -- single column, single key, udf with typechange
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_date_n0 on (day(srcpart.ds) = day(srcpart_date_n0.ds)) where srcpart_date_n0.`date` = '2008-04-08';
 select count(*) from srcpart join srcpart_date_n0 on (day(srcpart.ds) = day(srcpart_date_n0.ds)) where srcpart_date_n0.`date` = '2008-04-08';
-set hive.spark.dynamic.partition.pruning=false;
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_date_n0 on (day(srcpart.ds) = day(srcpart_date_n0.ds)) where srcpart_date_n0.`date` = '2008-04-08';
 select count(*) from srcpart join srcpart_date_n0 on (day(srcpart.ds) = day(srcpart_date_n0.ds)) where srcpart_date_n0.`date` = '2008-04-08';
-set hive.spark.dynamic.partition.pruning=true;
 
 -- multiple udfs and casts
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_date_n0 on abs(negative(cast(concat(cast(day(srcpart.ds) as string), "0") as bigint)) + 10) = abs(negative(cast(concat(cast(day(srcpart_date_n0.ds) as string), "0") as bigint)) + 10) where srcpart_date_n0.`date` = '2008-04-08';
@@ -46,30 +41,24 @@ EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_date_n0 o
 where srcpart_date_n0.`date` = '2008-04-08' and srcpart_hour.hour = 11;
 select count(*) from srcpart join srcpart_date_n0 on (srcpart.ds = srcpart_date_n0.ds) join srcpart_hour on (srcpart.hr = srcpart_hour.hr) 
 where srcpart_date_n0.`date` = '2008-04-08' and srcpart_hour.hour = 11;
-set hive.spark.dynamic.partition.pruning=false;
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_date_n0 on (srcpart.ds = srcpart_date_n0.ds) join srcpart_hour on (srcpart.hr = srcpart_hour.hr) 
 where srcpart_date_n0.`date` = '2008-04-08' and srcpart_hour.hour = 11;
 select count(*) from srcpart join srcpart_date_n0 on (srcpart.ds = srcpart_date_n0.ds) join srcpart_hour on (srcpart.hr = srcpart_hour.hr) 
 where srcpart_date_n0.`date` = '2008-04-08' and srcpart_hour.hour = 11;
-set hive.spark.dynamic.partition.pruning=true;
 select count(*) from srcpart where hr = 11 and ds = '2008-04-08';
 
 -- multiple columns single source
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_date_hour on (srcpart.ds = srcpart_date_hour.ds and srcpart.hr = srcpart_date_hour.hr) where srcpart_date_hour.`date` = '2008-04-08' and srcpart_date_hour.hour = 11;
 select count(*) from srcpart join srcpart_date_hour on (srcpart.ds = srcpart_date_hour.ds and srcpart.hr = srcpart_date_hour.hr) where srcpart_date_hour.`date` = '2008-04-08' and srcpart_date_hour.hour = 11;
-set hive.spark.dynamic.partition.pruning=false;
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_date_hour on (srcpart.ds = srcpart_date_hour.ds and srcpart.hr = srcpart_date_hour.hr) where srcpart_date_hour.`date` = '2008-04-08' and srcpart_date_hour.hour = 11;
 select count(*) from srcpart join srcpart_date_hour on (srcpart.ds = srcpart_date_hour.ds and srcpart.hr = srcpart_date_hour.hr) where srcpart_date_hour.`date` = '2008-04-08' and srcpart_date_hour.hour = 11;
-set hive.spark.dynamic.partition.pruning=true;
 select count(*) from srcpart where ds = '2008-04-08' and hr = 11;
 
 -- empty set
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_date_n0 on (srcpart.ds = srcpart_date_n0.ds) where srcpart_date_n0.`date` = 'I DONT EXIST';
 select count(*) from srcpart join srcpart_date_n0 on (srcpart.ds = srcpart_date_n0.ds) where srcpart_date_n0.`date` = 'I DONT EXIST';
-set hive.spark.dynamic.partition.pruning=false;
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_date_n0 on (srcpart.ds = srcpart_date_n0.ds) where srcpart_date_n0.`date` = 'I DONT EXIST';
 select count(*) from srcpart join srcpart_date_n0 on (srcpart.ds = srcpart_date_n0.ds) where srcpart_date_n0.`date` = 'I DONT EXIST';
-set hive.spark.dynamic.partition.pruning=true;
 select count(*) from srcpart where ds = 'I DONT EXIST';
 
 -- expressions
@@ -77,16 +66,13 @@ EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_double_ho
 select count(*) from srcpart join srcpart_double_hour on (srcpart.hr = cast(srcpart_double_hour.hr/2 as int)) where srcpart_double_hour.hour = 11;
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_double_hour on (srcpart.hr*2 = srcpart_double_hour.hr) where srcpart_double_hour.hour = 11;
 select count(*) from srcpart join srcpart_double_hour on (srcpart.hr*2 = srcpart_double_hour.hr) where srcpart_double_hour.hour = 11;
-set hive.spark.dynamic.partition.pruning=false;
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_double_hour on (srcpart.hr = cast(srcpart_double_hour.hr/2 as int)) where srcpart_double_hour.hour = 11;
 select count(*) from srcpart join srcpart_double_hour on (srcpart.hr = cast(srcpart_double_hour.hr/2 as int)) where srcpart_double_hour.hour = 11;
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_double_hour on (srcpart.hr*2 = srcpart_double_hour.hr) where srcpart_double_hour.hour = 11;
 select count(*) from srcpart join srcpart_double_hour on (srcpart.hr*2 = srcpart_double_hour.hr) where srcpart_double_hour.hour = 11;
-set hive.spark.dynamic.partition.pruning=true;
 select count(*) from srcpart where hr = 11;
 EXPLAIN VECTORIZATION DETAIL select count(*) from srcpart join srcpart_double_hour on (cast(srcpart.hr*2 as string) = cast(srcpart_double_hour.hr as string)) where srcpart_double_hour.hour = 11;
 select count(*) from srcpart join srcpart_double_hour on (cast(srcpart.hr*2 as string) = cast(srcpart_double_hour.hr as string)) where srcpart_double_hour.hour = 11;
-set hive.spark.dynamic.partition.pruning=true;
 select count(*) from srcpart where cast(hr as string) = 11;
 
 
