@@ -241,7 +241,7 @@ public abstract class Operation {
    * Clean up resources, which was set up in beforeRun().
    */
   protected void afterRun() {
-    LogUtils.unregisterLoggingContext();
+    LogUtils.unregisterLoggingContext(queryState.getConf());
   }
 
   /**

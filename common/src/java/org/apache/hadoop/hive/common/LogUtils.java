@@ -28,6 +28,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.ThreadContext;
 import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.appender.routing.RoutingAppender;
@@ -226,8 +227,12 @@ public class LogUtils {
   /**
    * Unregister logging context
    */
-  public static void unregisterLoggingContext() {
-    MDC.clear();
+  public static void unregisterLoggingContext(Configuration conf) {
+    if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
+      MDC.remove(OPERATIONLOG_LEVEL_KEY);
+    }
+    MDC.remove(QUERYID_LOG_KEY);
+    MDC.remove(SESSIONID_LOG_KEY);
   }
 
   /**
