@@ -1,4 +1,4 @@
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 select  
  'web' as channel
  ,web.item
@@ -132,7 +132,7 @@ PREHOOK: Input: default@store_sales
 PREHOOK: Input: default@web_returns
 PREHOOK: Input: default@web_sales
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 select  
  'web' as channel
  ,web.item

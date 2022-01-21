@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.google.common.collect.Sets;
@@ -47,7 +48,7 @@ public class TestIOContextMap {
     }
   }
 
-  @Test
+  @Ignore   // ignore because MR3 maintains IOContextMap per thread
   public void testMRTezGlobalMap() throws Exception {
     // Tests concurrent modification, and that results are the same per input across threads
     // but different between inputs.
@@ -98,7 +99,7 @@ public class TestIOContextMap {
     }
   }
 
-  @Test
+  @Ignore   // ignore because MR3 maintains IOContextMap per thread
   public void testTezLlapAttemptMap() throws Exception {
     // Tests that different threads get the same object per attempt per input, and different
     // between attempts/inputs; that attempt is inherited between threads; and that clearing
@@ -172,9 +173,9 @@ public class TestIOContextMap {
     }
   }
 
-  @Test
-    public void testSparkThreadLocal() throws Exception {
-    // Test that input name does not change IOContext returned, and that each thread gets its own.
+  @Ignore
+  public void testSparkThreadLocal() throws Exception {
+    // Test that input name does not changes IOContext returned, and that each thread gets its own.
     final Configuration conf1 = new Configuration();
     conf1.set(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "spark");
     final Configuration conf2 = new Configuration(conf1);

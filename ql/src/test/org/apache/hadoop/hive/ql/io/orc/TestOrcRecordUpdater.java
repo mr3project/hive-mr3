@@ -21,10 +21,7 @@ package org.apache.hadoop.hive.ql.io.orc;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.PrintStream;
+import java.io.*;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
@@ -44,9 +41,16 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.orc.impl.OrcAcidUtils;
 import org.apache.orc.tools.FileDump;
+import org.junit.Before;
 import org.junit.Test;
 
 public class TestOrcRecordUpdater {
+
+  @Before
+  public void setup() throws IOException {
+    long orcMemoryPool = 512L * 1024 * 1024;
+    OrcFile.setupOrcMemoryManager(orcMemoryPool);   // for MR3
+  }
 
   @Test
   public void testAccessors() throws Exception {

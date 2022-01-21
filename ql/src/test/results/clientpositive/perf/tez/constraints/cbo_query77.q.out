@@ -1,5 +1,5 @@
 Warning: Shuffle Join MERGEJOIN[225][tables = [$hdt$_0, $hdt$_1]] in Stage 'Reducer 14' is a cross product
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 with ss as
  (select s_store_sk,
          sum(ss_ext_sales_price) as sales,
@@ -115,7 +115,7 @@ PREHOOK: Input: default@web_page
 PREHOOK: Input: default@web_returns
 PREHOOK: Input: default@web_sales
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 with ss as
  (select s_store_sk,
          sum(ss_ext_sales_price) as sales,
