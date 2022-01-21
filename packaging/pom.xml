@@ -302,11 +302,14 @@
       <artifactId>hive-webhcat-java-client</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <!-- do not include because Hive on Spark is not supported -->
+    <!--
     <dependency>
       <groupId>org.apache.hive</groupId>
       <artifactId>hive-kryo-registrator</artifactId>
       <version>${project.version}</version>
     </dependency>
+     -->
   </dependencies>
 
 </project>
