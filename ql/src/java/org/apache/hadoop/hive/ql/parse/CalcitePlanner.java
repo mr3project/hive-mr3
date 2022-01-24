@@ -1999,6 +1999,7 @@ public class CalcitePlanner extends SemanticAnalyzer {
 
       final int maxCNFNodeCount = conf.getIntVar(HiveConf.ConfVars.HIVE_CBO_CNF_NODES_LIMIT);
       final int minNumORClauses = conf.getIntVar(HiveConf.ConfVars.HIVEPOINTLOOKUPOPTIMIZERMIN);
+      final boolean allowDisjunctivePredicates = conf.getBoolVar(ConfVars.HIVE_JOIN_DISJ_TRANSITIVE_PREDICATES_PUSHDOWN);
 
       //0. SetOp rewrite
       perfLogger.PerfLogBegin(this.getClass().getName(), PerfLogger.OPTIMIZER);
@@ -2075,8 +2076,8 @@ public class CalcitePlanner extends SemanticAnalyzer {
       }
       rules.add(HiveJoinAddNotNullRule.INSTANCE_JOIN);
       rules.add(HiveJoinAddNotNullRule.INSTANCE_SEMIJOIN);
-      rules.add(HiveJoinPushTransitivePredicatesRule.INSTANCE_JOIN);
-      rules.add(HiveJoinPushTransitivePredicatesRule.INSTANCE_SEMIJOIN);
+      rules.add(new HiveJoinPushTransitivePredicatesRule(HiveJoin.class, allowDisjunctivePredicates));
+      rules.add(new HiveJoinPushTransitivePredicatesRule(HiveSemiJoin.class, allowDisjunctivePredicates));
       rules.add(HiveSortMergeRule.INSTANCE);
       rules.add(HiveSortLimitPullUpConstantsRule.INSTANCE);
       rules.add(HiveUnionPullUpConstantsRule.INSTANCE);
