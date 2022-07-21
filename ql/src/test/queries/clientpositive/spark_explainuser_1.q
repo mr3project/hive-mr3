@@ -2,7 +2,6 @@ set hive.vectorized.execution.enabled=false;
 set hive.strict.checks.bucketing=false;
 
 set hive.mapred.mode=nonstrict;
-set hive.spark.explain.user=true;
 
 explain create table src_orc_merge_test_part_n0(key int, value string) partitioned by (ds string, ts string) stored as orc;
 create table src_orc_merge_test_part_n0(key int, value string) partitioned by (ds string, ts string) stored as orc;
