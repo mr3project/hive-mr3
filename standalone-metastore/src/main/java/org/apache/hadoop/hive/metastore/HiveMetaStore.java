@@ -3131,8 +3131,7 @@ public class HiveMetaStore extends ThriftHiveMetastore {
         part.setCreateTime((int) time);
         part.putToParameters(hive_metastoreConstants.DDL_TIME, Long.toString(time));
 
-        if (MetastoreConf.getBoolVar(conf, ConfVars.STATS_AUTO_GATHER) &&
-            !MetaStoreUtils.isView(tbl)) {
+        if (canUpdateStats(tbl)) {
           MetaStoreUtils.updatePartitionStatsFast(part, tbl, wh, madeDir, false, envContext, true);
         }
 
@@ -3734,6 +3733,27 @@ public class HiveMetaStore extends ThriftHiveMetastore {
       return result;
     }
 
+    /**
+     * Verify if update stats while altering partition(s)
+     * For the following three cases HMS will not update partition stats
+     * 1) Table property 'DO_NOT_UPDATE_STATS' = True
+     * 2) HMS configuration property 'STATS_AUTO_GATHER' = False
+     * 3) Is View
+     */
+    private boolean canUpdateStats(Table tbl) {
+        Map<String,String> tblParams = tbl.getParameters();
+        boolean updateStatsTbl = true;
+        if ((tblParams != null) && tblParams.containsKey(StatsSetupConst.DO_NOT_UPDATE_STATS)) {
+            updateStatsTbl = !Boolean.valueOf(tblParams.get(StatsSetupConst.DO_NOT_UPDATE_STATS));
+        }
+        if (!MetastoreConf.getBoolVar(conf, ConfVars.STATS_AUTO_GATHER) ||
+            MetaStoreUtils.isView(tbl) ||
+            !updateStatsTbl) {
+          return false;
+        }
+        return true;
+    }
+
     private void initializeAddedPartition(
         final Table tbl, final Partition part, boolean madeDir) throws MetaException {
       initializeAddedPartition(tbl, new PartitionSpecProxy.SimplePartitionWrapperIterator(part), madeDir);
@@ -3741,8 +3761,7 @@ public class HiveMetaStore extends ThriftHiveMetastore {
 
     private void initializeAddedPartition(
         final Table tbl, final PartitionSpecProxy.PartitionIterator part, boolean madeDir) throws MetaException {
-      if (MetastoreConf.getBoolVar(conf, ConfVars.STATS_AUTO_GATHER) &&
-          !MetaStoreUtils.isView(tbl)) {
+      if (canUpdateStats(tbl)) {
         MetaStoreUtils.updatePartitionStatsFast(part, tbl, wh, madeDir, false, null, true);
       }
 
