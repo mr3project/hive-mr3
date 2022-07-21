@@ -43,6 +43,8 @@ public class TezEdgeProperty {
   private long inputSizePerReducer;
   private Integer bufferSize;
 
+  private boolean isFixed;  // isFixed == true iff auto parallelism should not be used (for MR3), false by default
+
   public TezEdgeProperty(HiveConf hiveConf, EdgeType edgeType,
       int buckets) {
     this.hiveConf = hiveConf;
@@ -84,6 +86,14 @@ public class TezEdgeProperty {
 
   public boolean isAutoReduce() {
     return isAutoReduce;
+  }
+
+  public void setFixed() {
+    this.isFixed = true;
+  }
+
+  public boolean isFixed() {
+    return this.isFixed;
   }
 
   public int getMinReducer() {

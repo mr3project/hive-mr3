@@ -1,4 +1,4 @@
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 select  s_store_name, s_store_id,
         sum(case when (d_day_name='Sunday') then ss_sales_price else null end) sun_sales,
         sum(case when (d_day_name='Monday') then ss_sales_price else null end) mon_sales,
@@ -20,7 +20,7 @@ PREHOOK: Input: default@date_dim
 PREHOOK: Input: default@store
 PREHOOK: Input: default@store_sales
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 select  s_store_name, s_store_id,
         sum(case when (d_day_name='Sunday') then ss_sales_price else null end) sun_sales,
         sum(case when (d_day_name='Monday') then ss_sales_price else null end) mon_sales,

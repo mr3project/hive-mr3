@@ -1,4 +1,4 @@
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 with inv as
 (select w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy
        ,stdev,mean, case mean when 0 then null else stdev/mean end cov
@@ -29,7 +29,7 @@ PREHOOK: Input: default@inventory
 PREHOOK: Input: default@item
 PREHOOK: Input: default@warehouse
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 with inv as
 (select w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy
        ,stdev,mean, case mean when 0 then null else stdev/mean end cov

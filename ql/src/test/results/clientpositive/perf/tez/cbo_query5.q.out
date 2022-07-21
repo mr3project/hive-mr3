@@ -1,4 +1,4 @@
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 with ssr as
  (select s_store_id,
         sum(sales_price) as sales,
@@ -136,7 +136,7 @@ PREHOOK: Input: default@web_returns
 PREHOOK: Input: default@web_sales
 PREHOOK: Input: default@web_site
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 with ssr as
  (select s_store_id,
         sum(sales_price) as sales,

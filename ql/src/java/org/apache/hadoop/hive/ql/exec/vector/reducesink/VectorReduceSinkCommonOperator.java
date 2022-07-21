@@ -268,9 +268,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     reduceSkipTag = conf.getSkipTag();
     reduceTagByte = (byte) conf.getTag();
 
-    if (LOG.isInfoEnabled()) {
-      LOG.info("Using tag = " + (int) reduceTagByte);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Using tag = " + (int) reduceTagByte);
     }
+    numRows = 0;
+    cntr = 1;
 
     if (!isEmptyKey) {
       TableDesc keyTableDesc = conf.getKeySerializeInfo();
