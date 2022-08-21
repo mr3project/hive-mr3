@@ -7219,7 +7219,7 @@ POSTHOOK: type: CREATETABLE
 POSTHOOK: Output: database:default
 POSTHOOK: Output: default@date_dim
 Warning: Shuffle Join MERGEJOIN[37][tables = [$hdt$_0, $hdt$_1]] in Stage 'Reducer 2' is a cross product
-PREHOOK: query: explain cbo with avg_sales as
+PREHOOK: query: explain with avg_sales as
  (select avg(quantity*list_price) average_sales
   from (select ss_quantity quantity
              ,ss_list_price list_price
@@ -7232,7 +7232,7 @@ PREHOOK: type: QUERY
 PREHOOK: Input: default@date_dim
 PREHOOK: Input: default@store_sales
 #### A masked pattern was here ####
-POSTHOOK: query: explain cbo with avg_sales as
+POSTHOOK: query: explain with avg_sales as
  (select avg(quantity*list_price) average_sales
   from (select ss_quantity quantity
              ,ss_list_price list_price
@@ -7262,7 +7262,7 @@ HiveProject(ss_sold_date_sk=[$0], ss_quantity=[$1], ss_list_price=[$2])
                 HiveTableScan(table=[[default, date_dim]], table:alias=[date_dim])
 
 Warning: Shuffle Join MERGEJOIN[68][tables = [$hdt$_0, $hdt$_1, $hdt$_2]] in Stage 'Reducer 2' is a cross product
-PREHOOK: query: explain cbo with avg_sales as
+PREHOOK: query: explain with avg_sales as
  (select avg(quantity*list_price) over( partition by list_price) average_sales
   from (select ss_quantity quantity
              ,ss_list_price list_price
@@ -7275,7 +7275,7 @@ PREHOOK: type: QUERY
 PREHOOK: Input: default@date_dim
 PREHOOK: Input: default@store_sales
 #### A masked pattern was here ####
-POSTHOOK: query: explain cbo with avg_sales as
+POSTHOOK: query: explain with avg_sales as
  (select avg(quantity*list_price) over( partition by list_price) average_sales
   from (select ss_quantity quantity
              ,ss_list_price list_price

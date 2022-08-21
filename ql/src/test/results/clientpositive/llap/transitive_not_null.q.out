@@ -34,12 +34,12 @@ POSTHOOK: Input: _dummy_database@_dummy_table
 POSTHOOK: Output: default@tbl_2
 POSTHOOK: Lineage: tbl_2.i2 SCRIPT []
 POSTHOOK: Lineage: tbl_2.j2 SCRIPT []
-PREHOOK: query: explain cbo select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2
+PREHOOK: query: explain select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2
 PREHOOK: type: QUERY
 PREHOOK: Input: default@tbl_1
 PREHOOK: Input: default@tbl_2
 #### A masked pattern was here ####
-POSTHOOK: query: explain cbo select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2
+POSTHOOK: query: explain select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@tbl_1
 POSTHOOK: Input: default@tbl_2
@@ -68,12 +68,12 @@ NULL	200	NULL	NULL
 1	NULL	1	2
 1	NULL	1	NULL
 45	68	45	68
-PREHOOK: query: explain cbo select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2
+PREHOOK: query: explain select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2
 PREHOOK: type: QUERY
 PREHOOK: Input: default@tbl_1
 PREHOOK: Input: default@tbl_2
 #### A masked pattern was here ####
-POSTHOOK: query: explain cbo select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2
+POSTHOOK: query: explain select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@tbl_1
 POSTHOOK: Input: default@tbl_2
@@ -102,12 +102,12 @@ NULL	NULL	NULL	200
 1	NULL	1	2
 1	NULL	1	NULL
 45	68	45	68
-PREHOOK: query: explain cbo select * from tbl_1 full outer join tbl_2 on tbl_1.i1 = tbl_2.i2
+PREHOOK: query: explain select * from tbl_1 full outer join tbl_2 on tbl_1.i1 = tbl_2.i2
 PREHOOK: type: QUERY
 PREHOOK: Input: default@tbl_1
 PREHOOK: Input: default@tbl_2
 #### A masked pattern was here ####
-POSTHOOK: query: explain cbo select * from tbl_1 full outer join tbl_2 on tbl_1.i1 = tbl_2.i2
+POSTHOOK: query: explain select * from tbl_1 full outer join tbl_2 on tbl_1.i1 = tbl_2.i2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@tbl_1
 POSTHOOK: Input: default@tbl_2
@@ -136,12 +136,12 @@ NULL	200	NULL	NULL
 1	NULL	1	2
 1	NULL	1	NULL
 45	68	45	68
-PREHOOK: query: explain cbo select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2
+PREHOOK: query: explain select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2
 PREHOOK: type: QUERY
 PREHOOK: Input: default@tbl_1
 PREHOOK: Input: default@tbl_2
 #### A masked pattern was here ####
-POSTHOOK: query: explain cbo select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2
+POSTHOOK: query: explain select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@tbl_1
 POSTHOOK: Input: default@tbl_2
@@ -168,12 +168,12 @@ NULL	200	NULL	NULL
 1	NULL	NULL	NULL
 1	2	1	2
 45	68	45	68
-PREHOOK: query: explain cbo select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2
+PREHOOK: query: explain select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2
 PREHOOK: type: QUERY
 PREHOOK: Input: default@tbl_1
 PREHOOK: Input: default@tbl_2
 #### A masked pattern was here ####
-POSTHOOK: query: explain cbo select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2
+POSTHOOK: query: explain select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@tbl_1
 POSTHOOK: Input: default@tbl_2
@@ -200,12 +200,12 @@ NULL	NULL	NULL	200
 NULL	NULL	1	NULL
 1	2	1	2
 45	68	45	68
-PREHOOK: query: explain cbo select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2
+PREHOOK: query: explain select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2
 PREHOOK: type: QUERY
 PREHOOK: Input: default@tbl_1
 PREHOOK: Input: default@tbl_2
 #### A masked pattern was here ####
-POSTHOOK: query: explain cbo select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2
+POSTHOOK: query: explain select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@tbl_1
 POSTHOOK: Input: default@tbl_2
@@ -232,12 +232,12 @@ NULL	200	NULL	NULL
 1	2	NULL	NULL
 1	NULL	NULL	NULL
 45	68	NULL	NULL
-PREHOOK: query: explain cbo select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2
+PREHOOK: query: explain select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2
 PREHOOK: type: QUERY
 PREHOOK: Input: default@tbl_1
 PREHOOK: Input: default@tbl_2
 #### A masked pattern was here ####
-POSTHOOK: query: explain cbo select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2
+POSTHOOK: query: explain select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@tbl_1
 POSTHOOK: Input: default@tbl_2
@@ -264,7 +264,7 @@ NULL	NULL	NULL	200
 NULL	NULL	1	2
 NULL	NULL	1	NULL
 NULL	NULL	45	68
-PREHOOK: query: explain cbo SELECT t0.col0, t0.col1
+PREHOOK: query: explain SELECT t0.col0, t0.col1
 FROM
   (
     SELECT i1 as col0, j1 as col1 FROM tbl_1
@@ -278,7 +278,7 @@ PREHOOK: type: QUERY
 PREHOOK: Input: default@tbl_1
 PREHOOK: Input: default@tbl_2
 #### A masked pattern was here ####
-POSTHOOK: query: explain cbo SELECT t0.col0, t0.col1
+POSTHOOK: query: explain SELECT t0.col0, t0.col1
 FROM
   (
     SELECT i1 as col0, j1 as col1 FROM tbl_1

@@ -69,7 +69,8 @@ public class ServiceUtils {
   }
 
   public static boolean canProvideProgressLog(HiveConf hiveConf) {
-    return "tez".equals(hiveConf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE))
+    String engine = hiveConf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+    return (engine.equals("mr3") || engine.equals("tez"))
         && hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_INPLACE_PROGRESS);
   }
 

@@ -266,7 +266,7 @@ CREATE TABLE `date_dim`(
   `d_date_sk` int,
   `d_year` int);
 
-explain cbo with avg_sales as
+explain with avg_sales as
  (select avg(quantity*list_price) average_sales
   from (select ss_quantity quantity
              ,ss_list_price list_price
@@ -277,7 +277,7 @@ explain cbo with avg_sales as
 select * from store_sales where ss_list_price > (select average_sales from avg_sales);
 
 -- this one should have sq_count_check branch because it contains windowing function
-explain cbo with avg_sales as
+explain with avg_sales as
  (select avg(quantity*list_price) over( partition by list_price) average_sales
   from (select ss_quantity quantity
              ,ss_list_price list_price

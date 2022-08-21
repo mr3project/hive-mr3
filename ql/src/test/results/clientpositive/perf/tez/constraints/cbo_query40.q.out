@@ -1,4 +1,4 @@
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 select  
    w_state
   ,i_item_id
@@ -31,7 +31,7 @@ PREHOOK: Input: default@date_dim
 PREHOOK: Input: default@item
 PREHOOK: Input: default@warehouse
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 select  
    w_state
   ,i_item_id
