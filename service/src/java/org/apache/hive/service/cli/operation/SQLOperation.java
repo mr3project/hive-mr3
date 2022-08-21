@@ -329,7 +329,7 @@ public class SQLOperation extends ExecuteStatementOperation {
             setOperationException(e);
             LOG.error("Error running hive query: ", e);
           } finally {
-            LogUtils.unregisterLoggingContext();
+            LogUtils.unregisterLoggingContext(queryState.getConf());
 
             // If new hive object is created  by the child thread, then we need to close it as it might
             // have created a hms connection. Call Hive.closeCurrent() that closes the HMS connection, causes
