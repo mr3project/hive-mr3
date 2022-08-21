@@ -1,7 +1,6 @@
 SET hive.vectorized.execution.enabled=false;
 set hive.optimize.ppd=true;
 set hive.ppd.remove.duplicatefilters=true;
-set hive.spark.dynamic.partition.pruning=true;
 set hive.optimize.metadataonly=false;
 set hive.optimize.index.filter=true;
 set hive.strict.checks.cartesian.product=false;
@@ -20,19 +19,15 @@ create table srcpart_double_hour_n1 as select (hr*2) as hr, hr as hour from srcp
 -- single column, single key -- join a partitioned table to a non-partitioned table, static filter on the non-partitioned table
 EXPLAIN select count(*) from srcpart join srcpart_date_n4 on (srcpart.ds = srcpart_date_n4.ds) where srcpart_date_n4.`date` = '2008-04-08';
 select count(*) from srcpart join srcpart_date_n4 on (srcpart.ds = srcpart_date_n4.ds) where srcpart_date_n4.`date` = '2008-04-08';
-set hive.spark.dynamic.partition.pruning=false;
 EXPLAIN select count(*) from srcpart join srcpart_date_n4 on (srcpart.ds = srcpart_date_n4.ds) where srcpart_date_n4.`date` = '2008-04-08';
 select count(*) from srcpart join srcpart_date_n4 on (srcpart.ds = srcpart_date_n4.ds) where srcpart_date_n4.`date` = '2008-04-08';
-set hive.spark.dynamic.partition.pruning=true;
 select count(*) from srcpart where ds = '2008-04-08';
 
 -- single column, single key, udf with typechange
 EXPLAIN select count(*) from srcpart join srcpart_date_n4 on (day(srcpart.ds) = day(srcpart_date_n4.ds)) where srcpart_date_n4.`date` = '2008-04-08';
 select count(*) from srcpart join srcpart_date_n4 on (day(srcpart.ds) = day(srcpart_date_n4.ds)) where srcpart_date_n4.`date` = '2008-04-08';
-set hive.spark.dynamic.partition.pruning=false;
 EXPLAIN select count(*) from srcpart join srcpart_date_n4 on (day(srcpart.ds) = day(srcpart_date_n4.ds)) where srcpart_date_n4.`date` = '2008-04-08';
 select count(*) from srcpart join srcpart_date_n4 on (day(srcpart.ds) = day(srcpart_date_n4.ds)) where srcpart_date_n4.`date` = '2008-04-08';
-set hive.spark.dynamic.partition.pruning=true;
 
 -- multiple udfs and casts
 EXPLAIN select count(*) from srcpart join srcpart_date_n4 on abs(negative(cast(concat(cast(day(srcpart.ds) as string), "0") as bigint)) + 10) = abs(negative(cast(concat(cast(day(srcpart_date_n4.ds) as string), "0") as bigint)) + 10) where srcpart_date_n4.`date` = '2008-04-08';
@@ -47,30 +42,24 @@ EXPLAIN select count(*) from srcpart join srcpart_date_n4 on (srcpart.ds = srcpa
 where srcpart_date_n4.`date` = '2008-04-08' and srcpart_hour_n1.hour = 11;
 select count(*) from srcpart join srcpart_date_n4 on (srcpart.ds = srcpart_date_n4.ds) join srcpart_hour_n1 on (srcpart.hr = srcpart_hour_n1.hr) 
 where srcpart_date_n4.`date` = '2008-04-08' and srcpart_hour_n1.hour = 11;
-set hive.spark.dynamic.partition.pruning=false;
 EXPLAIN select count(*) from srcpart join srcpart_date_n4 on (srcpart.ds = srcpart_date_n4.ds) join srcpart_hour_n1 on (srcpart.hr = srcpart_hour_n1.hr) 
 where srcpart_date_n4.`date` = '2008-04-08' and srcpart_hour_n1.hour = 11;
 select count(*) from srcpart join srcpart_date_n4 on (srcpart.ds = srcpart_date_n4.ds) join srcpart_hour_n1 on (srcpart.hr = srcpart_hour_n1.hr) 
 where srcpart_date_n4.`date` = '2008-04-08' and srcpart_hour_n1.hour = 11;
-set hive.spark.dynamic.partition.pruning=true;
 select count(*) from srcpart where hr = 11 and ds = '2008-04-08';
 
 -- multiple columns single source -- filter partitioned table on both partitioned columns via join with non-partitioned table, filter non-partitioned table
 EXPLAIN select count(*) from srcpart join srcpart_date_hour_n1 on (srcpart.ds = srcpart_date_hour_n1.ds and srcpart.hr = srcpart_date_hour_n1.hr) where srcpart_date_hour_n1.`date` = '2008-04-08' and srcpart_date_hour_n1.hour = 11;
 select count(*) from srcpart join srcpart_date_hour_n1 on (srcpart.ds = srcpart_date_hour_n1.ds and srcpart.hr = srcpart_date_hour_n1.hr) where srcpart_date_hour_n1.`date` = '2008-04-08' and srcpart_date_hour_n1.hour = 11;
-set hive.spark.dynamic.partition.pruning=false;
 EXPLAIN select count(*) from srcpart join srcpart_date_hour_n1 on (srcpart.ds = srcpart_date_hour_n1.ds and srcpart.hr = srcpart_date_hour_n1.hr) where srcpart_date_hour_n1.`date` = '2008-04-08' and srcpart_date_hour_n1.hour = 11;
 select count(*) from srcpart join srcpart_date_hour_n1 on (srcpart.ds = srcpart_date_hour_n1.ds and srcpart.hr = srcpart_date_hour_n1.hr) where srcpart_date_hour_n1.`date` = '2008-04-08' and srcpart_date_hour_n1.hour = 11;
-set hive.spark.dynamic.partition.pruning=true;
 select count(*) from srcpart where ds = '2008-04-08' and hr = 11;
 
 -- empty set -- join a partitioned table to a non-partitioned table, static filter on the non-partitioned table that doesn't filter out anything
 EXPLAIN select count(*) from srcpart join srcpart_date_n4 on (srcpart.ds = srcpart_date_n4.ds) where srcpart_date_n4.`date` = 'I DONT EXIST';
 select count(*) from srcpart join srcpart_date_n4 on (srcpart.ds = srcpart_date_n4.ds) where srcpart_date_n4.`date` = 'I DONT EXIST';
-set hive.spark.dynamic.partition.pruning=false;
 EXPLAIN select count(*) from srcpart join srcpart_date_n4 on (srcpart.ds = srcpart_date_n4.ds) where srcpart_date_n4.`date` = 'I DONT EXIST';
 select count(*) from srcpart join srcpart_date_n4 on (srcpart.ds = srcpart_date_n4.ds) where srcpart_date_n4.`date` = 'I DONT EXIST';
-set hive.spark.dynamic.partition.pruning=true;
 select count(*) from srcpart where ds = 'I DONT EXIST';
 
 -- expressions -- triggers DPP with various expressions - e.g. cast, multiplication, division
@@ -78,16 +67,13 @@ EXPLAIN select count(*) from srcpart join srcpart_double_hour_n1 on (srcpart.hr 
 select count(*) from srcpart join srcpart_double_hour_n1 on (srcpart.hr = cast(srcpart_double_hour_n1.hr/2 as int)) where srcpart_double_hour_n1.hour = 11;
 EXPLAIN select count(*) from srcpart join srcpart_double_hour_n1 on (srcpart.hr*2 = srcpart_double_hour_n1.hr) where srcpart_double_hour_n1.hour = 11;
 select count(*) from srcpart join srcpart_double_hour_n1 on (srcpart.hr*2 = srcpart_double_hour_n1.hr) where srcpart_double_hour_n1.hour = 11;
-set hive.spark.dynamic.partition.pruning=false;
 EXPLAIN select count(*) from srcpart join srcpart_double_hour_n1 on (srcpart.hr = cast(srcpart_double_hour_n1.hr/2 as int)) where srcpart_double_hour_n1.hour = 11;
 select count(*) from srcpart join srcpart_double_hour_n1 on (srcpart.hr = cast(srcpart_double_hour_n1.hr/2 as int)) where srcpart_double_hour_n1.hour = 11;
 EXPLAIN select count(*) from srcpart join srcpart_double_hour_n1 on (srcpart.hr*2 = srcpart_double_hour_n1.hr) where srcpart_double_hour_n1.hour = 11;
 select count(*) from srcpart join srcpart_double_hour_n1 on (srcpart.hr*2 = srcpart_double_hour_n1.hr) where srcpart_double_hour_n1.hour = 11;
-set hive.spark.dynamic.partition.pruning=true;
 select count(*) from srcpart where hr = 11;
 EXPLAIN select count(*) from srcpart join srcpart_double_hour_n1 on (cast(srcpart.hr*2 as string) = cast(srcpart_double_hour_n1.hr as string)) where srcpart_double_hour_n1.hour = 11;
 select count(*) from srcpart join srcpart_double_hour_n1 on (cast(srcpart.hr*2 as string) = cast(srcpart_double_hour_n1.hr as string)) where srcpart_double_hour_n1.hour = 11;
-set hive.spark.dynamic.partition.pruning=true;
 select count(*) from srcpart where cast(hr as string) = 11;
 
 -- parent is reduce tasks -- join a partitioned table to a non-partitioned table, where the non-partitioned table is a subquery, static filter on the subquery
