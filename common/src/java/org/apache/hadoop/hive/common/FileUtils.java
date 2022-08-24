@@ -359,7 +359,7 @@ public final class FileUtils {
     while (remoteIterator.hasNext()) {
       LocatedFileStatus each = remoteIterator.next();
       Path relativePath = new Path(each.getPath().toString().replace(base.toString(), ""));
-      if (org.apache.hadoop.hive.metastore.utils.FileUtils.RemoteIteratorWithFilter.HIDDEN_FILES_FULL_PATH_FILTER.accept(relativePath)) {
+      if (RemoteIteratorWithFilter.HIDDEN_FILES_FULL_PATH_FILTER.accept(relativePath)) {
         results.add(each);
       }
     }
@@ -1101,4 +1101,23 @@ public final class FileUtils {
     return IO_ERROR_SLEEP_TIME * (int)(Math.pow(2.0, repeatNum));
   }
 
+  public static class RemoteIteratorWithFilter {
+    /**
+     * This works with {@link RemoteIterator} which (potentially) produces all files recursively
+     * so looking for hidden folders must look at whole path, not just the the last part of it as
+     * would be appropriate w/o recursive listing.
+     */
+    public static final PathFilter HIDDEN_FILES_FULL_PATH_FILTER = new PathFilter() {
+      @Override
+      public boolean accept(Path p) {
+        do {
+          String name = p.getName();
+          if (name.startsWith("_") || name.startsWith(".")) {
+            return false;
+          }
+        } while ((p = p.getParent()) != null);
+        return true;
+      }
+    };
+  }
 }
