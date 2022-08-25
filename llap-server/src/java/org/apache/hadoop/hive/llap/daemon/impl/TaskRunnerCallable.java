@@ -59,7 +59,6 @@ import org.apache.tez.dag.records.TezDAGID;
 import org.apache.tez.dag.records.TezTaskAttemptID;
 import org.apache.tez.dag.records.TezTaskID;
 import org.apache.tez.dag.records.TezVertexID;
-import org.apache.tez.hadoop.shim.HadoopShim;
 import org.apache.tez.runtime.api.ExecutionContext;
 import org.apache.tez.runtime.api.impl.TaskSpec;
 import org.apache.tez.runtime.api.impl.TezEvent;
@@ -117,7 +116,6 @@ public class TaskRunnerCallable extends CallableWithNdc<TaskRunner2Result> {
   private final String requestId;
   private final String threadNameSuffix;
   private final String queryId;
-  private final HadoopShim tezHadoopShim;
   private boolean shouldRunTask = true;
   final Stopwatch runtimeWatch = Stopwatch.createUnstarted();
   final Stopwatch killtimerWatch = Stopwatch.createUnstarted();
@@ -138,7 +136,7 @@ public class TaskRunnerCallable extends CallableWithNdc<TaskRunner2Result> {
                             Configuration conf, ExecutionContext executionContext, Map<String, String> envMap,
                             Credentials credentials, long memoryAvailable, AMReporter amReporter, ConfParams confParams,
                             LlapDaemonExecutorMetrics metrics, KilledTaskHandler killedTaskHandler,
-                            FragmentCompletionHandler fragmentCompleteHandler, HadoopShim tezHadoopShim,
+                            FragmentCompletionHandler fragmentCompleteHandler,
                             TezTaskAttemptID attemptId, SignableVertexSpec vertex, TezEvent initialEvent,
                             UserGroupInformation fsTaskUgi, SchedulerFragmentCompletingListener completionListener,
                             SocketFactory socketFactory, boolean isGuaranteed, WmFragmentCounters wmCounters) {
@@ -173,7 +171,6 @@ public class TaskRunnerCallable extends CallableWithNdc<TaskRunner2Result> {
             fragmentInfo.getQueryInfo().getDagIdentifier());
     this.killedTaskHandler = killedTaskHandler;
     this.fragmentCompletionHanler = fragmentCompleteHandler;
-    this.tezHadoopShim = tezHadoopShim;
     this.initialEvent = initialEvent;
     this.fsTaskUgi = fsTaskUgi;
     this.completionListener = completionListener;
@@ -189,7 +186,11 @@ public class TaskRunnerCallable extends CallableWithNdc<TaskRunner2Result> {
 
   @Override
   protected TaskRunner2Result callInternal() throws Exception {
-    setMDCFromNDC();
+    // RunnableWithNdc in tez-mr3 does not use NDC (with ndcStack), so do not call setMDCFromNDC().
+    //   Cf. Hive on MR3 does not use TaskRunnerCallable.
+    // do not call MDC.clear() because setMDCFromNDC() is not called
+
+    // setMDCFromNDC();
 
     try {
       isStarted.set(true);
@@ -280,7 +281,7 @@ public class TaskRunnerCallable extends CallableWithNdc<TaskRunner2Result> {
             taskRunner = new TezTaskRunner2(conf, fsTaskUgi, fragmentInfo.getLocalDirs(),
                 taskSpec, vertex.getQueryIdentifier().getAppAttemptNumber(),
                 serviceConsumerMetadata, envMap, startedInputsMap, taskReporter, executor,
-                objectRegistry, pid, executionContext, memoryAvailable, false, tezHadoopShim);
+                objectRegistry, pid, executionContext, memoryAvailable, false);
           }
         }
         if (taskRunner == null) {
@@ -309,7 +310,7 @@ public class TaskRunnerCallable extends CallableWithNdc<TaskRunner2Result> {
         IOContextMap.clearThreadAttempt(attemptId);
       }
     } finally {
-      MDC.clear();
+      // MDC.clear();
     }
   }
 

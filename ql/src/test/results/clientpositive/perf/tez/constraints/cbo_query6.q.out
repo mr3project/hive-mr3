@@ -1,5 +1,5 @@
 Warning: Map Join MAPJOIN[170][bigTable=?] in task 'Map 11' is a cross product
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 select  a.ca_state state, count(*) cnt
  from customer_address a
      ,customer c
@@ -30,7 +30,7 @@ PREHOOK: Input: default@date_dim
 PREHOOK: Input: default@item
 PREHOOK: Input: default@store_sales
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 select  a.ca_state state, count(*) cnt
  from customer_address a
      ,customer c
