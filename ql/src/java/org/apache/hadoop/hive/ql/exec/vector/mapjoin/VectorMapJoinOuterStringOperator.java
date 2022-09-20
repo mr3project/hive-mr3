@@ -74,6 +74,8 @@ public class VectorMapJoinOuterStringOperator extends VectorMapJoinOuterGenerate
   // The column number for this one column join specialization.
   private transient int singleJoinColumn;
 
+  private transient boolean isDebugEnabled;
+
   //---------------------------------------------------------------------------
   // Pass-thru constructors.
   //
@@ -81,15 +83,18 @@ public class VectorMapJoinOuterStringOperator extends VectorMapJoinOuterGenerate
   /** Kryo ctor. */
   protected VectorMapJoinOuterStringOperator() {
     super();
+    isDebugEnabled = LOG.isDebugEnabled();
   }
 
   public VectorMapJoinOuterStringOperator(CompilationOpContext ctx) {
     super(ctx);
+    isDebugEnabled = LOG.isDebugEnabled();
   }
 
   public VectorMapJoinOuterStringOperator(CompilationOpContext ctx, OperatorDesc conf,
       VectorizationContext vContext, VectorDesc vectorDesc) throws HiveException {
     super(ctx, conf, vContext, vectorDesc);
+    isDebugEnabled = LOG.isDebugEnabled();
   }
 
   //---------------------------------------------------------------------------
@@ -235,7 +240,7 @@ public class VectorMapJoinOuterStringOperator extends VectorMapJoinOuterGenerate
          * Common repeated join result processing.
          */
 
-        if (LOG.isDebugEnabled()) {
+        if (isDebugEnabled) {
           LOG.debug(CLASS_NAME + " batch #" + batchCounter + " repeated joinResult " + joinResult.name());
         }
         finishOuterRepeated(batch, joinResult, hashMapResults[0], someRowsFilteredOut,
@@ -414,7 +419,7 @@ public class VectorMapJoinOuterStringOperator extends VectorMapJoinOuterGenerate
           }
         }
 
-        if (LOG.isDebugEnabled()) {
+        if (isDebugEnabled) {
           LOG.debug(CLASS_NAME + " batch #" + batchCounter +
               " allMatchs " + intArrayToRangesString(allMatchs,allMatchCount) +
               " equalKeySeriesHashMapResultIndices " + intArrayToRangesString(equalKeySeriesHashMapResultIndices, equalKeySeriesCount) +
