@@ -15,12 +15,12 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: _dummy_database@_dummy_table
 POSTHOOK: Output: default@very_simple_table_for_in_test
 POSTHOOK: Lineage: very_simple_table_for_in_test.name SCRIPT []
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 select * from very_simple_table_for_in_test where name IN('g','r') AND name IN('a','b')
 PREHOOK: type: QUERY
 PREHOOK: Input: default@very_simple_table_for_in_test
 #### A masked pattern was here ####
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 select * from very_simple_table_for_in_test where name IN('g','r') AND name IN('a','b')
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@very_simple_table_for_in_test

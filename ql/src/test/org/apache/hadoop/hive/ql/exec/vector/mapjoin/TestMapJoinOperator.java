@@ -188,6 +188,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testLong() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     for (KeyConfig longKeyConfig : longKeyConfigs) {
       for (VectorMapJoinVariation vectorMapJoinVariation : VectorMapJoinVariation.values()) {
         if (vectorMapJoinVariation == VectorMapJoinVariation.NONE){
@@ -243,6 +244,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testMultiKey() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 87543;
     for (VectorMapJoinVariation vectorMapJoinVariation : VectorMapJoinVariation.values()) {
       if (vectorMapJoinVariation == VectorMapJoinVariation.NONE){
@@ -298,6 +300,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testString() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 87543;
     for (VectorMapJoinVariation vectorMapJoinVariation : VectorMapJoinVariation.values()) {
       if (vectorMapJoinVariation == VectorMapJoinVariation.NONE){

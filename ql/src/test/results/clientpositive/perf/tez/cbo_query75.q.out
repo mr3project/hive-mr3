@@ -1,4 +1,4 @@
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 WITH all_sales AS (
  SELECT d_year
        ,i_brand_id
@@ -76,7 +76,7 @@ PREHOOK: Input: default@store_sales
 PREHOOK: Input: default@web_returns
 PREHOOK: Input: default@web_sales
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 WITH all_sales AS (
  SELECT d_year
        ,i_brand_id

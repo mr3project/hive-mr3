@@ -1,6 +1,6 @@
 SET hive.vectorized.execution.enabled=true;
 
-SET hive.llap.io.enabled=false;
+SET hive.llap.io.enabled=true;
 
 SET hive.exec.orc.default.row.index.stride=1000;
 SET hive.optimize.index.filter=true;
@@ -9,7 +9,7 @@ set hive.auto.convert.join=false;
 DROP TABLE orc_llap_n0;
 
 set hive.auto.convert.join=true;
-SET hive.llap.io.enabled=false;
+SET hive.llap.io.enabled=true;
 
 CREATE TABLE orc_llap_n0(
     ctinyint TINYINT,
