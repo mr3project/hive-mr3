@@ -117,6 +117,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManager;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
+
 /**
  * SessionState encapsulates common data associated with a session.
  *
@@ -133,6 +137,9 @@ public class SessionState implements ISessionAuthState{
   private static final String TMP_TABLE_SPACE_KEY = "_hive.tmp_table_space";
   static final String LOCK_FILE_NAME = "inuse.lck";
   static final String INFO_FILE_NAME = "inuse.info";
+
+  public static final short SESSION_SCRATCH_DIR_PERMISSION = (short) 01733;
+  public static final short TASK_SCRATCH_DIR_PERMISSION = (short) 00700;
 
   /**
    * Concurrent since SessionState is often propagated to workers in thread pools
@@ -249,7 +256,7 @@ public class SessionState implements ISessionAuthState{
 
   private Map<String, List<String>> localMapRedErrors;
 
-  private TezSessionState tezSessionState;
+  private MR3Session mr3Session;
 
   private String currentDatabase;
 
@@ -676,10 +683,6 @@ public class SessionState implements ISessionAuthState{
 
   public static void endStart(SessionState startSs)
       throws CancellationException, InterruptedException {
-    if (startSs.tezSessionState == null) {
-      return;
-    }
-    startSs.tezSessionState.endOpen();
   }
 
   private static void start(SessionState startSs, boolean isAsync, LogHelper console) {
@@ -732,39 +735,7 @@ public class SessionState implements ISessionAuthState{
       throw new RuntimeException(e);
     }
 
-    String engine = HiveConf.getVar(startSs.getConf(), HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
-
-    if (!engine.equals("tez") || startSs.isHiveServerQuery
-            || !HiveConf.getBoolVar(startSs.getConf(), ConfVars.HIVE_CLI_TEZ_INITIALIZE_SESSION)) {
-      return;
-    }
-
-    try {
-      if (startSs.tezSessionState == null) {
-        startSs.setTezSession(new TezSessionState(startSs.getSessionId(), startSs.sessionConf));
-      } else {
-        // Only TezTask sets this, and then removes when done, so we don't expect to see it.
-        LOG.warn("Tez session was already present in SessionState before start: "
-            + startSs.tezSessionState);
-      }
-      if (startSs.tezSessionState.isOpen()) {
-        return;
-      }
-      if (startSs.tezSessionState.isOpening()) {
-        if (!isAsync) {
-          startSs.tezSessionState.endOpen();
-        }
-        return;
-      }
-      // Neither open nor opening.
-      if (!isAsync) {
-        startSs.tezSessionState.open();
-      } else {
-        startSs.tezSessionState.beginOpen(null, console);
-      }
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+    // no further action
   }
 
   /**
@@ -788,7 +759,8 @@ public class SessionState implements ISessionAuthState{
     // 1. HDFS scratch dir
     path = new Path(rootHDFSDirPath, userName);
     hdfsScratchDirURIString = path.toUri().toString();
-    createPath(conf, path, scratchDirPermission, false, false);
+    // HDFS scratch dir does not necessarily mean 'isLocal==true' when using MR3
+    Utilities.createDirsWithPermission(conf, path, new FsPermission(SESSION_SCRATCH_DIR_PERMISSION), true);
     // 2. Local scratch dir
     path = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.LOCAL_SCRATCH_DIR));
     createPath(conf, path, scratchDirPermission, true, false);
@@ -1908,14 +1880,17 @@ public class SessionState implements ISessionAuthState{
       detachSession();
     }
 
-    try {
-      if (tezSessionState != null) {
-        TezSessionPoolManager.closeIfNotDefault(tezSessionState, false);
+    if (mr3Session != null) {
+      try {
+        MR3SessionManager mr3SessionManager = MR3SessionManagerImpl.getInstance();
+        if (!mr3SessionManager.getShareMr3Session()) {
+          mr3SessionManager.closeSession(mr3Session);
+        }
+      } catch (Exception e) {
+        LOG.error("Error closing mr3 session", e);
+      } finally {
+        mr3Session = null;
       }
-    } catch (Exception e) {
-      LOG.info("Error closing tez session", e);
-    } finally {
-      setTezSession(null);
     }
 
     try {
@@ -2025,24 +2000,21 @@ public class SessionState implements ISessionAuthState{
   }
 
   public TezSessionState getTezSession() {
-    return tezSessionState;
+    // TezSessionState is never used
+    return null;
   }
 
   /** Called from TezTask to attach a TezSession to use to the threadlocal. Ugly pattern... */
   public void setTezSession(TezSessionState session) {
-    if (tezSessionState == session) {
-      return; // The same object.
-    }
-    if (tezSessionState != null) {
-      tezSessionState.markFree();
-      tezSessionState.setKillQuery(null);
-      tezSessionState = null;
-    }
-    tezSessionState = session;
-    if (session != null) {
-      session.markInUse();
-      tezSessionState.setKillQuery(getKillQuery());
-    }
+    // TezSessionState is never used
+  }
+
+  public MR3Session getMr3Session() {
+    return mr3Session;
+  }
+
+  public void setMr3Session(MR3Session mr3Session) {
+    this.mr3Session = mr3Session;
   }
 
   @Override
