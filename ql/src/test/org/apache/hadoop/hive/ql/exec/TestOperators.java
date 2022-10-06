@@ -469,7 +469,7 @@ public class TestOperators {
     }
     // execution mode not set, null is returned
     assertEquals(defaultNoConditionalTaskSize,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).getAdjustedNoConditionalTaskSize());
+        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, true, llapInfo.getNumExecutorsPerNode()).getAdjustedNoConditionalTaskSize());
     hiveConf.set(HiveConf.ConfVars.HIVE_EXECUTION_MODE.varname, "llap");
 
     if ("llap".equalsIgnoreCase(hiveConf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_MODE))) {
@@ -484,7 +484,7 @@ public class TestOperators {
     int maxSlots = 3;
     long expectedSize = (long) (defaultNoConditionalTaskSize + (defaultNoConditionalTaskSize * fraction * maxSlots));
     assertEquals(expectedSize,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo)
+        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, true, llapInfo.getNumExecutorsPerNode())
         .getAdjustedNoConditionalTaskSize());
 
     // num executors is less than max executors per query (which is not expected case), default executors will be
@@ -493,19 +493,19 @@ public class TestOperators {
     hiveConf.set(HiveConf.ConfVars.LLAP_MEMORY_OVERSUBSCRIPTION_MAX_EXECUTORS_PER_QUERY.varname, "5");
     expectedSize = (long) (defaultNoConditionalTaskSize + (defaultNoConditionalTaskSize * fraction * chosenSlots));
     assertEquals(expectedSize,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo)
+        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, true, llapInfo.getNumExecutorsPerNode())
         .getAdjustedNoConditionalTaskSize());
 
     // disable memory checking
     hiveConf.set(HiveConf.ConfVars.LLAP_MAPJOIN_MEMORY_MONITOR_CHECK_INTERVAL.varname, "0");
     assertFalse(
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).doMemoryMonitoring());
+        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, true, llapInfo.getNumExecutorsPerNode()).doMemoryMonitoring());
 
     // invalid inflation factor
     hiveConf.set(HiveConf.ConfVars.LLAP_MAPJOIN_MEMORY_MONITOR_CHECK_INTERVAL.varname, "10000");
     hiveConf.set(HiveConf.ConfVars.HIVE_HASH_TABLE_INFLATION_FACTOR.varname, "0.0f");
     assertFalse(
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).doMemoryMonitoring());
+        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, true, llapInfo.getNumExecutorsPerNode()).doMemoryMonitoring());
   }
 
   @Test
@@ -517,23 +517,23 @@ public class TestOperators {
 
     when(llapInfo.getNumExecutorsPerNode()).thenReturn(1);
     assertEquals(1,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).getMaxExecutorsOverSubscribeMemory());
+        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, true, llapInfo.getNumExecutorsPerNode()).getMaxExecutorsOverSubscribeMemory());
     assertEquals(3,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, null).getMaxExecutorsOverSubscribeMemory());
+        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, false, 0).getMaxExecutorsOverSubscribeMemory());
 
     when(llapInfo.getNumExecutorsPerNode()).thenReturn(6);
     assertEquals(2,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).getMaxExecutorsOverSubscribeMemory());
+        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, true, llapInfo.getNumExecutorsPerNode()).getMaxExecutorsOverSubscribeMemory());
 
     when(llapInfo.getNumExecutorsPerNode()).thenReturn(30);
     assertEquals(8,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).getMaxExecutorsOverSubscribeMemory());
+        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, true, llapInfo.getNumExecutorsPerNode()).getMaxExecutorsOverSubscribeMemory());
 
     hiveConf.set(HiveConf.ConfVars.LLAP_MEMORY_OVERSUBSCRIPTION_MAX_EXECUTORS_PER_QUERY.varname, "5");
     assertEquals(5,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, llapInfo).getMaxExecutorsOverSubscribeMemory());
+        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, true, llapInfo.getNumExecutorsPerNode()).getMaxExecutorsOverSubscribeMemory());
     assertEquals(5,
-        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, null).getMaxExecutorsOverSubscribeMemory());
+        convertJoinMapJoin.getMemoryMonitorInfo(hiveConf, false, 0).getMaxExecutorsOverSubscribeMemory());
   }
 
   @Test public void testHashGroupBy() throws HiveException {
