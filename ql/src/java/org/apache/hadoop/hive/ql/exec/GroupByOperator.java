@@ -386,8 +386,8 @@ public class GroupByOperator extends Operator<GroupByDesc> implements IConfigure
 
     newKeys = keyWrapperFactory.getKeyWrapper();
     isTez = HiveConf.getVar(hconf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez");
-    isLlap = LlapDaemonInfo.INSTANCE.isLlap();
-    numExecutors = isLlap ? LlapDaemonInfo.INSTANCE.getNumExecutors() : 1;
+    // getConf().getEstimateNumExecutors() works okay because we are in ContainerWorker
+    numExecutors = isTez ? this.getConf().getEstimateNumExecutors() : 1;
     firstRow = true;
     // estimate the number of hash table entries based on the size of each
     // entry. Since the size of a entry
@@ -398,7 +398,7 @@ public class GroupByOperator extends Operator<GroupByDesc> implements IConfigure
     memoryMXBean = ManagementFactory.getMemoryMXBean();
     maxMemory = isTez ? getConf().getMaxMemoryAvailable() : memoryMXBean.getHeapMemoryUsage().getMax();
     memoryThreshold = this.getConf().getMemoryThreshold();
-    LOG.info("isTez: {} isLlap: {} numExecutors: {} maxMemory: {}", isTez, isLlap, numExecutors, maxMemory);
+    LOG.info("isTez: {} numExecutors: {} maxMemory: {}", isTez, numExecutors, maxMemory);
   }
 
   /**
@@ -874,7 +874,13 @@ public class GroupByOperator extends Operator<GroupByDesc> implements IConfigure
       usedMemory = memoryMXBean.getHeapMemoryUsage().getUsed();
       // TODO: there is no easy and reliable way to compute the memory used by the executor threads and on-heap cache.
       // Assuming the used memory is equally divided among all executors.
-      usedMemory = isLlap ? usedMemory / numExecutors : usedMemory;
+      usedMemory = isTez ? usedMemory / numExecutors : usedMemory;
+      // TODO: In MR3, we conservatively estimate 'rate' because usedMemory is hard to compute accurately,
+      // e.g., for DAGAppMaster running multiple local ContainerWorkers each of which in turn runs multiple
+      // TaskAttempts. Thus 'rate > memoryThreshold' is triggered more often than usual in such a case.
+      // The user can adjust maxThreshold by increasing "hive.map.aggr.hash.force.flush.memory.threshold"
+      // in HiveConf to account for running multiple TaskAttempts inside the same process.
+      // Note that maxMemory is set correctly.
       rate = (float) usedMemory / (float) maxMemory;
       if (rate > memoryThreshold) {
         return (!isTez || numEntriesHashTable != 0);
