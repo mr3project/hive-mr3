@@ -42,7 +42,7 @@ public class MemoryInfo {
   public MemoryInfo(Configuration conf) {
     this.isTez = "tez".equalsIgnoreCase(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE));
     this.isLlap = "llap".equalsIgnoreCase(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_MODE));
-    if (isLlap) {
+    if (false) {
       LlapClusterStateForCompile llapInfo = LlapClusterStateForCompile.getClusterInfo(conf);
       llapInfo.initClusterInfo();
       if (llapInfo.hasClusterInfo()) {
@@ -56,8 +56,11 @@ public class MemoryInfo {
         this.maxExecutorMemory = (memPerInstanceMb * 1024L * 1024L) / numExecutors;
       }
     } else if (isTez) {
-        long containerSizeMb = DagUtils.getContainerResource(conf).getMemorySize();
-        float heapFraction = HiveConf.getFloatVar(conf, HiveConf.ConfVars.TEZ_CONTAINER_MAX_JAVA_HEAP_FRACTION);
+        long containerSizeMb =
+            HiveConf.getIntVar(conf, HiveConf.ConfVars.MR3_MAP_TASK_MEMORY_MB) > 0 ?
+            HiveConf.getIntVar(conf, HiveConf.ConfVars.MR3_MAP_TASK_MEMORY_MB) :
+            conf.getInt(MRJobConfig.MAP_MEMORY_MB, MRJobConfig.DEFAULT_MAP_MEMORY_MB);
+        float heapFraction = HiveConf.getFloatVar(conf, HiveConf.ConfVars.MR3_CONTAINER_MAX_JAVA_HEAP_FRACTION);
         this.maxExecutorMemory = (long) ((containerSizeMb * 1024L * 1024L) * heapFraction);
     } else {
       long executorMemoryFromConf =
