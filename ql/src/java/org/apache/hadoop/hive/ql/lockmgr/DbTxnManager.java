@@ -938,7 +938,9 @@ public final class DbTxnManager extends HiveTxnManagerImpl {
 
                 @Override
                 public Thread newThread(Runnable r) {
-                  return new HeartbeaterThread(r, "Heartbeater-" + threadCounter.getAndIncrement());
+                  Thread newThread = new HeartbeaterThread(r, "Heartbeater-" + threadCounter.getAndIncrement());
+                  newThread.setContextClassLoader(ClassLoader.getSystemClassLoader());
+                  return newThread;
                 }
               });
       ((ScheduledThreadPoolExecutor) heartbeatExecutorService).setRemoveOnCancelPolicy(true);
