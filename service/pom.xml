@@ -298,7 +298,7 @@
           <artifactId>jersey-client</artifactId>
         </exclusion>
       </exclusions>
-      <scope>test</scope>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.tez</groupId>
@@ -389,6 +389,12 @@
       <groupId>io.opentelemetry</groupId>
       <artifactId>opentelemetry-exporter-otlp</artifactId>
       <version>${otel.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.datamonad.mr3</groupId>
+      <artifactId>mr3-core</artifactId>
+      <version>${mr3.version}</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
   <build>
