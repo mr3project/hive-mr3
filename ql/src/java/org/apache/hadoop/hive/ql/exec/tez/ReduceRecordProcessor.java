@@ -87,7 +87,10 @@ public class ReduceRecordProcessor extends RecordProcessor {
     super(jconf, context);
 
     String queryId = HiveConf.getVar(jconf, HiveConf.ConfVars.HIVE_QUERY_ID);
-    cache = ObjectCacheFactory.getCache(jconf, queryId, true);
+    String prefixes = jconf.get(DagUtils.TEZ_MERGE_WORK_FILE_PREFIXES);
+    cache = (prefixes == null) ?    // if MergeWork does not exists
+      ObjectCacheFactory.getCache(jconf, queryId, true) :
+      ObjectCacheFactory.getPerTaskMrCache(queryId);
     dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, false, true);
 
     String cacheKey = processorContext.getTaskVertexName() + REDUCE_PLAN_KEY;
@@ -150,11 +153,14 @@ public class ReduceRecordProcessor extends RecordProcessor {
     checkAbortCondition();
     // set memory available for operators
     long memoryAvailableToTask = processorContext.getTotalMemoryAvailableToTask();
+    int estimateNumExecutors = processorContext.getEstimateNumExecutors();
     if (reducer.getConf() != null) {
       reducer.getConf().setMaxMemoryAvailable(memoryAvailableToTask);
-      LOG.info("Memory available for operators set to {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask));
+      reducer.getConf().setEstimateNumExecutors(estimateNumExecutors);
+      LOG.info("Memory available for operators set to {} {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask), estimateNumExecutors);
     }
     OperatorUtils.setMemoryAvailable(reducer.getChildOperators(), memoryAvailableToTask);
+    OperatorUtils.setEstimateNumExecutors(reducer.getChildOperators(), estimateNumExecutors);
 
     // Setup values registry
     String valueRegistryKey = DynamicValue.DYNAMIC_VALUE_REGISTRY_CACHE_KEY;
@@ -206,7 +212,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
 
     // initialize reduce operator tree
     try {
-      LOG.info(reducer.dump(0));
+      LOG.debug(reducer.dump(0));
 
       // Initialization isn't finished until all parents of all operators
       // are initialized. For broadcast joins that means initializing the
