@@ -60,7 +60,7 @@ public class TestLimitOperator {
 
     LlapProxy.setDaemon(isDaemon);
     if (!isDaemon) {// init tez object registry
-      ObjectCache.setupObjectRegistry(new ObjectRegistryImpl());
+      ObjectCache.setupObjectRegistryDummy();
     }
 
     HiveConf conf = new HiveConf();
