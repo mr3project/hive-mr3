@@ -298,7 +298,7 @@
           <artifactId>jersey-client</artifactId>
         </exclusion>
       </exclusions>
-      <scope>test</scope>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.tez</groupId>
