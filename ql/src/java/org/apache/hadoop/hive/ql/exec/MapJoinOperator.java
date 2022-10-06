@@ -80,6 +80,9 @@ import com.google.common.annotations.VisibleForTesting;
 import com.esotericsoftware.kryo.KryoException;
 import com.google.common.base.Preconditions;
 
+import java.security.PrivilegedExceptionAction;
+import org.apache.hadoop.security.UserGroupInformation;
+
 /**
  * Map side Join operator implementation.
  */
@@ -188,7 +191,11 @@ public class MapJoinOperator extends AbstractMapJoinOperator<MapJoinDesc> implem
     cacheKey = conf.getCacheKey() == null ?
         MapJoinDesc.generateCacheKey(this.getOperatorId()) :
         conf.getCacheKey() + "_" + this.getClass().getName();
-    cache = ObjectCacheFactory.getCache(hconf, queryId, false);
+    if (conf.getCacheKey() == null) {
+      cache = ObjectCacheFactory.getCache(hconf, queryId, false, false);  // use per-vertex cache
+    } else {
+      cache = ObjectCacheFactory.getCache(hconf, queryId, false, true);   // use per-query cache
+    }
     loader = getHashTableLoader(hconf);
 
     bucketId = hconf.getInt(Constants.LLAP_BUCKET_ID, -1);
@@ -229,9 +236,30 @@ public class MapJoinOperator extends AbstractMapJoinOperator<MapJoinDesc> implem
        */
       LOG.debug("This is not bucket map join, so cache");
 
+      // The reason that we execute loadHashTable() inside the current UGI is that loadHashTable() may
+      // create LocalFileSystem (e.g., in ShuffleManager.localFs), which is stored in FileSystem.CACHE[].
+      // However, Keys for FileSystem.CACHE[] use UGI, so the first DAG's UGI bound to the Thread in
+      // LlapObjectCache.staticPool is reused for all subsequent DAGs. In other words, Threads in
+      // LlapObjectCache.staticPool never change their UGI. As a result, FileSystem.closeAllForUGI() after
+      // the first DAG has no effect (because Key of FileSystem.CACHE[] always uses the UGI of the first DAG).
+      // This leads to memory leak of DAGClassLoader and destroys the semantic correctness.
+      UserGroupInformation ugi;
+      try {
+        ugi = UserGroupInformation.getCurrentUser();
+      } catch (IOException e) {
+        throw new HiveException("ugi", e);
+      }
+
       Future<Pair<MapJoinTableContainer[], MapJoinTableContainerSerDe[]>> future =
-          cache.retrieveAsync(
-              cacheKey, () ->loadHashTable(mapContext, mrContext));
+        cache.retrieveAsync(cacheKey, () ->
+            ugi.doAs(new PrivilegedExceptionAction<Pair<MapJoinTableContainer[], MapJoinTableContainerSerDe[]>>() {
+              @Override
+              public Pair<MapJoinTableContainer[], MapJoinTableContainerSerDe[]> run() throws Exception {
+                return loadHashTable(mapContext, mrContext);
+              }
+            })
+        );
+
       asyncInitOperations.add(future);
     } else if (!isInputFileChangeSensitive(mapContext)) {
       loadHashTable(mapContext, mrContext);
