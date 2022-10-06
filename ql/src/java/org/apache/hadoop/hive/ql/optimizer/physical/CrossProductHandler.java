@@ -58,6 +58,10 @@ import org.apache.hadoop.hive.ql.lib.TaskGraphWalker;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.session.SessionState;
 
+import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
+import org.apache.hadoop.yarn.api.records.Resource;
+
 /*
  * Check each MapJoin and ShuffleJoin Operator to see they are performing a cross product.
  * If yes, output a warning to the Session's console.
@@ -93,12 +97,15 @@ public class CrossProductHandler implements PhysicalPlanResolver, SemanticDispat
     if (cartesianProductEdgeEnabled
       && HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_MODE).equals("llap")
       && conf.get(CartesianProductVertexManager.TEZ_CARTESIAN_PRODUCT_MAX_PARALLELISM) == null) {
-      LlapClusterStateForCompile llapInfo = LlapClusterStateForCompile.getClusterInfo(conf);
-      llapInfo.initClusterInfo();
-      if (llapInfo.hasClusterInfo()) {
-        conf.setInt(CartesianProductVertexManager.TEZ_CARTESIAN_PRODUCT_MAX_PARALLELISM,
-          llapInfo.getKnownExecutorCount());
+      // MR3 only (Cf. LlapDecider.adjustAutoParallelism())
+      Resource reducerResource = DAGUtils.getReduceTaskResource(conf);
+      int reducerMemoryInMb = reducerResource.getMemory();
+      // the following code works even when reducerMemoryMb <= 0
+      int targetCount = MR3SessionManagerImpl.getEstimateNumTasksOrNodes(reducerMemoryInMb);
+      if (targetCount > 0) {
+        conf.setInt(CartesianProductVertexManager.TEZ_CARTESIAN_PRODUCT_MAX_PARALLELISM, targetCount);
       }
+      // if targetCount == 0, e.g., no ContainerWorkers are running, do not set TEZ_CARTESIAN_PRODUCT_MAX_PARALLELISM
     }
 
     TaskGraphWalker ogw = new TaskGraphWalker(this);
