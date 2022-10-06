@@ -66,6 +66,8 @@ import org.slf4j.LoggerFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 
+import org.apache.hadoop.hive.ql.exec.mr3.MR3Task;
+
 /**
  * Compiles and executes HQL commands.
  */
@@ -499,6 +501,12 @@ public class Driver implements IDriver {
     driverContext.setPlan(plan);
 
     compileFinished(deferClose);
+
+    // Before resetting SessionState.PerfLogger, we store compile start/end times in SessionState's HiveConf.
+    PerfLogger currentPerfLogger = SessionState.getPerfLogger(false);
+    HiveConf sessionConf = SessionState.get().getConf();
+    sessionConf.setLong(MR3Task.HIVE_CONF_COMPILE_START_TIME, currentPerfLogger.getStartTime(PerfLogger.COMPILE));
+    sessionConf.setLong(MR3Task.HIVE_CONF_COMPILE_END_TIME, currentPerfLogger.getEndTime(PerfLogger.COMPILE));
   }
 
   private void prepareForCompile(boolean resetTaskIds) throws CommandProcessorException {
