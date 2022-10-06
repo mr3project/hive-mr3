@@ -42,7 +42,7 @@ public class LlapObjectCache implements org.apache.hadoop.hive.ql.exec.ObjectCac
 
   private static final Logger LOG = LoggerFactory.getLogger(LlapObjectCache.class.getName());
 
-  private static ExecutorService staticPool = Executors.newCachedThreadPool();
+  private static ExecutorService staticPool = Executors.newCachedThreadPool(new LlapObjectCacheThreadFactory());
 
   private final Cache<String, Object> registry = CacheBuilder.newBuilder().softValues().build();
 
