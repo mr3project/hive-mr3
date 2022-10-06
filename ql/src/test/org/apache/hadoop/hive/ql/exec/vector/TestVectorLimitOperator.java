@@ -83,7 +83,7 @@ public class TestVectorLimitOperator {
 
     LlapProxy.setDaemon(isDaemon);
     if (!isDaemon) {// init tez object registry
-      ObjectCache.setupObjectRegistry(new ObjectRegistryImpl());
+      ObjectCache.setupObjectRegistryDummy();
     }
 
     HiveConf conf = new HiveConf();
@@ -137,7 +137,7 @@ public class TestVectorLimitOperator {
     VectorLimitOperator lo = new VectorLimitOperator(
         new CompilationOpContext(), ld, null, vectorDesc);
     // make sure an object registry is present for the test
-    ObjectCache.setupObjectRegistry(new ObjectRegistryImpl());
+    ObjectCache.setupObjectRegistryDummy();
     lo.initialize(new Configuration(), null);
 
     // Process the batch
