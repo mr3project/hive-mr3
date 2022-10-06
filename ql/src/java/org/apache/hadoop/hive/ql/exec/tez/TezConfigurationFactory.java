@@ -55,7 +55,7 @@ public class TezConfigurationFactory {
   }
 
   public static Configuration copyInto(Configuration target, Configuration src,
-      Predicate<String> sourceFilter) {
+      Predicate<String> sourceFilter) {   // sourceFilter == null
     Iterator<Map.Entry<String, String>> iter = src.iterator();
     while (iter.hasNext()) {
       Map.Entry<String, String> entry = iter.next();
