@@ -150,8 +150,8 @@ public class HiveSplitGenerator extends InputInitializer {
     this.work = Utilities.getMapWork(jobConf);
 
     this.splitLocationProvider =
-        Utils.getSplitLocationProvider(conf, work.getCacheAffinity(), LOG);
-    LOG.info("SplitLocationProvider: " + splitLocationProvider);
+        Utils.getSplitLocationProvider(conf, work.getCacheAffinity(), initializerContext, LOG);
+    LOG.info("{}/{}: {}", initializerContext.getDAGName(), initializerContext.getInputName(), splitLocationProvider);
   }
 
   @SuppressWarnings("unchecked")
