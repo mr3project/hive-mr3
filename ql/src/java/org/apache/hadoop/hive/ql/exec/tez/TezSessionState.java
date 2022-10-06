@@ -698,7 +698,6 @@ public class TezSessionState {
    * @throws Exception
    */
   void close(boolean keepDagFilesDir) throws Exception {
-    console = null;
     appJarLr = null;
 
     try {
@@ -724,6 +723,7 @@ public class TezSessionState {
         }
       }
     } finally {
+      console = null;
       try {
         cleanupScratchDir();
       } finally {
