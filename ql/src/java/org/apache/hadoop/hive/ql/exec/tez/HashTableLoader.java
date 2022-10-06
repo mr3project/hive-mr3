@@ -166,16 +166,14 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
     if (memoryMonitorInfo != null) {
       effectiveThreshold = memoryMonitorInfo.getEffectiveThreshold(desc.getMaxMemoryAvailable());
 
-      // hash table loading happens in server side, LlapDecider could kick out some fragments to run outside of LLAP.
-      // Flip the flag at runtime in case if we are running outside of LLAP
-      if (!LlapDaemonInfo.INSTANCE.isLlap()) {
-        memoryMonitorInfo.setLlap(false);
-      }
       if (memoryMonitorInfo.doMemoryMonitoring()) {
         doMemCheck = true;
         LOG.info("Memory monitoring for hash table loader enabled. {}", memoryMonitorInfo);
       }
     }
+
+    long interruptCheckInterval = HiveConf.getLongVar(hconf, HiveConf.ConfVars.MR3_MAPJOIN_INTERRUPT_CHECK_INTERVAL);
+    LOG.info("MapJoin interruptCheckInterval = " + interruptCheckInterval);
 
     if (!doMemCheck) {
       LOG.info("Not doing hash table memory monitoring. {}", memoryMonitorInfo);
@@ -260,6 +258,9 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
         while (kvReader.next()) {
           tableContainer.putRow((Writable) kvReader.getCurrentKey(), (Writable) kvReader.getCurrentValue());
           numEntries++;
+          if ((numEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
+            throw new InterruptedException("Hash table loading interrupted");
+          }
           if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
             final long estMemUsage = tableContainer.getEstimatedMemorySize();
             if (estMemUsage > effectiveThreshold) {
@@ -269,10 +270,10 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
               LOG.error(msg);
               throw new MapJoinMemoryExhaustionError(msg);
             } else {
-              LOG.info(
+              if (LOG.isDebugEnabled()) { LOG.debug(
                   "Checking hash table loader memory usage for input: {} numEntries: {} "
                       + "estimatedMemoryUsage: {} effectiveThreshold: {}",
-                  inputName, numEntries, estMemUsage, effectiveThreshold);
+                  inputName, numEntries, estMemUsage, effectiveThreshold); }
             }
           }
         }
