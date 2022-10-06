@@ -962,13 +962,28 @@ public class Exec extends HplsqlBaseVisitor<Integer> implements Closeable {
    */
   boolean includeFile(String file, boolean showError) {
     try {
-      String content = FileUtils.readFileToString(new java.io.File(file), "UTF-8");
-      if (content != null && !content.isEmpty()) {
-        if (trace) {
-          trace(null, "INCLUDE CONTENT " + file + " (non-empty)");
+      java.io.File jfile = null;
+      java.net.URL url = null;
+      java.net.URLClassLoader classLoader = (java.net.URLClassLoader)Thread.currentThread().getContextClassLoader();
+      if (classLoader != null) {
+        url = classLoader.getResource(file);
+      }
+      if (url != null) {
+        try {
+          jfile = new java.io.File(url.toURI());
+        } catch (java.net.URISyntaxException e) {
+          jfile = new java.io.File(url.getPath());
         }
-        new Exec(this).include(content);
-        return true;
+      }
+      if (jfile != null) {
+        String content = FileUtils.readFileToString(jfile, "UTF-8");
+        if (content != null && !content.isEmpty()) {
+          if (trace) {
+            trace(null, "INCLUDE CONTENT " + file + " (non-empty)");
+          }
+          new Exec(this).include(content);
+          return true;
+        }
       }
     } 
     catch (Exception e) {
