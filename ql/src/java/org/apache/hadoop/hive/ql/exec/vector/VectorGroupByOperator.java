@@ -624,8 +624,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
           keyWrappersBatch.getKeysFixedSize() +
           aggregationBatchInfo.getAggregatorsFixedSize();
 
-      MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
-      maxMemory = isLlap ? getConf().getMaxMemoryAvailable() : memoryMXBean.getHeapMemoryUsage().getMax();
+      maxMemory = getConf().getMaxMemoryAvailable();    // assume MR3, so do not use MemoryMXBean. Cf. HIVE-20648
       memoryThreshold = conf.getMemoryThreshold();
       // Tests may leave this unitialized, so better set it to 1
       if (memoryThreshold == 0.0f) {
@@ -1127,7 +1126,6 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
   @Override
   protected void initializeOp(Configuration hconf) throws HiveException {
     super.initializeOp(hconf);
-    isLlap = LlapProxy.isDaemon();
     VectorExpression.doTransientInit(keyExpressions, hconf);
 
     List<ObjectInspector> objectInspectors = new ArrayList<>();
