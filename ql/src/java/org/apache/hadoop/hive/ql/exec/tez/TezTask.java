@@ -125,12 +125,13 @@ public class TezTask extends Task<TezWork> {
   Map<BaseWork, JobConf> workToConf = new HashMap<BaseWork, JobConf>();
 
   public TezTask() {
-    this(DagUtils.getInstance());
+    super();
+    this.utils = null;
   }
 
   public TezTask(DagUtils utils) {
     super();
-    this.utils = utils;
+    this.utils = null;
   }
 
   public TezCounters getTezCounters() {
@@ -151,6 +152,24 @@ public class TezTask extends Task<TezWork> {
 
   @Override
   public int execute() {
+    return executeMr3();
+  }
+
+  private java.util.concurrent.atomic.AtomicBoolean isShutdownMr3 = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+  private int executeMr3() {
+    org.apache.hadoop.hive.ql.exec.mr3.MR3Task mr3Task =
+      new org.apache.hadoop.hive.ql.exec.mr3.MR3Task(conf, console, isShutdownMr3);
+    int returnCode = mr3Task.execute(context, this.getWork());
+    counters = mr3Task.getTezCounters();
+    Throwable exFromMr3 = mr3Task.getException();
+    if (exFromMr3 != null) {
+      this.setException(exFromMr3);
+    }
+    return returnCode;
+  }
+
+  private int executeTez() {
     int rc = 1;
     boolean cleanContext = false;
     Context ctx = null;
