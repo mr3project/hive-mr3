@@ -19,6 +19,7 @@
 package org.apache.hadoop.hive.ql.parse;
 
 import static org.apache.hadoop.hive.ql.plan.ReduceSinkDesc.ReducerTraits.AUTOPARALLEL;
+import static org.apache.hadoop.hive.ql.plan.ReduceSinkDesc.ReducerTraits.FIXED;
 import static org.apache.hadoop.hive.ql.plan.ReduceSinkDesc.ReducerTraits.UNIFORM;
 
 import java.util.*;
@@ -173,6 +174,11 @@ public class GenTezUtils {
     }
     edgeProp.setBufferSize(obtainBufferSize(root, reduceSink, defaultTinyBufferSize));
     reduceWork.setEdgePropRef(edgeProp);
+
+    if (reduceSink.getConf().getReducerTraits().contains(FIXED)) {
+      reduceWork.setFixed();
+      edgeProp.setFixed();
+    }
 
     tezWork.connect(
         context.preceedingWork,
@@ -696,6 +702,8 @@ public class GenTezUtils {
     // Connect parent/child work with a brodacast edge.
     LOG.debug("Connecting Baswork - " + parentWork.getName() + " to " + childWork.getName());
     TezEdgeProperty edgeProperty = new TezEdgeProperty(EdgeType.BROADCAST_EDGE);
+    // TODO: set isFixed because edgeProperty.isAutoReduce == false (for MR3)
+    edgeProperty.setFixed();
     TezWork tezWork = procCtx.currentTask.getWork();
     tezWork.connect(parentWork, childWork, edgeProperty);
 

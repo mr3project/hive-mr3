@@ -284,6 +284,12 @@ public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
     }
     TezEdgeProperty edgeProp = new TezEdgeProperty(null, edgeType, numBuckets);
 
+    if (edgeType == EdgeType.CUSTOM_EDGE || (edgeType == EdgeType.CUSTOM_SIMPLE_EDGE && !mapJoinOp.getConf()
+        .isDynamicPartitionHashJoin())) {
+      // disable auto parallelism for bucket map joins (see the above code where we use FIXED)
+      edgeProp.setFixed();
+    }
+
     if (mapJoinWork != null) {
       for (BaseWork myWork: mapJoinWork) {
         // link the work with the work associated with the reduce sink that triggered this rule

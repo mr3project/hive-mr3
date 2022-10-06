@@ -75,6 +75,7 @@ public class ReduceWork extends BaseWork {
 
   // boolean that says whether tez auto reduce parallelism should be used
   private boolean isAutoReduceParallelism;
+  private boolean isFixed;  // isFixed == true iff auto parallelism should not be used (for MR3), false by default
   // boolean that says whether the data distribution is uniform hash (not java HashCode)
   private transient boolean isUniformDistribution = false;
 
@@ -214,6 +215,14 @@ public class ReduceWork extends BaseWork {
 
   public boolean isAutoReduceParallelism() {
     return isAutoReduceParallelism;
+  }
+
+  public void setFixed() {
+    this.isFixed = true;
+  }
+
+  public boolean isFixed() {
+    return this.isFixed;
   }
 
   public boolean isSlowStart() {
