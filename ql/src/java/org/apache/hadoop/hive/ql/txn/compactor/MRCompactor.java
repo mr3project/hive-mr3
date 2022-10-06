@@ -380,6 +380,30 @@ public class MRCompactor implements Compactor {
     if (hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_IN_TEST)) {
       mrJob = job;
     }
+
+    boolean submitJobUsingMr3 = hiveConf.getBoolVar(ConfVars.HIVE_MR3_COMPACTION_USING_MR3);
+    if (submitJobUsingMr3) {
+      try {
+        job.setJobName("MR3-compaction-" + id);
+        LOG.info("Submitting {} compaction job '{}' to MR3. (current delta dirs count={}, obsolete delta dirs " +
+              "count={}. TxnIdRange[{},{}}]",
+          compactionType, job.getJobName(), curDirNumber, obsoleteDirNumber, minTxn, maxTxn);
+        try {
+          msc.setHadoopJobid(job.getJobName(), id);
+        } catch (TException e) {
+          LOG.warn("Error setting hadoop job, jobId=" + job.getJobName()
+              + " compactionId=" + id, e);
+        }
+        // Each compaction job creates its own MR3CompactionHelper and discards it because:
+        //  1. the retry logic is already implemented inside the compaction thread itself.
+        //  2. MR3CompactionHelper is not created frequently.
+        new MR3CompactionHelper(hiveConf).submitJobToMr3(job);
+        return;
+      } catch (Exception e) {
+        LOG.info("Compaction using MR3 failed. Retrying compaction using MR", e);
+      }
+    }
+
     if (LOG.isInfoEnabled()) {
       LOG.info("Submitting {} compaction job '{}' to {} queue. (current delta dirs count={}, obsolete delta dirs " +
               "count={}. TxnIdRange[{},{}}]",
@@ -403,6 +427,7 @@ public class MRCompactor implements Compactor {
       }
     }
   }
+
   /**
    * Set the column names and types into the job conf for the input format
    * to use.
