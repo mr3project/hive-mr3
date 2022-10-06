@@ -61,13 +61,17 @@ public class IOContextMap {
   }
 
   public static void clearThreadAttempt(String attemptId) {
+    cleanThreadAttemptId(attemptId);
+    attemptMap.remove(attemptId);
+  }
+
+  public static void cleanThreadAttemptId(String attemptId) {
     assert attemptId != null;
     String attemptIdCheck = threadAttemptId.get();
     if (!attemptId.equals(attemptIdCheck)) {
       LOG.error("Thread is clearing context for "
           + attemptId + ", but " + attemptIdCheck + " expected");
     }
-    attemptMap.remove(attemptId);
     threadAttemptId.remove();
   }
 
