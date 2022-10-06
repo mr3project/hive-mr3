@@ -88,6 +88,8 @@ import com.google.common.math.DoubleMath;
 
 import static org.apache.hadoop.hive.ql.exec.OperatorUtils.hasMoreOperatorsThan;
 
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
+
 /**
  * ConvertJoinMapJoin is an optimization that replaces a common join
  * (aka shuffle join) with a map join (aka broadcast or fragment replicate
@@ -103,6 +105,8 @@ public class ConvertJoinMapJoin implements SemanticNodeProcessor {
   private long maxJoinMemory;
   private HashMapDataStructureType hashMapDataStructure;
   private boolean fastHashTableAvailable;
+
+  private static final int MR3_BUCKET_MAPJOIN_ESTIMATE_NUM_CONTAINERS_DEFAULT = 4;
 
   @Override
   /*
@@ -121,14 +125,16 @@ public class ConvertJoinMapJoin implements SemanticNodeProcessor {
 
     JoinOperator joinOp = (JoinOperator) nd;
     // adjust noconditional task size threshold for LLAP
-    LlapClusterStateForCompile llapInfo = null;
-    if ("llap".equalsIgnoreCase(context.conf.getVar(ConfVars.HIVE_EXECUTION_MODE))) {
-      llapInfo = LlapClusterStateForCompile.getClusterInfo(context.conf);
-      llapInfo.initClusterInfo();
-    }
-    MemoryMonitorInfo memoryMonitorInfo = getMemoryMonitorInfo(context.conf, llapInfo);
+    boolean isLlap = "llap".equalsIgnoreCase(context.conf.getVar(ConfVars.HIVE_EXECUTION_MODE));
+    boolean isMr3 = HiveConf.getVar(context.conf, ConfVars.HIVE_EXECUTION_ENGINE).equals("tez");
+
+    // joinOp.getConf().getEstimateNumExecutors() does not work because we are inside Hive, not inside ContainerWorker
+    int estimateNumExecutors = getEstimateNumExecutors(context.conf);
+
+    MemoryMonitorInfo memoryMonitorInfo = getMemoryMonitorInfo(context.conf, isLlap && isMr3, estimateNumExecutors);
     joinOp.getConf().setMemoryMonitorInfo(memoryMonitorInfo);
-    maxJoinMemory = memoryMonitorInfo.getAdjustedNoConditionalTaskSize();
+    // effectively undo HIVE-20439
+    maxJoinMemory = context.conf.getLongVar(HiveConf.ConfVars.HIVE_CONVERT_JOIN_NOCONDITIONAL_TASK_THRESHOLD);
 
     LOG.info("maxJoinMemory: {}", maxJoinMemory);
 
@@ -177,8 +183,8 @@ public class ConvertJoinMapJoin implements SemanticNodeProcessor {
     if (numBuckets > 1) {
       if (context.conf.getBoolVar(HiveConf.ConfVars.HIVE_CONVERT_JOIN_BUCKET_MAPJOIN_TEZ)) {
         // Check if we are in LLAP, if so it needs to be determined if we should use BMJ or DPHJ
-        if (llapInfo != null) {
-          if (selectJoinForLlap(context, joinOp, tezBucketJoinProcCtx, llapInfo, mapJoinConversion, numBuckets)) {
+        if (isLlap) {
+          if (selectJoinForLlap(context, joinOp, tezBucketJoinProcCtx, mapJoinConversion, numBuckets)) {
             return null;
           }
         } else if (convertJoinBucketMapJoin(joinOp, context, mapJoinConversion, tezBucketJoinProcCtx)) {
@@ -250,27 +256,26 @@ public class ConvertJoinMapJoin implements SemanticNodeProcessor {
     }
   }
 
+  private int getEstimateNumExecutors(HiveConf conf) {
+    String scheme = conf.getVar(HiveConf.ConfVars.MR3_CONTAINERGROUP_SCHEME);
+    int mapSize = Math.max(conf.getIntVar(HiveConf.ConfVars.MR3_MAP_TASK_MEMORY_MB), 256);
+    int containerSize;
+    if (scheme.equals("all-in-one")) {
+      containerSize = conf.getIntVar(HiveConf.ConfVars.MR3_ALLINONE_CONTAINERGROUP_MEMORY_MB);
+    } else {
+      containerSize = conf.getIntVar(HiveConf.ConfVars.MR3_MAP_CONTAINERGROUP_MEMORY_MB);
+    }
+    return Math.max(containerSize / mapSize, 1);
+  }
+
   private boolean selectJoinForLlap(OptimizeTezProcContext context, JoinOperator joinOp,
                           TezBucketJoinProcCtx tezBucketJoinProcCtx,
-                          LlapClusterStateForCompile llapInfo,
                           MapJoinConversion mapJoinConversion, int numBuckets) throws SemanticException {
     if (!context.conf.getBoolVar(HiveConf.ConfVars.HIVE_DYNAMIC_PARTITION_HASHJOIN)
             && numBuckets > 1) {
       // DPHJ is disabled, only attempt BMJ or mapjoin
       return convertJoinBucketMapJoin(joinOp, context, mapJoinConversion, tezBucketJoinProcCtx);
     }
-
-    int numExecutorsPerNode = -1;
-    if (llapInfo.hasClusterInfo()) {
-      numExecutorsPerNode = llapInfo.getNumExecutorsPerNode();
-    }
-    if (numExecutorsPerNode == -1) {
-      numExecutorsPerNode = context.conf.getIntVar(ConfVars.LLAP_DAEMON_NUM_EXECUTORS);
-    }
-
-    int numNodes = llapInfo.getKnownExecutorCount()/numExecutorsPerNode;
-
-    LOG.debug("Number of nodes = " + numNodes + ". Number of Executors per node = " + numExecutorsPerNode);
 
     // Determine the size of small table inputs
     final int mapJoinConversionPos = mapJoinConversion.getBigTablePos();
@@ -291,6 +296,21 @@ public class ConvertJoinMapJoin implements SemanticNodeProcessor {
 
     LOG.info("Cost of dynamically partitioned hash join : total small table size = " + totalSize
     + " bigTableSize = " + bigTableSize + "networkCostDPHJ = " + networkCostDPHJ);
+
+    int numNodes = context.conf.getIntVar(HiveConf.ConfVars.MR3_BUCKET_MAPJOIN_ESTIMATE_NUM_NODES);
+    if (numNodes == -1) {   // not initialized yet
+      // we are inside Hive, not ContainerWorker
+      numNodes = MR3SessionManagerImpl.getNumNodes();
+      if (numNodes == 0) {
+        LOG.warn("getNumNodes is zero, so use a default value: " + MR3_BUCKET_MAPJOIN_ESTIMATE_NUM_CONTAINERS_DEFAULT);
+        numNodes = MR3_BUCKET_MAPJOIN_ESTIMATE_NUM_CONTAINERS_DEFAULT;
+      } else {
+        LOG.info("getNumNodes: " + numNodes);
+      }
+      context.conf.setIntVar(HiveConf.ConfVars.MR3_BUCKET_MAPJOIN_ESTIMATE_NUM_NODES, numNodes);
+    } else {
+      LOG.info("Use the cached value of getNumNodes: " + numNodes);
+    }
 
     // Network cost of map side join
     long networkCostMJ = numNodes * totalSize;
@@ -408,35 +428,24 @@ public class ConvertJoinMapJoin implements SemanticNodeProcessor {
   @VisibleForTesting
   public MemoryMonitorInfo getMemoryMonitorInfo(
                                                 final HiveConf conf,
-                                                LlapClusterStateForCompile llapInfo) {
+                                                final boolean isLlapMr3,
+                                                final int estimateNumExecutors) {
     long maxSize = conf.getLongVar(HiveConf.ConfVars.HIVE_CONVERT_JOIN_NOCONDITIONAL_TASK_THRESHOLD);
     final double overSubscriptionFactor = conf.getFloatVar(ConfVars.LLAP_MAPJOIN_MEMORY_OVERSUBSCRIBE_FACTOR);
-    final int maxSlotsPerQuery = getMaxSlotsPerQuery(conf, llapInfo);
+    final int maxSlotsPerQuery = getMaxSlotsPerQuery(conf, estimateNumExecutors);
     final long memoryCheckInterval = conf.getLongVar(ConfVars.LLAP_MAPJOIN_MEMORY_MONITOR_CHECK_INTERVAL);
     final float inflationFactor = conf.getFloatVar(ConfVars.HIVE_HASH_TABLE_INFLATION_FACTOR);
     final MemoryMonitorInfo memoryMonitorInfo;
-    if (llapInfo != null) {
-      final int executorsPerNode;
-      if (!llapInfo.hasClusterInfo()) {
-        LOG.warn("LLAP cluster information not available. Falling back to getting #executors from hiveconf..");
-        executorsPerNode = conf.getIntVar(ConfVars.LLAP_DAEMON_NUM_EXECUTORS);
-      } else {
-        final int numExecutorsPerNodeFromCluster = llapInfo.getNumExecutorsPerNode();
-        if (numExecutorsPerNodeFromCluster == -1) {
-          LOG.warn("Cannot determine executor count from LLAP cluster information. Falling back to getting #executors" +
-            " from hiveconf..");
-          executorsPerNode = conf.getIntVar(ConfVars.LLAP_DAEMON_NUM_EXECUTORS);
-        } else {
-          executorsPerNode = numExecutorsPerNodeFromCluster;
-        }
-      }
+
+    if (isLlapMr3) {
+      LOG.info("MemoryMonitorInfo uses estimateNumExecutors = " + estimateNumExecutors);
 
       // bounded by max executors
-      final int slotsPerQuery = Math.min(maxSlotsPerQuery, executorsPerNode);
+      final int slotsPerQuery = Math.min(maxSlotsPerQuery, estimateNumExecutors);
       final long llapMaxSize = (long) (maxSize + (maxSize * overSubscriptionFactor * slotsPerQuery));
       // prevents under subscription
       final long adjustedMaxSize = Math.max(maxSize, llapMaxSize);
-      memoryMonitorInfo = new MemoryMonitorInfo(true, executorsPerNode, maxSlotsPerQuery,
+      memoryMonitorInfo = new MemoryMonitorInfo(true, estimateNumExecutors, maxSlotsPerQuery,
         overSubscriptionFactor, maxSize, adjustedMaxSize, memoryCheckInterval, inflationFactor);
     } else {
       // for non-LLAP mode most of these are not relevant. Only noConditionalTaskSize is used by shared scan optimizer.
@@ -447,14 +456,10 @@ public class ConvertJoinMapJoin implements SemanticNodeProcessor {
     return memoryMonitorInfo;
   }
 
-  private int getMaxSlotsPerQuery(HiveConf conf, LlapClusterStateForCompile llapInfo) {
+  private int getMaxSlotsPerQuery(HiveConf conf, final int estimateNumExecutors) {
     int maxExecutorsPerQuery = conf.getIntVar(ConfVars.LLAP_MEMORY_OVERSUBSCRIPTION_MAX_EXECUTORS_PER_QUERY);
     if (maxExecutorsPerQuery == -1) {
-      if (llapInfo == null) {
-        maxExecutorsPerQuery = DEFAULT_MAX_EXECUTORS_PER_QUERY_CONTAINER_MODE;
-      } else {
-        maxExecutorsPerQuery = Math.min(Math.max(1, llapInfo.getNumExecutorsPerNode() / 3), 8);
-      }
+      maxExecutorsPerQuery = Math.min(Math.max(1, estimateNumExecutors / 3), 8);
     }
     return maxExecutorsPerQuery;
   }
