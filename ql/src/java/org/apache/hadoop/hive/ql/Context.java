@@ -1114,6 +1114,10 @@ public class Context {
    * Today this translates into running hadoop jobs locally
    */
   public boolean isLocalOnlyExecutionMode() {
+    if (HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+      return false;
+    }
+
     return ShimLoader.getHadoopShims().isLocalMode(conf);
   }
 
