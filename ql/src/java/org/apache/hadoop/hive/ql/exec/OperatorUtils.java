@@ -715,4 +715,20 @@ public class OperatorUtils {
     }
     return op;
   }
+
+  public static void setEstimateNumExecutors(final List<Operator<? extends OperatorDesc>> operators,
+                                             final int estimateNumExecutors) {
+    if (operators == null) {
+      return;
+    }
+
+    for (Operator<? extends OperatorDesc> op : operators) {
+      if (op.getConf() != null) {
+        op.getConf().setEstimateNumExecutors(estimateNumExecutors);
+      }
+      if (op.getChildOperators() != null && !op.getChildOperators().isEmpty()) {
+        setEstimateNumExecutors(op.getChildOperators(), estimateNumExecutors);
+      }
+    }
+  }
 }
