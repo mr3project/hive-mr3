@@ -327,7 +327,7 @@ public class DynamicPartitionPruner {
       LOG.debug("part key expr applied: {}", partValue);
 
       if (!values.contains(partValue) && (!mustKeepOnePartition || work.getPathToPartitionInfo().size() > 1)) {
-        LOG.info("Pruning path: {}", p);
+        if (LOG.isDebugEnabled()) { LOG.info("Pruning path: {}", p); }
         it.remove();
         // work.removePathToPartitionInfo(p);
         work.removePathToAlias(p);
