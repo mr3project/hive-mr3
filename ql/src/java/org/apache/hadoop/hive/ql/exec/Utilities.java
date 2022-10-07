@@ -1991,11 +1991,8 @@ public final class Utilities {
 
   private static FileStatus compareTempOrDuplicateFiles(FileSystem fs,
       FileStatus file, FileStatus existingFile, Configuration conf) throws IOException {
-    // Pick the one with newest attempt ID. Previously, this function threw an
-    // exception when the file size of the newer attempt was less than the
-    // older attempt. This was an incorrect assumption due to various
-    // techniques like file compression and no guarantee that the new task will
-    // write values in the same order.
+    // Use the approach of Hive 3 on MR3 which compares only the size of output files and picks up the largest one
+    // Undo the logic in HIVE-23354
     FileStatus toDelete = null, toRetain = null;
 
     // This method currently does not support speculative execution
@@ -2022,20 +2019,15 @@ public final class Utilities {
       return existingFile;
     }
 
-    int existingFileAttemptId = getAttemptIdFromFilename(existingFile.getPath().getName());
-    int fileAttemptId = getAttemptIdFromFilename(file.getPath().getName());
-    // Files may come in any order irrespective of their attempt IDs
-    if (existingFileAttemptId > fileAttemptId) {
+    // for Hive on MR3, do not call getFileSizeRecursively()
+    if (existingFile.getLen() >= file.getLen()) {
       // keep existing
       toRetain = existingFile;
       toDelete = file;
-    } else if (existingFileAttemptId < fileAttemptId) {
+    } else {
       // keep file
       toRetain = file;
       toDelete = existingFile;
-    } else {
-      throw new IOException(filePath + " has same attempt ID " + fileAttemptId + " as "
-          + existingFile.getPath());
     }
 
     if (!fs.delete(toDelete.getPath(), true)) {
