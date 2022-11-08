@@ -372,6 +372,7 @@ public class MR3Task {
     JSONObject json = new JSONObject().put("context", "Hive").put("description", context.getCmd());
     String dagInfo = json.toString();
     Credentials dagCredentials = jobConf.getCredentials();
+    String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEQUERYID);
 
     // if doAs == true,
     //   UserGroupInformation.getCurrentUser() == the user from Beeline (auth:PROXY)
@@ -380,7 +381,7 @@ public class MR3Task {
     //   UserGroupInformation.getCurrentUser() == the user from HiveServer2 (auth:KERBEROS)
     //   UserGroupInformation.getCurrentUser() does not hold HIVE_DELEGATION_TOKEN (which is unnecessary)
 
-    DAG dag = DAG.create(dagName, dagInfo, dagCredentials);
+    DAG dag = DAG.create(dagName, dagInfo, dagCredentials, queryId);
     if (LOG.isDebugEnabled()) {
       LOG.debug("DagInfo: " + dagInfo);
     }
