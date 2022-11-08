@@ -58,6 +58,7 @@ public class DAG {
   final private String name;
   final private String dagInfo;
   final private Credentials dagCredentials;
+  final private String queryId;
 
   final private Collection<LocalResource> localResources = new HashSet<LocalResource>();
   final private Map<String, Vertex> vertices = new HashMap<String, Vertex>();
@@ -82,17 +83,24 @@ public class DAG {
   private DAG(
       String name,
       String dagInfo,
-      @Nullable Credentials dagCredentials) {
+      @Nullable Credentials dagCredentials,
+      String queryId) {
     this.name = name;
     this.dagInfo = dagInfo;
     this.dagCredentials = dagCredentials != null ? dagCredentials : new Credentials();
+    this.queryId = queryId;
   }
 
   public static DAG create(
       String name,
       String dagInfo,
-      Credentials dagCredentials) {
-    return new DAG(name, dagInfo, dagCredentials);
+      Credentials dagCredentials,
+      String queryId) {
+    return new DAG(name, dagInfo, dagCredentials, queryId);
+  }
+
+  public String getQueryId() {
+    return queryId;
   }
 
   /**
