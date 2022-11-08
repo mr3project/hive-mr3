@@ -358,7 +358,7 @@ public class MR3SessionImpl implements MR3Session {
     // still close() can be called at any time (from MR3SessionManager.getNewMr3SessionIfNotAlive())
 
     String dagUser = UserGroupInformation.getCurrentUser().getShortUserName();
-    MR3Conf dagConf = createDagConf(mr3TaskConf, dagUser);
+    MR3Conf dagConf = createDagConf(mr3TaskConf, dagUser, dag.getQueryId());
 
     // sessionConf is not passed to MR3; only dagConf is passed to MR3 as a component of DAGProto.dagConf.
     DAGAPI.DAGProto dagProto = dag.createDagProto(mr3TaskConf, dagConf);
@@ -379,7 +379,7 @@ public class MR3SessionImpl implements MR3Session {
   }
 
   // MR3Conf from createDagConf() is the only MR3Conf passed to MR3 as part of submitting a DAG.
-  private MR3Conf createDagConf(Configuration mr3TaskConf, String dagUser) {
+  private MR3Conf createDagConf(Configuration mr3TaskConf, String dagUser, String queryId) {
     boolean confStopCrossDagReuse = HiveConf.getBoolVar(mr3TaskConf,
         HiveConf.ConfVars.MR3_CONTAINER_STOP_CROSS_DAG_REUSE);
     String queueName = HiveConf.getVar(mr3TaskConf,
@@ -409,6 +409,9 @@ public class MR3SessionImpl implements MR3Session {
     }
     if (maxNumWorkers < HiveConf.ConfVars.MR3_CONTAINER_MAX_NUM_WORKERS.defaultIntVal) {
       confBuilder.setInt(MR3Conf$.MODULE$.MR3_CONTAINER_MAX_NUM_WORKERS(), maxNumWorkers);
+    }
+    if (queryId != null) {
+      confBuilder.set(HiveConf.ConfVars.HIVEQUERYID.varname, queryId);  // from HIVE-23429
     }
     return confBuilder
         .setInt(MR3Conf$.MODULE$.MR3_AM_TASK_MAX_FAILED_ATTEMPTS(), taskMaxFailedAttempts)
