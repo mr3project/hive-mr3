@@ -146,7 +146,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -317,11 +316,17 @@ public class DAGUtils {
     }
     // final vertices need to have at least one output
     if (isFinal && !(work instanceof MapReduceMapWork)) {
+      EntityDescriptor outputCommitterDescriptor = null;
+      String committer = HiveConf.getVar(vertexJobConf, ConfVars.TEZ_MAPREDUCE_OUTPUT_COMMITTER);
+      if (committer != null && !committer.isEmpty()) {
+        outputCommitterDescriptor = new EntityDescriptor(committer, null);
+      }
       EntityDescriptor logicalOutputDescriptor = new EntityDescriptor(
           outputKlass.getName(),
           vertex.getProcessorDescriptorPayload());
-      // no need to set OutputCommitter, Hive will handle moving temporary files to permanent locations
-      vertex.addDataSink("out_" + work.getName(), logicalOutputDescriptor);
+      // In the original implementation, no need to set OutputCommitter as Hive will handle moving temporary files to permanent locations.
+      // We set OutputCommitter here in order to support Iceberg.
+      vertex.addDataSink("out_" + work.getName(), logicalOutputDescriptor, outputCommitterDescriptor);
     }
 
     return vertex;
@@ -1457,7 +1462,9 @@ public class DAGUtils {
         TezConfigurationFactory
             .wrapWithJobConf(hiveConf, null);
 
-    conf.set("mapred.output.committer.class", NullOutputCommitter.class.getName());
+    if (conf.get("mapred.output.committer.class") == null) {
+      conf.set("mapred.output.committer.class", NullOutputCommitter.class.getName());
+    }
 
     conf.setBoolean("mapred.committer.job.setup.cleanup.needed", false);
     conf.setBoolean("mapred.committer.job.task.cleanup.needed", false);
