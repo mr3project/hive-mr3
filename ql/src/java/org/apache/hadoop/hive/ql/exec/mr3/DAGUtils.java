@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.ErrorMsg;
+import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.TaskRunner;
 import org.apache.hadoop.hive.ql.exec.Utilities;
@@ -314,8 +315,11 @@ public class DAGUtils {
     } else {
       outputKlass = MROutput.class;
     }
+
+    // If there is a fileSink add a DataSink to the vertex
+    boolean hasFileSink = work.getAllOperators().stream().anyMatch(o -> o instanceof FileSinkOperator);
     // final vertices need to have at least one output
-    if (isFinal && !(work instanceof MapReduceMapWork)) {
+    if ((isFinal || hasFileSink) && !(work instanceof MapReduceMapWork)) {
       EntityDescriptor outputCommitterDescriptor = null;
       String committer = HiveConf.getVar(vertexJobConf, ConfVars.TEZ_MAPREDUCE_OUTPUT_COMMITTER);
       if (committer != null && !committer.isEmpty()) {
