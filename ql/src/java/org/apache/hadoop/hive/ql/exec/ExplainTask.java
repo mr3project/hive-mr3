@@ -30,7 +30,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +62,6 @@ import org.apache.hadoop.hive.ql.plan.ExplainWork;
 import org.apache.hadoop.hive.ql.plan.HiveOperation;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
-import org.apache.hadoop.hive.ql.plan.SparkWork;
 import org.apache.hadoop.hive.ql.plan.TezWork;
 import org.apache.hadoop.hive.ql.plan.api.StageType;
 import org.apache.hadoop.hive.ql.security.authorization.AuthorizationFactory;
@@ -84,7 +83,7 @@ import com.google.common.annotations.VisibleForTesting;
 public class ExplainTask extends Task<ExplainWork> implements Serializable {
   private static final long serialVersionUID = 1L;
   public static final String EXPL_COLUMN_NAME = "Explain";
-  private final Set<Operator<?>> visitedOps = new HashSet<Operator<?>>();
+  private final Map<Operator<?>, Integer> operatorVisits = new HashMap<>();
   private boolean isLogical = false;
   protected final Logger LOG;
 
@@ -572,36 +571,6 @@ public class ExplainTask extends Task<ExplainWork> implements Serializable {
               json.accumulate(ent.getKey().toString(), jsonDep);
             }
           }
-        } else if (ent.getValue() != null && !((List<?>) ent.getValue()).isEmpty()
-            && ((List<?>) ent.getValue()).get(0) != null &&
-            ((List<?>) ent.getValue()).get(0) instanceof SparkWork.Dependency) {
-          if (out != null) {
-            boolean isFirst = true;
-            for (SparkWork.Dependency dep: (List<SparkWork.Dependency>) ent.getValue()) {
-              if (!isFirst) {
-                out.print(", ");
-              } else {
-                out.print("<- ");
-                isFirst = false;
-              }
-              out.print(dep.getName());
-              out.print(" (");
-              out.print(dep.getShuffleType());
-              out.print(", ");
-              out.print(dep.getNumPartitions());
-              out.print(")");
-            }
-            out.println();
-          }
-          if (jsonOutput) {
-            for (SparkWork.Dependency dep: (List<SparkWork.Dependency>) ent.getValue()) {
-              JSONObject jsonDep = new JSONObject(new LinkedHashMap<>());
-              jsonDep.put("parent", dep.getName());
-              jsonDep.put("type", dep.getShuffleType());
-              jsonDep.put("partitions", dep.getNumPartitions());
-              json.accumulate(ent.getKey().toString(), jsonDep);
-            }
-          }
         } else {
           if (out != null) {
             out.print(ent.getValue().toString());
@@ -829,6 +798,12 @@ public class ExplainTask extends Task<ExplainWork> implements Serializable {
     if (work instanceof Operator) {
       Operator<? extends OperatorDesc> operator =
         (Operator<? extends OperatorDesc>) work;
+      final int visitCnt = operatorVisits.merge(operator, 1, Integer::sum);
+      final int limit = conf.getIntVar(ConfVars.HIVE_EXPLAIN_NODE_VISIT_LIMIT);
+      if (visitCnt == limit) {
+        throw new IllegalStateException(
+            operator + " reached " + ConfVars.HIVE_EXPLAIN_NODE_VISIT_LIMIT.varname + "(" + limit + ")");
+      }
       if (operator.getConf() != null) {
         String appender = isLogical ? " (" + operator.getOperatorId() + ")" : "";
         JSONObject jsonOut = outputPlan(operator.getConf(), out, extended,
@@ -849,15 +824,12 @@ public class ExplainTask extends Task<ExplainWork> implements Serializable {
         }
       }
 
-      if (!visitedOps.contains(operator) || !isLogical) {
-        visitedOps.add(operator);
-        if (operator.getChildOperators() != null) {
-          int cindent = jsonOutput ? 0 : indent + 2;
-          for (Operator<? extends OperatorDesc> op : operator.getChildOperators()) {
-            JSONObject jsonOut = outputPlan(op, out, extended, jsonOutput, cindent);
-            if (jsonOutput) {
-              ((JSONObject)json.get(JSONObject.getNames(json)[0])).accumulate("children", jsonOut);
-            }
+      if ((visitCnt == 1 || !isLogical) && operator.getChildOperators() != null) {
+        int cindent = jsonOutput ? 0 : indent + 2;
+        for (Operator<? extends OperatorDesc> op : operator.getChildOperators()) {
+          JSONObject jsonOut = outputPlan(op, out, extended, jsonOutput, cindent);
+          if (jsonOutput) {
+            ((JSONObject) json.get(JSONObject.getNames(json)[0])).accumulate("children", jsonOut);
           }
         }
       }
