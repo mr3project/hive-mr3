@@ -1,7 +1,7 @@
 Warning: Shuffle Join MERGEJOIN[1182][tables = [$hdt$_0, $hdt$_1]] in Stage 'Reducer 6' is a cross product
 Warning: Shuffle Join MERGEJOIN[1189][tables = [$hdt$_0, $hdt$_1]] in Stage 'Reducer 16' is a cross product
 Warning: Shuffle Join MERGEJOIN[1196][tables = [$hdt$_1, $hdt$_2]] in Stage 'Reducer 22' is a cross product
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 with  cross_items as
  (select i_item_sk ss_item_sk
  from item,
@@ -110,7 +110,7 @@ PREHOOK: Input: default@item
 PREHOOK: Input: default@store_sales
 PREHOOK: Input: default@web_sales
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 with  cross_items as
  (select i_item_sk ss_item_sk
  from item,

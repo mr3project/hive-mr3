@@ -898,7 +898,9 @@ public final class ColumnPrunerProcFactory {
       ReduceSinkOperator reduce, ColumnPrunerProcCtx cppCtx) throws SemanticException {
     ReduceSinkDesc reduceConf = reduce.getConf();
     Map<String, ExprNodeDesc> oldMap = reduce.getColumnExprMap();
-    LOG.info("RS " + reduce.getIdentifier() + " oldColExprMap: " + oldMap);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("RS " + reduce.getIdentifier() + " oldColExprMap: " + oldMap);
+    }
     RowSchema oldRS = reduce.getSchema();
     ArrayList<ColumnInfo> old_signature = oldRS.getSignature();
     ArrayList<ColumnInfo> signature = new ArrayList<ColumnInfo>(old_signature);
@@ -947,7 +949,9 @@ public final class ColumnPrunerProcFactory {
         .getFieldSchemasFromColumnList(reduceConf.getValueCols(),
         newValueColNames, 0, ""));
     reduceConf.setValueSerializeInfo(newValueTable);
-    LOG.info("RS " + reduce.getIdentifier() + " newColExprMap: " + oldMap);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("RS " + reduce.getIdentifier() + " newColExprMap: " + oldMap);
+    }
   }
 
   /**
@@ -1094,7 +1098,9 @@ public final class ColumnPrunerProcFactory {
     List<Operator<? extends OperatorDesc>> childOperators = op
         .getChildOperators();
 
-    LOG.info("JOIN " + op.getIdentifier() + " oldExprs: " + conf.getExprs());
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("JOIN " + op.getIdentifier() + " oldExprs: " + conf.getExprs());
+    }
 
     if (cppCtx.genColLists(op) == null) {
       return;
@@ -1207,7 +1213,9 @@ public final class ColumnPrunerProcFactory {
       rs.add(col);
     }
 
-    LOG.info("JOIN " + op.getIdentifier() + " newExprs: " + conf.getExprs());
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("JOIN " + op.getIdentifier() + " newExprs: " + conf.getExprs());
+    }
 
     op.setColumnExprMap(newColExprMap);
     conf.setOutputColumnNames(outputCols);

@@ -32,6 +32,12 @@
   </properties>
 
   <dependencies>
+    <dependency>
+      <groupId>javax.servlet</groupId>
+      <artifactId>javax.servlet-api</artifactId>
+      <version>${javax-servlet.version}</version>
+      <scope>compile</scope>
+    </dependency>
     <!-- dependencies are always listed in sorted order by groupId, artifectId -->
     <!-- intra-project -->
     <dependency>
@@ -241,7 +247,7 @@
       <groupId>org.apache.tez</groupId>
       <artifactId>tez-api</artifactId>
       <version>${tez.version}</version>
-      <scope>test</scope>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.tez</groupId>
@@ -278,6 +284,12 @@
             <artifactId>hadoop-yarn-server-web-proxy</artifactId>
           </exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>com.datamonad.mr3</groupId>
+      <artifactId>mr3-core</artifactId>
+      <version>${mr3.version}</version>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>

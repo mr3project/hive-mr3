@@ -189,7 +189,7 @@ public class MiniHiveKdc {
                                               .withConf(hiveConf)
                                               .withMiniKdc(hivePrincipal, hiveKeytab)
                                               .withAuthenticationType(authType);
-    if (HiveServer2.isHttpTransportMode(hiveConf)) {
+    if (org.apache.hive.service.server.HiveServer2.isHttpTransportMode(hiveConf)) {
       miniHS2Builder.withHTTPTransport();
     }
     return miniHS2Builder.build();

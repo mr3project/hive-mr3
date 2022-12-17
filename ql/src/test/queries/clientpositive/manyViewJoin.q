@@ -8379,7 +8379,7 @@ from test_hive_2050 t1
 inner join test_hive_2048 t2 on
 t1.ds_ts =  t2.max_partition;
 
-set hive.stageid.rearrange=execution;
+-- set hive.stageid.rearrange=execution;
 set hive.auto.convert.join=true;
 set hive.cbo.enable=false;
 

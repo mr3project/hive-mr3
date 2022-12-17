@@ -1,4 +1,4 @@
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 select  i_item_desc
       ,w_warehouse_name
       ,d1.d_week_seq
@@ -38,7 +38,7 @@ PREHOOK: Input: default@item
 PREHOOK: Input: default@promotion
 PREHOOK: Input: default@warehouse
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 select  i_item_desc
       ,w_warehouse_name
       ,d1.d_week_seq
