@@ -31,7 +31,6 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.plan.ColStatistics.Range;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.junit.Test;
-import org.spark_project.guava.collect.Sets;
 
 public class TestStatsUtils {
 
@@ -73,32 +72,6 @@ public class TestStatsUtils {
     double M = range.maxValue.doubleValue();
     double v = f.doubleValue();
     return m <= v && v <= M;
-  }
-
-  @Test
-  public void testPrimitiveSizeEstimations() throws Exception {
-    HiveConf conf = new HiveConf();
-    Set<String> exclusions = Sets.newHashSet();
-    exclusions.add(serdeConstants.VOID_TYPE_NAME);
-    exclusions.add(serdeConstants.LIST_TYPE_NAME);
-    exclusions.add(serdeConstants.MAP_TYPE_NAME);
-    exclusions.add(serdeConstants.STRUCT_TYPE_NAME);
-    exclusions.add(serdeConstants.UNION_TYPE_NAME);
-    Field[] serdeFields = serdeConstants.class.getFields();
-    for (Field field : serdeFields) {
-      if (!Modifier.isStatic(field.getModifiers())) {
-        continue;
-      }
-      if (!field.getName().endsWith("_TYPE_NAME")) {
-        continue;
-      }
-      String typeName = (String) FieldUtils.readStaticField(field);
-      if (exclusions.contains(typeName)) {
-        continue;
-      }
-      long siz = StatsUtils.getSizeOfPrimitiveTypeArraysFromType(typeName, 3, conf);
-      assertNotEquals(field.toString(), 0, siz);
-    }
   }
 
 }
