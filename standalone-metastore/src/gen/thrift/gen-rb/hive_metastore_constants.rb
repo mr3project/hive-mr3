@@ -57,7 +57,9 @@ TABLE_TRANSACTIONAL_PROPERTIES = %q"transactional_properties"
 
 TABLE_BUCKETING_VERSION = %q"bucketing_version"
 
-DRUID_CONFIG_PREFIX = %q"druid."
-
 JDBC_CONFIG_PREFIX = %q"hive.sql."
+
+EXPECTED_PARAMETER_KEY = %q"expected_parameter_key"
+
+EXPECTED_PARAMETER_VALUE = %q"expected_parameter_value"
 

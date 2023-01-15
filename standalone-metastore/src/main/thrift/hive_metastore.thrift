@@ -2242,6 +2242,8 @@ const string TABLE_IS_TRANSACTIONAL = "transactional",
 const string TABLE_NO_AUTO_COMPACT = "no_auto_compaction",
 const string TABLE_TRANSACTIONAL_PROPERTIES = "transactional_properties",
 const string TABLE_BUCKETING_VERSION = "bucketing_version",
-const string DRUID_CONFIG_PREFIX = "druid.",
 const string JDBC_CONFIG_PREFIX = "hive.sql.",
 
+// Keys for alter table environment context parameters
+const string EXPECTED_PARAMETER_KEY = "expected_parameter_key",
+const string EXPECTED_PARAMETER_VALUE = "expected_parameter_value",
