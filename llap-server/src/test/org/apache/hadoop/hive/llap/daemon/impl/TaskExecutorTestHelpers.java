@@ -37,7 +37,6 @@ import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.tez.dag.records.TezDAGID;
 import org.apache.tez.dag.records.TezVertexID;
-import org.apache.tez.hadoop.shim.DefaultHadoopShim;
 import org.apache.tez.runtime.api.impl.ExecutionContextImpl;
 import org.apache.tez.runtime.api.impl.TezEvent;
 import org.apache.tez.runtime.task.EndReason;
@@ -212,10 +211,10 @@ public class TaskExecutorTestHelpers {
     public MockRequest(SubmitWorkRequestProto requestProto, QueryFragmentInfo fragmentInfo,
                        boolean canFinish, boolean canFinishQueue, long workTime,
                        TezEvent initialEvent, boolean isGuaranteed) {
-      super(requestProto, fragmentInfo, new Configuration(), new ExecutionContextImpl("localhost"),
+      super(requestProto, fragmentInfo, new Configuration(), new ExecutionContextImpl("localhost", null, null),
           null, new Credentials(), 0, mock(AMReporter.class), null, mock(
           LlapDaemonExecutorMetrics.class), mock(KilledTaskHandler.class), mock(
-          FragmentCompletionHandler.class), new DefaultHadoopShim(), null,
+          FragmentCompletionHandler.class), null,
           requestProto.getWorkSpec().getVertex(), initialEvent, null, mock(
           SchedulerFragmentCompletingListener.class), mock(SocketFactory.class), isGuaranteed, null);
       this.workTime = workTime;

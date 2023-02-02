@@ -1,4 +1,4 @@
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 select  ca_zip
        ,sum(cs_sales_price)
  from catalog_sales
@@ -22,7 +22,7 @@ PREHOOK: Input: default@customer
 PREHOOK: Input: default@customer_address
 PREHOOK: Input: default@date_dim
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 select  ca_zip
        ,sum(cs_sales_price)
  from catalog_sales

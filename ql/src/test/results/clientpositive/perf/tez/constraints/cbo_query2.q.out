@@ -1,4 +1,4 @@
-PREHOOK: query: explain cbo
+PREHOOK: query: explain
 with wscs as
  (select sold_date_sk
         ,sales_price
@@ -61,7 +61,7 @@ PREHOOK: Input: default@catalog_sales
 PREHOOK: Input: default@date_dim
 PREHOOK: Input: default@web_sales
 PREHOOK: Output: hdfs://### HDFS PATH ###
-POSTHOOK: query: explain cbo
+POSTHOOK: query: explain
 with wscs as
  (select sold_date_sk
         ,sales_price

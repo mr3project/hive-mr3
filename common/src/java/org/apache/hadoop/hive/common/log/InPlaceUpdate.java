@@ -187,16 +187,8 @@ public class InPlaceUpdate {
 
 
   public static boolean canRenderInPlace(HiveConf conf) {
-    String engine = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
     boolean inPlaceUpdates = false;
-
-    if (engine.equals("tez")) {
-      inPlaceUpdates = HiveConf.getBoolVar(conf, HiveConf.ConfVars.TEZ_EXEC_INPLACE_PROGRESS);
-    }
-
-    if (engine.equals("spark")) {
-      inPlaceUpdates = HiveConf.getBoolVar(conf, HiveConf.ConfVars.SPARK_EXEC_INPLACE_PROGRESS);
-    }
+    inPlaceUpdates = HiveConf.getBoolVar(conf, HiveConf.ConfVars.TEZ_EXEC_INPLACE_PROGRESS);
 
     return inPlaceUpdates && isUnixTerminal();
   }

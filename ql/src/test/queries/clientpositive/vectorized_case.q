@@ -1,6 +1,7 @@
 set hive.explain.user=false;
 set hive.fetch.task.conversion=none;
 set hive.vectorized.execution.enabled = true;
+set hive.llap.execution.mode=all;
 
 explain vectorization detail
 select 

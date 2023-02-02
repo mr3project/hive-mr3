@@ -87,6 +87,7 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RecordReader;
 import org.junit.Assert;
 import org.junit.Rule;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
@@ -194,13 +195,13 @@ public class TestUtilities {
     assertEquals(0, paths.size());
   }
 
-  @Test
+  @Ignore   // ignore because execution engine is assumed 'mr3'
   public void testRemoveTempOrDuplicateFilesOnMrNoDp() throws Exception {
     List<Path> paths = runRemoveTempOrDuplicateFilesTestCase("mr", false);
     assertEquals(NUM_BUCKETS, paths.size());
   }
 
-  @Test
+  @Ignore   // ignore because execution engine is assumed 'mr3'
   public void testRemoveTempOrDuplicateFilesOnMrWithDp() throws Exception {
     List<Path> paths = runRemoveTempOrDuplicateFilesTestCase("mr", true);
     assertEquals(NUM_BUCKETS, paths.size());

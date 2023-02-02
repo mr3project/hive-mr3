@@ -419,7 +419,7 @@ public final class HiveUtils {
   }
 
   public static String getLocalDirList(Configuration conf) {
-    if (HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+    if (true) {
       TezContext tezContext = (TezContext) TezContext.get();
       if (tezContext != null && tezContext.getTezProcessorContext() != null) {
         return StringUtils.arrayToString(tezContext.getTezProcessorContext().getWorkDirs());

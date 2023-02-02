@@ -39,9 +39,6 @@ public class PostExecWMEventsSummaryPrinter implements ExecuteWithHookContext {
     assert (hookContext.getHookType() == HookContext.HookType.POST_EXEC_HOOK ||
       hookContext.getHookType() == HookContext.HookType.ON_FAILURE_HOOK);
     HiveConf conf = hookContext.getConf();
-    if (!"tez".equals(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE))) {
-      return;
-    }
 
     LOG.info("Executing post execution hook to print workload manager events summary..");
     SessionState.LogHelper console = SessionState.getConsole();
