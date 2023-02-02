@@ -52,7 +52,6 @@ INSERT INTO TABLE partitioned_table5 PARTITION (part_col1 = 1, part_col2 = 1) VA
 INSERT INTO TABLE partitioned_table5 PARTITION (part_col1 = 2, part_col2 = 2) VALUES (1), (2), (3), (4), (5), (6);
 INSERT INTO TABLE partitioned_table5 PARTITION (part_col1 = 3, part_col2 = 3) VALUES (1), (2), (3), (4), (5), (6);
 
-SET hive.spark.dynamic.partition.pruning.map.join.only=true;
 SET hive.strict.checks.cartesian.product=false;
 SET hive.auto.convert.join=true;
 SET hive.auto.convert.join.noconditionaltask.size=15; -- ensure the partitioned tables are treated as big tables

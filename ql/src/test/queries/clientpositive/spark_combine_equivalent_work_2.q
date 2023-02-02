@@ -19,7 +19,6 @@ FROM (
   FROM (SELECT * FROM src LIMIT 1) s2
 ) a;
 
-set hive.combine.equivalent.work.optimization = false;
 
 explain
 SELECT *
