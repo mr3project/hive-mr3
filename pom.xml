@@ -178,7 +178,7 @@
     <junit.version>4.11</junit.version>
     <kryo.version>3.0.3</kryo.version>
     <libfb303.version>0.9.3</libfb303.version>
-    <libthrift.version>0.9.3-1</libthrift.version>
+    <libthrift.version>0.14.0</libthrift.version>
     <log4j2.version>2.17.1</log4j2.version>
     <opencsv.version>5.7.1</opencsv.version>
     <orc.version>1.5.8</orc.version>
