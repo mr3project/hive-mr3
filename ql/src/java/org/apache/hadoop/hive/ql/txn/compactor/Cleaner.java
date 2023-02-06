@@ -229,7 +229,7 @@ public class Cleaner extends CompactorThread {
         if ((ci.tableName == null && lock.getTablename() == null) ||
             (ci.tableName != null && ci.tableName.equalsIgnoreCase(lock.getTablename()))) {
           if ((ci.partName == null && lock.getPartname() == null) ||
-              (ci.partName != null && ci.partName.equalsIgnoreCase(lock.getPartname()))) {
+              (ci.partName != null && ci.partName.equals(lock.getPartname()))) {
             relatedLocks.add(lock.getLockid());
           }
         }

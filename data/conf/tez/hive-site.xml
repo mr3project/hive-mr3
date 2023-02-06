@@ -225,7 +225,7 @@
 
 <property>
   <name>hive.execution.engine</name>
-  <value>tez</value>
+  <value>mr3</value>
   <description>Whether to use MR or Tez</description>
 </property>
 
@@ -296,6 +296,106 @@
 <property>
   <name>hive.query.results.cache.enabled</name>
   <value>false</value>
+</property>
+
+<!-- MR3 -->
+
+<property>
+  <name>hive.execution.mode</name>
+  <value>container</value>
+</property>
+
+<property>
+  <name>hive.mr3.container.combine.taskattempts</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>hive.mr3.container.reuse</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>hive.mr3.containergroup.scheme</name>
+  <value>all-in-one</value>
+</property>
+
+<property>
+  <name>hive.mr3.map.task.memory.mb</name>
+  <value>2048</value>
+</property>
+
+<property>
+  <name>hive.mr3.map.task.vcores</name>
+  <value>1</value>
+</property>
+
+<property>
+  <name>hive.mr3.reduce.task.memory.mb</name>
+  <value>2048</value>
+</property>
+
+<property>
+  <name>hive.mr3.reduce.task.vcores</name>
+  <value>1</value>
+</property>
+
+<property>
+  <name>hive.mr3.all-in-one.containergroup.memory.mb</name>
+  <value>4096</value>
+</property>
+
+<property>
+  <name>hive.mr3.all-in-one.containergroup.vcores</name>
+  <value>2</value>
+</property>
+
+<property>
+  <name>mr3.runtime</name>
+  <value>tez</value>
+</property>
+
+<property>
+  <name>mr3.master.mode</name>
+  <value>local-thread</value>
+</property>
+
+<property>
+  <name>mr3.am.worker.mode</name>
+  <value>local</value>
+</property>
+
+<property>
+  <name>mr3.am.resource.memory.mb</name>
+  <value>12800</value>
+</property>
+
+<property>
+  <name>mr3.am.local.resourcescheduler.max.memory.mb</name>
+  <value>8192</value>
+  <description>
+    For local testing, set: HIVE_CLIENT_HEAPSIZE=32768, MR3_AM_HEAPSIZE=28672
+  </description>
+</property>
+
+<property>
+  <name>mr3.am.local.resourcescheduler.max.cpu.cores</name>
+  <value>128</value>
+</property>
+
+<property>
+  <name>mr3.container.localize.python.working.dir.unsafe</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>mr3.container.runtime.auto.start.input</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>mr3.container.localize.python.working.dir.unsafe</name>
+  <value>true</value>
 </property>
 
 </configuration>

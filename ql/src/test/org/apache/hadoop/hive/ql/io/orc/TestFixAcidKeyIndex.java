@@ -68,6 +68,9 @@ public class TestFixAcidKeyIndex {
     testFilePath = new Path(workDir, "TestFixAcidKeyIndex." +
         testCaseName.getMethodName() + ".orc");
     fs.delete(testFilePath, false);
+
+    long orcMemoryPool = 512L * 1024 * 1024;
+    OrcFile.setupOrcMemoryManager(orcMemoryPool);   // for MR3
   }
 
   static abstract class TestKeyIndexBuilder
