@@ -1,6 +1,5 @@
 set hive.mapred.mode=nonstrict;
 set hive.optimize.constant.propagation=true;
-set hive.spark.dynamic.partition.pruning=true;
 
 drop table if exists tb1_n0;
 create table tb1_n0 (id int);

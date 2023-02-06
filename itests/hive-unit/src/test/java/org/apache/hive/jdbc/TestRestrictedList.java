@@ -87,26 +87,15 @@ public class TestRestrictedList {
     addToExpectedRestrictedMap("hive.server2.authentication.ldap.userMembershipKey");
     addToExpectedRestrictedMap("hive.server2.authentication.ldap.groupClassKey");
     addToExpectedRestrictedMap("hive.server2.authentication.ldap.customLDAPQuery");
-    addToExpectedRestrictedMap("hive.spark.client.channel.log.level");
-    addToExpectedRestrictedMap("hive.spark.client.secret.bits");
-    addToExpectedRestrictedMap("hive.spark.client.rpc.server.address");
-    addToExpectedRestrictedMap("hive.spark.client.rpc.server.port");
-    addToExpectedRestrictedMap("hive.spark.client.rpc.sasl.mechanisms");
     addToExpectedRestrictedMap("bonecp.test");
     addToExpectedRestrictedMap("hive.druid.broker.address.default");
     addToExpectedRestrictedMap("hive.druid.coordinator.address.default");
     addToExpectedRestrictedMap("hikari.test");
     addToExpectedRestrictedMap("hadoop.bin.path");
     addToExpectedRestrictedMap("yarn.bin.path");
-    addToExpectedRestrictedMap("hive.spark.client.connect.timeout");
-    addToExpectedRestrictedMap("hive.spark.client.server.connect.timeout");
-    addToExpectedRestrictedMap("hive.spark.client.rpc.max.size");
-    addToExpectedRestrictedMap("hive.spark.client.rpc.threads");
     addToExpectedRestrictedMap("_hive.local.session.path");
     addToExpectedRestrictedMap("_hive.tmp_table_space");
     addToExpectedRestrictedMap("_hive.hdfs.session.path");
-    addToExpectedRestrictedMap("hive.spark.client.rpc.server.address");
-    addToExpectedRestrictedMap("spark.home");
     addToExpectedRestrictedMap("hive.privilege.synchronizer.interval");
   }
 
