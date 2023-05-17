@@ -45,7 +45,6 @@ import org.apache.hadoop.hive.ql.exec.vector.VectorizedInputFormatInterface;
 import org.apache.hadoop.hive.ql.exec.vector.reducesink.*;
 import org.apache.hadoop.hive.ql.exec.vector.udf.VectorUDFArgDesc;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
-import org.apache.hadoop.hive.ql.parse.spark.SparkPartitionPruningSinkOperator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.fs.Path;
@@ -57,7 +56,6 @@ import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.*;
 import org.apache.hadoop.hive.ql.exec.mr.MapRedTask;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinKey;
-import org.apache.hadoop.hive.ql.exec.spark.SparkTask;
 import org.apache.hadoop.hive.ql.exec.tez.TezTask;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExpressionDescriptor;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinInnerBigOnlyLongOperator;
@@ -132,8 +130,6 @@ import org.apache.hadoop.hive.ql.plan.VectorPTFInfo;
 import org.apache.hadoop.hive.ql.plan.VectorPTFDesc.SupportedFunctionType;
 import org.apache.hadoop.hive.ql.plan.VectorTableScanDesc;
 import org.apache.hadoop.hive.ql.plan.VectorGroupByDesc.ProcessingMode;
-import org.apache.hadoop.hive.ql.plan.VectorSparkHashTableSinkDesc;
-import org.apache.hadoop.hive.ql.plan.VectorSparkPartitionPruningSinkDesc;
 import org.apache.hadoop.hive.ql.plan.VectorTopNKeyDesc;
 import org.apache.hadoop.hive.ql.plan.VectorLimitDesc;
 import org.apache.hadoop.hive.ql.plan.VectorMapJoinInfo;
@@ -142,9 +138,6 @@ import org.apache.hadoop.hive.ql.plan.PartitionDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceWork;
 import org.apache.hadoop.hive.ql.plan.SMBJoinDesc;
-import org.apache.hadoop.hive.ql.plan.SparkHashTableSinkDesc;
-import org.apache.hadoop.hive.ql.optimizer.spark.SparkPartitionPruningSinkDesc;
-import org.apache.hadoop.hive.ql.plan.SparkWork;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.plan.TableScanDesc;
 import org.apache.hadoop.hive.ql.plan.TezWork;
@@ -963,26 +956,6 @@ public class Vectorizer implements PhysicalPlanResolver {
             setReduceWorkExplainConditions(reduceWork);
 
             // We are only vectorizing Reduce under Tez/Spark.
-            if (isReduceVectorizationEnabled) {
-              convertReduceWork(reduceWork);
-            }
-            logReduceWorkExplainVectorization(reduceWork);
-          }
-        }
-      } else if (currTask instanceof SparkTask) {
-        SparkWork sparkWork = (SparkWork) currTask.getWork();
-        for (BaseWork baseWork : sparkWork.getAllWork()) {
-          if (baseWork instanceof MapWork) {
-            MapWork mapWork = (MapWork) baseWork;
-            setMapWorkExplainConditions(mapWork);
-            convertMapWork(mapWork, /* isTezOrSpark */ true);
-            logMapWorkExplainVectorization(mapWork);
-          } else if (baseWork instanceof ReduceWork) {
-            ReduceWork reduceWork = (ReduceWork) baseWork;
-
-            // Always set the EXPLAIN conditions.
-            setReduceWorkExplainConditions(reduceWork);
-
             if (isReduceVectorizationEnabled) {
               convertReduceWork(reduceWork);
             }
@@ -2512,18 +2485,6 @@ public class Vectorizer implements PhysicalPlanResolver {
       return false;
     }
     return true;
-  }
-
-  private boolean validateSparkHashTableSinkOperator(SparkHashTableSinkOperator op) {
-    SparkHashTableSinkDesc desc = op.getConf();
-    byte tag = desc.getTag();
-    // it's essentially a MapJoinDesc
-    List<ExprNodeDesc> filterExprs = desc.getFilters().get(tag);
-    List<ExprNodeDesc> keyExprs = desc.getKeys().get(tag);
-    List<ExprNodeDesc> valueExprs = desc.getExprs().get(tag);
-    return validateExprNodeDesc(
-        filterExprs, "Filter", VectorExpressionDescriptor.Mode.FILTER, /* allowComplex */ true) &&
-        validateExprNodeDesc(keyExprs, "Key") && validateExprNodeDesc(valueExprs, "Value");
   }
 
   private boolean validateReduceSinkOperator(ReduceSinkOperator op) {
@@ -5208,33 +5169,6 @@ public class Vectorizer implements PhysicalPlanResolver {
           break;
         case HASHTABLESINK:
           {
-            // No validation.
-
-            SparkHashTableSinkDesc sparkHashTableSinkDesc = (SparkHashTableSinkDesc) op.getConf();
-
-            VectorSparkHashTableSinkDesc vectorSparkHashTableSinkDesc = new VectorSparkHashTableSinkDesc();
-            vectorOp = OperatorFactory.getVectorOperator(
-                op.getCompilationOpContext(), sparkHashTableSinkDesc,
-                vContext, vectorSparkHashTableSinkDesc);
-            isNative = true;
-          }
-          break;
-        case SPARKPRUNINGSINK:
-          {
-            // No validation.
-
-            SparkPartitionPruningSinkDesc sparkPartitionPruningSinkDesc =
-                (SparkPartitionPruningSinkDesc) op.getConf();
-
-            VectorSparkPartitionPruningSinkDesc vectorSparkPartitionPruningSinkDesc =
-                new VectorSparkPartitionPruningSinkDesc();
-            vectorOp = OperatorFactory.getVectorOperator(
-                op.getCompilationOpContext(), sparkPartitionPruningSinkDesc,
-                vContext, vectorSparkPartitionPruningSinkDesc);
-            // need to maintain the unique ID so that target map works can
-            // read the output
-            ((SparkPartitionPruningSinkOperator) vectorOp).setUniqueId(
-                ((SparkPartitionPruningSinkOperator) op).getUniqueId());
             isNative = true;
           }
           break;
