@@ -73,6 +73,7 @@ import org.apache.hadoop.hive.ql.optimizer.ConstantPropagate;
 import org.apache.hadoop.hive.ql.optimizer.ConstantPropagateProcCtx.ConstantPropagateOption;
 import org.apache.hadoop.hive.ql.optimizer.ConvertJoinMapJoin;
 import org.apache.hadoop.hive.ql.optimizer.DynamicPartitionPruningOptimization;
+import org.apache.hadoop.hive.ql.optimizer.ExtendParentReduceSinkOfMapJoin;
 import org.apache.hadoop.hive.ql.optimizer.MergeJoinProc;
 import org.apache.hadoop.hive.ql.optimizer.ReduceSinkMapJoinProc;
 import org.apache.hadoop.hive.ql.optimizer.RemoveDynamicPruningBySize;
@@ -222,6 +223,8 @@ public class TezCompiler extends TaskCompiler {
       new SharedWorkOptimizer().transform(procCtx.parseContext);
     }
     perfLogger.PerfLogEnd(this.getClass().getName(), PerfLogger.TEZ_COMPILER, "Shared scans optimization");
+
+    extendParentReduceSinkOfMapJoin(procCtx);
 
     perfLogger.PerfLogBegin(this.getClass().getName(), PerfLogger.TEZ_COMPILER);
     markOperatorsWithUnstableRuntimeStats(procCtx);
@@ -460,6 +463,18 @@ public class TezCompiler extends TaskCompiler {
     List<Node> topNodes = new ArrayList<Node>();
     topNodes.addAll(procCtx.parseContext.getTopOps().values());
     GraphWalker ogw = new ForwardWalker(disp);
+    ogw.startWalking(topNodes, null);
+  }
+
+  private void extendParentReduceSinkOfMapJoin(OptimizeTezProcContext procCtx) throws SemanticException {
+    Map<Rule, NodeProcessor> opRules = new LinkedHashMap<>();
+    opRules.put(
+        new RuleRegExp("Extend parent RS of MapJoin", MapJoinOperator.getOperatorName() + "%"),
+        new ExtendParentReduceSinkOfMapJoin());
+
+    Dispatcher disp = new DefaultRuleDispatcher(null, opRules, procCtx);
+    GraphWalker ogw = new DefaultGraphWalker(disp);
+    List<Node> topNodes = new ArrayList<>(procCtx.parseContext.getTopOps().values());
     ogw.startWalking(topNodes, null);
   }
 
