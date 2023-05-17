@@ -510,7 +510,11 @@ public class CachedStore implements RawStore, Configurable {
     public void run() {
       if (!shouldRunPrewarm) {
         // TODO: prewarm and update can probably be merged.
-        update();
+        try {
+          update();
+        } catch (Exception e) {
+          LOG.error("periodical refresh fail ", e);
+        }
       } else {
         try {
           prewarm(rawStore);
