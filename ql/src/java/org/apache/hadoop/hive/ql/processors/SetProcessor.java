@@ -258,15 +258,6 @@ public class SetProcessor implements CommandProcessor {
       }
     }
     conf.verifyAndSet(key, value);
-    if (HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname.equals(key)) {
-      if (!"spark".equals(value)) {
-        ss.closeSparkSession();
-      }
-      if ("mr".equals(value)) {
-        result = HiveConf.generateMrDeprecationWarning();
-        LOG.warn(result);
-      }
-    }
     if (register) {
       ss.getOverriddenConfigurations().put(key, value);
     }
@@ -374,7 +365,7 @@ public class SetProcessor implements CommandProcessor {
 
     if (nwcmd.equals("-v")) {
       Properties properties = null;
-      if (ss.getConf().getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+      if (true) {
         Class<?> clazz;
         try {
           clazz = Class.forName("org.apache.tez.dag.api.TezConfiguration");

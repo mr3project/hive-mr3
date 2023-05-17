@@ -26,8 +26,21 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.hive.conf.Constants;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.llap.counters.FragmentCountersMap;
+import org.apache.hadoop.hive.llap.tezplugins.LlapTezUtils;
+import org.apache.hadoop.hive.ql.exec.ObjectCacheFactory;
+import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.io.IOContextMap;
+import org.apache.hadoop.hive.ql.io.orc.OrcFile;
+import org.apache.tez.dag.records.TezDAGID;
+import org.apache.tez.dag.records.TezTaskAttemptID;
+import org.apache.tez.dag.records.TezTaskID;
+import org.apache.tez.dag.records.TezVertexID;
+import org.apache.tez.mapreduce.input.MRInput;
 import org.apache.tez.runtime.api.TaskFailureType;
 import org.apache.tez.runtime.api.events.CustomProcessorEvent;
+import org.apache.tez.runtime.api.events.ProcessorHandlerSetupCloseEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -143,7 +156,8 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
   public TezProcessor(ProcessorContext context) {
     super(context);
-    ObjectCache.setupObjectRegistry(context.getObjectRegistry());
+    ObjectCache.setupObjectRegistry(context);
+    OrcFile.setupOrcMemoryManager(context.getTotalMemoryAvailableToTask());
   }
 
   @Override
@@ -154,19 +168,33 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       if (progressHelper != null) {
         progressHelper.shutDownProgressTaskService();
       }
+
+    IOContextMap.clearThreadAttempt(getContext().getUniqueIdentifier());
   }
 
   @Override
   public void handleEvents(List<Event> arg0) {
-    // As of now only used for Bucket MapJoin, there is exactly one event in the list.
+    // for ProcessorHandlerSetupCloseEvent and Bucket MapJoin, there is exactly one event in the list.
     assert arg0.size() <= 1;
     for (Event event : arg0) {
-      CustomProcessorEvent cpEvent = (CustomProcessorEvent) event;
-      ByteBuffer buffer = cpEvent.getPayload();
-      // Get int view of the buffer
-      IntBuffer intBuffer = buffer.asIntBuffer();
-      jobConf.setInt(Constants.LLAP_NUM_BUCKETS, intBuffer.get(0));
-      jobConf.setInt(Constants.LLAP_BUCKET_ID, intBuffer.get(1));
+      if (event instanceof ProcessorHandlerSetupCloseEvent) {
+        ProcessorHandlerSetupCloseEvent phEvent = (ProcessorHandlerSetupCloseEvent) event;
+        boolean setup = phEvent.getSetup();
+        if (setup) {
+          IOContextMap.setThreadAttemptId(processorContext.getUniqueIdentifier());
+        } else {
+          IOContextMap.cleanThreadAttemptId(processorContext.getUniqueIdentifier());
+        }
+      } else if (event instanceof CustomProcessorEvent) {
+        CustomProcessorEvent cpEvent = (CustomProcessorEvent) event;
+        ByteBuffer buffer = cpEvent.getPayload();
+        // Get int view of the buffer
+        IntBuffer intBuffer = buffer.asIntBuffer();
+        jobConf.setInt(Constants.LLAP_NUM_BUCKETS, intBuffer.get(0));
+        jobConf.setInt(Constants.LLAP_BUCKET_ID, intBuffer.get(1));
+      } else {
+        LOG.error("Ignoring unknown Event: " + event);
+      }
     }
   }
 
@@ -176,11 +204,33 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     Configuration conf = TezUtils.createConfFromUserPayload(getContext().getUserPayload());
     this.jobConf = new JobConf(conf);
     this.processorContext = getContext();
+    int dagIdId = processorContext.getDagIdentifier();
+    HiveConf.setIntVar(this.jobConf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID, dagIdId);
+
     ExecutionContext execCtx = processorContext.getExecutionContext();
     if (execCtx instanceof Hook) {
       ((Hook)execCtx).initializeHook(this);
     }
     setupMRLegacyConfigs(processorContext);
+
+    // use the implementation of IOContextMap for LLAP
+    IOContextMap.setThreadAttemptId(processorContext.getUniqueIdentifier());
+
+    if (true) {
+      String queryId = HiveConf.getVar(this.jobConf, HiveConf.ConfVars.HIVEQUERYID);
+      processorContext.setDagShutdownHook(dagIdId,
+          new Runnable() {
+            public void run() {
+              ObjectCacheFactory.removeLlapQueryCache(queryId, dagIdId);
+            }
+          },
+          new org.apache.tez.runtime.api.TaskContext.VertexShutdown() {
+            public void run(int vertexIdId) {
+              ObjectCacheFactory.removeLlapQueryVertexCache(queryId, dagIdId, vertexIdId);
+            }
+          });
+    }
+
     perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.TEZ_INITIALIZE_PROCESSOR);
   }
 
@@ -250,14 +300,29 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       initializeAndRunProcessor(inputs, outputs);
     }
     // TODO HIVE-14042. In case of an abort request, throw an InterruptedException
+    // implement HIVE-14042 in initializeAndRunProcessor(), not here
   }
 
   protected void initializeAndRunProcessor(Map<String, LogicalInput> inputs,
       Map<String, LogicalOutput> outputs)
       throws Exception {
     Throwable originalThrowable = null;
-    try {
 
+    boolean setLlapCacheCounters = isMap &&
+        HiveConf.getVar(this.jobConf, HiveConf.ConfVars.HIVE_EXECUTION_MODE).equals("llap")
+        && HiveConf.getBoolVar(this.jobConf, HiveConf.ConfVars.LLAP_CLIENT_CONSISTENT_SPLITS);
+    String fragmentId = null;
+    if (setLlapCacheCounters) {
+      TezDAGID tezDAGID = TezDAGID.getInstance(this.getContext().getApplicationId(), this.getContext().getDagIdentifier());
+      TezVertexID tezVertexID = TezVertexID.getInstance(tezDAGID, this.getContext().getTaskVertexIndex());
+      TezTaskID tezTaskID = TezTaskID.getInstance(tezVertexID, this.getContext().getTaskIndex());
+      TezTaskAttemptID tezTaskAttemptID = TezTaskAttemptID.getInstance(tezTaskID, this.getContext().getTaskAttemptNumber());
+      this.jobConf.set(MRInput.TEZ_MAPREDUCE_TASK_ATTEMPT_ID, tezTaskAttemptID.toString());
+      fragmentId = LlapTezUtils.getFragmentId(this.jobConf);
+      FragmentCountersMap.registerCountersForFragment(fragmentId, this.processorContext.getCounters());
+    }
+
+    try {
       MRTaskReporter mrReporter = new MRTaskReporter(getContext());
       // Init and run are both potentially long, and blocking operations. Synchronization
       // with the 'abort' operation will not work since if they end up blocking on a monitor
@@ -276,6 +341,11 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
         LOG.error("Cannot recover from this FATAL error", StringUtils.stringifyException(originalThrowable));
         getContext().reportFailure(TaskFailureType.FATAL, originalThrowable,
                       "Cannot recover from this error");
+        ObjectCache.clearObjectRegistry();  // clear thread-local cache which may contain MAP/REDUCE_PLAN
+        Utilities.clearWork(jobConf);       // clear thread-local gWorkMap which may contain MAP/REDUCE_PLAN
+        if (setLlapCacheCounters) {
+          FragmentCountersMap.unregisterCountersForFragment(fragmentId);
+        }
         throw new RuntimeException(originalThrowable);
       }
 
@@ -288,8 +358,32 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
           originalThrowable = t;
         }
       }
+
+      if (setLlapCacheCounters) {
+        FragmentCountersMap.unregisterCountersForFragment(fragmentId);
+      }
+
+      // Invariant: calls to abort() eventually lead to clearing thread-local cache exactly once.
+      // 1.
+      // rproc.run()/close() may return normally even after abort() is called and rProcLocal.abort() is
+      // executed. In such a case, thread-local cache may be in a corrupted state. Hence, we should raise
+      // InterruptedException by setting originalThrowable to InterruptedException. In this way, we clear
+      // thread-local cache and fail the current TaskAttempt.
+      // 2.
+      // We set this.aborted to true, so that from now on, abort() is ignored to avoid corrupting thread-local
+      // cache (MAP_PLAN/REDUCE_PLAN).
+
+      // 2. set aborted to true
+      boolean prevAborted = aborted.getAndSet(true);
+      // 1. raise InterruptedException if necessary
+      if (prevAborted && originalThrowable == null) {
+        originalThrowable = new InterruptedException("abort() was called, but RecordProcessor successfully returned");
+      }
+
       if (originalThrowable != null) {
         LOG.error(StringUtils.stringifyException(originalThrowable));
+        ObjectCache.clearObjectRegistry();  // clear thread-local cache which may contain MAP/REDUCE_PLAN
+        Utilities.clearWork(jobConf);       // clear thread-local gWorkMap which may contain MAP/REDUCE_PLAN
         if (originalThrowable instanceof InterruptedException) {
           throw (InterruptedException) originalThrowable;
         } else {
@@ -299,19 +393,24 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     }
   }
 
+  // abort() can be called after run() has returned without throwing Exception.
+  // Calling ObjectCache.clearObjectRegistry() and Utilities.clearWork(jobConf) inside abort() does not make
+  // sense because the caller thread is not the same thread that calls run().
   @Override
   public void abort() {
-    RecordProcessor rProcLocal;
+    RecordProcessor rProcLocal = null;
     synchronized (this) {
       LOG.info("Received abort");
-      aborted.set(true);
-      rProcLocal = rproc;
+      boolean prevAborted = aborted.getAndSet(true);
+      if (!prevAborted) {
+        rProcLocal = rproc;
+      }
     }
     if (rProcLocal != null) {
       LOG.info("Forwarding abort to RecordProcessor");
       rProcLocal.abort();
     } else {
-      LOG.info("RecordProcessor not yet setup. Abort will be ignored");
+      LOG.info("RecordProcessor not yet setup or already completed. Abort will be ignored");
     }
   }
 

@@ -31,6 +31,11 @@ apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
 PREHOOK: query: select * from newtypestbl where b!=true
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl
@@ -39,11 +44,6 @@ POSTHOOK: query: select * from newtypestbl where b!=true
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypestbl
 #### A masked pattern was here ####
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
 PREHOOK: query: select * from newtypestbl where b<true
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl
@@ -52,11 +52,6 @@ POSTHOOK: query: select * from newtypestbl where b<true
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypestbl
 #### A masked pattern was here ####
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
 PREHOOK: query: select * from newtypestbl where b>true
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl
@@ -78,11 +73,11 @@ apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
 PREHOOK: query: select * from newtypestbl where b=false
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl
@@ -91,11 +86,6 @@ POSTHOOK: query: select * from newtypestbl where b=false
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypestbl
 #### A masked pattern was here ####
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
 PREHOOK: query: select * from newtypestbl where b!=false
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl
@@ -104,6 +94,11 @@ POSTHOOK: query: select * from newtypestbl where b!=false
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypestbl
 #### A masked pattern was here ####
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
@@ -130,6 +125,11 @@ apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
 PREHOOK: query: select * from newtypestbl where b<=false
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl
@@ -138,11 +138,6 @@ POSTHOOK: query: select * from newtypestbl where b<=false
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypestbl
 #### A masked pattern was here ####
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
 PREHOOK: query: select * from newtypestbl where b=true
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl
@@ -156,6 +151,11 @@ apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
 PREHOOK: query: select * from newtypestbl where b!=true
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl
@@ -164,11 +164,6 @@ POSTHOOK: query: select * from newtypestbl where b!=true
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypestbl
 #### A masked pattern was here ####
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
 PREHOOK: query: select * from newtypestbl where b<true
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl
@@ -177,11 +172,6 @@ POSTHOOK: query: select * from newtypestbl where b<true
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypestbl
 #### A masked pattern was here ####
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
 PREHOOK: query: select * from newtypestbl where b>true
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl
@@ -203,11 +193,11 @@ apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
 PREHOOK: query: select * from newtypestbl where b=false
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl
@@ -216,11 +206,6 @@ POSTHOOK: query: select * from newtypestbl where b=false
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypestbl
 #### A masked pattern was here ####
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
 PREHOOK: query: select * from newtypestbl where b!=false
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl
@@ -229,6 +214,11 @@ POSTHOOK: query: select * from newtypestbl where b!=false
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypestbl
 #### A masked pattern was here ####
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
@@ -255,6 +245,11 @@ apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
 apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
+apple     	bee	0.220	true
 PREHOOK: query: select * from newtypestbl where b<=false
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl
@@ -263,8 +258,3 @@ POSTHOOK: query: select * from newtypestbl where b<=false
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypestbl
 #### A masked pattern was here ####
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false
-hello     	world	11.220	false

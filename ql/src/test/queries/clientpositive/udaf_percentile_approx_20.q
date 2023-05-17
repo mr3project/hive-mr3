@@ -1,4 +1,4 @@
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
 -- INCLUDE_HADOOP_MAJOR_VERSIONS( 0.20S)
 

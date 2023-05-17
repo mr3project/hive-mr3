@@ -1,5 +1,5 @@
 SET hive.vectorized.execution.enabled=false;
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
 set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
 CREATE TABLE srcbucket_mapjoin_n17(key int, value string) CLUSTERED BY (key) INTO 2 BUCKETS STORED AS TEXTFILE;

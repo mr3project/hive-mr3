@@ -1,4 +1,4 @@
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
 set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
 ;

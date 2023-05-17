@@ -1,6 +1,6 @@
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
-set hive.mapred.mode=nonstrict;
+-- set hive.mapred.mode=nonstrict;
 -- small no part, 4 bucket & big 2 part, 2 bucket
 CREATE TABLE bucket_small_n7 (key string, value string) CLUSTERED BY (key) SORTED BY (key) INTO 4 BUCKETS STORED AS TEXTFILE;
 load data local inpath '../../data/files/auto_sortmerge_join/big/000000_0' INTO TABLE bucket_small_n7;

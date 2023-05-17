@@ -1,7 +1,7 @@
 SET hive.vectorized.execution.enabled=false;
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
-set hive.mapred.mode=nonstrict;
+-- set hive.mapred.mode=nonstrict;
 CREATE TABLE srcbucket_mapjoin_n0(key int, value string) CLUSTERED BY (key) INTO 2 BUCKETS STORED AS TEXTFILE;
 load data local inpath '../../data/files/bmj/000000_0' INTO TABLE srcbucket_mapjoin_n0;
 load data local inpath '../../data/files/bmj/000001_0' INTO TABLE srcbucket_mapjoin_n0;

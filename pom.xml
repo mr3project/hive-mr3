@@ -61,7 +61,6 @@
     <module>testutils</module>
     <module>packaging</module>
     <module>standalone-metastore</module>
-    <module>upgrade-acid</module>
     <module>kafka-handler</module>
   </modules>
 
@@ -97,17 +96,15 @@
 
     <!-- Plugin and Plugin Dependency Versions -->
     <ant.contrib.version>1.0b3</ant.contrib.version>
-    <datanucleus.maven.plugin.version>3.3.0-release</datanucleus.maven.plugin.version>
-    <maven.test.jvm.args>-Xmx2048m</maven.test.jvm.args>
+    <maven.test.jvm.args>-Xmx20480m</maven.test.jvm.args>
     <maven.antrun.plugin.version>1.7</maven.antrun.plugin.version>
     <maven.assembly.plugin.version>2.3</maven.assembly.plugin.version>
     <maven.checkstyle.plugin.version>2.17</maven.checkstyle.plugin.version>
-    <maven.compiler.plugin.version>3.6.1</maven.compiler.plugin.version>
+    <maven.compiler.plugin.version>3.8.0</maven.compiler.plugin.version>
     <maven.enforcer.plugin.version>1.3.1</maven.enforcer.plugin.version>
     <maven.install.plugin.version>2.4</maven.install.plugin.version>
     <maven.jar.plugin.version>2.4</maven.jar.plugin.version>
-    <maven.javadoc.plugin.version>2.4</maven.javadoc.plugin.version>
-    <maven.shade.plugin.version>3.1.0</maven.shade.plugin.version>
+    <maven.shade.plugin.version>3.4.1</maven.shade.plugin.version>
     <maven.surefire.plugin.version>2.21.0</maven.surefire.plugin.version>
     <maven.war.plugin.version>2.4</maven.war.plugin.version>
     <maven.dependency.plugin.version>2.8</maven.dependency.plugin.version>
@@ -134,7 +131,7 @@
     <commons-cli.version>1.2</commons-cli.version>
     <commons-codec.version>1.7</commons-codec.version>
     <commons-collections.version>3.2.2</commons-collections.version>
-    <commons-compress.version>1.9</commons-compress.version>
+    <commons-compress.version>1.21</commons-compress.version>
     <commons-exec.version>1.1</commons-exec.version>
     <commons-io.version>2.6</commons-io.version>
     <commons-lang3.version>3.9</commons-lang3.version>
@@ -149,7 +146,7 @@
     <guava.version>19.0</guava.version>
     <groovy.version>2.4.11</groovy.version>
     <h2database.version>1.3.166</h2database.version>
-    <hadoop.version>3.1.0</hadoop.version>
+    <hadoop.version>3.3.1</hadoop.version>
     <hadoop.bin.path>${basedir}/${hive.path.to.root}/testutils/hadoop</hadoop.bin.path>
     <hamcrest.version>1.3</hamcrest.version>
     <hbase.version>2.0.0-alpha4</hbase.version>
@@ -170,7 +167,7 @@
     <javolution.version>5.5.1</javolution.version>
     <jdo-api.version>3.0.1</jdo-api.version>
     <jettison.version>1.1</jettison.version>
-    <jetty.version>9.3.25.v20180904</jetty.version>
+    <jetty.version>9.4.40.v20210413</jetty.version>
     <jersey.version>1.19</jersey.version>
     <!-- Glassfish jersey is included for Spark client test only -->
     <glassfish.jersey.version>2.22.2</glassfish.jersey.version>
@@ -190,20 +187,20 @@
     <powermock.version>1.7.4</powermock.version>
     <mina.version>2.0.0-M5</mina.version>
     <netty.version>4.1.17.Final</netty.version>
-    <netty3.version>3.10.5.Final</netty3.version>
+    <netty3.version>3.10.6.Final</netty3.version>
     <parquet.version>1.10.0</parquet.version>
     <pig.version>0.16.0</pig.version>
     <plexus.version>1.5.6</plexus.version>
     <protobuf.version>2.5.0</protobuf.version>
     <stax.version>1.0.1</stax.version>
-    <slf4j.version>1.7.10</slf4j.version>
+    <slf4j.version>1.7.30</slf4j.version>
     <ST4.version>4.0.4</ST4.version>
-    <storage-api.version>2.7.0</storage-api.version>
-    <tez.version>0.9.1</tez.version>
+    <storage-api.version>2.6.1.mr3</storage-api.version>
+    <tez.version>0.9.1.mr3.1.0</tez.version>
     <super-csv.version>2.2.0</super-csv.version>
     <spark.version>2.3.0</spark.version>
     <scala.binary.version>2.11</scala.binary.version>
-    <scala.version>2.11.8</scala.version>
+    <scala.version>2.11.12</scala.version>
     <tempus-fugit.version>1.1</tempus-fugit.version>
     <snappy.version>1.1.4</snappy.version>
     <wadl-resourcedoc-doclet.version>1.4</wadl-resourcedoc-doclet.version>
@@ -217,6 +214,8 @@
     <tephra.version>0.6.0</tephra.version>
     <gson.version>2.2.4</gson.version>
     <re2j.version>1.2</re2j.version>
+    <jansi.version>2.3.4</jansi.version>
+    <mr3.version>1.0</mr3.version>
   </properties>
 
   <repositories>
@@ -633,6 +632,11 @@
         <version>${jetty.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-http</artifactId>
+        <version>${jetty.version}</version>
+      </dependency>
+      <dependency>
         <groupId>javax.servlet</groupId>
         <artifactId>javax.servlet-api</artifactId>
         <version>${javax-servlet.version}</version>
@@ -765,14 +769,34 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-mapreduce-client-core</artifactId>
         <version>${hadoop.version}</version>
-         <exclusions>
-            <exclusion>
+        <exclusions>
+          <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-reload4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.reload4j</groupId>
+            <artifactId>reload4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.jline</groupId>
+            <artifactId>jline</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-all</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -790,6 +814,12 @@
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-yarn-client</artifactId>
         <version>${hadoop.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jline</groupId>
+            <artifactId>jline</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
@@ -928,11 +958,6 @@
       <version>${slf4j.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.hive</groupId>
-      <artifactId>hive-upgrade-acid</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-all</artifactId>
       <scope>test</scope>
@@ -1035,18 +1060,6 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-war-plugin</artifactId>
           <version>${maven.war.plugin.version}</version>
-        </plugin>
-        <plugin>
-          <groupId>org.datanucleus</groupId>
-          <artifactId>datanucleus-maven-plugin</artifactId>
-          <version>${datanucleus.maven.plugin.version}</version>
-          <dependencies>
-            <dependency>
-              <groupId>org.datanucleus</groupId>
-              <artifactId>datanucleus-core</artifactId>
-              <version>${datanucleus-core.version}</version>
-            </dependency>
-          </dependencies>
         </plugin>
         <plugin>
           <groupId>org.apache.felix</groupId>
@@ -1155,7 +1168,7 @@
                   <onlyWhenRelease>true</onlyWhenRelease>
                 </requireReleaseDeps>
               </rules>
-              <fail>true</fail>
+              <fail>false</fail>
             </configuration>
           </execution>
           <execution>

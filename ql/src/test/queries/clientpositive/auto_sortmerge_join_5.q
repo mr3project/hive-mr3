@@ -1,6 +1,6 @@
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
-set hive.mapred.mode=nonstrict;
+-- set hive.mapred.mode=nonstrict;
 -- small no part, 4 bucket & big no part, 2 bucket
 
 -- SORT_QUERY_RESULTS

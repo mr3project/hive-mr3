@@ -69,7 +69,7 @@ SELECT p1.p_name FROM part p1 LEFT JOIN (select p_type as p_col from part ) p2 W
 -- decorrelation should not mangle up the result schema
 create table tschema(id int, name string,dept string);
 insert into tschema values(1,'a','it'),(2,'b','eee'),(NULL, 'c', 'cse');
-explain cbo select distinct 'empno' as eid, a.id from tschema a
+explain select distinct 'empno' as eid, a.id from tschema a
     where NOT EXISTS (select c.id from tschema c where a.id=c.id);
 select distinct 'empno' as eid, a.id from tschema a
     where NOT EXISTS (select c.id from tschema c where a.id=c.id);

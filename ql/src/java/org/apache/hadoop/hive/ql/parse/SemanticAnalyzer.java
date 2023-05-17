@@ -1146,9 +1146,8 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
   }
 
   private void assertCombineInputFormat(Tree numerator, String message) throws SemanticException {
-    String inputFormat = conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez") ?
-        HiveConf.getVar(conf, HiveConf.ConfVars.HIVETEZINPUTFORMAT):
-        HiveConf.getVar(conf, HiveConf.ConfVars.HIVEINPUTFORMAT);
+    String inputFormat =
+        HiveConf.getVar(conf, HiveConf.ConfVars.HIVETEZINPUTFORMAT);
     if (!inputFormat.equals(CombineHiveInputFormat.class.getName())) {
       throw new SemanticException(generateErrorMessage((ASTNode) numerator,
           message + " sampling is not supported in " + inputFormat));
@@ -9287,21 +9286,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       ASTNode hint = (ASTNode) hints.getChild(pos);
       if (((ASTNode) hint.getChild(0)).getToken().getType() == HintParser.TOK_MAPJOIN) {
         // the user has specified to ignore mapjoin hint
-        if (!conf.getBoolVar(HiveConf.ConfVars.HIVEIGNOREMAPJOINHINT)
-            && !conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
-          ASTNode hintTblNames = (ASTNode) hint.getChild(1);
-          int numCh = hintTblNames.getChildCount();
-          for (int tblPos = 0; tblPos < numCh; tblPos++) {
-            String tblName = ((ASTNode) hintTblNames.getChild(tblPos)).getText()
-                .toLowerCase();
-            if (!cols.contains(tblName)) {
-              cols.add(tblName);
-            }
-          }
-        }
-        else {
-          queryProperties.setMapJoinRemoved(true);
-        }
+        queryProperties.setMapJoinRemoved(true);
       }
     }
 
@@ -9408,11 +9393,6 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     }
     joinTree.setJoinCond(condn);
 
-    if ((qb.getParseInfo().getHints() != null)
-        && !(conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez"))) {
-      LOG.info("STREAMTABLE hint honored.");
-      parseStreamTables(joinTree, qb);
-    }
     return joinTree;
   }
 
@@ -9707,10 +9687,6 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       }
 
       joinTree.setMapAliases(mapAliases);
-
-      if ((conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) == false) {
-        parseStreamTables(joinTree, qb);
-      }
     }
 
     return joinTree;
@@ -10728,8 +10704,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     // with SEL_3 to get UNION_2, then no SelectOperator will be inserted. Hence error
     // will happen afterwards. The solution here is to insert one after UNION_1, which
     // cast int to double.
-    boolean isMR = HiveConf.getVar(conf,
-        HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("mr");
+    boolean isMR = false;
 
     if (!isMR || !(leftOp instanceof UnionOperator)) {
       leftOp = genInputSelectForUnion(leftOp, leftmap, leftalias, unionoutRR, unionalias);

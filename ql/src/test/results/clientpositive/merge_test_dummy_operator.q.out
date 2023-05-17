@@ -317,7 +317,7 @@ SELECT S.*
   --AND F.temp_result_1 < 200
 PREHOOK: type: QUERY
 PREHOOK: Input: default@common_join_table
-#### A masked pattern was here ####
+PREHOOK: Output: hdfs://### HDFS PATH ###
 POSTHOOK: query: WITH temp_tbl_1 AS (
 SELECT col7
 	  ,col4KEY
@@ -407,7 +407,7 @@ SELECT S.*
   --AND F.temp_result_1 < 200
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@common_join_table
-#### A masked pattern was here ####
+POSTHOOK: Output: hdfs://### HDFS PATH ###
 id	109515	1	10	1
 PREHOOK: query: drop table common_join_table
 PREHOOK: type: DROPTABLE

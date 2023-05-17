@@ -101,8 +101,12 @@ public class MapRecordProcessor extends RecordProcessor {
     if (LlapProxy.isDaemon()) {
       setLlapOfFragmentId(context);
     }
-    cache = ObjectCacheFactory.getCache(jconf, queryId, true);
-    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, false, true);
+    String prefixes = jconf.get(DagUtils.TEZ_MERGE_WORK_FILE_PREFIXES);
+    int dagIdId = context.getDagIdentifier();
+    cache = (prefixes == null) ?    // if MergeWork does not exists
+      ObjectCacheFactory.getCache(jconf, queryId, dagIdId, true) :
+      ObjectCacheFactory.getPerTaskMrCache(queryId, dagIdId);
+    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, dagIdId, false, true);
     execContext = new ExecMapperContext(jconf);
     execContext.setJc(jconf);
     cacheKeys = new ArrayList<String>();
@@ -292,15 +296,18 @@ public class MapRecordProcessor extends RecordProcessor {
       checkAbortCondition();
       mapOp.setChildren(jconf);
       mapOp.passExecContext(execContext);
-      l4j.info(mapOp.dump(0));
+      l4j.debug(mapOp.dump(0));
 
       // set memory available for operators
       long memoryAvailableToTask = processorContext.getTotalMemoryAvailableToTask();
+      int estimateNumExecutors = processorContext.getEstimateNumExecutors();
       if (mapOp.getConf() != null) {
         mapOp.getConf().setMaxMemoryAvailable(memoryAvailableToTask);
-        l4j.info("Memory available for operators set to {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask));
+        mapOp.getConf().setEstimateNumExecutors(estimateNumExecutors);
+        l4j.info("Memory available for operators set to {} {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask), estimateNumExecutors);
       }
       OperatorUtils.setMemoryAvailable(mapOp.getChildOperators(), memoryAvailableToTask);
+      OperatorUtils.setEstimateNumExecutors(mapOp.getChildOperators(), estimateNumExecutors);
 
       mapOp.initializeLocalWork(jconf);
 

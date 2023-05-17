@@ -39,18 +39,6 @@
 </property>
 
 <property>
-  <name>hive.tez.container.size</name>
-  <value>128</value>
-  <description></description>
-</property>
-
-<property>
-  <name>hive.stats.fetch.column.stats</name>
-  <value>true</value>
-  <description>Use column stats to annotate stats for physical optimization phase</description>
-</property>
-
-<property>
   <name>hive.merge.tezfiles</name>
   <value>false</value>
   <description>Merge small files at the end of a Tez DAG</description>
@@ -224,24 +212,6 @@
 </property>
 
 <property>
-  <name>hive.execution.engine</name>
-  <value>tez</value>
-  <description>Whether to use MR or Tez</description>
-</property>
-
-<property>
-  <name>tez.am.node-blacklisting.enabled</name>
-  <value>false</value>
-</property>
-
-<property>
-  <name>hive.prewarm.enabled</name>
-  <value>false</value>
-  <description>
-    Enables container prewarm for tez (hadoop 2 only)
-  </description>
-</property>
-<property>
   <name>hive.in.tez.test</name>
   <value>true</value>
   <description>
@@ -249,26 +219,11 @@
   </description>
 </property>
 
-<property>
-  <name>hive.execution.mode</name>
-  <value>llap</value>
-</property>
-
 <!--property>
      This is determined by the cluster type, and is set in code - HadoopShims, etc.
   <name>hive.llap.execution.mode</name>
   <value>all</value>
 </property-->
-
-<property>
-  <name>hive.tez.java.opts</name>
-  <value> -Dlog4j.configurationFile=tez-container-log4j2.properties -Dtez.container.log.level=INFO -Dtez.container.root.logger=CLA </value>
-</property>
-
-<property>
-  <name>tez.am.launch.cmd-opts</name>
-  <value> -Dlog4j.configurationFile=tez-container-log4j2.properties -Dtez.container.log.level=INFO -Dtez.container.root.logger=CLA </value>
-</property>
 
 <property>
   <name>hive.llap.cache.allow.synthetic.fileid</name>
@@ -354,8 +309,140 @@
 </property>
 
 <property>
+  <name>hive.users.in.admin.role</name>
+  <value>hive_admin_user</value>
+</property>
+
+<property>
   <name>tez.counters.max</name>
   <value>1024</value>
+</property>
+
+<!-- MR3 -->
+
+<property>
+  <name>hive.execution.engine</name>
+  <value>mr3</value>
+</property>
+
+<property>
+  <name>hive.execution.mode</name>
+  <value>llap</value>
+</property>
+
+<property>
+  <name>hive.llap.execution.mode</name>
+  <value>all</value>
+</property>
+
+<property>
+  <name>hive.llap.io.enabled</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>hive.llap.io.memory.size</name>
+  <value>4Gb</value>
+</property>
+
+<property>
+  <name>hive.mr3.llap.headroom.mb</name>
+  <value>0</value>
+</property>
+
+<property>
+  <name>hive.llap.io.threadpool.size</name>
+  <value>2</value>
+</property>
+
+<property>
+  <name>hive.mr3.container.combine.taskattempts</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>hive.mr3.container.reuse</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>hive.mr3.containergroup.scheme</name>
+  <value>all-in-one</value>
+</property>
+
+<property>
+  <name>hive.mr3.map.task.memory.mb</name>
+  <value>2048</value>
+</property>
+
+<property>
+  <name>hive.mr3.map.task.vcores</name>
+  <value>1</value>
+</property>
+
+<property>
+  <name>hive.mr3.reduce.task.memory.mb</name>
+  <value>2048</value>
+</property>
+
+<property>
+  <name>hive.mr3.reduce.task.vcores</name>
+  <value>1</value>
+</property>
+
+<property>
+  <name>hive.mr3.all-in-one.containergroup.memory.mb</name>
+  <value>12288</value>
+</property>
+
+<property>
+  <name>hive.mr3.all-in-one.containergroup.vcores</name>
+  <value>6</value>
+</property>
+
+<property>
+  <name>mr3.runtime</name>
+  <value>tez</value>
+</property>
+
+<property>
+  <name>mr3.master.mode</name>
+  <value>local-thread</value>
+</property>
+
+<property>
+  <name>mr3.am.worker.mode</name>
+  <value>local</value>
+</property>
+
+<property>
+  <name>mr3.am.resource.memory.mb</name>
+  <value>18432</value>
+</property>
+
+<property>
+  <name>mr3.am.local.resourcescheduler.max.memory.mb</name>
+  <value>16384</value>
+</property>
+
+<property>
+  <name>mr3.am.local.resourcescheduler.max.cpu.cores</name>
+  <value>128</value>
+</property>
+
+<property>
+  <name>mr3.container.localize.python.working.dir.unsafe</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>mr3.container.runtime.auto.start.input</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>mr3.container.localize.python.working.dir.unsafe</name>
+  <value>true</value>
 </property>
 
 </configuration>

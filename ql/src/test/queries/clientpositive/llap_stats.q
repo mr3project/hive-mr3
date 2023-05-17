@@ -2,7 +2,7 @@ set hive.mapred.mode=nonstrict;
 SET hive.vectorized.execution.enabled=true;
 set hive.exec.dynamic.partition.mode=nonstrict;
 
-SET hive.llap.io.enabled=false;
+SET hive.llap.io.enabled=true;
 
 SET hive.exec.orc.default.buffer.size=32768;
 SET hive.exec.orc.default.row.index.stride=1000;

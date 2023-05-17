@@ -1,4 +1,4 @@
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
 set hive.explain.user=true;
 set hive.metastore.aggregate.stats.cache.enabled=false;

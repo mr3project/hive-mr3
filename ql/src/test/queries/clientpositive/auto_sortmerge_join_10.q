@@ -100,7 +100,7 @@ select count(t1.key) from tbl1_n5 as t1 where not exists
 select count(t1.key) from tbl1_n5 as t1 where not exists
      (select 1 from tbl2_n4 as t2 where t1.key = t2.key);
 
-set hive.auto.convert.anti.join=false;
+-- set hive.auto.convert.anti.join=false;
 
 explain
 select count(t1.key) from tbl1_n5 as t1 where not exists

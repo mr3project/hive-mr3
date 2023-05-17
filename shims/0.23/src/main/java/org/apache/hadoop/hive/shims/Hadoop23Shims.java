@@ -50,6 +50,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FutureDataInputStreamBuilder;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathFilter;
@@ -810,6 +811,11 @@ public class Hadoop23Shims extends HadoopShimsSecure {
     }
     public ProxyFileSystem23(FileSystem fs, URI uri) {
       super(fs, uri);
+    }
+
+    @Override
+    public FutureDataInputStreamBuilder openFile(Path path) throws IOException, UnsupportedOperationException {
+      return super.openFile(ProxyFileSystem23.super.swizzleParamPath(path));
     }
 
     @Override

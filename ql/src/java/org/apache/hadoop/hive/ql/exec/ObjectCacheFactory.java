@@ -18,13 +18,15 @@
 
 package org.apache.hadoop.hive.ql.exec;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.hadoop.hive.conf.Constants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.llap.io.api.LlapProxy;
 import org.apache.hadoop.hive.llap.io.api.LlapProxy;
 import org.apache.hadoop.hive.ql.exec.tez.LlapObjectCache;
 
@@ -35,18 +37,26 @@ import org.apache.hadoop.hive.ql.exec.tez.LlapObjectCache;
 public class ObjectCacheFactory {
   private static final ConcurrentHashMap<String, ObjectCache> llapQueryCaches =
       new ConcurrentHashMap<>();
+  private static final ConcurrentHashMap<String, Map<Integer, LlapObjectCache>> llapVertexCaches =
+      new ConcurrentHashMap<>();
   private static final Logger LOG = LoggerFactory.getLogger(ObjectCacheFactory.class);
 
   private ObjectCacheFactory() {
     // avoid instantiation
   }
 
+  public static ObjectCache getPerTaskMrCache(String queryId, int dagIdId) {
+    return new ObjectCacheWrapper(
+      new  org.apache.hadoop.hive.ql.exec.mr.ObjectCache(), queryId, dagIdId);
+  }
+
   /**
    * Returns the appropriate cache
    */
-  public static ObjectCache getCache(Configuration conf, String queryId, boolean isPlanCache) {
+  public static ObjectCache getCache(
+      Configuration conf, String queryId, int dagIdId, boolean isPlanCache) {
     // LLAP cache can be disabled via config or isPlanCache
-    return getCache(conf, queryId, isPlanCache, false);
+    return getCache(conf, queryId, dagIdId, isPlanCache, false);
   }
 
   /**
@@ -58,54 +68,90 @@ public class ObjectCacheFactory {
    *        of config settings disabling LLAP cache. Valid only if running LLAP.
    * @return
    */
-  public static ObjectCache getCache(Configuration conf, String queryId, boolean isPlanCache, boolean llapCacheAlwaysEnabled) {
-    if (HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
-      if (LlapProxy.isDaemon()) { // daemon
-        if (isLlapCacheEnabled(conf, isPlanCache, llapCacheAlwaysEnabled)) {
-          // LLAP object cache, unlike others, does not use globals. Thus, get the existing one.
-          return getLlapObjectCache(queryId);
-        } else { // no cache
-          return new ObjectCacheWrapper(
-              new org.apache.hadoop.hive.ql.exec.mr.ObjectCache(), queryId);
-        }
-      } else { // container
-        if (org.apache.hadoop.hive.ql.exec.tez.ObjectCache.isObjectRegistryConfigured()) {
-          return new ObjectCacheWrapper(
-              new org.apache.hadoop.hive.ql.exec.tez.ObjectCache(), queryId);
-        } else {
-          // Tez processor needs to configure object registry first.
-          return null;
-        }
+  public static ObjectCache getCache(
+      Configuration conf, String queryId, int dagIdId, boolean isPlanCache, boolean llapCacheAlwaysEnabled) {
+    if (isPlanCache || !HiveConf.getBoolVar(conf, HiveConf.ConfVars.MR3_CONTAINER_USE_PER_QUERY_CACHE)) {
+      // return a per-thread cache
+      if (org.apache.hadoop.hive.ql.exec.tez.ObjectCache.isObjectRegistryConfigured()) {
+        return new ObjectCacheWrapper(new org.apache.hadoop.hive.ql.exec.tez.ObjectCache(), queryId, dagIdId);
+      } else
+        return null;
+    } else {
+      if (llapCacheAlwaysEnabled) {
+        // return a per-query cache
+        return getLlapObjectCache(queryId, dagIdId);
+      } else {
+        // return a per-Vertex cache
+        int vertexIndex = org.apache.hadoop.hive.ql.exec.tez.ObjectCache.getCurrentVertexIndex();
+        return getLlapQueryVertexCache(queryId, dagIdId, vertexIndex);
       }
-    } else { // mr or spark
-      return new ObjectCacheWrapper(
-          new  org.apache.hadoop.hive.ql.exec.mr.ObjectCache(), queryId);
     }
   }
 
-  private static boolean isLlapCacheEnabled(Configuration conf, boolean isPlanCache, boolean llapCacheAlwaysEnabled) {
-    return (llapCacheAlwaysEnabled ||
-        (HiveConf.getBoolVar(conf, HiveConf.ConfVars.LLAP_OBJECT_CACHE_ENABLED) && !isPlanCache));
-  }
-
-  private static ObjectCache getLlapObjectCache(String queryId) {
+  private static ObjectCache getLlapObjectCache(String queryId, int dagIdId) {
     // If order of events (i.e. dagstart and fragmentstart) was guaranteed, we could just
     // create the cache when dag starts, and blindly return it to execution here.
     if (queryId == null) throw new RuntimeException("Query ID cannot be null");
-    ObjectCache result = llapQueryCaches.get(queryId);
+    String cacheKey = getCacheKey(queryId, dagIdId);
+    ObjectCache result = llapQueryCaches.get(cacheKey);
     if (result != null) return result;
     result = new LlapObjectCache();
-    ObjectCache old = llapQueryCaches.putIfAbsent(queryId, result);
+    ObjectCache old = llapQueryCaches.putIfAbsent(cacheKey, result);
     if (old == null && LOG.isInfoEnabled()) {
-      LOG.info("Created object cache for " + queryId);
+      LOG.info("Created object cache for " + cacheKey);
     }
     return (old != null) ? old : result;
   }
 
-  public static void removeLlapQueryCache(String queryId) {
-    if (LOG.isInfoEnabled()) {
-      LOG.info("Removing object cache for " + queryId);
+  private static LlapObjectCache getLlapQueryVertexCache(String queryId, int dagIdId, int vertexIndex) {
+    if (queryId == null) throw new RuntimeException("Query ID cannot be null");
+    Map<Integer, LlapObjectCache> map = getLlapQueryVertexCacheMap(queryId, dagIdId);
+    synchronized (map) {
+      LlapObjectCache result = map.get(vertexIndex);
+      if (result != null) return result;
+      result = new LlapObjectCache();
+      map.put(vertexIndex, result);
+      LOG.info("Created Vertex cache for " + queryId + " " + vertexIndex);
+      return result;
     }
-    llapQueryCaches.remove(queryId);
+  }
+
+  private static Map<Integer, LlapObjectCache> getLlapQueryVertexCacheMap(String queryId, int dagIdId) {
+    String cacheKey = getCacheKey(queryId, dagIdId);
+    Map<Integer, LlapObjectCache> result = llapVertexCaches.get(cacheKey);
+    if (result != null) return result;
+    result = new HashMap<>();
+    Map<Integer, LlapObjectCache> old = llapVertexCaches.putIfAbsent(cacheKey, result);
+    if (old == null && LOG.isInfoEnabled()) {
+      LOG.info("Created Vertex cache map for " + cacheKey);
+    }
+    return (old != null) ? old : result;
+  }
+
+  public static void removeLlapQueryVertexCache(String queryId, int dagIdId, int vertexIndex) {
+    String cacheKey = getCacheKey(queryId, dagIdId);
+    Map<Integer, LlapObjectCache> result = llapVertexCaches.get(cacheKey);
+    if (result != null) {
+      LlapObjectCache prev;
+      synchronized (result) {
+        prev = result.remove(vertexIndex);
+      }
+      if (prev != null && LOG.isInfoEnabled()) {
+        LOG.info("Removed Vertex cache for " + cacheKey + " " + vertexIndex);
+      }
+    }
+  }
+
+  public static void removeLlapQueryCache(String queryId, int dagIdId) {
+    String cacheKey = getCacheKey(queryId, dagIdId);
+    if (LOG.isInfoEnabled()) {
+      LOG.info("Removing object cache and Vertex cache map for " + cacheKey);
+    }
+    llapQueryCaches.remove(cacheKey);
+    llapVertexCaches.remove(cacheKey);
+  }
+
+  private static String getCacheKey(String queryId, int dagIdId) {
+    return queryId + "_" + dagIdId;
   }
 }

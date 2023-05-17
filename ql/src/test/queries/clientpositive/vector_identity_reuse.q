@@ -12,7 +12,7 @@ create table u_table_19 (bigint_col_18 bigint ,int_col_19 int, STRING_COL_7 stri
 insert into u_table_19 values (922,5,'500');
 
 
--- set hive.mapjoin.full.outer=true;
+-- -- set hive.mapjoin.full.outer=true;
 set hive.auto.convert.join=true;
 set hive.query.results.cache.enabled=false;
 set hive.merge.nway.joins=true;

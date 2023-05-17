@@ -2,8 +2,8 @@ set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.vectorized.execution.enabled=true;
 set hive.llap.io.enabled=true;
 set hive.map.aggr=false;
-set hive.strict.checks.bucketing=false;
-set hive.mapred.mode=nonstrict;
+set hive.strict.checks.bucketing=true;
+-- set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 
 set hive.auto.convert.join=true;
