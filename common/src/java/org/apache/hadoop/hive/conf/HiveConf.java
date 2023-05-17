@@ -2665,68 +2665,6 @@ public class HiveConf extends Configuration {
         "Max bytes per arrow batch. This is a threshold, the memory is not pre-allocated."),
     HIVE_ARROW_BATCH_SIZE("hive.arrow.batch.size", 1000, "The number of rows sent in one Arrow batch."),
 
-    // For Druid storage handler
-    HIVE_DRUID_INDEXING_GRANULARITY("hive.druid.indexer.segments.granularity", "DAY",
-            new PatternSet("YEAR", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE", "SECOND"),
-            "Granularity for the segments created by the Druid storage handler"
-    ),
-    HIVE_DRUID_MAX_PARTITION_SIZE("hive.druid.indexer.partition.size.max", 5000000,
-            "Maximum number of records per segment partition"
-    ),
-    HIVE_DRUID_MAX_ROW_IN_MEMORY("hive.druid.indexer.memory.rownum.max", 75000,
-            "Maximum number of records in memory while storing data in Druid"
-    ),
-    HIVE_DRUID_BROKER_DEFAULT_ADDRESS("hive.druid.broker.address.default", "localhost:8082",
-            "Address of the Druid broker. If we are querying Druid from Hive, this address needs to be\n"
-                    +
-                    "declared"
-    ),
-    HIVE_DRUID_COORDINATOR_DEFAULT_ADDRESS("hive.druid.coordinator.address.default", "localhost:8081",
-            "Address of the Druid coordinator. It is used to check the load status of newly created segments"
-    ),
-    HIVE_DRUID_OVERLORD_DEFAULT_ADDRESS("hive.druid.overlord.address.default", "localhost:8090",
-        "Address of the Druid overlord. It is used to submit indexing tasks to druid."
-    ),
-    HIVE_DRUID_SELECT_THRESHOLD("hive.druid.select.threshold", 10000,
-        "Takes only effect when hive.druid.select.distribute is set to false. \n" +
-        "When we can split a Select query, this is the maximum number of rows that we try to retrieve\n" +
-        "per query. In order to do that, we obtain the estimated size for the complete result. If the\n" +
-        "number of records of the query results is larger than this threshold, we split the query in\n" +
-        "total number of rows/threshold parts across the time dimension. Note that we assume the\n" +
-        "records to be split uniformly across the time dimension."),
-    HIVE_DRUID_NUM_HTTP_CONNECTION("hive.druid.http.numConnection", 20, "Number of connections used by\n" +
-        "the HTTP client."),
-    HIVE_DRUID_HTTP_READ_TIMEOUT("hive.druid.http.read.timeout", "PT1M", "Read timeout period for the HTTP\n" +
-        "client in ISO8601 format (for example P2W, P3M, PT1H30M, PT0.750S), default is period of 1 minute."),
-    HIVE_DRUID_SLEEP_TIME("hive.druid.sleep.time", "PT10S",
-            "Sleep time between retries in ISO8601 format (for example P2W, P3M, PT1H30M, PT0.750S), default is period of 10 seconds."
-    ),
-    HIVE_DRUID_BASE_PERSIST_DIRECTORY("hive.druid.basePersistDirectory", "",
-            "Local temporary directory used to persist intermediate indexing state, will default to JVM system property java.io.tmpdir."
-    ),
-    DRUID_SEGMENT_DIRECTORY("hive.druid.storage.storageDirectory", "/druid/segments"
-            , "druid deep storage location."),
-    DRUID_METADATA_BASE("hive.druid.metadata.base", "druid", "Default prefix for metadata tables"),
-    DRUID_METADATA_DB_TYPE("hive.druid.metadata.db.type", "mysql",
-            new PatternSet("mysql", "postgresql", "derby"), "Type of the metadata database."
-    ),
-    DRUID_METADATA_DB_USERNAME("hive.druid.metadata.username", "",
-            "Username to connect to Type of the metadata DB."
-    ),
-    DRUID_METADATA_DB_PASSWORD("hive.druid.metadata.password", "",
-            "Password to connect to Type of the metadata DB."
-    ),
-    DRUID_METADATA_DB_URI("hive.druid.metadata.uri", "",
-            "URI to connect to the database (for example jdbc:mysql://hostname:port/DBName)."
-    ),
-    DRUID_WORKING_DIR("hive.druid.working.directory", "/tmp/workingDirectory",
-            "Default hdfs working directory used to store some intermediate metadata"
-    ),
-    HIVE_DRUID_MAX_TRIES("hive.druid.maxTries", 5, "Maximum number of retries before giving up"),
-    HIVE_DRUID_PASSIVE_WAIT_TIME("hive.druid.passiveWaitTimeMs", 30000L,
-            "Wait time in ms default to 30 seconds."
-    ),
-    HIVE_DRUID_BITMAP_FACTORY_TYPE("hive.druid.bitmap.type", "roaring", new PatternSet("roaring", "concise"), "Coding algorithm use to encode the bitmaps"),
     // For HBase storage handler
     HIVE_HBASE_WAL_ENABLED("hive.hbase.wal.enabled", true,
         "Whether writes to HBase should be forced to the write-ahead log. \n" +
@@ -4304,8 +4242,6 @@ public class HiveConf extends Configuration {
             "hive.privilege.synchronizer," +
             "hive.privilege.synchronizer.interval," +
             "bonecp.,"+
-            "hive.druid.broker.address.default,"+
-            "hive.druid.coordinator.address.default,"+
             "hikari.,"+
             "hadoop.bin.path,"+
             "yarn.bin.path",
@@ -5431,7 +5367,6 @@ public class HiveConf extends Configuration {
     "hive\\.auto\\..*",
     "hive\\.cbo\\..*",
     "hive\\.convert\\..*",
-    "hive\\.druid\\..*",
     "hive\\.exec\\.dynamic\\.partition.*",
     "hive\\.exec\\.max\\.dynamic\\.partitions.*",
     "hive\\.exec\\.compress\\..*",
