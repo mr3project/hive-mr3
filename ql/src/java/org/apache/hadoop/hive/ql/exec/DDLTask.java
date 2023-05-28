@@ -5406,7 +5406,6 @@ public class DDLTask extends Task<DDLWork> implements Serializable {
       // TODO: why doesn't this check class name rather than toString?
       String sh = tbl.getStorageHandler().toString();
       retval = !sh.equals("org.apache.hadoop.hive.hbase.HBaseStorageHandler")
-              && !sh.equals(Constants.DRUID_HIVE_STORAGE_HANDLER_ID)
               && !sh.equals(Constants.JDBC_HIVE_STORAGE_HANDLER_ID)
               && !sh.equals("org.apache.hadoop.hive.accumulo.AccumuloStorageHandler");
     }

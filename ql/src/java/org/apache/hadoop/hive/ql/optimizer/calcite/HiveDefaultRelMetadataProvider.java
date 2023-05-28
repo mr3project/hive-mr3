@@ -18,7 +18,6 @@
 package org.apache.hadoop.hive.ql.optimizer.calcite;
 
 import java.util.List;
-import org.apache.calcite.adapter.druid.DruidQuery;
 import org.apache.calcite.adapter.jdbc.JdbcRules.JdbcAggregate;
 import org.apache.calcite.adapter.jdbc.JdbcRules.JdbcFilter;
 import org.apache.calcite.adapter.jdbc.JdbcRules.JdbcJoin;
@@ -116,8 +115,6 @@ public class HiveDefaultRelMetadataProvider {
           HiveSortLimit.class,
           HiveTableFunctionScan.class,
           HiveUnion.class,
-
-          DruidQuery.class,
 
           HiveJdbcConverter.class,
           JdbcHiveTableScan.class,
