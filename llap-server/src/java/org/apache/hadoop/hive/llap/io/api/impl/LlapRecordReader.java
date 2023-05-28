@@ -141,11 +141,11 @@ class LlapRecordReader
     final String fragmentId = LlapTezUtils.getFragmentId(job);
     final String dagId = LlapTezUtils.getDagId(job);
     final String queryId = HiveConf.getVar(job, HiveConf.ConfVars.HIVEQUERYID);
-    MDC.put("dagId", dagId);
-    MDC.put("queryId", queryId);
+    // MDC.put("dagId", dagId);
+    // MDC.put("queryId", queryId);
     TezCounters taskCounters = null;
     if (fragmentId != null) {
-      MDC.put("fragmentId", fragmentId);
+      // MDC.put("fragmentId", fragmentId);
       taskCounters = FragmentCountersMap.getCountersForFragment(fragmentId);
       LOG.info("Received fragment id: {}", fragmentId);
     } else {
@@ -507,7 +507,7 @@ class LlapRecordReader
     feedback.stop();
     isClosed = true;
     rethrowErrorIfAny(pendingError.get());
-    MDC.clear();
+    // MDC.clear();
   }
 
   private static void rethrowErrorIfAny(Throwable pendingError) throws IOException {
