@@ -84,6 +84,7 @@ import org.apache.hadoop.hive.ql.exec.TaskFactory;
 import org.apache.hadoop.hive.ql.exec.TaskResult;
 import org.apache.hadoop.hive.ql.exec.TaskRunner;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.mr3.MR3Task;
 import org.apache.hadoop.hive.ql.history.HiveHistory.Keys;
 import org.apache.hadoop.hive.ql.hooks.Entity;
 import org.apache.hadoop.hive.ql.hooks.Entity.Type;
@@ -759,6 +760,11 @@ public class Driver implements IDriver {
       double duration = perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.COMPILE)/1000.00;
       ImmutableMap<String, Long> compileHMSTimings = dumpMetaCallTimingWithoutEx("compilation");
       queryDisplay.setHmsTimings(QueryDisplay.Phase.COMPILATION, compileHMSTimings);
+
+      // Before resetting SessionState.PerfLogger, we store compile start/end times in SessionState's HiveConf.
+      HiveConf sessionConf = SessionState.get().getConf();
+      sessionConf.setLong(MR3Task.HIVE_CONF_COMPILE_START_TIME, perfLogger.getStartTime(PerfLogger.COMPILE));
+      sessionConf.setLong(MR3Task.HIVE_CONF_COMPILE_END_TIME, perfLogger.getEndTime(PerfLogger.COMPILE));
 
       boolean isInterrupted = lDrvState.isAborted();
       if (isInterrupted && !deferClose) {

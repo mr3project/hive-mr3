@@ -1,6 +1,6 @@
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
-set hive.mapred.mode=nonstrict;
+-- set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 set hive.join.emit.interval=100000;
 set hive.optimize.ppd=true;

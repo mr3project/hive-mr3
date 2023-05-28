@@ -1,5 +1,5 @@
 set hive.cbo.enable=false;
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
 -- SORT_QUERY_RESULTS
 

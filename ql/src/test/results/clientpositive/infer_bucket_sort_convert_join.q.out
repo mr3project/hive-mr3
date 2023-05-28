@@ -60,9 +60,6 @@ SELECT a.key, b.value FROM src a JOIN src b ON a.key = b.key
 PREHOOK: type: QUERY
 PREHOOK: Input: default@src
 PREHOOK: Output: default@test_table_n11@part=1
-Hive Runtime Error: Map local work exhausted memory
-FAILED: Execution Error, return code 3 from org.apache.hadoop.hive.ql.exec.mr.MapredLocalTask
-ATTEMPT: Execute BackupTask: org.apache.hadoop.hive.ql.exec.mr.MapRedTask
 POSTHOOK: query: INSERT OVERWRITE TABLE test_table_n11 PARTITION (part = '1') 
 SELECT a.key, b.value FROM src a JOIN src b ON a.key = b.key
 POSTHOOK: type: QUERY
@@ -102,8 +99,8 @@ SerDe Library:      	org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 InputFormat:        	org.apache.hadoop.mapred.TextInputFormat	 
 OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat	 
 Compressed:         	No                  	 
-Num Buckets:        	1                   	 
-Bucket Columns:     	[key]               	 
-Sort Columns:       	[Order(col:key, order:1)]	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
 Storage Desc Params:	 	 
 	serialization.format	1                   

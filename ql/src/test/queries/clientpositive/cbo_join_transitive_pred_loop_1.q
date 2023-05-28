@@ -4,7 +4,7 @@ CREATE TABLE test1 (act_nbr string);
 CREATE TABLE test2 (month int);
 CREATE TABLE test3 (mth int, con_usd double);
 
-EXPLAIN CBO
+explain
 SELECT c.month,
       d.con_usd
 FROM

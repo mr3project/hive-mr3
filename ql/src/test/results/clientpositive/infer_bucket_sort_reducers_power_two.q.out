@@ -39,7 +39,7 @@ Table:              	test_table_n14
 #### A masked pattern was here ####
 Partition Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
-	numFiles            	4                   
+	numFiles            	13                  
 	numRows             	309                 
 	rawDataSize         	1482                
 	totalSize           	1791                
@@ -50,9 +50,9 @@ SerDe Library:      	org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 InputFormat:        	org.apache.hadoop.mapred.TextInputFormat	 
 OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat	 
 Compressed:         	No                  	 
-Num Buckets:        	4                   	 
-Bucket Columns:     	[key]               	 
-Sort Columns:       	[Order(col:key, order:1)]	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
 Storage Desc Params:	 	 
 	serialization.format	1                   
 PREHOOK: query: INSERT OVERWRITE TABLE test_table_n14 PARTITION (part = '1') 
@@ -88,7 +88,7 @@ Table:              	test_table_n14
 #### A masked pattern was here ####
 Partition Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
-	numFiles            	4                   
+	numFiles            	53                  
 	numRows             	1028                
 	rawDataSize         	10968               
 	totalSize           	11996               
@@ -99,9 +99,9 @@ SerDe Library:      	org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 InputFormat:        	org.apache.hadoop.mapred.TextInputFormat	 
 OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat	 
 Compressed:         	No                  	 
-Num Buckets:        	4                   	 
-Bucket Columns:     	[key]               	 
-Sort Columns:       	[Order(col:key, order:1)]	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
 Storage Desc Params:	 	 
 	serialization.format	1                   
 PREHOOK: query: INSERT OVERWRITE TABLE test_table_n14 PARTITION (part = '1') 
@@ -137,7 +137,7 @@ Table:              	test_table_n14
 #### A masked pattern was here ####
 Partition Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
-	numFiles            	4                   
+	numFiles            	71                  
 	numRows             	1028                
 	rawDataSize         	10968               
 	totalSize           	11996               
@@ -148,9 +148,9 @@ SerDe Library:      	org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 InputFormat:        	org.apache.hadoop.mapred.TextInputFormat	 
 OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat	 
 Compressed:         	No                  	 
-Num Buckets:        	4                   	 
-Bucket Columns:     	[key, value]        	 
-Sort Columns:       	[Order(col:key, order:1), Order(col:value, order:1)]	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
 Storage Desc Params:	 	 
 	serialization.format	1                   
 PREHOOK: query: INSERT OVERWRITE TABLE test_table_n14 PARTITION (part = '1') 
@@ -186,7 +186,7 @@ Table:              	test_table_n14
 #### A masked pattern was here ####
 Partition Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
-	numFiles            	4                   
+	numFiles            	88                  
 	numRows             	2654                
 	rawDataSize         	28466               
 	totalSize           	31120               
@@ -197,9 +197,9 @@ SerDe Library:      	org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 InputFormat:        	org.apache.hadoop.mapred.TextInputFormat	 
 OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat	 
 Compressed:         	No                  	 
-Num Buckets:        	4                   	 
-Bucket Columns:     	[key]               	 
-Sort Columns:       	[Order(col:key, order:1)]	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
 Storage Desc Params:	 	 
 	serialization.format	1                   
 PREHOOK: query: INSERT OVERWRITE TABLE test_table_n14 PARTITION (part = '1') 
@@ -235,10 +235,10 @@ Table:              	test_table_n14
 #### A masked pattern was here ####
 Partition Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
-	numFiles            	16                  
-	numRows             	257                 
-	rawDataSize         	2823                
-	totalSize           	3080                
+	numFiles            	74                  
+	numRows             	2654                
+	rawDataSize         	28466               
+	totalSize           	31120               
 #### A masked pattern was here ####
 	 	 
 # Storage Information	 	 
@@ -246,9 +246,9 @@ SerDe Library:      	org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 InputFormat:        	org.apache.hadoop.mapred.TextInputFormat	 
 OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat	 
 Compressed:         	No                  	 
-Num Buckets:        	16                  	 
-Bucket Columns:     	[value]             	 
-Sort Columns:       	[Order(col:value, order:1)]	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
 Storage Desc Params:	 	 
 	serialization.format	1                   
 PREHOOK: query: INSERT OVERWRITE TABLE test_table_n14 PARTITION (part = '1')
@@ -284,7 +284,7 @@ Table:              	test_table_n14
 #### A masked pattern was here ####
 Partition Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
-	numFiles            	1                   
+	numFiles            	2                   
 	numRows             	5                   
 	rawDataSize         	19                  
 	totalSize           	24                  

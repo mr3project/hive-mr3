@@ -1,4 +1,4 @@
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
 set datanucleus.cache.collections=false;
 set hive.stats.autogather=true;

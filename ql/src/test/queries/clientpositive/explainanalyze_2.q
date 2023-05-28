@@ -1,7 +1,7 @@
 SET hive.vectorized.execution.enabled=false;
 set hive.map.aggr=false;
 
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 set hive.explain.user=true;
 
 explain analyze

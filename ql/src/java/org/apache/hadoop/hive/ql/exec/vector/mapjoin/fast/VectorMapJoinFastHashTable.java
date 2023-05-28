@@ -65,7 +65,12 @@ public abstract class VectorMapJoinFastHashTable implements VectorMapJoinHashTab
   }
 
   private static int nextHighestPowerOfTwo(int v) {
-    return Integer.highestOneBit(v) << 1;
+    int value = Integer.highestOneBit(v);
+    if (Integer.highestOneBit(v) == HIGHEST_INT_POWER_OF_2) {
+      LOG.warn("Reached highest 2 power: {}", HIGHEST_INT_POWER_OF_2);
+      return value;
+    }
+    return value << 1;
   }
 
   public VectorMapJoinFastHashTable(

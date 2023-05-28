@@ -10,8 +10,8 @@ INSERT INTO t_test VALUES
 select 1 from (select count(distinct a) from t_test) x;
 select b from (select count(distinct a) b from t_test) x;
 
-explain cbo select 1 from (select count(distinct a) from t_test) x;
-explain cbo select b from (select count(distinct a) b from t_test) x;
+explain select 1 from (select count(distinct a) from t_test) x;
+explain select b from (select count(distinct a) b from t_test) x;
 
 explain select 1 from (select count(distinct a) from t_test) x;
 explain select b from (select count(distinct a) b from t_test) x;

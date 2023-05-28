@@ -1,8 +1,8 @@
 --! qt:dataset:src
 set hive.stats.column.autogather=false;
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
-set hive.mapred.mode=nonstrict;
+-- set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 set hive.auto.convert.join=true;
 set hive.auto.convert.join.noconditionaltask=true;

@@ -89,8 +89,12 @@ public class ReduceRecordProcessor extends RecordProcessor {
     super(jconf, context);
 
     String queryId = HiveConf.getVar(jconf, HiveConf.ConfVars.HIVEQUERYID);
-    cache = ObjectCacheFactory.getCache(jconf, queryId, true);
-    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, false, true);
+    String prefixes = jconf.get(DagUtils.TEZ_MERGE_WORK_FILE_PREFIXES);
+    int dagIdId = context.getDagIdentifier();
+    cache = (prefixes == null) ?    // if MergeWork does not exists
+      ObjectCacheFactory.getCache(jconf, queryId, dagIdId, true) :
+      ObjectCacheFactory.getPerTaskMrCache(queryId, dagIdId);
+    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, dagIdId, false, true);
 
     String cacheKey = processorContext.getTaskVertexName() + REDUCE_PLAN_KEY;
     cacheKeys = Lists.newArrayList(cacheKey);
@@ -165,11 +169,14 @@ public class ReduceRecordProcessor extends RecordProcessor {
     checkAbortCondition();
     // set memory available for operators
     long memoryAvailableToTask = processorContext.getTotalMemoryAvailableToTask();
+    int estimateNumExecutors = processorContext.getEstimateNumExecutors();
     if (reducer.getConf() != null) {
       reducer.getConf().setMaxMemoryAvailable(memoryAvailableToTask);
-      l4j.info("Memory available for operators set to {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask));
+      reducer.getConf().setEstimateNumExecutors(estimateNumExecutors);
+      l4j.info("Memory available for operators set to {} {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask), estimateNumExecutors);
     }
     OperatorUtils.setMemoryAvailable(reducer.getChildOperators(), memoryAvailableToTask);
+    OperatorUtils.setEstimateNumExecutors(reducer.getChildOperators(), estimateNumExecutors);
 
     // Setup values registry
     String valueRegistryKey = DynamicValue.DYNAMIC_VALUE_REGISTRY_CACHE_KEY;
@@ -226,7 +233,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
 
     // initialize reduce operator tree
     try {
-      l4j.info(reducer.dump(0));
+      l4j.debug(reducer.dump(0));
 
       // Initialization isn't finished until all parents of all operators
       // are initialized. For broadcast joins that means initializing the

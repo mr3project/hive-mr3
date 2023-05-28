@@ -1,7 +1,7 @@
 SET hive.vectorized.execution.enabled=false;
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
-set hive.mapred.mode=nonstrict;
+-- set hive.mapred.mode=nonstrict;
 set hive.join.emit.interval=2;
 
 set hive.optimize.ppd=true;

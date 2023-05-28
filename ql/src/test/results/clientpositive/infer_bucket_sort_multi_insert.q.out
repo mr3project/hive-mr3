@@ -137,7 +137,7 @@ Table:              	test_table
 #### A masked pattern was here ####
 Partition Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
-	numFiles            	1                   
+	numFiles            	2                   
 	numRows             	309                 
 	rawDataSize         	1482                
 	totalSize           	1791                
@@ -148,9 +148,9 @@ SerDe Library:      	org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 InputFormat:        	org.apache.hadoop.mapred.TextInputFormat	 
 OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat	 
 Compressed:         	No                  	 
-Num Buckets:        	1                   	 
-Bucket Columns:     	[key]               	 
-Sort Columns:       	[Order(col:key, order:1)]	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
 Storage Desc Params:	 	 
 	serialization.format	1                   
 PREHOOK: query: DESCRIBE FORMATTED test_table PARTITION (part = '2')
@@ -174,7 +174,7 @@ Table:              	test_table
 #### A masked pattern was here ####
 Partition Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
-	numFiles            	1                   
+	numFiles            	2                   
 	numRows             	309                 
 	rawDataSize         	2718                
 	totalSize           	3027                
@@ -185,9 +185,9 @@ SerDe Library:      	org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 InputFormat:        	org.apache.hadoop.mapred.TextInputFormat	 
 OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat	 
 Compressed:         	No                  	 
-Num Buckets:        	1                   	 
-Bucket Columns:     	[value]             	 
-Sort Columns:       	[Order(col:value, order:1)]	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
 Storage Desc Params:	 	 
 	serialization.format	1                   
 PREHOOK: query: FROM src
@@ -229,7 +229,7 @@ Table:              	test_table
 #### A masked pattern was here ####
 Partition Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
-	numFiles            	1                   
+	numFiles            	2                   
 	numRows             	309                 
 	rawDataSize         	1482                
 	totalSize           	1791                
@@ -240,9 +240,9 @@ SerDe Library:      	org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 InputFormat:        	org.apache.hadoop.mapred.TextInputFormat	 
 OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat	 
 Compressed:         	No                  	 
-Num Buckets:        	1                   	 
-Bucket Columns:     	[key]               	 
-Sort Columns:       	[Order(col:key, order:1)]	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
 Storage Desc Params:	 	 
 	serialization.format	1                   
 PREHOOK: query: DESCRIBE FORMATTED test_table PARTITION (part = '2')
@@ -321,7 +321,7 @@ Table:              	test_table
 #### A masked pattern was here ####
 Partition Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
-	numFiles            	1                   
+	numFiles            	2                   
 	numRows             	309                 
 	rawDataSize         	1482                
 	totalSize           	1791                
@@ -332,9 +332,9 @@ SerDe Library:      	org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 InputFormat:        	org.apache.hadoop.mapred.TextInputFormat	 
 OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat	 
 Compressed:         	No                  	 
-Num Buckets:        	1                   	 
-Bucket Columns:     	[key]               	 
-Sort Columns:       	[Order(col:key, order:1)]	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
 Storage Desc Params:	 	 
 	serialization.format	1                   
 PREHOOK: query: DESCRIBE FORMATTED test_table PARTITION (part = '2')
@@ -358,7 +358,7 @@ Table:              	test_table
 #### A masked pattern was here ####
 Partition Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
-	numFiles            	1                   
+	numFiles            	2                   
 	numRows             	309                 
 	rawDataSize         	2690                
 	totalSize           	2999                
@@ -369,8 +369,8 @@ SerDe Library:      	org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 InputFormat:        	org.apache.hadoop.mapred.TextInputFormat	 
 OutputFormat:       	org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat	 
 Compressed:         	No                  	 
-Num Buckets:        	1                   	 
-Bucket Columns:     	[key]               	 
-Sort Columns:       	[Order(col:key, order:1)]	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
 Storage Desc Params:	 	 
 	serialization.format	1                   

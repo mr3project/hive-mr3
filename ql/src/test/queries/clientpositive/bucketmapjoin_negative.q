@@ -1,4 +1,4 @@
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
 CREATE TABLE srcbucket_mapjoin_n10(key int, value string) CLUSTERED BY (key) INTO 2 BUCKETS STORED AS TEXTFILE;
 load data local inpath '../../data/files/bmj/000000_0' INTO TABLE srcbucket_mapjoin_n10;

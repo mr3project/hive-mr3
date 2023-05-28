@@ -1,6 +1,6 @@
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
-set hive.mapred.mode=nonstrict;
+-- set hive.mapred.mode=nonstrict;
 -- small 1 part, 2 bucket & big 2 part, 4 bucket
 
 CREATE TABLE bucket_small_n11 (key string, value string) partitioned by (ds string) CLUSTERED BY (key) SORTED BY (KEY) INTO 2 BUCKETS STORED AS TEXTFILE;

@@ -222,15 +222,15 @@ POSTHOOK: Input: default@src_autho_test_n8
 POSTHOOK: Input: default@v_n9
 #### A masked pattern was here ####
 238
-238
-86
 86
 311
-311
-27
 27
 165
-165
+409
+255
+278
+98
+484
 PREHOOK: query: select key from
 (select value as key from v2_n7 union select value as key from v1_n13 union all select key from v_n9)subq
 limit 10

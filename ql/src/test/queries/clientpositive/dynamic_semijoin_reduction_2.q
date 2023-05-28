@@ -1,5 +1,5 @@
 set hive.compute.query.using.stats=false;
-set hive.mapred.mode=nonstrict;
+-- set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 set hive.optimize.ppd=true;
 set hive.ppd.remove.duplicatefilters=true;
@@ -54,7 +54,7 @@ insert into src2_n7 select * from src2_n7;
 load data local inpath '../../data/files/bmj/000000_0' INTO TABLE srcbucket_mapjoin_n20 partition(ds='2008-04-08');
 load data local inpath '../../data/files/bmj1/000001_0' INTO TABLE srcbucket_mapjoin_n20 partition(ds='2008-04-08');
 
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 set hive.join.emit.interval=2;
 set hive.stats.fetch.column.stats=true;
 set hive.optimize.bucketingsorting=false;

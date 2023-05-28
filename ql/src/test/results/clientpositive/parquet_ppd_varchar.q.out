@@ -31,6 +31,11 @@ apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 PREHOOK: query: select * from newtypestbl_n0 where v="bee"
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -44,6 +49,11 @@ apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 PREHOOK: query: select * from newtypestbl_n0 where v!="bee"
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -52,11 +62,6 @@ POSTHOOK: query: select * from newtypestbl_n0 where v!="bee"
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypestbl_n0
 #### A masked pattern was here ####
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
 PREHOOK: query: select * from newtypestbl_n0 where v!="bee"
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -65,11 +70,6 @@ POSTHOOK: query: select * from newtypestbl_n0 where v!="bee"
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypestbl_n0
 #### A masked pattern was here ####
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
 PREHOOK: query: select * from newtypestbl_n0 where v<"world"
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -83,6 +83,11 @@ apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 PREHOOK: query: select * from newtypestbl_n0 where v<"world"
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -91,6 +96,11 @@ POSTHOOK: query: select * from newtypestbl_n0 where v<"world"
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypestbl_n0
 #### A masked pattern was here ####
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
@@ -109,11 +119,11 @@ apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 PREHOOK: query: select * from newtypestbl_n0 where v<="world" sort by c
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -127,11 +137,11 @@ apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 PREHOOK: query: select * from newtypestbl_n0 where v="bee   "
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -161,6 +171,11 @@ apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 PREHOOK: query: select * from newtypestbl_n0 where v in ("bee", "orange")
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -174,6 +189,11 @@ apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 PREHOOK: query: select * from newtypestbl_n0 where v in ("bee", "world") sort by c
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -187,11 +207,11 @@ apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 PREHOOK: query: select * from newtypestbl_n0 where v in ("bee", "world") sort by c
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -205,11 +225,11 @@ apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 PREHOOK: query: select * from newtypestbl_n0 where v in ("orange")
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -239,6 +259,11 @@ apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 PREHOOK: query: select * from newtypestbl_n0 where v between "bee" and "orange"
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -252,6 +277,11 @@ apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 PREHOOK: query: select * from newtypestbl_n0 where v between "bee" and "zombie" sort by c
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -265,11 +295,11 @@ apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 PREHOOK: query: select * from newtypestbl_n0 where v between "bee" and "zombie" sort by c
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0
@@ -283,11 +313,11 @@ apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
 apple     	bee	0.220	1970-02-20
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
-hello     	world	11.220	1970-02-27
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
+apple     	bee	0.220	1970-02-20
 PREHOOK: query: select * from newtypestbl_n0 where v between "orange" and "pine"
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypestbl_n0

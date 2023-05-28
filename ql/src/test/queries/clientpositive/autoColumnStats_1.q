@@ -1,4 +1,4 @@
-set hive.strict.checks.bucketing=false;
+set hive.strict.checks.bucketing=true;
 
 set hive.stats.column.autogather=true;
 set hive.stats.fetch.column.stats=true;
