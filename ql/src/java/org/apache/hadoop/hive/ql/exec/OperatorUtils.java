@@ -29,7 +29,6 @@ import java.util.Set;
 import java.util.Stack;
 
 import org.apache.hadoop.hive.ql.exec.NodeUtils.Function;
-import org.apache.hadoop.hive.ql.parse.spark.SparkPartitionPruningSinkOperator;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
 import org.apache.hadoop.hive.ql.plan.MapWork;
@@ -355,25 +354,6 @@ public class OperatorUtils {
   }
 
   /**
-   * Remove the branch that contains the specified operator. Do nothing if there's no branching,
-   * i.e. all the upstream operators have only one child.
-   */
-  public static void removeBranch(SparkPartitionPruningSinkOperator op) {
-    Operator<?> child = op;
-    Operator<?> curr = op;
-
-    while (curr.getChildOperators().size() <= 1) {
-      child = curr;
-      if (curr.getParentOperators() == null || curr.getParentOperators().isEmpty()) {
-        return;
-      }
-      curr = curr.getParentOperators().get(0);
-    }
-
-    curr.removeChild(child);
-  }
-
-  /**
    * Remove operator from the tree, disconnecting it from its
    * parents and children.
    */
@@ -399,20 +379,6 @@ public class OperatorUtils {
       return op.toString() + " (" + ((TableScanOperator) op).getConf().getAlias() + ")";
     }
     return op.toString();
-  }
-
-  /**
-   * Return true if contain branch otherwise return false
-   */
-  public static boolean isInBranch(SparkPartitionPruningSinkOperator op) {
-    Operator<?> curr = op;
-    while (curr.getChildOperators().size() <= 1) {
-      if (curr.getParentOperators() == null || curr.getParentOperators().isEmpty()) {
-        return false;
-      }
-      curr = curr.getParentOperators().get(0);
-    }
-    return true;
   }
 
   public static Set<Operator<?>> getOp(BaseWork work, Class<?> clazz) {
