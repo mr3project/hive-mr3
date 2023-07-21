@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedBatchUtil;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedInputFormatInterface;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
@@ -115,6 +116,7 @@ public class VectorizedOrcInputFormat extends FileInputFormat<NullWritable, Vect
     public boolean next(NullWritable key, VectorizedRowBatch value) throws IOException {
 
       try {
+        VectorizedBatchUtil.resetNonPartitionColumns(value);
         // Check and update partition cols if necessary. Ideally, this should be done
         // in CreateValue as the partition is constant per split. But since Hive uses
         // CombineHiveRecordReader and

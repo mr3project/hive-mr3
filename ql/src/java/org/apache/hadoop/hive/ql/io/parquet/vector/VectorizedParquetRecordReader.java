@@ -30,6 +30,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.llap.LlapCacheAwareFs;
 import org.apache.hadoop.hive.llap.LlapUtil;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedBatchUtil;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
 import org.apache.hadoop.hive.ql.io.HdfsUtils;
@@ -102,6 +103,7 @@ public class VectorizedParquetRecordReader extends ParquetRecordReaderBase
   private List<TypeInfo> columnTypesList;
   private VectorizedRowBatchCtx rbCtx;
   private Object[] partitionValues;
+  private boolean addPartitionCols = true;
   private Path cacheFsPath;
   private static final int MAP_DEFINITION_LEVEL_MAX = 3;
 
@@ -395,14 +397,17 @@ public class VectorizedParquetRecordReader extends ParquetRecordReaderBase
    * Advances to the next batch of rows. Returns false if there are no more.
    */
   private boolean nextBatch(VectorizedRowBatch columnarBatch) throws IOException {
-    columnarBatch.reset();
+    VectorizedBatchUtil.resetNonPartitionColumns(columnarBatch);
     if (rowsReturned >= totalRowCount) {
       return false;
     }
 
     // Add partition cols if necessary (see VectorizedOrcInputFormat for details).
-    if (partitionValues != null) {
-      rbCtx.addPartitionColsToBatch(columnarBatch, partitionValues);
+    if (addPartitionCols) {
+      if (partitionValues != null) {
+        rbCtx.addPartitionColsToBatch(columnarBatch, partitionValues);
+      }
+      addPartitionCols = false;
     }
     checkEndOfRowGroup();
 
