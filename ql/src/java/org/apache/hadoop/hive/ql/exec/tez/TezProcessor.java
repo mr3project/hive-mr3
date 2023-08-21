@@ -296,6 +296,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       //done - output does not need to be committed as hive does not use outputcommitter
       perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.TEZ_RUN_PROCESSOR);
     } catch (Throwable t) {
+      rproc.setAborted(true);
       originalThrowable = t;
     } finally {
       if (originalThrowable != null && (originalThrowable instanceof Error ||
