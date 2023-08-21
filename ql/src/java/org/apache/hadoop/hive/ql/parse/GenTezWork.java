@@ -425,7 +425,7 @@ public class GenTezWork implements NodeProcessor {
         rWork.getTagToInput().put(tag == -1 ? 0 : tag, work.getName());
 
         // remember the output name of the reduce sink
-        rs.getConf().setOutputName(rWork.getName());
+        rs.getConf().setOutputName(getActualOutputWorkName(context, rWork));
 
         // For dynamic partitioned hash join, run the ReduceSinkMapJoinProc logic for any
         // ReduceSink parents that we missed.
@@ -515,5 +515,23 @@ public class GenTezWork implements NodeProcessor {
     tezWork.connect(unionWork, work, edgeProp);
     unionWork.addUnionOperators(context.currentUnionOperators);
     context.workWithUnionOperators.add(work);
+  }
+
+  /**
+   * If the given reduceWork is the merged work of a MergeJoinWork, return the name of that MergeJoinWork.
+   * Otherwise, return the name of the given reduceWork.
+   */
+  private String getActualOutputWorkName(GenTezProcContext context, ReduceWork reduceWork) {
+    for (MergeJoinWork mergeJoinWork: context.opMergeJoinWorkMap.values()) {
+      if (mergeJoinWork.getBaseWorkList().contains(reduceWork)) {
+        // getMainWork() == null means that we have not visited the leaf Operator of MergeJoinWork.
+        // In this case, GenTezWork will adjust the output name of merged works
+        // by calling MergeJoinWork.addMergedWork() with non-null argument for parameter work.
+        if (mergeJoinWork.getMainWork() != null) {
+          return mergeJoinWork.getMainWork().getName();
+        }
+      }
+    }
+    return reduceWork.getName();
   }
 }
