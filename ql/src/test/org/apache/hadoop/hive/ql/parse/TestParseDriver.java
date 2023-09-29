@@ -304,4 +304,12 @@ public class TestParseDriver {
 
   }
 
+  @Test
+  public void testSubQueryWithSetOpSupportsOrderBy() throws Exception {
+    String q = "SELECT a FROM ((SELECT a FROM t1 ORDER BY a) UNION ALL (SELECT a FROM t2 DISTRIBUTE BY a)) B";
+    System.out.println(q);
+
+    ASTNode root = parseDriver.parse(q);
+    System.out.println(root.dump());
+  }
 }
