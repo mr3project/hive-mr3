@@ -292,7 +292,7 @@ public class CachedStore implements RawStore, Configurable {
               List<ColumnStatistics> partitionColStats = null;
               AggrStats aggrStatsAllPartitions = null;
               AggrStats aggrStatsAllButDefaultPartition = null;
-              if (table.isSetPartitionKeys()) {
+              if (!table.getPartitionKeys().isEmpty()) {
                 Deadline.startTimer("getPartitions");
                 partitions = rawStore.getPartitions(catName, dbName, tblName, Integer.MAX_VALUE);
                 Deadline.stopTimer();
@@ -363,6 +363,7 @@ public class CachedStore implements RawStore, Configurable {
         LOG.debug("Processed database: {}. Cached {} / {} databases so far.", dbName,
             ++numberOfDatabasesCachedSoFar, databases.size());
       }
+      sharedCache.clearDirtyFlags();
       completePrewarm(startTime);
     }
   }
@@ -518,6 +519,7 @@ public class CachedStore implements RawStore, Configurable {
       } else {
         try {
           prewarm(rawStore);
+          shouldRunPrewarm = false;
         } catch (Exception e) {
           LOG.error("Prewarm failure", e);
           return;
