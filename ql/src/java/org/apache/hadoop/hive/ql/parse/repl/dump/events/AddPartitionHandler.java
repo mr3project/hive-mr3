@@ -48,7 +48,7 @@ class AddPartitionHandler extends AbstractEventHandler {
     AddPartitionMessage apm = deserializer.getAddPartitionMessage(event.getMessage());
     org.apache.hadoop.hive.metastore.api.Table tobj = apm.getTableObj();
     if (tobj == null) {
-      LOG.debug("Event#{} was a ADD_PTN_EVENT with no table listed");
+      LOG.debug("Event#{} was a ADD_PTN_EVENT with no table listed", fromEventId());
       return;
     }
 
@@ -59,7 +59,7 @@ class AddPartitionHandler extends AbstractEventHandler {
 
     Iterable<org.apache.hadoop.hive.metastore.api.Partition> ptns = apm.getPartitionObjs();
     if ((ptns == null) || (!ptns.iterator().hasNext())) {
-      LOG.debug("Event#{} was an ADD_PTN_EVENT with no partitions");
+      LOG.debug("Event#{} was an ADD_PTN_EVENT with no partitions", fromEventId());
       return;
     }
 

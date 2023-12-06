@@ -43,7 +43,7 @@ class CreateTableHandler extends AbstractEventHandler {
     org.apache.hadoop.hive.metastore.api.Table tobj = ctm.getTableObj();
 
     if (tobj == null) {
-      LOG.debug("Event#{} was a CREATE_TABLE_EVENT with no table listed");
+      LOG.debug("Event#{} was a CREATE_TABLE_EVENT with no table listed", fromEventId());
       return;
     }
 
