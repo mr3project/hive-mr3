@@ -1013,6 +1013,15 @@ class MetaStoreDirectSql {
     if (value instanceof Boolean) {
       return (Boolean)value;
     }
+
+    // check if oracle db returned 0 or 1 for boolean value
+    if (value instanceof Number) {
+      try {
+        return BooleanUtils.toBooleanObject(Integer.valueOf(((Number) value).intValue()), 1, 0, null);
+      } catch (IllegalArgumentException iae) {
+        // NOOP
+      }
+    }
     if (value instanceof String) {
       try {
         return BooleanUtils.toBooleanObject((String) value, "Y", "N", null);
