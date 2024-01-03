@@ -359,7 +359,7 @@ public final class FileUtils {
     while (remoteIterator.hasNext()) {
       LocatedFileStatus each = remoteIterator.next();
       Path relativePath = makeRelative(base.getPath(), each.getPath());
-      if (org.apache.hadoop.hive.metastore.utils.FileUtils.RemoteIteratorWithFilter.HIDDEN_FILES_FULL_PATH_FILTER.accept(relativePath)) {
+      if (RemoteIteratorWithFilter.HIDDEN_FILES_FULL_PATH_FILTER.accept(relativePath)) {
         results.add(each);
       }
     }
