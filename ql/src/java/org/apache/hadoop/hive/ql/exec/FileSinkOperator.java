@@ -254,6 +254,14 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
               }
             }
 
+            if (!fs.exists(finalPaths[idx].getParent())) {
+              LOG.warn("Creating the parent of the final path: " + finalPaths[idx].getParent());
+              if (!FileUtils.mkdir(fs, finalPaths[idx].getParent(), hconf)) {
+                throw new HiveException("Unable to rename output from: "
+                    + outPaths[idx] + " to: " + finalPaths[idx] + ", unable to create the parent of the final path");
+              }
+            }
+
             if (!fs.rename(outPaths[idx], finalPaths[idx])) {
               throw new HiveException("Unable to rename output from: "
                 + outPaths[idx] + " to: " + finalPaths[idx]);
