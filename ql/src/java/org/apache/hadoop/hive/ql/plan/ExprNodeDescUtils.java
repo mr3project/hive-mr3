@@ -19,6 +19,7 @@
 package org.apache.hadoop.hive.ql.plan;
 
 import com.google.common.collect.Multimap;
+import java.util.Arrays;
 import java.util.Collection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +36,7 @@ import org.apache.hadoop.hive.ql.optimizer.ConstantPropagateProcFactory;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFBridge;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPAnd;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPEqual;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPNotEqual;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPNotNull;
@@ -201,6 +203,32 @@ public class ExprNodeDescUtils {
       }
     }
     return false;
+  }
+
+  /**
+   * Creates a conjunction (AND) of two expressions flattening nested conjunctions if possible.
+   * <p>
+   * The method is equivalent to calling: {@code and(Arrays.asList(e1, e2))}
+   * </p>
+   */
+  public static ExprNodeGenericFuncDesc and(ExprNodeDesc e1, ExprNodeDesc e2) {
+    return and(Arrays.asList(e1, e2));
+  }
+
+  /**
+   * Creates a conjunction (AND) of the given expressions flattening nested conjunctions if possible.
+   * <pre>
+   * Input: OR(A, B), C, AND(D, AND(E, F))
+   * Output: AND(OR(A, B), C, D, E, F)
+   * </pre>
+   * TODO: Replace mergePredicates ?
+   */
+  public static ExprNodeGenericFuncDesc and(List<ExprNodeDesc> exps) {
+    List<ExprNodeDesc> flatExps = new ArrayList<>();
+    for (ExprNodeDesc e : exps) {
+      split(e, flatExps);
+    }
+    return new ExprNodeGenericFuncDesc(TypeInfoFactory.booleanTypeInfo, new GenericUDFOPAnd(), "and", flatExps);
   }
 
   /**

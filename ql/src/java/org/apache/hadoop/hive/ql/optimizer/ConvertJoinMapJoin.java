@@ -1544,7 +1544,24 @@ public class ConvertJoinMapJoin implements NodeProcessor {
         MapJoinDesc mapJoinDesc = mapJoinOp.getConf();
         mapJoinDesc.setDynamicPartitionHashJoin(true);
         if (mapJoinConversion.getIsFullOuterJoin()) {
-          FullOuterMapJoinOptimization.removeFilterMap(mapJoinDesc);
+          // HIVE-18908 in Hive-MR3:
+          //   We never convert FOJ to MapJoin if it has filter expressions,
+          //   so do not call FullOuterMapJoinOptimization.removeFilterMap().
+          boolean hasFullOuterJoinWithFilter = mapJoinDesc.getCondsList().stream().anyMatch(cond -> {
+            if (cond.getType() == JoinDesc.FULL_OUTER_JOIN) {
+              Byte left = (byte) cond.getLeft();
+              Byte right = (byte) cond.getRight();
+              boolean leftHasFilter = mapJoinDesc.getFilters().containsKey(left) &&
+                  !mapJoinDesc.getFilters().get(left).isEmpty();
+              boolean rightHasFilter = mapJoinDesc.getFilters().containsKey(right) &&
+                  !mapJoinDesc.getFilters().get(right).isEmpty();
+              return leftHasFilter || rightHasFilter;
+            } else {
+              return false;
+            }
+          });
+          LOG.info("Full outer join, has filters={}", hasFullOuterJoinWithFilter);
+          assert !hasFullOuterJoinWithFilter;
         }
         // Set OpTraits for dynamically partitioned hash join:
         // bucketColNames: Re-use previous joinOp's bucketColNames. Parent operators should be
