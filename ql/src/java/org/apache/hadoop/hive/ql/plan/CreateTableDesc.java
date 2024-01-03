@@ -863,7 +863,7 @@ public class CreateTableDesc extends DDLDesc implements Serializable {
       }
     }
 
-    if (!this.isCTAS && (tbl.getPath() == null || (tbl.isEmpty() && !isExternal()))) {
+    if (!this.isCTAS && (tbl.getPath() == null || (!isExternal() && tbl.isEmpty()))) {  // tbl.isEmpty() is expensive if FileSystem == S3 (Cf. HIVE-24849)
       if (!tbl.isPartitioned() && conf.getBoolVar(HiveConf.ConfVars.HIVESTATSAUTOGATHER)) {
         StatsSetupConst.setStatsStateForCreateTable(tbl.getTTable().getParameters(),
             MetaStoreUtils.getColumnNames(tbl.getCols()), StatsSetupConst.TRUE);
