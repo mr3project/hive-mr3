@@ -49,6 +49,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
@@ -4199,10 +4200,8 @@ public class HiveMetaStore extends ThriftHiveMetastore {
     }
     private void deleteParentRecursive(Path parent, int depth, boolean mustPurge, boolean needRecycle)
             throws IOException, MetaException {
-      if (depth > 0 && parent != null && wh.isWritable(parent)) {
-        if (wh.isDir(parent) && wh.isEmptyDir(parent)) {
-          wh.deleteDir(parent, true, mustPurge, needRecycle);
-        }
+      if (depth > 0 && parent != null && wh.isWritable(parent) && wh.isEmptyDir(parent)) {
+        wh.deleteDir(parent, true, mustPurge, needRecycle);
         deleteParentRecursive(parent.getParent(), depth - 1, mustPurge, needRecycle);
       }
     }
@@ -4215,13 +4214,34 @@ public class HiveMetaStore extends ThriftHiveMetastore {
           null);
     }
 
-    private static class PathAndPartValSize {
-      PathAndPartValSize(Path path, int partValSize) {
+    /** Stores a path and its size. */
+    private static class PathAndDepth implements Comparable<PathAndDepth> {
+      final Path path;
+      final int depth;
+
+      public PathAndDepth(Path path, int depth) {
         this.path = path;
-        this.partValSize = partValSize;
+        this.depth = depth;
       }
-      public Path path;
-      int partValSize;
+
+      @Override
+      public int hashCode() {
+        return Objects.hash(path.hashCode(), depth);
+      }
+
+      @Override
+      public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        PathAndDepth that = (PathAndDepth) o;
+        return depth == that.depth && Objects.equals(path, that.path);
+      }
+
+      /** The largest {@code depth} is processed first in a {@link PriorityQueue}. */
+      @Override
+      public int compareTo(PathAndDepth o) {
+        return o.depth - depth;
+      }
     }
 
     @Override
@@ -4234,7 +4254,7 @@ public class HiveMetaStore extends ThriftHiveMetastore {
       boolean deleteData = request.isSetDeleteData() && request.isDeleteData();
       boolean ignoreProtection = request.isSetIgnoreProtection() && request.isIgnoreProtection();
       boolean needResult = !request.isSetNeedResult() || request.isNeedResult();
-      List<PathAndPartValSize> dirsToDelete = new ArrayList<>();
+      List<PathAndDepth> dirsToDelete = new ArrayList<>();
       List<Path> archToDelete = new ArrayList<>();
       EnvironmentContext envContext = request.isSetEnvironmentContext()
           ? request.getEnvironmentContext() : null;
@@ -4321,7 +4341,7 @@ public class HiveMetaStore extends ThriftHiveMetastore {
           if ((part.getSd() != null) && (part.getSd().getLocation() != null)) {
             Path partPath = new Path(part.getSd().getLocation());
             verifyIsWritablePath(partPath);
-            dirsToDelete.add(new PathAndPartValSize(partPath, part.getValues().size()));
+            dirsToDelete.add(new PathAndDepth(partPath, part.getValues().size()));
           }
         }
 
@@ -4355,16 +4375,38 @@ public class HiveMetaStore extends ThriftHiveMetastore {
           for (Path path : archToDelete) {
             wh.deleteDir(path, true, mustPurge, isSourceOfReplication);
           }
-          for (PathAndPartValSize p : dirsToDelete) {
+
+          // Uses a priority queue to delete the parents of deleted directories if empty.
+          // Parents with the deepest path are always processed first. It guarantees that the emptiness
+          // of a parent won't be changed once it has been processed. So duplicated processing can be
+          // avoided.
+          PriorityQueue<PathAndDepth> parentsToDelete = new PriorityQueue<>();
+          for (PathAndDepth p : dirsToDelete) {
             wh.deleteDir(p.path, true, mustPurge, isSourceOfReplication);
+            addParentForDel(parentsToDelete, p);
+          }
+
+          HashSet<PathAndDepth> processed = new HashSet<>();
+          while (!parentsToDelete.isEmpty()) {
             try {
-              deleteParentRecursive(p.path.getParent(), p.partValSize - 1, mustPurge, isSourceOfReplication);
+              PathAndDepth p = parentsToDelete.poll();
+              if (processed.contains(p)) {
+                continue;
+              }
+              processed.add(p);
+
+              Path path = p.path;
+              if (wh.isWritable(path) && wh.isEmptyDir(path)) {
+                wh.deleteDir(path, true, mustPurge, isSourceOfReplication);
+                addParentForDel(parentsToDelete, p);
+              }
             } catch (IOException ex) {
-              LOG.warn("Error from deleteParentRecursive", ex);
+              LOG.warn("Error from recursive parent deletion", ex);
               throw new MetaException("Failed to delete parent: " + ex.getMessage());
             }
           }
         }
+
         if (parts != null) {
           int i = 0;
           if (parts != null && !listeners.isEmpty()) {
@@ -4382,6 +4424,13 @@ public class HiveMetaStore extends ThriftHiveMetastore {
             }
           }
         }
+      }
+    }
+
+    private static void addParentForDel(PriorityQueue<PathAndDepth> parentsToDelete, PathAndDepth p) {
+      Path parent = p.path.getParent();
+      if (parent != null && p.depth - 1 > 0) {
+        parentsToDelete.add(new PathAndDepth(parent, p.depth - 1));
       }
     }
 
