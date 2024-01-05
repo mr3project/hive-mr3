@@ -249,89 +249,6 @@ public class TestExplainTask {
   }
 
   @Test
-  public void testOutputMapJsonShouldMatch() throws Exception {
-    Map<Object, Object> map = new LinkedHashMap<>();
-
-    // String
-    map.put("key-1", "value-1");
-
-    // SparkWork
-    map.put("spark-work", new SparkWork("spark-work"));
-
-    // Empty list
-    List<Object> emptList = Collections.emptyList();
-    map.put("empty-list", emptList);
-
-    // List of TezWork.Dependency
-    List<Object> tezList1 = new ArrayList<>(Arrays.asList(new Object[] {mockTezWorkDependency()}));
-    map.put("tez-list-1", tezList1);
-    List<Object> tezList2 = new ArrayList<>(
-            Arrays.asList(new Object[] {mockTezWorkDependency(), mockTezWorkDependency()}));
-    map.put("tez-list-2", tezList2);
-
-    // List of SparkWork.Dependency
-    List<Object> sparkList1 = new ArrayList<>(
-            Arrays.asList(new Object[]{mockSparkWorkDependency()}));
-    map.put("spark-list-1", sparkList1);
-    List<Object> sparkList2 = new ArrayList<>(
-            Arrays.asList(new Object[]{mockSparkWorkDependency(), mockSparkWorkDependency()}));
-    map.put("spark-list-2", sparkList2);
-
-    // inner Map
-    Map<Object, Object> innerMap = new LinkedHashMap<>();
-    innerMap.put("inner-key-1", "inner-value-1");
-    innerMap.put("inner-key-2", tezList1);
-    map.put("map-1", innerMap);
-
-    JsonNode result = objectMapper.readTree(
-            uut.outputMap(map, false, null, false, true, 0).toString());
-    JsonNode expected = objectMapper.readTree("{\"key-1\":\"value-1\",\"tez-list-2\":" +
-            "[{\"parent\":\"name\"}," + "{\"parent\":\"name\"}],\"tez-list-1\":" +
-            "{\"parent\":\"name\"},\"empty-list\":\"[]\",\"spark-list-2\":" +
-            "[{\"parent\":\"mock-name\"},{\"parent\":\"mock-name\"}]," +
-            "\"spark-list-1\":{\"parent\":" +
-            "\"mock-name\"}, \"map-1\":\"{inner-key-1=inner-value-1, " +
-            "inner-key-2=[mock-tez-dependency]}\",\"spark-work\":" +
-            "{\"Spark\":{\"DagName:\":\"spark-work:2\"}}}");
-
-    assertEquals(expected, result);
-  }
-
-  @Test
-  public void testOutputPlanJsonShouldMatch() throws Exception {
-    // SparkWork
-    SparkWork work = new SparkWork("spark-work");
-
-    JsonNode result = objectMapper.readTree(
-            uut.outputPlan(work, null, false, true, 0, null).toString());
-    JsonNode expected = objectMapper.readTree("{\"Spark\":{\"DagName:\":\"spark-work:1\"}}");
-    assertEquals(expected, result);
-
-    // Operator with single child
-    CollectOperator parentCollectOperator1 = new CollectOperator();
-    CollectOperator child1 = new CollectOperator();
-    parentCollectOperator1.setChildOperators(new ArrayList<Operator<? extends OperatorDesc>>(
-            Arrays.asList(new CollectOperator[] {child1})));
-    parentCollectOperator1.setConf(new CollectDesc());
-
-    result = objectMapper.readTree(
-            uut.outputPlan(parentCollectOperator1, null, false, true, 0, null).toString());
-    expected = objectMapper.readTree("{\"Collect\":{\"children\":{}}}");
-    assertEquals(expected, result);
-
-    // Operator with 2 children
-    CollectOperator parentCollectOperator2 = new CollectOperator();
-    CollectOperator child2 = new CollectOperator();
-    parentCollectOperator2.setChildOperators(new ArrayList<Operator<? extends OperatorDesc>>(
-            Arrays.asList(new CollectOperator[] {child1, child2})));
-    parentCollectOperator2.setConf(new CollectDesc());
-    result = objectMapper.readTree(
-            uut.outputPlan(parentCollectOperator2, null, false, true, 0, null).toString());
-    expected = objectMapper.readTree("{\"Collect\":{\"children\":[{},{}]}}");
-    assertEquals(expected, result);
-  }
-
-  @Test
   public void testCollectAuthRelatedEntitiesJsonShouldMatch() throws Exception {
     QueryState qs = mock(QueryState.class);
     when(qs.getHiveOperation()).thenReturn(HiveOperation.EXPLAIN);
@@ -376,13 +293,6 @@ public class TestExplainTask {
     TezWork.Dependency dep = mock(TezWork.Dependency.class);
     when(dep.getName()).thenReturn("name");
     when(dep.toString()).thenReturn("mock-tez-dependency");
-    return dep;
-  }
-
-  private SparkWork.Dependency mockSparkWorkDependency() {
-    SparkWork.Dependency dep = mock(SparkWork.Dependency.class);
-    when(dep.getName()).thenReturn("mock-name");
-    when(dep.toString()).thenReturn("mock-spark-dependency");
     return dep;
   }
 
