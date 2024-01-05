@@ -148,9 +148,29 @@ POSTHOOK: Lineage: view3.value EXPRESSION [(t4)t4.FieldSchema(name:value, type:s
 PREHOOK: query: explain
 select count(0) from view2 v2 join view3 v3 on v2.dt=v3.dt
 PREHOOK: type: QUERY
+PREHOOK: Input: default@t1
+PREHOOK: Input: default@t1@dt=2018
+PREHOOK: Input: default@t2
+PREHOOK: Input: default@t2@dt=2018
+PREHOOK: Input: default@t3
+PREHOOK: Input: default@t3@dt=2018
+PREHOOK: Input: default@t4
+PREHOOK: Input: default@view2
+PREHOOK: Input: default@view3
+#### A masked pattern was here ####
 POSTHOOK: query: explain
 select count(0) from view2 v2 join view3 v3 on v2.dt=v3.dt
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@t1
+POSTHOOK: Input: default@t1@dt=2018
+POSTHOOK: Input: default@t2
+POSTHOOK: Input: default@t2@dt=2018
+POSTHOOK: Input: default@t3
+POSTHOOK: Input: default@t3@dt=2018
+POSTHOOK: Input: default@t4
+POSTHOOK: Input: default@view2
+POSTHOOK: Input: default@view3
+#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -180,11 +200,28 @@ STAGE PLANS:
                     Statistics: Num rows: 1 Data size: 184 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
                       key expressions: _col0 (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: _col0 (type: string)
                       Statistics: Num rows: 2 Data size: 368 Basic stats: COMPLETE Column stats: COMPLETE
+                    Select Operator
+                      expressions: _col0 (type: string)
+                      outputColumnNames: _col0
+                      Statistics: Num rows: 2 Data size: 368 Basic stats: COMPLETE Column stats: COMPLETE
+                      Group By Operator
+                        keys: _col0 (type: string)
+                        minReductionHashAggr: 0.5
+                        mode: hash
+                        outputColumnNames: _col0
+                        Statistics: Num rows: 1 Data size: 184 Basic stats: COMPLETE Column stats: COMPLETE
+                        Dynamic Partitioning Event Operator
+                          Target column: dt (string)
+                          Target Input: t1
+                          Partition key expr: dt
+                          Statistics: Num rows: 1 Data size: 184 Basic stats: COMPLETE Column stats: COMPLETE
+                          Target Vertex: Map 8
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
         Map 5 
             Map Operator Tree:
                 TableScan
@@ -197,61 +234,49 @@ STAGE PLANS:
                     Statistics: Num rows: 1 Data size: 184 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
                       key expressions: _col0 (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: _col0 (type: string)
                       Statistics: Num rows: 2 Data size: 368 Basic stats: COMPLETE Column stats: COMPLETE
+                    Select Operator
+                      expressions: _col0 (type: string)
+                      outputColumnNames: _col0
+                      Statistics: Num rows: 2 Data size: 368 Basic stats: COMPLETE Column stats: COMPLETE
+                      Group By Operator
+                        keys: _col0 (type: string)
+                        minReductionHashAggr: 0.5
+                        mode: hash
+                        outputColumnNames: _col0
+                        Statistics: Num rows: 1 Data size: 184 Basic stats: COMPLETE Column stats: COMPLETE
+                        Dynamic Partitioning Event Operator
+                          Target column: dt (string)
+                          Target Input: t1
+                          Partition key expr: dt
+                          Statistics: Num rows: 1 Data size: 184 Basic stats: COMPLETE Column stats: COMPLETE
+                          Target Vertex: Map 8
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
         Map 6 
             Map Operator Tree:
                 TableScan
                   alias: t4
                   filterExpr: dt is not null (type: boolean)
-                  Statistics: Num rows: 5 Data size: 920 Basic stats: COMPLETE Column stats: NONE
+                  Statistics: Num rows: 5 Data size: 440 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
                     predicate: dt is not null (type: boolean)
-                    Statistics: Num rows: 5 Data size: 920 Basic stats: COMPLETE Column stats: NONE
+                    Statistics: Num rows: 5 Data size: 440 Basic stats: COMPLETE Column stats: COMPLETE
                     Select Operator
                       expressions: dt (type: string)
                       outputColumnNames: _col0
-                      Statistics: Num rows: 5 Data size: 920 Basic stats: COMPLETE Column stats: NONE
+                      Statistics: Num rows: 5 Data size: 440 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
-                        Statistics: Num rows: 6 Data size: 1104 Basic stats: COMPLETE Column stats: COMPLETE
-                      Select Operator
-                        expressions: _col0 (type: string)
-                        outputColumnNames: _col0
-                        Statistics: Num rows: 6 Data size: 2208 Basic stats: COMPLETE Column stats: COMPLETE
-                        Group By Operator
-                          keys: _col0 (type: string)
-                          mode: hash
-                          outputColumnNames: _col0
-                          Statistics: Num rows: 1 Data size: 368 Basic stats: COMPLETE Column stats: COMPLETE
-                          Dynamic Partitioning Event Operator
-                            Target column: dt (string)
-                            Target Input: t2
-                            Partition key expr: dt
-                            Statistics: Num rows: 1 Data size: 368 Basic stats: COMPLETE Column stats: COMPLETE
-                            Target Vertex: Map 1
-                      Select Operator
-                        expressions: _col0 (type: string)
-                        outputColumnNames: _col0
-                        Statistics: Num rows: 6 Data size: 2208 Basic stats: COMPLETE Column stats: COMPLETE
-                        Group By Operator
-                          keys: _col0 (type: string)
-                          mode: hash
-                          outputColumnNames: _col0
-                          Statistics: Num rows: 1 Data size: 368 Basic stats: COMPLETE Column stats: COMPLETE
-                          Dynamic Partitioning Event Operator
-                            Target column: dt (string)
-                            Target Input: t3
-                            Partition key expr: dt
-                            Statistics: Num rows: 1 Data size: 368 Basic stats: COMPLETE Column stats: COMPLETE
-                            Target Vertex: Map 5
+                        Statistics: Num rows: 6 Data size: 624 Basic stats: COMPLETE Column stats: COMPLETE
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
         Map 8 
             Map Operator Tree:
                 TableScan
@@ -264,41 +289,12 @@ STAGE PLANS:
                     Statistics: Num rows: 1 Data size: 184 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
                       key expressions: _col0 (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: _col0 (type: string)
-                      Statistics: Num rows: 6 Data size: 1104 Basic stats: COMPLETE Column stats: COMPLETE
-                    Select Operator
-                      expressions: _col0 (type: string)
-                      outputColumnNames: _col0
-                      Statistics: Num rows: 6 Data size: 2208 Basic stats: COMPLETE Column stats: COMPLETE
-                      Group By Operator
-                        keys: _col0 (type: string)
-                        mode: hash
-                        outputColumnNames: _col0
-                        Statistics: Num rows: 1 Data size: 368 Basic stats: COMPLETE Column stats: COMPLETE
-                        Dynamic Partitioning Event Operator
-                          Target column: dt (string)
-                          Target Input: t2
-                          Partition key expr: dt
-                          Statistics: Num rows: 1 Data size: 368 Basic stats: COMPLETE Column stats: COMPLETE
-                          Target Vertex: Map 1
-                    Select Operator
-                      expressions: _col0 (type: string)
-                      outputColumnNames: _col0
-                      Statistics: Num rows: 6 Data size: 2208 Basic stats: COMPLETE Column stats: COMPLETE
-                      Group By Operator
-                        keys: _col0 (type: string)
-                        mode: hash
-                        outputColumnNames: _col0
-                        Statistics: Num rows: 1 Data size: 368 Basic stats: COMPLETE Column stats: COMPLETE
-                        Dynamic Partitioning Event Operator
-                          Target column: dt (string)
-                          Target Input: t3
-                          Partition key expr: dt
-                          Statistics: Num rows: 1 Data size: 368 Basic stats: COMPLETE Column stats: COMPLETE
-                          Target Vertex: Map 5
+                      Statistics: Num rows: 6 Data size: 624 Basic stats: COMPLETE Column stats: COMPLETE
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
         Reducer 3 
             Execution mode: llap
             Reduce Operator Tree:
@@ -311,10 +307,12 @@ STAGE PLANS:
                 Statistics: Num rows: 12 Data size: 96 Basic stats: COMPLETE Column stats: COMPLETE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.9166667
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                     value expressions: _col0 (type: bigint)

@@ -89,8 +89,12 @@ public class ReduceRecordProcessor extends RecordProcessor {
     super(jconf, context);
 
     String queryId = HiveConf.getVar(jconf, HiveConf.ConfVars.HIVEQUERYID);
-    cache = ObjectCacheFactory.getCache(jconf, queryId, true);
-    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, false, true);
+    String prefixes = jconf.get(DagUtils.TEZ_MERGE_WORK_FILE_PREFIXES);
+    int dagIdId = context.getDagIdentifier();
+    cache = (prefixes == null) ?    // if MergeWork does not exists
+      ObjectCacheFactory.getCache(jconf, queryId, dagIdId, true) :
+      ObjectCacheFactory.getPerTaskMrCache(queryId, dagIdId);
+    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, dagIdId, false, true);
 
     String cacheKey = processorContext.getTaskVertexName() + REDUCE_PLAN_KEY;
     cacheKeys = Lists.newArrayList(cacheKey);
@@ -165,11 +169,14 @@ public class ReduceRecordProcessor extends RecordProcessor {
     checkAbortCondition();
     // set memory available for operators
     long memoryAvailableToTask = processorContext.getTotalMemoryAvailableToTask();
+    int estimateNumExecutors = processorContext.getEstimateNumExecutors();
     if (reducer.getConf() != null) {
       reducer.getConf().setMaxMemoryAvailable(memoryAvailableToTask);
-      l4j.info("Memory available for operators set to {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask));
+      reducer.getConf().setEstimateNumExecutors(estimateNumExecutors);
+      l4j.info("Memory available for operators set to {} {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask), estimateNumExecutors);
     }
     OperatorUtils.setMemoryAvailable(reducer.getChildOperators(), memoryAvailableToTask);
+    OperatorUtils.setEstimateNumExecutors(reducer.getChildOperators(), estimateNumExecutors);
 
     // Setup values registry
     String valueRegistryKey = DynamicValue.DYNAMIC_VALUE_REGISTRY_CACHE_KEY;
@@ -226,7 +233,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
 
     // initialize reduce operator tree
     try {
-      l4j.info(reducer.dump(0));
+      l4j.debug(reducer.dump(0));
 
       // Initialization isn't finished until all parents of all operators
       // are initialized. For broadcast joins that means initializing the
@@ -343,15 +350,34 @@ public class ReduceRecordProcessor extends RecordProcessor {
    */
   private List<LogicalInput> getShuffleInputs(Map<String, LogicalInput> inputs) throws Exception {
     // the reduce plan inputs have tags, add all inputs that have tags
-    Map<Integer, String> tagToinput = reduceWork.getTagToInput();
     ArrayList<LogicalInput> shuffleInputs = new ArrayList<LogicalInput>();
-    for (String inpStr : tagToinput.values()) {
-      if (inputs.get(inpStr) == null) {
-        throw new AssertionError("Cound not find input: " + inpStr);
+
+    for (String inputName : reduceWork.getTagToInput().values()) {
+      if (inputs.get(inputName) == null) {
+        throw new AssertionError("Could not find input: " + inputName);
       }
-      inputs.get(inpStr).start();
-      shuffleInputs.add(inputs.get(inpStr));
+      inputs.get(inputName).start();
+      shuffleInputs.add(inputs.get(inputName));
     }
+
+    if (mergeWorkList != null) {
+      for (BaseWork mergedWork: mergeWorkList) {
+        ReduceWork mergedReduceWork = (ReduceWork) mergedWork;
+        for (String inputName: mergedReduceWork.getTagToInput().values()) {
+          if (inputs.get(inputName) == null) {
+            throw new AssertionError("Could not find input: " + inputName);
+          }
+
+          LogicalInput input = inputs.get(inputName);
+          if (shuffleInputs.contains(input)) {
+            throw new AssertionError("Input " + inputName + " is contained in more than one work");
+          }
+          input.start();
+          shuffleInputs.add(input);
+        }
+      }
+    }
+
     return shuffleInputs;
   }
 

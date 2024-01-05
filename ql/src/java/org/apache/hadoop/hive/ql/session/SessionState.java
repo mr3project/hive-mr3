@@ -72,6 +72,9 @@ import org.apache.hadoop.hive.ql.MapRedStats;
 import org.apache.hadoop.hive.ql.exec.FunctionInfo;
 import org.apache.hadoop.hive.ql.exec.Registry;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManager;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.hive.ql.exec.spark.session.SparkSession;
 import org.apache.hadoop.hive.ql.exec.spark.session.SparkSessionManagerImpl;
 import org.apache.hadoop.hive.ql.exec.tez.TezSessionPoolManager;
@@ -133,6 +136,9 @@ public class SessionState {
       new ConcurrentHashMap<>();
   private final Map<String, SessionHiveMetaStoreClient.TempTable> tempPartitions =
       new ConcurrentHashMap<>();
+
+  public static final short SESSION_SCRATCH_DIR_PERMISSION = (short) 01733;
+  public static final short TASK_SCRATCH_DIR_PERMISSION = (short) 00700;
 
   protected ClassLoader parentLoader;
 
@@ -232,8 +238,6 @@ public class SessionState {
 
   private Map<String, List<String>> localMapRedErrors;
 
-  private TezSessionState tezSessionState;
-
   private String currentDatabase;
 
   private final String CONFIG_AUTHZ_SETTINGS_APPLIED_MARKER =
@@ -242,6 +246,8 @@ public class SessionState {
   private String userIpAddress;
 
   private SparkSession sparkSession;
+
+  private MR3Session mr3Session;
 
   /**
    * Gets information about HDFS encryption
@@ -444,7 +450,9 @@ public class SessionState {
     final String currThreadName = Thread.currentThread().getName();
     if (!currThreadName.contains(logPrefix)) {
       final String newThreadName = logPrefix + " " + currThreadName;
-      LOG.info("Updating thread name to {}", newThreadName);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Updating thread name to {}", newThreadName);
+      }
       Thread.currentThread().setName(newThreadName);
     }
   }
@@ -455,7 +463,9 @@ public class SessionState {
     final String currThreadName = Thread.currentThread().getName();
     if (currThreadName.contains(logPrefix)) {
       final String[] names = currThreadName.split(logPrefix);
-      LOG.info("Resetting thread name to {}", names[names.length - 1]);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Resetting thread name to {}", names[names.length - 1]);
+      }
       Thread.currentThread().setName(names[names.length - 1].trim());
     }
   }
@@ -599,10 +609,6 @@ public class SessionState {
 
   public static void endStart(SessionState startSs)
       throws CancellationException, InterruptedException {
-    if (startSs.tezSessionState == null) {
-      return;
-    }
-    startSs.tezSessionState.endOpen();
   }
 
   private static void start(SessionState startSs, boolean isAsync, LogHelper console) {
@@ -655,37 +661,7 @@ public class SessionState {
       throw new RuntimeException(e);
     }
 
-    String engine = HiveConf.getVar(startSs.getConf(), HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
-    if (!engine.equals("tez") || startSs.isHiveServerQuery) {
-      return;
-    }
-
-    try {
-      if (startSs.tezSessionState == null) {
-        startSs.setTezSession(new TezSessionState(startSs.getSessionId(), startSs.sessionConf));
-      } else {
-        // Only TezTask sets this, and then removes when done, so we don't expect to see it.
-        LOG.warn("Tez session was already present in SessionState before start: "
-            + startSs.tezSessionState);
-      }
-      if (startSs.tezSessionState.isOpen()) {
-        return;
-      }
-      if (startSs.tezSessionState.isOpening()) {
-        if (!isAsync) {
-          startSs.tezSessionState.endOpen();
-        }
-        return;
-      }
-      // Neither open nor opening.
-      if (!isAsync) {
-        startSs.tezSessionState.open();
-      } else {
-        startSs.tezSessionState.beginOpen(null, console);
-      }
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+    // no further action
   }
 
   /**
@@ -709,7 +685,7 @@ public class SessionState {
     // 1. HDFS scratch dir
     path = new Path(rootHDFSDirPath, userName);
     hdfsScratchDirURIString = path.toUri().toString();
-    createPath(conf, path, scratchDirPermission, false, false);
+    Utilities.createDirsWithPermission(conf, path, new FsPermission(SESSION_SCRATCH_DIR_PERMISSION), true);
     // 2. Local scratch dir
     path = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.LOCALSCRATCHDIR));
     createPath(conf, path, scratchDirPermission, true, false);
@@ -1765,14 +1741,17 @@ public class SessionState {
       detachSession();
     }
 
-    try {
-      if (tezSessionState != null) {
-        TezSessionPoolManager.closeIfNotDefault(tezSessionState, false);
+    if (mr3Session != null) {
+      try {
+        MR3SessionManager mr3SessionManager = MR3SessionManagerImpl.getInstance();
+        if (!mr3SessionManager.getShareMr3Session()) {
+          mr3SessionManager.closeSession(mr3Session);
+        }
+      } catch (Exception e) {
+        LOG.error("Error closing mr3 session", e);
+      } finally {
+        mr3Session = null;
       }
-    } catch (Exception e) {
-      LOG.info("Error closing tez session", e);
-    } finally {
-      setTezSession(null);
     }
 
     try {
@@ -1869,24 +1848,13 @@ public class SessionState {
   }
 
   public TezSessionState getTezSession() {
-    return tezSessionState;
+    // tezSessionState is never used
+    return null;
   }
 
   /** Called from TezTask to attach a TezSession to use to the threadlocal. Ugly pattern... */
   public void setTezSession(TezSessionState session) {
-    if (tezSessionState == session) {
-      return; // The same object.
-    }
-    if (tezSessionState != null) {
-      tezSessionState.markFree();
-      tezSessionState.setKillQuery(null);
-      tezSessionState = null;
-    }
-    tezSessionState = session;
-    if (session != null) {
-      session.markInUse();
-      tezSessionState.setKillQuery(getKillQuery());
-    }
+    // tezSessionState is never used
   }
 
   public String getUserName() {
@@ -1933,6 +1901,14 @@ public class SessionState {
 
   public void setSparkSession(SparkSession sparkSession) {
     this.sparkSession = sparkSession;
+  }
+
+  public MR3Session getMr3Session() {
+    return mr3Session;
+  }
+
+  public void setMr3Session(MR3Session mr3Session) {
+    this.mr3Session = mr3Session;
   }
 
   /**

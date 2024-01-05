@@ -1,3 +1,4 @@
+--! qt:dataset:srcpart
 SET hive.vectorized.execution.enabled=false;
 set hive.strict.checks.bucketing=false;
 
@@ -32,7 +33,6 @@ set hive.merge.mapredfiles=true;
 set hive.merge.smallfiles.avgsize=10000000000000;
 set hive.exec.compress.output=false;
 set hive.exec.dynamic.partition=true;
-set hive.exec.dynamic.partition.mode=nonstrict;
 
 explain
 insert overwrite table merge_dynamic_part_n3 partition (ds = '2008-04-08', hr)

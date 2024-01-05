@@ -82,12 +82,10 @@ public class TestVectorLimitOperator {
     int actualNumberOfElements = 4; // from FakeVectorRowBatchFromObjectIterables
 
     LlapProxy.setDaemon(isDaemon);
-    if (!isDaemon) {// init tez object registry
-      ObjectCache.setupObjectRegistry(new ObjectRegistryImpl());
-    }
 
     HiveConf conf = new HiveConf();
     HiveConf.setVar(conf, HiveConf.ConfVars.HIVEQUERYID, "query-" + random.nextInt(10000));
+    HiveConf.setIntVar(conf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID, 1);
     HiveConf.setVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE, "tez");
     conf.set(TezProcessor.HIVE_TEZ_VERTEX_NAME, "Map 1");
 
@@ -137,8 +135,13 @@ public class TestVectorLimitOperator {
     VectorLimitOperator lo = new VectorLimitOperator(
         new CompilationOpContext(), ld, null, vectorDesc);
     // make sure an object registry is present for the test
-    ObjectCache.setupObjectRegistry(new ObjectRegistryImpl());
-    lo.initialize(new Configuration(), null);
+    HiveConf conf = new HiveConf();
+    int seed = limit * 100 + batchSize * 10 + expectedBatchSize;
+    HiveConf.setVar(conf, HiveConf.ConfVars.HIVEQUERYID, "query-" + seed);
+    HiveConf.setIntVar(conf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID, seed);
+    HiveConf.setVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE, "tez");
+    conf.set(TezProcessor.HIVE_TEZ_VERTEX_NAME, "Map 1");
+    lo.initialize(conf, null);
 
     // Process the batch
     lo.process(vrb, 0);

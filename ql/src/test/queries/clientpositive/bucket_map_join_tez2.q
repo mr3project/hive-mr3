@@ -1,3 +1,5 @@
+--! qt:dataset:src
+-- set hive.stats.filter.range.uniform=false;
 set hive.stats.column.autogather=false;
 set hive.strict.checks.bucketing=false;
 
@@ -6,6 +8,7 @@ set hive.explain.user=false;
 set hive.auto.convert.join=true;
 set hive.auto.convert.join.noconditionaltask=true;
 set hive.auto.convert.join.noconditionaltask.size=30000;
+set hive.llap.memory.oversubscription.max.executors.per.query=3;
 
 CREATE TABLE srcbucket_mapjoin_n18(key int, value string) partitioned by (ds string) CLUSTERED BY (key) INTO 2 BUCKETS STORED AS TEXTFILE;
 CREATE TABLE tab_part_n11 (key int, value string) PARTITIONED BY(ds STRING) CLUSTERED BY (key) INTO 4 BUCKETS STORED AS TEXTFILE;
@@ -127,7 +130,7 @@ insert overwrite table tab_part_ext partition (ds='2008-04-08')
 select key,value from srcbucket_mapjoin_part_n20;
 analyze table tab_part_ext compute statistics for columns;
 
-set hive.auto.convert.join.noconditionaltask.size=1500;
+set hive.auto.convert.join.noconditionaltask.size=3500;
 set hive.convert.join.bucket.mapjoin.tez = true;
 set hive.disable.unsafe.external.table.operations=true;
 set test.comment=Bucket map join should work here;
@@ -156,3 +159,5 @@ FROM my_fact JOIN my_dim ON my_fact.join_col = my_dim.join_col
 WHERE my_fact.fiscal_year = '2015'
 AND my_dim.filter_col IN ( 'VAL1', 'VAL2' )
 and my_fact.accounting_period in (10);
+
+reset hive.llap.memory.oversubscription.max.executors.per.query;

@@ -1,3 +1,5 @@
+--! qt:dataset:srcpart
+--! qt:dataset:alltypesorc
 set hive.compute.query.using.stats=false;
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
@@ -138,6 +140,9 @@ explain select * from alltypesorc_int_n1 join
                                        union all
                                        select srcpart_small_n3.key1 as key from srcpart_small_n3) unionsrc on (alltypesorc_int_n1.cstring = unionsrc.key);
 
+
+-- Non equi joins : Should NOT create a semijoin branch
+EXPLAIN select count(*) from srcpart_date_n7 join srcpart_small_n3 on (srcpart_date_n7.key = srcpart_small_n3.key1 and srcpart_date_n7.value > srcpart_small_n3.value1);
 
 
 drop table srcpart_date_n7;

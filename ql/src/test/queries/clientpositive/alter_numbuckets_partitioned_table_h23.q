@@ -1,4 +1,4 @@
--- EXCLUDE_HADOOP_MAJOR_VERSIONS(0.20S)
+--! qt:dataset:src
 create table tst1_n1(key string, value string) partitioned by (ds string) clustered by (key) into 10 buckets;
 
 alter table tst1_n1 clustered by (key) into 8 buckets;
@@ -49,6 +49,12 @@ describe formatted tst1_n1;
 -- Test removing test order
 
 alter table tst1_n1 clustered by (value) into 12 buckets;
+
+describe formatted tst1_n1;
+
+-- Test changing name of bucket column
+
+alter table tst1_n1 change key keys string;
 
 describe formatted tst1_n1;
 

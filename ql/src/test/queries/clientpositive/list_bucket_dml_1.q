@@ -1,6 +1,6 @@
+--! qt:dataset:srcpart
 set hive.mapred.mode=nonstrict;
 set hive.exec.dynamic.partition=true;
-set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
 set hive.merge.mapfiles=false;	
 set hive.merge.mapredfiles=false; 
@@ -8,7 +8,6 @@ set mapred.input.dir.recursive=true;
 
 -- list bucketing DML : dynamic partition and 2 stage query plan.
 
--- INCLUDE_HADOOP_MAJOR_VERSIONS(0.23)
 
 -- create a skewed table
 create table list_bucketing_dynamic_part_n0 (key String, value String) 

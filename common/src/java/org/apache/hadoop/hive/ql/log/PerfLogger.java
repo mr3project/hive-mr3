@@ -71,6 +71,13 @@ public class PerfLogger {
   public static final String TEZ_GET_SESSION = "TezGetSession";
   public static final String SAVE_TO_RESULTS_CACHE = "saveToResultsCache";
 
+  public static final String MR3_SUBMIT_TO_RUNNING = "MR3SubmitToRunningDag";
+  public static final String MR3_BUILD_DAG = "MR3BuildDag";
+  public static final String MR3_SUBMIT_DAG = "MR3SubmitDag";
+  public static final String MR3_RUN_DAG = "MR3RunDag";
+  public static final String MR3_CREATE_VERTEX = "MR3CreateVertex";
+  public static final String MR3_RUN_VERTEX = "MR3RunVertex";
+
   public static final String SPARK_SUBMIT_TO_RUNNING = "SparkSubmitToRunning";
   public static final String SPARK_BUILD_PLAN = "SparkBuildPlan";
   public static final String SPARK_BUILD_RDD_GRAPH = "SparkBuildRDDGraph";

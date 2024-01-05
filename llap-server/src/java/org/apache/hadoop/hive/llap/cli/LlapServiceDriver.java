@@ -396,8 +396,6 @@ public class LlapServiceDriver {
               org.apache.logging.log4j.Logger.class, // log4j-api
               org.apache.logging.log4j.core.Appender.class, // log4j-core
               org.apache.logging.slf4j.Log4jLogger.class, // log4j-slf4j
-              // log4j-1.2-API needed for NDC
-              org.apache.log4j.config.Log4j1ConfigurationFactory.class,
               io.netty.util.NetUtil.class, // netty4
               org.jboss.netty.util.NetUtil.class, //netty3
               org.apache.arrow.vector.types.pojo.ArrowType.class, //arrow-vector

@@ -1,11 +1,15 @@
 PREHOOK: query: drop table tstsrc_n2
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table tstsrc_n2
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: drop table tstsrcpart_n2
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table tstsrcpart_n2
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table tstsrc_n2 like src
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
@@ -432,10 +436,13 @@ POSTHOOK: Input: default@old_name@ds=1
 PREHOOK: query: ALTER TABLE old_name RENAME TO new_name
 PREHOOK: type: ALTERTABLE_RENAME
 PREHOOK: Input: default@old_name
+PREHOOK: Output: database:default
+PREHOOK: Output: default@new_name
 PREHOOK: Output: default@old_name
 POSTHOOK: query: ALTER TABLE old_name RENAME TO new_name
 POSTHOOK: type: ALTERTABLE_RENAME
 POSTHOOK: Input: default@old_name
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@new_name
 POSTHOOK: Output: default@old_name
 PREHOOK: query: SELECT SUM(hash(col)) FROM (SELECT transform(*) using 'tr "\t" "_"' AS col
@@ -454,16 +461,20 @@ POSTHOOK: Input: default@new_name@ds=1
 PREHOOK: query: drop table tstsrc_n2
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@tstsrc_n2
+PREHOOK: Output: database:default
 PREHOOK: Output: default@tstsrc_n2
 POSTHOOK: query: drop table tstsrc_n2
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@tstsrc_n2
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@tstsrc_n2
 PREHOOK: query: drop table tstsrcpart_n2
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@tstsrcpart_n2
+PREHOOK: Output: database:default
 PREHOOK: Output: default@tstsrcpart_n2
 POSTHOOK: query: drop table tstsrcpart_n2
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@tstsrcpart_n2
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@tstsrcpart_n2

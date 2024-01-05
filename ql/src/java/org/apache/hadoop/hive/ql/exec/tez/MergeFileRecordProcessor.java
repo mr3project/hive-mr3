@@ -95,7 +95,9 @@ public class MergeFileRecordProcessor extends RecordProcessor {
     }
 
     String queryId = HiveConf.getVar(jconf, HiveConf.ConfVars.HIVEQUERYID);
-    cache = ObjectCacheFactory.getCache(jconf, queryId, true);
+    int dagIdId = processorContext.getDagIdentifier();
+    // do not consider ObjectCacheFactory.getPerTaskMrCache() because there is no MergeWork
+    cache = ObjectCacheFactory.getCache(jconf, queryId, dagIdId, true);
 
     try {
       execContext.setJc(jconf);

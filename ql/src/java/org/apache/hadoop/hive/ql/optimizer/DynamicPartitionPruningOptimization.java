@@ -19,7 +19,6 @@
 package org.apache.hadoop.hive.ql.optimizer;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -40,15 +39,12 @@ import org.apache.hadoop.hive.ql.exec.RowSchema;
 import org.apache.hadoop.hive.ql.exec.SelectOperator;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
-import org.apache.hadoop.hive.ql.exec.spark.SparkUtilities;
 import org.apache.hadoop.hive.ql.io.AcidUtils.Operation;
 import org.apache.hadoop.hive.ql.lib.Node;
 import org.apache.hadoop.hive.ql.lib.NodeProcessor;
 import org.apache.hadoop.hive.ql.lib.NodeProcessorCtx;
 import org.apache.hadoop.hive.ql.metadata.Partition;
 import org.apache.hadoop.hive.ql.metadata.Table;
-import org.apache.hadoop.hive.ql.optimizer.spark.CombineEquivalentWorkResolver;
-import org.apache.hadoop.hive.ql.optimizer.spark.SparkPartitionPruningSinkDesc;
 import org.apache.hadoop.hive.ql.parse.GenTezUtils;
 import org.apache.hadoop.hive.ql.parse.GenTezUtils.DynamicListContext;
 import org.apache.hadoop.hive.ql.parse.GenTezUtils.DynamicPartitionPrunerContext;
@@ -60,8 +56,6 @@ import org.apache.hadoop.hive.ql.parse.SemanticAnalyzer;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.parse.SemiJoinBranchInfo;
 import org.apache.hadoop.hive.ql.parse.SemiJoinHint;
-import org.apache.hadoop.hive.ql.parse.spark.OptimizeSparkProcContext;
-import org.apache.hadoop.hive.ql.parse.spark.SparkPartitionPruningSinkOperator;
 import org.apache.hadoop.hive.ql.plan.AggregationDesc;
 import org.apache.hadoop.hive.ql.plan.DynamicPruningEventDesc;
 import org.apache.hadoop.hive.ql.plan.DynamicValue;
@@ -104,19 +98,16 @@ public class DynamicPartitionPruningOptimization implements NodeProcessor {
     ParseContext parseContext;
     if (procCtx instanceof OptimizeTezProcContext) {
       parseContext = ((OptimizeTezProcContext) procCtx).parseContext;
-    } else if (procCtx instanceof OptimizeSparkProcContext) {
-      parseContext = ((OptimizeSparkProcContext) procCtx).getParseContext();
     } else {
       throw new IllegalArgumentException("expected parseContext to be either " +
-          "OptimizeTezProcContext or OptimizeSparkProcContext, but found " +
+          "OptimizeTezProcContext, but found " +
           procCtx.getClass().getName());
     }
 
     FilterOperator filter = (FilterOperator) nd;
     FilterDesc desc = filter.getConf();
 
-    if (!parseContext.getConf().getBoolVar(ConfVars.TEZ_DYNAMIC_PARTITION_PRUNING) &&
-        !parseContext.getConf().isSparkDPPAny()) {
+    if (!parseContext.getConf().getBoolVar(ConfVars.TEZ_DYNAMIC_PARTITION_PRUNING)) {
       // nothing to do when the optimization is off
       return null;
     }
@@ -151,10 +142,6 @@ public class DynamicPartitionPruningOptimization implements NodeProcessor {
     }
 
     boolean semiJoin = parseContext.getConf().getBoolVar(ConfVars.TEZ_DYNAMIC_SEMIJOIN_REDUCTION);
-    if (HiveConf.getVar(parseContext.getConf(), HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("spark")) {
-      //TODO HIVE-16862: Implement a similar feature like "hive.tez.dynamic.semijoin.reduction" in hive on spark
-      semiJoin = false;
-    }
 
     for (DynamicListContext ctx : removerContext) {
       String column = ExprNodeDescUtils.extractColName(ctx.parent);
@@ -482,8 +469,7 @@ public class DynamicPartitionPruningOptimization implements NodeProcessor {
     groupByOp.setColumnExprMap(colMap);
 
     // finally add the event broadcast operator
-    if (HiveConf.getVar(parseContext.getConf(),
-        ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+    if (true) {
       DynamicPruningEventDesc eventDesc = new DynamicPruningEventDesc();
       eventDesc.setTableScan(ts);
       eventDesc.setGenerator(ctx.generator);
@@ -493,29 +479,6 @@ public class DynamicPartitionPruningOptimization implements NodeProcessor {
       eventDesc.setTargetColumnType(columnType);
       eventDesc.setPartKey(partKey);
       OperatorFactory.getAndMakeChild(eventDesc, groupByOp);
-    } else {
-      // Must be spark branch
-      SparkPartitionPruningSinkDesc desc = new SparkPartitionPruningSinkDesc();
-      desc.setTable(PlanUtils.getReduceValueTableDesc(PlanUtils
-          .getFieldSchemasFromColumnList(keyExprs, "key")));
-      desc.addTarget(column, columnType, partKey, null, ts);
-      SparkPartitionPruningSinkOperator dppSink = (SparkPartitionPruningSinkOperator)
-          OperatorFactory.getAndMakeChild(desc, groupByOp);
-      if (HiveConf.getBoolVar(parseContext.getConf(),
-          ConfVars.HIVE_COMBINE_EQUIVALENT_WORK_OPTIMIZATION)) {
-        mayReuseExistingDPPSink(parentOfRS, Arrays.asList(selectOp, groupByOp, dppSink));
-      }
-    }
-  }
-
-  private void mayReuseExistingDPPSink(Operator<? extends OperatorDesc> branchingOP,
-      List<Operator<? extends OperatorDesc>> newDPPBranch) {
-    SparkPartitionPruningSinkOperator reusableDPP = SparkUtilities.findReusableDPPSink(branchingOP,
-        newDPPBranch);
-    if (reusableDPP != null) {
-      CombineEquivalentWorkResolver.combineEquivalentDPPSinks(reusableDPP,
-          (SparkPartitionPruningSinkOperator) newDPPBranch.get(newDPPBranch.size() - 1));
-      branchingOP.removeChild(newDPPBranch.get(0));
     }
   }
 

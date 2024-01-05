@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.hive.common.JavaUtils;
+import org.apache.hadoop.hive.ql.util.MR3FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.fs.FileStatus;
@@ -100,7 +101,7 @@ public class CopyTask extends Task<CopyWork> implements Serializable {
         String oneSrcPathStr = oneSrc.getPath().toString();
         console.printInfo("Copying file: " + oneSrcPathStr);
         Utilities.FILE_OP_LOGGER.debug("Copying file {} to {}", oneSrcPathStr, toPath);
-        if (!FileUtils.copy(srcFs, oneSrc.getPath(), dstFs, toPath,
+        if (!MR3FileUtils.copy(srcFs, oneSrc.getPath(), dstFs, toPath,
             false, // delete source
             true, // overwrite destination
             conf)) {

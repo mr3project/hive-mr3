@@ -17,7 +17,7 @@ load data local inpath "../../data/files/test.dat"
 load data local inpath "../../data/files/test.dat" 
 	into table exim_employee_n11 partition (emp_country="us", emp_state="ka");		
 dfs ${system:test.dfs.mkdir} target/tmp/ql/test/data/exports/exim_employee/temp;
-dfs -rmr target/tmp/ql/test/data/exports/exim_employee;
+dfs -rm -r -f target/tmp/ql/test/data/exports/exim_employee;
 export table exim_employee_n11 to 'ql/test/data/exports/exim_employee';
 drop table exim_employee_n11;
 
@@ -25,9 +25,9 @@ create database importer;
 use importer;
 
 dfs ${system:test.dfs.mkdir} target/tmp/ql/test/data/tablestore/exim_employee/temp;
-dfs -rmr target/tmp/ql/test/data/tablestore/exim_employee;
+dfs -rm -r -f target/tmp/ql/test/data/tablestore/exim_employee;
 dfs ${system:test.dfs.mkdir} target/tmp/ql/test/data/tablestore2/exim_employee/temp;
-dfs -rmr target/tmp/ql/test/data/tablestore2/exim_employee;
+dfs -rm -r -f target/tmp/ql/test/data/tablestore2/exim_employee;
 
 create external table exim_employee_n11 ( emp_id int comment "employee id") 	
 	comment "employee table"
@@ -40,11 +40,11 @@ import table exim_employee_n11 partition (emp_country="us", emp_state="tn")
 	location 'ql/test/data/tablestore/exim_employee';
 show table extended like exim_employee_n11;
 show table extended like exim_employee_n11 partition (emp_country="us", emp_state="tn");		
-dfs -rmr target/tmp/ql/test/data/exports/exim_employee;
+dfs -rm -r -f target/tmp/ql/test/data/exports/exim_employee;
 select * from exim_employee_n11;
-dfs -rmr target/tmp/ql/test/data/tablestore/exim_employee;
+dfs -rm -r -f target/tmp/ql/test/data/tablestore/exim_employee;
 select * from exim_employee_n11;
 drop table exim_employee_n11;
-dfs -rmr target/tmp/ql/test/data/tablestore2/exim_employee;
+dfs -rm -r -f target/tmp/ql/test/data/tablestore2/exim_employee;
 
 drop database importer;

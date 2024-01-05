@@ -16,7 +16,7 @@ set hive.prewarm.enabled=false;
 set hive.join.inner.residual=false;
 set hive.limit.optimize.enable=true;
 set hive.mapjoin.bucket.cache.size=10000;
-set hive.strict.managed.tables=true;
+-- set hive.strict.managed.tables=true;
 set hive.tez.auto.reducer.parallelism=true;
 set hive.tez.bucket.pruning=true;
 

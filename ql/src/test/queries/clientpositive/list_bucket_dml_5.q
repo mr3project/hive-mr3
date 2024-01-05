@@ -1,6 +1,6 @@
+--! qt:dataset:srcpart
 set hive.mapred.mode=nonstrict;
 set hive.exec.dynamic.partition=true;
-set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
 set hive.merge.mapfiles=false;	
 set hive.merge.mapredfiles=false; 
@@ -8,7 +8,6 @@ set mapred.input.dir.recursive=true;
 
 -- list bucketing DML: multiple skewed columns. 2 stages
 
--- INCLUDE_HADOOP_MAJOR_VERSIONS(0.23)
 -- SORT_QUERY_RESULTS
 
 -- create a skewed table

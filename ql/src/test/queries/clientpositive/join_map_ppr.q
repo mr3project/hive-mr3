@@ -1,8 +1,11 @@
+--! qt:dataset:srcpart
+--! qt:dataset:src1
+--! qt:dataset:src
 -- SORT_QUERY_RESULTS
 
 CREATE TABLE dest_j1_n4(key STRING, value STRING, val2 STRING) STORED AS TEXTFILE;
 set hive.cbo.enable=false;
-
+set hive.merge.nway.joins=true;
 EXPLAIN EXTENDED
 INSERT OVERWRITE TABLE dest_j1_n4
 SELECT /*+ MAPJOIN(x,y) */ x.key, z.value, y.value

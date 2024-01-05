@@ -512,7 +512,7 @@ public final class PlanUtils {
    */
   public static TableDesc getMapJoinKeyTableDesc(Configuration conf,
       List<FieldSchema> fieldSchemas) {
-    if (HiveConf.getVar(conf, ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+    if (true) {
       // In tez we use a different way of transmitting the hash table.
       // We basically use ReduceSinkOperators and set the transfer to
       // be broadcast (instead of partitioned). As a consequence we use

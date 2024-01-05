@@ -1,3 +1,4 @@
+--! qt:dataset:part
 -- create database with multiple tables, views.
 -- Use both partitioned and non-partitioned tables, as well as
 -- tables with specific storage locations
@@ -10,7 +11,7 @@ USE db5;
 
 set hive.stats.dbclass=fs;
 dfs ${system:test.dfs.mkdir} ${system:test.tmp.dir}/dbcascade/temp;
-dfs -rmr ${system:test.tmp.dir}/dbcascade;
+dfs -rm -r -f ${system:test.tmp.dir}/dbcascade;
 dfs ${system:test.dfs.mkdir} ${system:test.tmp.dir}/dbcascade;
 
 -- add a table, view
@@ -63,4 +64,4 @@ LOAD DATA LOCAL INPATH '../../data/files/kv1.txt' into table temp_tbl3;
 DROP DATABASE db5 CASCADE;
 
 dfs -test -d ${system:test.tmp.dir}/dbcascade/extab1;
-dfs -rmr ${system:test.tmp.dir}/dbcascade;
+dfs -rm -r -f ${system:test.tmp.dir}/dbcascade;

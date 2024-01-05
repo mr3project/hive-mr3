@@ -37,6 +37,7 @@ public abstract class AbstractOperatorDesc implements OperatorDesc {
   protected transient Map<String, String> opProps;
   protected long memNeeded = 0;
   protected long memAvailable = 0;
+  protected int estimateNumExecutors = 0;
   protected String runtimeStatsTmpDir;
 
   /**
@@ -120,6 +121,16 @@ public abstract class AbstractOperatorDesc implements OperatorDesc {
   @Override
   public void setMaxMemoryAvailable(final long memoryAvailble) {
     this.memAvailable = memoryAvailble;
+  }
+
+  @Override
+  public int getEstimateNumExecutors() {
+    return estimateNumExecutors;
+  }
+
+  @Override
+  public void setEstimateNumExecutors(final int estimateNumExecutors) {
+    this.estimateNumExecutors = estimateNumExecutors;
   }
 
   @Override

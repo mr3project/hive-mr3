@@ -175,7 +175,7 @@ ON (test1_n4.value=test2_n2.value
     OR test2_n2.key between 100 and 102));
 
 -- Disjunction with pred on multiple inputs and single inputs (full outer join)
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 EXPLAIN
 SELECT *
 FROM test1_n4 FULL OUTER JOIN test2_n2
@@ -189,7 +189,7 @@ ON (test1_n4.value=test2_n2.value
   OR test1_n4.key between 100 and 102
   OR test2_n2.key between 100 and 102);
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 SET hive.merge.nway.joins=false;
 EXPLAIN
 SELECT *
@@ -206,7 +206,7 @@ ON (test1_n4.value=test2_n2.value
 SET hive.merge.nway.joins=true;
 
 -- Disjunction with pred on multiple inputs and left input (full outer join)
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 EXPLAIN
 SELECT *
 FROM test1_n4 FULL OUTER JOIN test2_n2
@@ -218,7 +218,7 @@ FROM test1_n4 FULL OUTER JOIN test2_n2
 ON (test1_n4.value=test2_n2.value
   OR test1_n4.key between 100 and 102);
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 SET hive.merge.nway.joins=false;
 EXPLAIN
 SELECT *
@@ -233,7 +233,7 @@ ON (test1_n4.value=test2_n2.value
 SET hive.merge.nway.joins=true;
 
 -- Disjunction with pred on multiple inputs and right input (full outer join)
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 EXPLAIN
 SELECT *
 FROM test1_n4 FULL OUTER JOIN test2_n2
@@ -245,7 +245,7 @@ FROM test1_n4 FULL OUTER JOIN test2_n2
 ON (test1_n4.value=test2_n2.value
   OR test2_n2.key between 100 and 102);
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 SET hive.merge.nway.joins=false;
 EXPLAIN
 SELECT *
@@ -260,7 +260,7 @@ ON (test1_n4.value=test2_n2.value
 SET hive.merge.nway.joins=true;
 
 -- Keys plus residual (full outer join)
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 EXPLAIN
 SELECT *
 FROM test1_n4 FULL OUTER JOIN test2_n2
@@ -274,7 +274,7 @@ ON (test1_n4.value=test2_n2.value
   AND (test1_n4.key between 100 and 102
     OR test2_n2.key between 100 and 102));
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 SET hive.merge.nway.joins=false;
 EXPLAIN
 SELECT *
@@ -291,7 +291,7 @@ ON (test1_n4.value=test2_n2.value
 SET hive.merge.nway.joins=true;
 
 -- Mixed ( FOJ (ROJ, LOJ) ) 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 EXPLAIN
 SELECT *
 FROM (
@@ -331,7 +331,7 @@ FULL OUTER JOIN (
   ) sq2
 ON (sq1.value1 is null or sq2.value4 is null and sq2.value3 != sq1.value2);
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 SET hive.merge.nway.joins=false;
 EXPLAIN
 SELECT *

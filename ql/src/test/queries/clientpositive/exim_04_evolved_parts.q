@@ -24,7 +24,7 @@ alter table exim_employee_n12 set serde "org.apache.hadoop.hive.serde2.lazybinar
 
 alter table exim_employee_n12 add partition (emp_country='in', emp_state='ka');
 dfs ${system:test.dfs.mkdir} target/tmp/ql/test/data/exports/exim_employee/temp;
-dfs -rmr target/tmp/ql/test/data/exports/exim_employee;
+dfs -rm -r -f target/tmp/ql/test/data/exports/exim_employee;
 export table exim_employee_n12 to 'ql/test/data/exports/exim_employee';
 drop table exim_employee_n12;
 
@@ -36,7 +36,7 @@ describe extended exim_employee_n12;
 describe extended exim_employee_n12 partition (emp_country='in', emp_state='tn');
 describe extended exim_employee_n12 partition (emp_country='in', emp_state='ka');
 show table extended like exim_employee_n12;
-dfs -rmr target/tmp/ql/test/data/exports/exim_employee;
+dfs -rm -r -f target/tmp/ql/test/data/exports/exim_employee;
 select * from exim_employee_n12;
 drop table exim_employee_n12;
 

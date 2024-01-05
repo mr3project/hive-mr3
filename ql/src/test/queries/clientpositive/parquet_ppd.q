@@ -1,3 +1,5 @@
+--! qt:dataset:src
+
 set hive.vectorized.execution.enabled=false;
 
 CREATE TABLE parquet_tbl(

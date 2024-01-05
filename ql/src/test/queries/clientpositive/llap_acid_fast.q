@@ -1,3 +1,4 @@
+--! qt:dataset:alltypesorc
 set hive.mapred.mode=nonstrict;
 SET hive.vectorized.execution.enabled=true;
 
@@ -8,7 +9,6 @@ SET hive.exec.orc.default.row.index.stride=1000;
 SET hive.optimize.index.filter=true;
 set hive.fetch.task.conversion=none;
 
-set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.support.concurrency=true;
 set hive.txn.manager=org.apache.hadoop.hive.ql.lockmgr.DbTxnManager;
 

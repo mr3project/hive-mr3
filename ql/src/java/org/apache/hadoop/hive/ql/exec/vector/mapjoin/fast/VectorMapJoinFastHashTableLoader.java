@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.util.Collections;
 import java.util.Map;
 
-import org.apache.hadoop.hive.llap.LlapDaemonInfo;
 import org.apache.hadoop.hive.ql.exec.MemoryMonitorInfo;
 import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionError;
 import org.slf4j.Logger;
@@ -41,6 +40,7 @@ import org.apache.hadoop.io.BytesWritable;
 import org.apache.tez.runtime.api.Input;
 import org.apache.tez.runtime.api.LogicalInput;
 import org.apache.tez.runtime.library.api.KeyValueReader;
+import org.apache.tez.runtime.api.AbstractLogicalInput;
 
 /**
  * HashTableLoader for Tez constructs the hashtable from records read from
@@ -77,12 +77,6 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
     long effectiveThreshold = 0;
     if (memoryMonitorInfo != null) {
       effectiveThreshold = memoryMonitorInfo.getEffectiveThreshold(desc.getMaxMemoryAvailable());
-
-      // hash table loading happens in server side, LlapDecider could kick out some fragments to run outside of LLAP.
-      // Flip the flag at runtime in case if we are running outside of LLAP
-      if (!LlapDaemonInfo.INSTANCE.isLlap()) {
-        memoryMonitorInfo.setLlap(false);
-      }
       if (memoryMonitorInfo.doMemoryMonitoring()) {
         doMemCheck = true;
         if (LOG.isInfoEnabled()) {
@@ -90,6 +84,9 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
         }
       }
     }
+
+    long interruptCheckInterval = HiveConf.getLongVar(hconf, HiveConf.ConfVars.MR3_MAPJOIN_INTERRUPT_CHECK_INTERVAL);
+    LOG.info("interruptCheckInterval = " + interruptCheckInterval);
 
     if (!doMemCheck) {
       if (LOG.isInfoEnabled()) {
@@ -117,19 +114,35 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
         KeyValueReader kvReader = (KeyValueReader) input.getReader();
 
         Long keyCountObj = parentKeyCounts.get(pos);
-        long keyCount = (keyCountObj == null) ? -1 : keyCountObj.longValue();
+        long estKeyCount = (keyCountObj == null) ? -1 : keyCountObj;
+
+        long inputRecords = -1;
+        try {
+          //TODO : Need to use class instead of string.
+          // https://issues.apache.org/jira/browse/HIVE-23981
+          inputRecords = ((AbstractLogicalInput) input).getContext().getCounters().
+                  findCounter("org.apache.tez.common.counters.TaskCounter",
+                          "APPROXIMATE_INPUT_RECORDS").getValue();
+        } catch (Exception e) {
+          LOG.debug("Failed to get value for counter APPROXIMATE_INPUT_RECORDS", e);
+        }
+        long keyCount = Math.max(estKeyCount, inputRecords);
 
         VectorMapJoinFastTableContainer vectorMapJoinFastTableContainer =
                 new VectorMapJoinFastTableContainer(desc, hconf, keyCount);
 
-        LOG.info("Loading hash table for input: {} cacheKey: {} tableContainer: {} smallTablePos: {}", inputName,
-          cacheKey, vectorMapJoinFastTableContainer.getClass().getSimpleName(), pos);
+        LOG.info("Loading hash table for input: {} cacheKey: {} tableContainer: {} smallTablePos: {} " +
+                "estKeyCount : {} keyCount : {}", inputName, cacheKey,
+                vectorMapJoinFastTableContainer.getClass().getSimpleName(), pos, estKeyCount, keyCount);
 
         vectorMapJoinFastTableContainer.setSerde(null, null); // No SerDes here.
         while (kvReader.next()) {
           vectorMapJoinFastTableContainer.putRow((BytesWritable)kvReader.getCurrentKey(),
               (BytesWritable)kvReader.getCurrentValue());
           numEntries++;
+          if ((numEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
+            throw new InterruptedException("Hash table loading interrupted");
+          }
           if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
               final long estMemUsage = vectorMapJoinFastTableContainer.getEstimatedMemorySize();
               if (estMemUsage > effectiveThreshold) {
@@ -139,8 +152,8 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
                 LOG.error(msg);
                 throw new MapJoinMemoryExhaustionError(msg);
               } else {
-                if (LOG.isInfoEnabled()) {
-                  LOG.info("Checking hash table loader memory usage for input: {} numEntries: {} " +
+                if (LOG.isDebugEnabled()) {
+                  LOG.debug("Checking hash table loader memory usage for input: {} numEntries: {} " +
                       "estimatedMemoryUsage: {} effectiveThreshold: {}", inputName, numEntries, estMemUsage,
                     effectiveThreshold);
                 }
@@ -155,8 +168,8 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
               "estimatedMemoryUsage: {}", inputName, cacheKey, numEntries,
             vectorMapJoinFastTableContainer.getEstimatedMemorySize());
         } else {
-          LOG.info("Finished loading hash table for input: {} cacheKey: {} numEntries: {}", inputName, cacheKey,
-            numEntries);
+          LOG.info("Finished loading hash table for input: {} cacheKey: {} numEntries: {}",
+                  inputName, cacheKey, numEntries);
         }
       } catch (IOException e) {
         throw new HiveException(e);

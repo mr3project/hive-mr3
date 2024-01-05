@@ -10,4 +10,4 @@ select * from temp_table_external;
 drop table temp_table_external;
 dfs -ls hdfs:///tmp/temp_table_external/;
 
-dfs -rmr hdfs:///tmp/temp_table_external;
+dfs -rm -r -f hdfs:///tmp/temp_table_external;

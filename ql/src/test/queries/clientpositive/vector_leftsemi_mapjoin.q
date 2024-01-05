@@ -1,3 +1,4 @@
+--! qt:dataset:src
 set hive.explain.user=false;
 set hive.fetch.task.conversion=none;
 set hive.auto.convert.join=true;
@@ -83,12 +84,12 @@ explain vectorization expression
 select a.key from t3_n35 a left outer join t1_n148 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t3_n35 a left outer join t1_n148 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 explain vectorization expression
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 explain vectorization expression
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
@@ -104,12 +105,12 @@ explain vectorization expression
 select a.key from t3_n35 a left semi join t2_n87 b on a.key = b.key left outer join t1_n148 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t2_n87 b on a.key = b.key left outer join t1_n148 c on a.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 explain vectorization expression
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 explain vectorization expression
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
@@ -182,12 +183,12 @@ explain vectorization operator
 select a.key from t3_n35 a left outer join t1_n148 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t3_n35 a left outer join t1_n148 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 explain vectorization operator
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 explain vectorization operator
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
@@ -196,12 +197,12 @@ explain vectorization operator
 select a.key from t3_n35 a left semi join t2_n87 b on a.key = b.key left outer join t1_n148 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t2_n87 b on a.key = b.key left outer join t1_n148 c on a.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 explain vectorization operator
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 explain vectorization operator
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 -- select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
@@ -274,12 +275,12 @@ explain vectorization only operator
 select a.key from t3_n35 a left outer join t1_n148 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t3_n35 a left outer join t1_n148 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 explain vectorization operator
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 explain vectorization operator
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 -- select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
@@ -288,12 +289,12 @@ explain vectorization only operator
 select a.key from t3_n35 a left semi join t2_n87 b on a.key = b.key left outer join t1_n148 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t2_n87 b on a.key = b.key left outer join t1_n148 c on a.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 explain vectorization only operator
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 explain vectorization only operator
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 -- select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
@@ -367,12 +368,12 @@ explain vectorization operator
 select a.key from t3_n35 a left outer join t1_n148 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t3_n35 a left outer join t1_n148 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 explain vectorization operator
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 explain vectorization operator
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
@@ -381,12 +382,12 @@ explain vectorization operator
 select a.key from t3_n35 a left semi join t2_n87 b on a.key = b.key left outer join t1_n148 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t2_n87 b on a.key = b.key left outer join t1_n148 c on a.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 explain vectorization operator
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 explain vectorization operator
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
@@ -459,12 +460,12 @@ explain vectorization operator
 select a.key from t3_n35 a left outer join t1_n148 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t3_n35 a left outer join t1_n148 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 explain vectorization operator
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 explain vectorization operator
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
@@ -473,12 +474,12 @@ explain vectorization operator
 select a.key from t3_n35 a left semi join t2_n87 b on a.key = b.key left outer join t1_n148 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t2_n87 b on a.key = b.key left outer join t1_n148 c on a.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 explain vectorization operator
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 explain vectorization operator
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
@@ -552,12 +553,12 @@ explain vectorization operator
 select a.key from t3_n35 a left outer join t1_n148 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t3_n35 a left outer join t1_n148 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 explain vectorization operator
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 explain vectorization operator
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
 select a.key from t1_n148 a full outer join t3_n35 b on a.key = b.key left semi join t2_n87 c on b.key = c.key sort by a.key;
@@ -566,12 +567,12 @@ explain vectorization operator
 select a.key from t3_n35 a left semi join t2_n87 b on a.key = b.key left outer join t1_n148 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t2_n87 b on a.key = b.key left outer join t1_n148 c on a.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 explain vectorization operator
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 explain vectorization operator
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;
 select a.key from t3_n35 a left semi join t1_n148 b on a.key = b.key full outer join t2_n87 c on a.key = c.key sort by a.key;

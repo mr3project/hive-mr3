@@ -9,5 +9,5 @@ IMPORT FROM '/tmp/test_import_exported_table/exported_table';
 DESCRIBE j1_41;
 SELECT * from j1_41;
 
-dfs -rmr hdfs:///tmp/test_import_exported_table;
+dfs -rm -r -f hdfs:///tmp/test_import_exported_table;
 

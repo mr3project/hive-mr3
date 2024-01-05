@@ -268,6 +268,7 @@
       <version>${hadoop.version}</version>
       <scope>test</scope>
     </dependency>
+    <!--
     <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-server</artifactId>
@@ -312,6 +313,7 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+     -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-minicluster</artifactId>
@@ -488,6 +490,12 @@
       <groupId>commons-dbcp</groupId>
       <artifactId>commons-dbcp</artifactId>
       <version>${commons-dbcp.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.datamonad.mr3</groupId>
+      <artifactId>mr3-tez</artifactId>
+      <version>${mr3.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

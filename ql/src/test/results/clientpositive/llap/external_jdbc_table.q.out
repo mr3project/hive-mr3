@@ -301,8 +301,12 @@ POSTHOOK: Input: default@ext_simple_derby_table1
 -44	53
 PREHOOK: query: explain select bkey from ext_simple_derby_table1 where 100 < ext_simple_derby_table1.ikey
 PREHOOK: type: QUERY
+PREHOOK: Input: default@ext_simple_derby_table1
+#### A masked pattern was here ####
 POSTHOOK: query: explain select bkey from ext_simple_derby_table1 where 100 < ext_simple_derby_table1.ikey
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@ext_simple_derby_table1
+#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-0 is a root stage
 
@@ -371,9 +375,15 @@ POSTHOOK: Input: default@ext_simple_derby_table1
 PREHOOK: query: explain select ext_simple_derby_table1.fkey, ext_simple_derby_table2.dkey from ext_simple_derby_table1 join ext_simple_derby_table2 on
 (ext_simple_derby_table1.ikey = ext_simple_derby_table2.ikey)
 PREHOOK: type: QUERY
+PREHOOK: Input: default@ext_simple_derby_table1
+PREHOOK: Input: default@ext_simple_derby_table2
+#### A masked pattern was here ####
 POSTHOOK: query: explain select ext_simple_derby_table1.fkey, ext_simple_derby_table2.dkey from ext_simple_derby_table1 join ext_simple_derby_table2 on
 (ext_simple_derby_table1.ikey = ext_simple_derby_table2.ikey)
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@ext_simple_derby_table1
+POSTHOOK: Input: default@ext_simple_derby_table2
+#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-0 is a root stage
 
@@ -385,13 +395,13 @@ STAGE PLANS:
         TableScan
           alias: ext_simple_derby_table1
           properties:
-            hive.sql.query SELECT "t"."fkey", "t0"."dkey"
-FROM (SELECT *
+            hive.sql.query SELECT "t0"."fkey", "t2"."dkey"
+FROM (SELECT "ikey", "fkey"
 FROM "SIMPLE_DERBY_TABLE1"
-WHERE "ikey" IS NOT NULL) AS "t"
-INNER JOIN (SELECT *
+WHERE "ikey" IS NOT NULL) AS "t0"
+INNER JOIN (SELECT "ikey", "dkey"
 FROM "SIMPLE_DERBY_TABLE2"
-WHERE "ikey" IS NOT NULL) AS "t0" ON "t"."ikey" = "t0"."ikey"
+WHERE "ikey" IS NOT NULL) AS "t2" ON "t0"."ikey" = "t2"."ikey"
             hive.sql.query.fieldNames fkey,dkey
             hive.sql.query.fieldTypes float,double
             hive.sql.query.split false
@@ -417,9 +427,15 @@ POSTHOOK: Input: default@ext_simple_derby_table2
 PREHOOK: query: explain select simple_hive_table1.fkey, ext_simple_derby_table2.dkey from simple_hive_table1 join ext_simple_derby_table2 on
 (simple_hive_table1.ikey = ext_simple_derby_table2.ikey)
 PREHOOK: type: QUERY
+PREHOOK: Input: default@ext_simple_derby_table2
+PREHOOK: Input: default@simple_hive_table1
+#### A masked pattern was here ####
 POSTHOOK: query: explain select simple_hive_table1.fkey, ext_simple_derby_table2.dkey from simple_hive_table1 join ext_simple_derby_table2 on
 (simple_hive_table1.ikey = ext_simple_derby_table2.ikey)
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@ext_simple_derby_table2
+POSTHOOK: Input: default@simple_hive_table1
+#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -447,22 +463,23 @@ STAGE PLANS:
                       Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                       Reduce Output Operator
                         key expressions: _col0 (type: int)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: int)
                         Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col1 (type: float)
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
         Map 3 
             Map Operator Tree:
                 TableScan
                   alias: ext_simple_derby_table2
                   properties:
-                    hive.sql.query SELECT "ikey", "bkey", "fkey", "dkey"
+                    hive.sql.query SELECT "ikey", "dkey"
 FROM "SIMPLE_DERBY_TABLE2"
 WHERE "ikey" IS NOT NULL
-                    hive.sql.query.fieldNames ikey,bkey,fkey,dkey
-                    hive.sql.query.fieldTypes int,bigint,float,double
+                    hive.sql.query.fieldNames ikey,dkey
+                    hive.sql.query.fieldTypes int,double
                     hive.sql.query.split true
                   Statistics: Num rows: 1 Data size: 12 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
@@ -471,6 +488,7 @@ WHERE "ikey" IS NOT NULL
                     Statistics: Num rows: 1 Data size: 12 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: _col0 (type: int)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: _col0 (type: int)
                       Statistics: Num rows: 1 Data size: 12 Basic stats: COMPLETE Column stats: NONE
@@ -485,16 +503,11 @@ WHERE "ikey" IS NOT NULL
                      Inner Join 0 to 1
                 keys:
                   0 _col0 (type: int)
-<<<<<<< HEAD
-                  1 ikey (type: int)
-                outputColumnNames: _col1, _col5
-=======
                   1 _col0 (type: int)
                 outputColumnNames: _col1, _col3
->>>>>>> da34c3c253... HIVE-20976: JDBC queries containing joins gives wrong results (Jesus Camacho Rodriguez, reviewed by Ashutosh Chauhan)
                 Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                 Select Operator
-                  expressions: _col1 (type: float), _col5 (type: double)
+                  expressions: _col1 (type: float), _col3 (type: double)
                   outputColumnNames: _col0, _col1
                   Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                   File Output Operator
@@ -538,6 +551,31 @@ POSTHOOK: Input: default@ext_simple_derby_table2
 POSTHOOK: Input: default@simple_hive_table1
 #### A masked pattern was here ####
 8
--16
 20
+-16
 50
+PREHOOK: query: explain cbo
+select ext_simple_derby_table1.fkey, ext_simple_derby_table2.dkey from ext_simple_derby_table1 join ext_simple_derby_table2 on
+(ext_simple_derby_table1.ikey = ext_simple_derby_table2.ikey)
+PREHOOK: type: QUERY
+PREHOOK: Input: default@ext_simple_derby_table1
+PREHOOK: Input: default@ext_simple_derby_table2
+#### A masked pattern was here ####
+POSTHOOK: query: explain cbo
+select ext_simple_derby_table1.fkey, ext_simple_derby_table2.dkey from ext_simple_derby_table1 join ext_simple_derby_table2 on
+(ext_simple_derby_table1.ikey = ext_simple_derby_table2.ikey)
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@ext_simple_derby_table1
+POSTHOOK: Input: default@ext_simple_derby_table2
+#### A masked pattern was here ####
+CBO PLAN:
+HiveJdbcConverter(convention=[JDBC.DERBY])
+  JdbcProject(fkey=[$1], dkey=[$3])
+    JdbcJoin(condition=[=($0, $2)], joinType=[inner])
+      JdbcProject(ikey=[$0], fkey=[$2])
+        JdbcFilter(condition=[IS NOT NULL($0)])
+          JdbcHiveTableScan(table=[[default, ext_simple_derby_table1]], table:alias=[ext_simple_derby_table1])
+      JdbcProject(ikey=[$0], dkey=[$3])
+        JdbcFilter(condition=[IS NOT NULL($0)])
+          JdbcHiveTableScan(table=[[default, ext_simple_derby_table2]], table:alias=[ext_simple_derby_table2])
+

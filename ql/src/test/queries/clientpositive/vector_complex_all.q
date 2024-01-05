@@ -1,10 +1,12 @@
+--! qt:dataset:src1
+--! qt:dataset:src
 set hive.compute.query.using.stats=false;
 set hive.strict.checks.cartesian.product=false;
 set hive.cli.print.header=true;
 set hive.explain.user=false;
 set hive.fetch.task.conversion=none;
 SET hive.vectorized.execution.enabled=true;
-set hive.llap.io.enabled=false;
+set hive.llap.io.enabled=true;
 set hive.mapred.mode=nonstrict;
 set hive.auto.convert.join=true;
 
@@ -68,7 +70,7 @@ SELECT strct.B, str FROM orc_create_complex_n0;
 
 SELECT strct.B, str FROM orc_create_complex_n0;
 
-set hive.llap.io.enabled=false;
+set hive.llap.io.enabled=true;
 
 EXPLAIN VECTORIZATION DETAIL
 INSERT INTO TABLE orc_create_complex_n0

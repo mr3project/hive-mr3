@@ -339,4 +339,19 @@
   <value>false</value>
 </property>
 
+<property>
+  <name>mr3.container.localize.python.working.dir.unsafe</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>mr3.container.runtime.auto.start.input</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>mr3.am.permit.custom.user.class</name>
+  <value>true</value>
+</property>
+
 </configuration>

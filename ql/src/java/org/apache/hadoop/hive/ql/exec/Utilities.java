@@ -433,21 +433,8 @@ public final class Utilities {
     InputStream in = null;
     Kryo kryo = SerializationUtilities.borrowKryo();
     try {
-      String engine = HiveConf.getVar(conf, ConfVars.HIVE_EXECUTION_ENGINE);
-      if (engine.equals("spark")) {
-        // TODO Add jar into current thread context classloader as it may be invoked by Spark driver inside
-        // threads, should be unnecessary while SPARK-5377 is resolved.
-        String addedJars = conf.get(HIVE_ADDED_JARS);
-        if (StringUtils.isNotEmpty(addedJars)) {
-          ClassLoader loader = Thread.currentThread().getContextClassLoader();
-          ClassLoader newLoader = addToClassPath(loader, addedJars.split(";"));
-          Thread.currentThread().setContextClassLoader(newLoader);
-          kryo.setClassLoader(newLoader);
-        }
-      }
-
       path = getPlanPath(conf, name);
-      LOG.info("PLAN PATH = {}", path);
+      LOG.debug("PLAN PATH = {}", path);
       if (path == null) { // Map/reduce plan may not be generated
         return null;
       }
@@ -1481,8 +1468,7 @@ public final class Utilities {
     // we are avoiding rename/move only if following conditions are met
     //  * execution engine is tez
     //  * if it is select query
-    if (conf != null && conf.getIsQuery() && conf.getFilesToFetch() != null
-        && HiveConf.getVar(hConf, ConfVars.HIVE_EXECUTION_ENGINE).equalsIgnoreCase("tez")){
+    if (conf != null && conf.getIsQuery() && conf.getFilesToFetch() != null){
       return true;
     }
     return false;
@@ -1844,7 +1830,7 @@ public final class Utilities {
   private static void addBucketFileToResults2(HashMap<String, FileStatus> taskIDToFile,
       int numBuckets, Configuration hconf, List<Path> result) {
     if (MapUtils.isNotEmpty(taskIDToFile) && (numBuckets > taskIDToFile.size())
-        && !"tez".equalsIgnoreCase(hconf.get(ConfVars.HIVE_EXECUTION_ENGINE.varname))) {
+        && false) {
         addBucketsToResultsCommon(taskIDToFile, numBuckets, result);
     }
   }
@@ -1854,7 +1840,7 @@ public final class Utilities {
       int numBuckets, Configuration hconf, List<Path> result) {
     // if the table is bucketed and enforce bucketing, we should check and generate all buckets
     if (numBuckets > 0 && taskIDToFile != null
-        && !"tez".equalsIgnoreCase(hconf.get(ConfVars.HIVE_EXECUTION_ENGINE.varname))) {
+        && false) {
       addBucketsToResultsCommon(taskIDToFile, numBuckets, result);
     }
   }
@@ -3672,7 +3658,7 @@ public final class Utilities {
    * Set hive input format, and input format file if necessary.
    */
   public static void setInputAttributes(Configuration conf, MapWork mWork) {
-    HiveConf.ConfVars var = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez") ?
+    HiveConf.ConfVars var = true ?
       HiveConf.ConfVars.HIVETEZINPUTFORMAT : HiveConf.ConfVars.HIVEINPUTFORMAT;
     if (mWork.getInputformat() != null) {
       HiveConf.setVar(conf, var, mWork.getInputformat());

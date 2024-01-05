@@ -12,4 +12,4 @@ SELECT /*+ MAPJOIN(b) */ a.dt FROM t1_n99 a JOIN t2_n62 b ON (a.dt = b.dt);
 SET hive.optimize.bucketmapjoin=false;
 set hive.input.format=org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
 
-dfs -rmr ${system:test.tmp.dir}/bmjpathfilter;
+dfs -rm -r -f ${system:test.tmp.dir}/bmjpathfilter;

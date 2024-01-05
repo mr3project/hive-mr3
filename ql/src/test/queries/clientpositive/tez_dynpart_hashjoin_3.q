@@ -1,6 +1,8 @@
-set hive.optimize.limittranspose=true;
-set hive.optimize.limittranspose.reductionpercentage=0.1f;
-set hive.optimize.limittranspose.reductiontuples=100;
+--! qt:dataset:src
+--! qt:dataset:alltypesorc
+-- set hive.optimize.limittranspose=true;
+-- set hive.optimize.limittranspose.reductionpercentage=0.1f;
+-- set hive.optimize.limittranspose.reductiontuples=100;
 set hive.explain.user=false;
 set hive.auto.convert.join=false;
 set hive.optimize.dynamic.partition.hashjoin=false;

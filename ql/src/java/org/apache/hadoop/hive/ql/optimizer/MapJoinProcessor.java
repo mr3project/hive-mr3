@@ -431,6 +431,34 @@ public class MapJoinProcessor extends Transform {
       return false;
     }
 
+    // Do not convert to MapJoin if we have FullOuterJoin with any filter expression.
+    // This partially disables HIVE-18908 patch and solves the MapJoin correctness problems
+    // described in HIVE-27226.
+    if (joinDesc.getFilters() != null) {
+      boolean hasFullOuterJoinWithFilter = Arrays.stream(joinDesc.getConds()).anyMatch(cond -> {
+        if (cond.getType() == JoinDesc.FULL_OUTER_JOIN) {
+          // Note that CommonJoinOperator.hasFilter() implements a stricter check based on filterMap.
+          // We loosen the filter check by checking JoinDesc.getFilters() instead of JoinDesc.getFilterMap()
+          // because we want to convert more FullOuterJoin to MapJoin.
+          // Maybe we can implement more flexible check by parsing FilterMap(cf. JoinDesc.filterMap),
+          // but we have to check SemanticAnalyzer and CommonJoinOperator.getObject() to ensure correctness.
+          Byte left = (byte) cond.getLeft();
+          Byte right = (byte) cond.getRight();
+          boolean leftHasFilter =
+              joinDesc.getFilters().containsKey(left) && !joinDesc.getFilters().get(left).isEmpty();
+          boolean rightHasFilter =
+              joinDesc.getFilters().containsKey(right) && !joinDesc.getFilters().get(right).isEmpty();
+          return leftHasFilter || rightHasFilter;
+        } else {
+          return false;
+        }
+      });
+      if (hasFullOuterJoinWithFilter) {
+        LOG.debug("FULL OUTER MapJoin not enabled: FullOuterMapJoin with filters not supported");
+        return false;
+      }
+    }
+
     if (joinDesc.getResidualFilterExprs() != null &&
         joinDesc.getResidualFilterExprs().size() != 0) {
       if (LOG.isDebugEnabled()) {

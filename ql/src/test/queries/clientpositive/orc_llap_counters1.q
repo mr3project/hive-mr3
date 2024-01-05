@@ -1,3 +1,4 @@
+--! qt:replace:/(\s+totalSize\s+)\S+(\s+)/$1#Masked#/
 set hive.vectorized.execution.enabled=false;
 set hive.mapred.mode=nonstrict;
 SET hive.optimize.index.filter=true;
@@ -19,7 +20,8 @@ CREATE TABLE staging(t tinyint,
            `dec` decimal(4,2),
            bin binary)
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '|'
-STORED AS TEXTFILE;
+STORED AS TEXTFILE
+TBLPROPERTIES ("hive.serialization.decode.binary.as.base64"="false");
 
 LOAD DATA LOCAL INPATH '../../data/files/over1k' OVERWRITE INTO TABLE staging;
 LOAD DATA LOCAL INPATH '../../data/files/over1k' INTO TABLE staging;

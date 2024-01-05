@@ -1,3 +1,5 @@
+--! qt:dataset:alltypesorc
+
 set hive.vectorized.execution.enabled=false;
 
 create table ts_merge (
@@ -17,7 +19,6 @@ set hive.merge.orcfile.stripe.level=true;
 set hive.merge.tezfiles=true;
 set hive.merge.mapfiles=true;
 set hive.merge.mapredfiles=true;
-set hive.merge.sparkfiles=true;
 
 select count(*) from ts_merge;
 alter table ts_merge concatenate;
@@ -30,7 +31,15 @@ dfs -ls ${hiveconf:hive.metastore.warehouse.dir}/ts_merge/;
 create table a_merge like alltypesorc;
 
 insert overwrite table a_merge select * from alltypesorc;
-load data local inpath '../../data/files/alltypesorc' into table a_merge;
+load data local inpath '../../data/files/alltypesorc_voriginal' into table a_merge;
+dfs -ls ${hiveconf:hive.metastore.warehouse.dir}/a_merge/;
+
+select count(*) from a_merge;
+alter table a_merge concatenate;
+select count(*) from a_merge;
+dfs -ls ${hiveconf:hive.metastore.warehouse.dir}/a_merge/;
+
+insert into table a_merge select * from alltypesorc;
 dfs -ls ${hiveconf:hive.metastore.warehouse.dir}/a_merge/;
 
 select count(*) from a_merge;

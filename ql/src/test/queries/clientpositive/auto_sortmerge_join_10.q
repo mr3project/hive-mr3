@@ -1,8 +1,10 @@
+--! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 ;
 
 set hive.exec.reducers.max = 1;
+-- set hive.auto.convert.anti.join=true;
 
 CREATE TABLE tbl1_n5(key int, value string) CLUSTERED BY (key) SORTED BY (key) INTO 2 BUCKETS;
 CREATE TABLE tbl2_n4(key int, value string) CLUSTERED BY (key) SORTED BY (key) INTO 2 BUCKETS;
@@ -100,7 +102,7 @@ select count(t1.key) from tbl1_n5 as t1 where not exists
 select count(t1.key) from tbl1_n5 as t1 where not exists
      (select 1 from tbl2_n4 as t2 where t1.key = t2.key);
 
-set hive.auto.convert.anti.join=false;
+-- set hive.auto.convert.anti.join=false;
 
 explain
 select count(t1.key) from tbl1_n5 as t1 where not exists

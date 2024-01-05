@@ -58,6 +58,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hive.common.util.HiveTestUtils;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
@@ -158,7 +159,7 @@ public class TestNewInputOutputFormat {
     }
   }
   
-  @Test
+  @Ignore   // because this test runs MapReduce and uses Orc
   //Test regular outputformat
   public void testNewOutputFormat() throws Exception {
     int rownum=1000;
@@ -230,11 +231,11 @@ public class TestNewInputOutputFormat {
     localFs.delete(outputPath, true);
   }
   
-  @Test
+  @Ignore   // because this test runs MapReduce and uses Orc
   //Test outputformat with compression
   public void testNewOutputFormatWithCompression() throws Exception {
     conf.set("hive.exec.orc.default.compress", "SNAPPY");
-    
+
     Path inputPath = new Path(workDir, "TestOrcFile." +
         testCaseName.getMethodName() + ".txt");
     Path outputPath = new Path(workDir, "TestOrcFile." +
@@ -325,7 +326,7 @@ public class TestNewInputOutputFormat {
   }
   
   @SuppressWarnings("unchecked")
-  @Test
+  @Ignore   // because this test runs MapReduce and uses Orc
   //Test outputformat with complex data type, and with reduce
   public void testNewOutputFormatComplex() throws Exception {
     Path inputPath = new Path(workDir, "TestOrcFile." +

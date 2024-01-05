@@ -81,8 +81,10 @@ public class VectorLimitOperator extends LimitOperator implements VectorizationO
     if (currCount + batch.size <= offset) {
       currCount += batch.size;
     } else if (currCount >= offset + limit || currentCountForAllTasks.get() >= offset + limit) {
-      LOG.debug("Limit reached: currCount: {}, currentCountForAllTasks: {}", currCount,
-          currentCountForAllTasks.get());
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Limit reached: currCount: {}, currentCountForAllTasks: {}", currCount,
+            currentCountForAllTasks.get());
+      }
       onLimitReached();
     } else {
       int skipSize = 0;
@@ -103,7 +105,7 @@ public class VectorLimitOperator extends LimitOperator implements VectorizationO
         }
       }
       currCount += batch.size;
-      currentCountForAllTasks.set(currentCountForAllTasks.get() + batch.size);
+      currentCountForAllTasks.addAndGet(batch.size);
       batch.size = newBatchSize;
       vectorForward(batch);
     }

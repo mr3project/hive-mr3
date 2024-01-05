@@ -531,6 +531,9 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
   public void abort() {
     LOG.info("Received abort in operator: {}", getName());
     abortOp.set(true);
+    for (Operator<? extends OperatorDesc> op : childOperators) {
+      op.abort();
+    }
   }
 
   /**
@@ -618,24 +621,24 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
   }
 
   protected final void defaultEndGroup() throws HiveException {
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Ending group");
-    }
+    // if (LOG.isDebugEnabled()) {
+    //   LOG.debug("Ending group");
+    // }
 
     if (childOperators == null) {
       return;
     }
 
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Ending group for children:");
-    }
+    // if (LOG.isDebugEnabled()) {
+    //   LOG.debug("Ending group for children:");
+    // }
     for (Operator<? extends OperatorDesc> op : childOperators) {
       op.endGroup();
     }
 
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("End group Done");
-    }
+    // if (LOG.isDebugEnabled()) {
+    //   LOG.debug("End group Done");
+    // }
   }
 
   // If a operator wants to do some work at the beginning of a group
