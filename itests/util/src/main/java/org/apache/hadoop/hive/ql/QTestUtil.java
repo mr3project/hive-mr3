@@ -120,9 +120,6 @@ import org.apache.hadoop.hive.ql.dataset.Dataset;
 import org.apache.hadoop.hive.shims.HadoopShims;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hive.common.util.StreamPrinter;
-import org.apache.hive.druid.MiniDruidCluster;
-import org.apache.hive.kafka.SingleNodeKafkaCluster;
-import org.apache.hive.kafka.Wikipedia;
 import org.apache.tools.ant.BuildException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
@@ -202,9 +199,6 @@ public class QTestUtil {
   private QOutProcessor qOutProcessor;
   private final String initScript;
   private final String cleanupScript;
-
-  private MiniDruidCluster druidCluster;
-  private SingleNodeKafkaCluster kafkaCluster;
 
   public interface SuiteAddTestFunctor {
     public void addTestToSuite(TestSuite suite, Object setup, String tName);
@@ -398,19 +392,6 @@ public class QTestUtil {
         conf.set(confEntry.getKey(), clusterSpecificConf.get(confEntry.getKey()));
       }
     }
-    if (druidCluster != null) {
-      final Path druidDeepStorage = fs.makeQualified(new Path(druidCluster.getDeepStorageDir()));
-      fs.mkdirs(druidDeepStorage);
-      conf.set("hive.druid.storage.storageDirectory", druidDeepStorage.toUri().getPath());
-      conf.set("hive.druid.metadata.db.type", "derby");
-      conf.set("hive.druid.metadata.uri", druidCluster.getMetadataURI());
-      conf.set("hive.druid.coordinator.address.default", druidCluster.getCoordinatorURI());
-      conf.set("hive.druid.overlord.address.default", druidCluster.getOverlordURI());
-      final Path scratchDir = fs
-              .makeQualified(new Path(System.getProperty("test.tmp.dir"), "druidStagingDir"));
-      fs.mkdirs(scratchDir);
-      conf.set("hive.druid.working.directory", scratchDir.toUri().getPath());
-    }
   }
 
   private void setFsRelatedProperties(HiveConf conf, boolean isLocalFs, FileSystem fs) {
@@ -502,8 +483,6 @@ public class QTestUtil {
     llap(CoreClusterType.TEZ, FsType.hdfs),
     llap_local(CoreClusterType.TEZ, FsType.local),
     none(CoreClusterType.MR, FsType.local),
-    druid(CoreClusterType.TEZ, FsType.hdfs),
-    druidKafka(CoreClusterType.TEZ, FsType.hdfs),
     kafka(CoreClusterType.TEZ, FsType.hdfs);
 
 
@@ -535,10 +514,6 @@ public class QTestUtil {
         return llap;
       } else if (type.equals("llap_local")) {
         return llap_local;
-      } else if (type.equals("druid")) {
-        return druid;
-      } else if (type.equals("druid-kafka")) {
-        return druidKafka;
       }
       else {
         return none;
@@ -687,42 +662,6 @@ public class QTestUtil {
 
     String uriString = fs.getUri().toString();
 
-    if (clusterType == MiniClusterType.druid || clusterType == MiniClusterType.druidKafka) {
-      final String tempDir = System.getProperty("test.tmp.dir");
-      druidCluster = new MiniDruidCluster("mini-druid",
-          getLogDirectory(),
-          tempDir,
-          setup.zkPort,
-          Utilities.jarFinderGetJar(MiniDruidCluster.class)
-      );
-      final Path druidDeepStorage = fs.makeQualified(new Path(druidCluster.getDeepStorageDir()));
-      fs.mkdirs(druidDeepStorage);
-      conf.set("hive.druid.storage.storageDirectory", druidDeepStorage.toUri().getPath());
-      conf.set("hive.druid.metadata.db.type", "derby");
-      conf.set("hive.druid.metadata.uri", druidCluster.getMetadataURI());
-      final Path scratchDir = fs
-          .makeQualified(new Path(System.getProperty("test.tmp.dir"), "druidStagingDir"));
-      fs.mkdirs(scratchDir);
-      conf.set("hive.druid.working.directory", scratchDir.toUri().getPath());
-      druidCluster.init(conf);
-      druidCluster.start();
-    }
-
-    if (clusterType == MiniClusterType.kafka
-        || clusterType == MiniClusterType.druidKafka) {
-      kafkaCluster = new SingleNodeKafkaCluster("kafka",
-          getLogDirectory() + "/kafka-cluster",
-          setup.zkPort
-      );
-      kafkaCluster.init(conf);
-      kafkaCluster.start();
-      kafkaCluster.createTopicWithData(
-          "test-topic",
-          new File(getScriptsDir(), "kafka_init_data.json")
-      );
-      kafkaCluster.createTopicWithData("wiki_kafka_avro_table", getAvroRows());
-    }
-
     if (clusterType.getCoreClusterType() == CoreClusterType.TEZ) {
       if (confDir != null && !confDir.isEmpty()) {
         conf.addResource(new URL("file://" + new File(confDir).toURI().getPath()
@@ -745,49 +684,6 @@ public class QTestUtil {
     }
   }
 
-  private static List<byte[]> getAvroRows() {
-    int numRows = 10;
-    List<byte[]> events;
-    final DatumWriter<GenericRecord> writer = new SpecificDatumWriter<>(Wikipedia.getClassSchema());
-    events =
-        IntStream.rangeClosed(0, numRows)
-            .mapToObj(i -> Wikipedia.newBuilder()
-                // 1534736225090 -> 08/19/2018 20:37:05
-                .setTimestamp(formatter.format(new Timestamp(1534736225090L + 1000 * 3600 * i)))
-                .setAdded(i * 300)
-                .setDeleted(-i)
-                .setIsrobot(i % 2 == 0)
-                .setChannel("chanel number " + i)
-                .setComment("comment number " + i)
-                .setCommentlength(i)
-                .setDiffurl(String.format("url %s", i))
-                .setFlags("flag")
-                .setIsminor(i % 2 > 0)
-                .setIsanonymous(i % 3 != 0)
-                .setNamespace("namespace")
-                .setIsunpatrolled(new Boolean(i % 3 == 0))
-                .setIsnew(new Boolean(i % 2 > 0))
-                .setPage(String.format("page is %s", i * 100))
-                .setDelta(i)
-                .setDeltabucket(i * 100.4)
-                .setUser("test-user-" + i)
-                .build())
-            .map(genericRecord -> {
-              java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-              BinaryEncoder encoder = EncoderFactory.get().binaryEncoder(out, null);
-              try {
-                writer.write(genericRecord, encoder);
-                encoder.flush();
-                out.close();
-              } catch (IOException e) {
-                throw new RuntimeException(e);
-              }
-              return out.toByteArray();
-            })
-            .collect(Collectors.toList());
-    return events;
-  }
-
   public void shutdown() throws Exception {
     if (System.getenv(QTEST_LEAVE_FILES) == null) {
       cleanUp();
@@ -796,15 +692,7 @@ public class QTestUtil {
     if (clusterType.getCoreClusterType() == CoreClusterType.TEZ && SessionState.get().getTezSession() != null) {
       SessionState.get().getTezSession().destroy();
     }
-    if (druidCluster != null) {
-      druidCluster.stop();
-      druidCluster = null;
-    }
 
-    if (kafkaCluster != null) {
-      kafkaCluster.stop();
-      kafkaCluster = null;
-    }
     setup.tearDown();
     if (mr != null) {
       mr.shutdown();

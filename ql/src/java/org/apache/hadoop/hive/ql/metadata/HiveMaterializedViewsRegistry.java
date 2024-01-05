@@ -31,9 +31,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.ImmutableMap;
-import org.apache.calcite.adapter.druid.DruidQuery;
-import org.apache.calcite.adapter.druid.DruidSchema;
-import org.apache.calcite.adapter.druid.DruidTable;
 import org.apache.calcite.interpreter.BindableConvention;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.plan.RelOptCluster;
@@ -345,49 +342,7 @@ public final class HiveMaterializedViewsRegistry {
     RelNode tableRel;
 
     // 3. Build operator
-    if (obtainTableType(viewTable) == TableType.DRUID) {
-      // Build Druid query
-      String address = HiveConf.getVar(conf,
-          HiveConf.ConfVars.HIVE_DRUID_BROKER_DEFAULT_ADDRESS);
-      String dataSource = viewTable.getParameters().get(Constants.DRUID_DATA_SOURCE);
-      Set<String> metrics = new HashSet<>();
-      List<RelDataType> druidColTypes = new ArrayList<>();
-      List<String> druidColNames = new ArrayList<>();
-      //@NOTE this code is very similar to the code at org/apache/hadoop/hive/ql/parse/CalcitePlanner.java:2362
-      //@TODO it will be nice to refactor it
-      RelDataTypeFactory dtFactory = cluster.getRexBuilder().getTypeFactory();
-      for (RelDataTypeField field : rowType.getFieldList()) {
-        if (DruidTable.DEFAULT_TIMESTAMP_COLUMN.equals(field.getName())) {
-          // Druid's time column is always not null.
-          druidColTypes.add(dtFactory.createTypeWithNullability(field.getType(), false));
-        } else {
-          druidColTypes.add(field.getType());
-        }
-        druidColNames.add(field.getName());
-        if (field.getName().equals(DruidTable.DEFAULT_TIMESTAMP_COLUMN)) {
-          // timestamp
-          continue;
-        }
-        if (field.getType().getSqlTypeName() == SqlTypeName.VARCHAR) {
-          // dimension
-          continue;
-        }
-        metrics.add(field.getName());
-      }
-
-      List<Interval> intervals = Arrays.asList(DruidTable.DEFAULT_INTERVAL);
-      rowType = dtFactory.createStructType(druidColTypes, druidColNames);
-      RelOptHiveTable optTable = new RelOptHiveTable(null, cluster.getTypeFactory(), fullyQualifiedTabName,
-          rowType, viewTable, nonPartitionColumns, partitionColumns, new ArrayList<>(),
-          conf, new HashMap<>(), new HashMap<>(), new AtomicInteger());
-      DruidTable druidTable = new DruidTable(new DruidSchema(address, address, false),
-          dataSource, RelDataTypeImpl.proto(rowType), metrics, DruidTable.DEFAULT_TIMESTAMP_COLUMN,
-          intervals, null, null);
-      final TableScan scan = new HiveTableScan(cluster, cluster.traitSetOf(HiveRelNode.CONVENTION),
-          optTable, viewTable.getTableName(), null, false, false);
-      tableRel = DruidQuery.create(cluster, cluster.traitSetOf(BindableConvention.INSTANCE),
-          optTable, druidTable, ImmutableList.<RelNode>of(scan), ImmutableMap.of());
-    } else {
+    {
       // Build Hive Table Scan Rel
       RelOptHiveTable optTable = new RelOptHiveTable(null, cluster.getTypeFactory(), fullyQualifiedTabName,
           rowType, viewTable, nonPartitionColumns, partitionColumns, new ArrayList<>(),
@@ -402,10 +357,6 @@ public final class HiveMaterializedViewsRegistry {
   private static TableType obtainTableType(Table tabMetaData) {
     if (tabMetaData.getStorageHandler() != null) {
       final String storageHandlerStr = tabMetaData.getStorageHandler().toString();
-      if (storageHandlerStr.equals(Constants.DRUID_HIVE_STORAGE_HANDLER_ID)) {
-        return TableType.DRUID;
-      }
-
       if (storageHandlerStr.equals(Constants.JDBC_HIVE_STORAGE_HANDLER_ID)) {
         return TableType.JDBC;
       }
@@ -415,9 +366,7 @@ public final class HiveMaterializedViewsRegistry {
     return TableType.NATIVE;
   }
 
-  //@TODO this seems to be the same as org.apache.hadoop.hive.ql.parse.CalcitePlanner.TableType.DRUID do we really need both
   private enum TableType {
-    DRUID,
     NATIVE,
     JDBC
   }

@@ -88,8 +88,6 @@ public class TestRestrictedList {
     addToExpectedRestrictedMap("hive.server2.authentication.ldap.groupClassKey");
     addToExpectedRestrictedMap("hive.server2.authentication.ldap.customLDAPQuery");
     addToExpectedRestrictedMap("bonecp.test");
-    addToExpectedRestrictedMap("hive.druid.broker.address.default");
-    addToExpectedRestrictedMap("hive.druid.coordinator.address.default");
     addToExpectedRestrictedMap("hikari.test");
     addToExpectedRestrictedMap("hadoop.bin.path");
     addToExpectedRestrictedMap("yarn.bin.path");
