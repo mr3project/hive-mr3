@@ -59,12 +59,10 @@ public class TestLimitOperator {
     int numProcessedElements = 0; // from FakeVectorRowBatchFromObjectIterables
 
     LlapProxy.setDaemon(isDaemon);
-    if (!isDaemon) {// init tez object registry
-      ObjectCache.setupObjectRegistry(new ObjectRegistryImpl());
-    }
 
     HiveConf conf = new HiveConf();
     HiveConf.setVar(conf, HiveConf.ConfVars.HIVEQUERYID, "query-" + random.nextInt(10000));
+    HiveConf.setIntVar(conf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID, 1);
     HiveConf.setVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE, "tez");
     conf.set(TezProcessor.HIVE_TEZ_VERTEX_NAME, "Map 1");
 

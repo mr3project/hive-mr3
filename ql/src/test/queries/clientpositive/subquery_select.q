@@ -1,6 +1,10 @@
+--! qt:dataset:src
+--! qt:dataset:part
 -- following tests test queries in SELECT
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
+
+-- SORT_QUERY_RESULTS
 
 -- IN, non corr
 explain SELECT p_size, p_size IN (

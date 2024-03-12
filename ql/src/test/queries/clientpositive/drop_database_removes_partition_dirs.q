@@ -1,3 +1,5 @@
+--! qt:dataset:src
+--! qt:dataset:part
 -- This test verifies that if a partition exists outside a table's current location when the
 -- database is dropped the partition's location is dropped as well.
 
@@ -24,4 +26,4 @@ DROP DATABASE test_database CASCADE;
 
 dfs -ls ${system:test.tmp.dir}/drop_database_removes_partition_dirs_table2;
 
-dfs -rmr ${system:test.tmp.dir}/drop_database_removes_partition_dirs_table2;
+dfs -rm -r -f ${system:test.tmp.dir}/drop_database_removes_partition_dirs_table2;

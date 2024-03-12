@@ -9,7 +9,7 @@ set hive.security.authorization.enabled=true;
 
 grant Select on table exim_department_n3 to user hive_test_user;
 dfs ${system:test.dfs.mkdir} target/tmp/ql/test/data/exports/exim_department/temp;
-dfs -rmr target/tmp/ql/test/data/exports/exim_department;
+dfs -rm -r -f target/tmp/ql/test/data/exports/exim_department;
 export table exim_department_n3 to 'ql/test/data/exports/exim_department';
 
 set hive.security.authorization.enabled=false;

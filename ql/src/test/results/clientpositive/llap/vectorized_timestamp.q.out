@@ -1,7 +1,9 @@
 PREHOOK: query: DROP TABLE IF EXISTS test_n2
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: DROP TABLE IF EXISTS test_n2
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: CREATE TABLE test_n2(ts TIMESTAMP) STORED AS ORC
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
@@ -138,7 +140,7 @@ STAGE PLANS:
                   Statistics: Num rows: 2 Data size: 80 Basic stats: COMPLETE Column stats: COMPLETE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:ts:timestamp, 1:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:ts:timestamp, 1:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>, 2:ROW__IS__DELETED:boolean]
                   Select Operator
                     expressions: ts (type: timestamp)
                     outputColumnNames: ts
@@ -156,15 +158,17 @@ STAGE PLANS:
                           native: false
                           vectorProcessingMode: HASH
                           projectedOutputColumnNums: [0, 1]
+                      minReductionHashAggr: 0.5
                       mode: hash
                       outputColumnNames: _col0, _col1
                       Statistics: Num rows: 1 Data size: 80 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
+                        null sort order: 
                         sort order: 
                         Reduce Sink Vectorization:
                             className: VectorReduceSinkEmptyKeyOperator
                             native: true
-                            nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
+                            nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
                             valueColumns: 0:timestamp, 1:timestamp
                         Statistics: Num rows: 1 Data size: 80 Basic stats: COMPLETE Column stats: COMPLETE
                         value expressions: _col0 (type: timestamp), _col1 (type: timestamp)
@@ -189,7 +193,7 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Vectorization:
                 enabled: true
-                enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
+                enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez] IS true
                 reduceColumnNullOrder: 
                 reduceColumnSortOrder: 
                 allNative: false
@@ -275,10 +279,11 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: test_n2
+                  filterExpr: (ts) IN (TIMESTAMP'0001-01-01 00:00:00', TIMESTAMP'0002-02-02 00:00:00') (type: boolean)
                   Statistics: Num rows: 2 Data size: 80 Basic stats: COMPLETE Column stats: COMPLETE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:ts:timestamp, 1:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:ts:timestamp, 1:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>, 2:ROW__IS__DELETED:boolean]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
@@ -370,7 +375,7 @@ STAGE PLANS:
                   Statistics: Num rows: 2 Data size: 80 Basic stats: COMPLETE Column stats: COMPLETE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:ts:timestamp, 1:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:ts:timestamp, 1:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>, 2:ROW__IS__DELETED:boolean]
                   Select Operator
                     expressions: ts (type: timestamp)
                     outputColumnNames: ts
@@ -388,15 +393,17 @@ STAGE PLANS:
                           native: false
                           vectorProcessingMode: HASH
                           projectedOutputColumnNums: [0, 1]
+                      minReductionHashAggr: 0.5
                       mode: hash
                       outputColumnNames: _col0, _col1
                       Statistics: Num rows: 1 Data size: 16 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
+                        null sort order: 
                         sort order: 
                         Reduce Sink Vectorization:
                             className: VectorReduceSinkEmptyKeyOperator
                             native: true
-                            nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
+                            nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
                             valueColumns: 0:double, 1:bigint
                         Statistics: Num rows: 1 Data size: 16 Basic stats: COMPLETE Column stats: COMPLETE
                         value expressions: _col0 (type: double), _col1 (type: bigint)
@@ -421,7 +428,7 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Vectorization:
                 enabled: true
-                enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
+                enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez] IS true
                 reduceColumnNullOrder: 
                 reduceColumnSortOrder: 
                 allNative: false
@@ -513,34 +520,36 @@ STAGE PLANS:
                   Statistics: Num rows: 2 Data size: 80 Basic stats: COMPLETE Column stats: COMPLETE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:ts:timestamp, 1:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:ts:timestamp, 1:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>, 2:ROW__IS__DELETED:boolean]
                   Select Operator
                     expressions: ts (type: timestamp), UDFToDouble(ts) (type: double), (UDFToDouble(ts) * UDFToDouble(ts)) (type: double)
                     outputColumnNames: _col0, _col1, _col2
                     Select Vectorization:
                         className: VectorSelectOperator
                         native: true
-                        projectedOutputColumnNums: [0, 2, 5]
-                        selectExpressions: CastTimestampToDouble(col 0:timestamp) -> 2:double, DoubleColMultiplyDoubleColumn(col 3:double, col 4:double)(children: CastTimestampToDouble(col 0:timestamp) -> 3:double, CastTimestampToDouble(col 0:timestamp) -> 4:double) -> 5:double
+                        projectedOutputColumnNums: [0, 3, 6]
+                        selectExpressions: CastTimestampToDouble(col 0:timestamp) -> 3:double, DoubleColMultiplyDoubleColumn(col 4:double, col 5:double)(children: CastTimestampToDouble(col 0:timestamp) -> 4:double, CastTimestampToDouble(col 0:timestamp) -> 5:double) -> 6:double
                     Statistics: Num rows: 2 Data size: 80 Basic stats: COMPLETE Column stats: COMPLETE
                     Group By Operator
                       aggregations: sum(_col2), sum(_col1), count(_col0)
                       Group By Vectorization:
-                          aggregators: VectorUDAFSumDouble(col 5:double) -> double, VectorUDAFSumDouble(col 2:double) -> double, VectorUDAFCount(col 0:timestamp) -> bigint
+                          aggregators: VectorUDAFSumDouble(col 6:double) -> double, VectorUDAFSumDouble(col 3:double) -> double, VectorUDAFCount(col 0:timestamp) -> bigint
                           className: VectorGroupByOperator
                           groupByMode: HASH
                           native: false
                           vectorProcessingMode: HASH
                           projectedOutputColumnNums: [0, 1, 2]
+                      minReductionHashAggr: 0.5
                       mode: hash
                       outputColumnNames: _col0, _col1, _col2
                       Statistics: Num rows: 1 Data size: 24 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
+                        null sort order: 
                         sort order: 
                         Reduce Sink Vectorization:
                             className: VectorReduceSinkEmptyKeyOperator
                             native: true
-                            nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
+                            nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
                             valueColumns: 0:double, 1:double, 2:bigint
                         Statistics: Num rows: 1 Data size: 24 Basic stats: COMPLETE Column stats: COMPLETE
                         value expressions: _col0 (type: double), _col1 (type: double), _col2 (type: bigint)
@@ -565,7 +574,7 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Vectorization:
                 enabled: true
-                enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
+                enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez] IS true
                 reduceColumnNullOrder: 
                 reduceColumnSortOrder: 
                 allNative: false
@@ -590,7 +599,7 @@ STAGE PLANS:
                 outputColumnNames: _col0, _col1, _col2
                 Statistics: Num rows: 1 Data size: 24 Basic stats: COMPLETE Column stats: COMPLETE
                 Select Operator
-                  expressions: ((_col0 - ((_col1 * _col1) / _col2)) / _col2) (type: double), ((_col0 - ((_col1 * _col1) / _col2)) / _col2) (type: double), ((_col0 - ((_col1 * _col1) / _col2)) / CASE WHEN ((_col2 = 1L)) THEN (null) ELSE ((_col2 - 1)) END) (type: double), power(((_col0 - ((_col1 * _col1) / _col2)) / _col2), 0.5) (type: double), power(((_col0 - ((_col1 * _col1) / _col2)) / _col2), 0.5) (type: double), power(((_col0 - ((_col1 * _col1) / _col2)) / _col2), 0.5) (type: double), power(((_col0 - ((_col1 * _col1) / _col2)) / CASE WHEN ((_col2 = 1L)) THEN (null) ELSE ((_col2 - 1)) END), 0.5) (type: double)
+                  expressions: ((_col0 - ((_col1 * _col1) / _col2)) / _col2) (type: double), ((_col0 - ((_col1 * _col1) / _col2)) / _col2) (type: double), ((_col0 - ((_col1 * _col1) / _col2)) / if((_col2 = 1L), null, (_col2 - 1))) (type: double), power(((_col0 - ((_col1 * _col1) / _col2)) / _col2), 0.5) (type: double), power(((_col0 - ((_col1 * _col1) / _col2)) / _col2), 0.5) (type: double), power(((_col0 - ((_col1 * _col1) / _col2)) / _col2), 0.5) (type: double), power(((_col0 - ((_col1 * _col1) / _col2)) / if((_col2 = 1L), null, (_col2 - 1))), 0.5) (type: double)
                   outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6
                   Select Vectorization:
                       className: VectorSelectOperator

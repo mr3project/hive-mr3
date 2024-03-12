@@ -1,5 +1,5 @@
 set hive.optimize.cte.materialize.threshold=2;
-set hive.optimize.cte.materialize.full.aggregate.only=false;
+-- set hive.optimize.cte.materialize.full.aggregate.only=false;
 
 drop table if exists cte_mat_9_a;
 create table cte_mat_9_a (id int);

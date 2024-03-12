@@ -1,6 +1,6 @@
+--! qt:dataset:srcpart
 set hive.mapred.mode=nonstrict;
 set hive.exec.dynamic.partition=true;
-set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.input.format=org.apache.hadoop.hive.ql.io.BucketizedHiveInputFormat;
 set hive.merge.smallfiles.avgsize=200;
 set mapred.input.dir.recursive=true;
@@ -47,7 +47,6 @@ set hive.merge.mapredfiles=false;
 -- with merge
 -- 118 000002_0 
 
--- INCLUDE_HADOOP_MAJOR_VERSIONS(0.23)
 
 -- create a skewed table
 create table list_bucketing_dynamic_part_n2 (key String, value String) 

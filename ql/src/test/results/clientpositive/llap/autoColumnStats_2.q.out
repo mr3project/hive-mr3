@@ -1,7 +1,9 @@
 PREHOOK: query: drop table src_multi1
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table src_multi1
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table src_multi1 like src
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
@@ -26,6 +28,8 @@ PREHOOK: Input: default@src_multi1
 #### A masked pattern was here ####
 POSTHOOK: query: explain extended select * from src_multi1
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@src_multi1
+#### A masked pattern was here ####
 OPTIMIZED SQL: SELECT `key`, `value`
 FROM `default`.`src_multi1`
 STAGE DEPENDENCIES:
@@ -62,6 +66,7 @@ Retention:          	0
 Table Type:         	MANAGED_TABLE       	 
 Table Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
+	bucketing_version   	2                   
 	numFiles            	1                   
 	numRows             	500                 
 	rawDataSize         	5312                
@@ -80,12 +85,16 @@ Storage Desc Params:
 	serialization.format	1                   
 PREHOOK: query: drop table a_n3
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table a_n3
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: drop table b_n3
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table b_n3
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table a_n3 like src
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
@@ -126,38 +135,38 @@ PREHOOK: Input: default@a_n3
 POSTHOOK: query: describe formatted a_n3 key
 POSTHOOK: type: DESCTABLE
 POSTHOOK: Input: default@a_n3
-col_name            	key                 	 	 	 	 	 	 	 	 	 	 
-data_type           	string              	 	 	 	 	 	 	 	 	 	 
-min                 	                    	 	 	 	 	 	 	 	 	 	 
-max                 	                    	 	 	 	 	 	 	 	 	 	 
-num_nulls           	0                   	 	 	 	 	 	 	 	 	 	 
-distinct_count      	316                 	 	 	 	 	 	 	 	 	 	 
-avg_col_len         	2.812               	 	 	 	 	 	 	 	 	 	 
-max_col_len         	3                   	 	 	 	 	 	 	 	 	 	 
-num_trues           	                    	 	 	 	 	 	 	 	 	 	 
-num_falses          	                    	 	 	 	 	 	 	 	 	 	 
-bitVector           	HL                  	 	 	 	 	 	 	 	 	 	 
-comment             	from deserializer   	 	 	 	 	 	 	 	 	 	 
-COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}	 	 	 	 	 	 	 	 	 	 
+col_name            	key                 
+data_type           	string              
+min                 	                    
+max                 	                    
+num_nulls           	0                   
+distinct_count      	316                 
+avg_col_len         	2.812               
+max_col_len         	3                   
+num_trues           	                    
+num_falses          	                    
+bit_vector          	HL                  
+comment             	from deserializer   
+COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
 PREHOOK: query: describe formatted b_n3 key
 PREHOOK: type: DESCTABLE
 PREHOOK: Input: default@b_n3
 POSTHOOK: query: describe formatted b_n3 key
 POSTHOOK: type: DESCTABLE
 POSTHOOK: Input: default@b_n3
-col_name            	key                 	 	 	 	 	 	 	 	 	 	 
-data_type           	string              	 	 	 	 	 	 	 	 	 	 
-min                 	                    	 	 	 	 	 	 	 	 	 	 
-max                 	                    	 	 	 	 	 	 	 	 	 	 
-num_nulls           	0                   	 	 	 	 	 	 	 	 	 	 
-distinct_count      	316                 	 	 	 	 	 	 	 	 	 	 
-avg_col_len         	2.812               	 	 	 	 	 	 	 	 	 	 
-max_col_len         	3                   	 	 	 	 	 	 	 	 	 	 
-num_trues           	                    	 	 	 	 	 	 	 	 	 	 
-num_falses          	                    	 	 	 	 	 	 	 	 	 	 
-bitVector           	HL                  	 	 	 	 	 	 	 	 	 	 
-comment             	from deserializer   	 	 	 	 	 	 	 	 	 	 
-COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}	 	 	 	 	 	 	 	 	 	 
+col_name            	key                 
+data_type           	string              
+min                 	                    
+max                 	                    
+num_nulls           	0                   
+distinct_count      	316                 
+avg_col_len         	2.812               
+max_col_len         	3                   
+num_trues           	                    
+num_falses          	                    
+bit_vector          	HL                  
+comment             	from deserializer   
+COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
 PREHOOK: query: from src
 insert overwrite table a_n3 select *
 insert into table b_n3 select *
@@ -194,6 +203,7 @@ Retention:          	0
 Table Type:         	MANAGED_TABLE       	 
 Table Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
+	bucketing_version   	2                   
 	numFiles            	1                   
 	numRows             	500                 
 	rawDataSize         	5312                
@@ -228,6 +238,7 @@ Retention:          	0
 Table Type:         	MANAGED_TABLE       	 
 Table Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
+	bucketing_version   	2                   
 	numFiles            	2                   
 	numRows             	1000                
 	rawDataSize         	10624               
@@ -250,38 +261,38 @@ PREHOOK: Input: default@b_n3
 POSTHOOK: query: describe formatted b_n3 key
 POSTHOOK: type: DESCTABLE
 POSTHOOK: Input: default@b_n3
-col_name            	key                 	 	 	 	 	 	 	 	 	 	 
-data_type           	string              	 	 	 	 	 	 	 	 	 	 
-min                 	                    	 	 	 	 	 	 	 	 	 	 
-max                 	                    	 	 	 	 	 	 	 	 	 	 
-num_nulls           	0                   	 	 	 	 	 	 	 	 	 	 
-distinct_count      	316                 	 	 	 	 	 	 	 	 	 	 
-avg_col_len         	2.812               	 	 	 	 	 	 	 	 	 	 
-max_col_len         	3                   	 	 	 	 	 	 	 	 	 	 
-num_trues           	                    	 	 	 	 	 	 	 	 	 	 
-num_falses          	                    	 	 	 	 	 	 	 	 	 	 
-bitVector           	HL                  	 	 	 	 	 	 	 	 	 	 
-comment             	from deserializer   	 	 	 	 	 	 	 	 	 	 
-COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}	 	 	 	 	 	 	 	 	 	 
+col_name            	key                 
+data_type           	string              
+min                 	                    
+max                 	                    
+num_nulls           	0                   
+distinct_count      	316                 
+avg_col_len         	2.812               
+max_col_len         	3                   
+num_trues           	                    
+num_falses          	                    
+bit_vector          	HL                  
+comment             	from deserializer   
+COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
 PREHOOK: query: describe formatted b_n3 value
 PREHOOK: type: DESCTABLE
 PREHOOK: Input: default@b_n3
 POSTHOOK: query: describe formatted b_n3 value
 POSTHOOK: type: DESCTABLE
 POSTHOOK: Input: default@b_n3
-col_name            	value               	 	 	 	 	 	 	 	 	 	 
-data_type           	string              	 	 	 	 	 	 	 	 	 	 
-min                 	                    	 	 	 	 	 	 	 	 	 	 
-max                 	                    	 	 	 	 	 	 	 	 	 	 
-num_nulls           	0                   	 	 	 	 	 	 	 	 	 	 
-distinct_count      	307                 	 	 	 	 	 	 	 	 	 	 
-avg_col_len         	6.812               	 	 	 	 	 	 	 	 	 	 
-max_col_len         	7                   	 	 	 	 	 	 	 	 	 	 
-num_trues           	                    	 	 	 	 	 	 	 	 	 	 
-num_falses          	                    	 	 	 	 	 	 	 	 	 	 
-bitVector           	HL                  	 	 	 	 	 	 	 	 	 	 
-comment             	from deserializer   	 	 	 	 	 	 	 	 	 	 
-COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}	 	 	 	 	 	 	 	 	 	 
+col_name            	value               
+data_type           	string              
+min                 	                    
+max                 	                    
+num_nulls           	0                   
+distinct_count      	307                 
+avg_col_len         	6.812               
+max_col_len         	7                   
+num_trues           	                    
+num_falses          	                    
+bit_vector          	HL                  
+comment             	from deserializer   
+COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
 PREHOOK: query: insert into table b_n3 select NULL, NULL from src limit 10
 PREHOOK: type: QUERY
 PREHOOK: Input: default@src
@@ -298,38 +309,38 @@ PREHOOK: Input: default@b_n3
 POSTHOOK: query: describe formatted b_n3 key
 POSTHOOK: type: DESCTABLE
 POSTHOOK: Input: default@b_n3
-col_name            	key                 	 	 	 	 	 	 	 	 	 	 
-data_type           	string              	 	 	 	 	 	 	 	 	 	 
-min                 	                    	 	 	 	 	 	 	 	 	 	 
-max                 	                    	 	 	 	 	 	 	 	 	 	 
-num_nulls           	10                  	 	 	 	 	 	 	 	 	 	 
-distinct_count      	316                 	 	 	 	 	 	 	 	 	 	 
-avg_col_len         	2.812               	 	 	 	 	 	 	 	 	 	 
-max_col_len         	3                   	 	 	 	 	 	 	 	 	 	 
-num_trues           	                    	 	 	 	 	 	 	 	 	 	 
-num_falses          	                    	 	 	 	 	 	 	 	 	 	 
-bitVector           	HL                  	 	 	 	 	 	 	 	 	 	 
-comment             	from deserializer   	 	 	 	 	 	 	 	 	 	 
-COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}	 	 	 	 	 	 	 	 	 	 
+col_name            	key                 
+data_type           	string              
+min                 	                    
+max                 	                    
+num_nulls           	10                  
+distinct_count      	316                 
+avg_col_len         	2.812               
+max_col_len         	3                   
+num_trues           	                    
+num_falses          	                    
+bit_vector          	HL                  
+comment             	from deserializer   
+COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
 PREHOOK: query: describe formatted b_n3 value
 PREHOOK: type: DESCTABLE
 PREHOOK: Input: default@b_n3
 POSTHOOK: query: describe formatted b_n3 value
 POSTHOOK: type: DESCTABLE
 POSTHOOK: Input: default@b_n3
-col_name            	value               	 	 	 	 	 	 	 	 	 	 
-data_type           	string              	 	 	 	 	 	 	 	 	 	 
-min                 	                    	 	 	 	 	 	 	 	 	 	 
-max                 	                    	 	 	 	 	 	 	 	 	 	 
-num_nulls           	10                  	 	 	 	 	 	 	 	 	 	 
-distinct_count      	307                 	 	 	 	 	 	 	 	 	 	 
-avg_col_len         	6.812               	 	 	 	 	 	 	 	 	 	 
-max_col_len         	7                   	 	 	 	 	 	 	 	 	 	 
-num_trues           	                    	 	 	 	 	 	 	 	 	 	 
-num_falses          	                    	 	 	 	 	 	 	 	 	 	 
-bitVector           	HL                  	 	 	 	 	 	 	 	 	 	 
-comment             	from deserializer   	 	 	 	 	 	 	 	 	 	 
-COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}	 	 	 	 	 	 	 	 	 	 
+col_name            	value               
+data_type           	string              
+min                 	                    
+max                 	                    
+num_nulls           	10                  
+distinct_count      	307                 
+avg_col_len         	6.812               
+max_col_len         	7                   
+num_trues           	                    
+num_falses          	                    
+bit_vector          	HL                  
+comment             	from deserializer   
+COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
 PREHOOK: query: insert into table b_n3(value) select key+100000 from src limit 10
 PREHOOK: type: QUERY
 PREHOOK: Input: default@src
@@ -346,42 +357,44 @@ PREHOOK: Input: default@b_n3
 POSTHOOK: query: describe formatted b_n3 key
 POSTHOOK: type: DESCTABLE
 POSTHOOK: Input: default@b_n3
-col_name            	key                 	 	 	 	 	 	 	 	 	 	 
-data_type           	string              	 	 	 	 	 	 	 	 	 	 
-min                 	                    	 	 	 	 	 	 	 	 	 	 
-max                 	                    	 	 	 	 	 	 	 	 	 	 
-num_nulls           	20                  	 	 	 	 	 	 	 	 	 	 
-distinct_count      	316                 	 	 	 	 	 	 	 	 	 	 
-avg_col_len         	2.812               	 	 	 	 	 	 	 	 	 	 
-max_col_len         	3                   	 	 	 	 	 	 	 	 	 	 
-num_trues           	                    	 	 	 	 	 	 	 	 	 	 
-num_falses          	                    	 	 	 	 	 	 	 	 	 	 
-bitVector           	HL                  	 	 	 	 	 	 	 	 	 	 
-comment             	from deserializer   	 	 	 	 	 	 	 	 	 	 
-COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}	 	 	 	 	 	 	 	 	 	 
+col_name            	key                 
+data_type           	string              
+min                 	                    
+max                 	                    
+num_nulls           	20                  
+distinct_count      	316                 
+avg_col_len         	2.812               
+max_col_len         	3                   
+num_trues           	                    
+num_falses          	                    
+bit_vector          	HL                  
+comment             	from deserializer   
+COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
 PREHOOK: query: describe formatted b_n3 value
 PREHOOK: type: DESCTABLE
 PREHOOK: Input: default@b_n3
 POSTHOOK: query: describe formatted b_n3 value
 POSTHOOK: type: DESCTABLE
 POSTHOOK: Input: default@b_n3
-col_name            	value               	 	 	 	 	 	 	 	 	 	 
-data_type           	string              	 	 	 	 	 	 	 	 	 	 
-min                 	                    	 	 	 	 	 	 	 	 	 	 
-max                 	                    	 	 	 	 	 	 	 	 	 	 
-num_nulls           	10                  	 	 	 	 	 	 	 	 	 	 
-distinct_count      	316                 	 	 	 	 	 	 	 	 	 	 
-avg_col_len         	8.0                 	 	 	 	 	 	 	 	 	 	 
-max_col_len         	8                   	 	 	 	 	 	 	 	 	 	 
-num_trues           	                    	 	 	 	 	 	 	 	 	 	 
-num_falses          	                    	 	 	 	 	 	 	 	 	 	 
-bitVector           	HL                  	 	 	 	 	 	 	 	 	 	 
-comment             	from deserializer   	 	 	 	 	 	 	 	 	 	 
-COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}	 	 	 	 	 	 	 	 	 	 
+col_name            	value               
+data_type           	string              
+min                 	                    
+max                 	                    
+num_nulls           	10                  
+distinct_count      	316                 
+avg_col_len         	8.0                 
+max_col_len         	8                   
+num_trues           	                    
+num_falses          	                    
+bit_vector          	HL                  
+comment             	from deserializer   
+COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
 PREHOOK: query: drop table src_multi2
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table src_multi2
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table src_multi2 like src
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
@@ -420,6 +433,7 @@ Retention:          	0
 Table Type:         	MANAGED_TABLE       	 
 Table Parameters:	 	 
 	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"key\":\"true\",\"value\":\"true\"}}
+	bucketing_version   	2                   
 	numFiles            	1                   
 	numRows             	508                 
 	rawDataSize         	5400                
@@ -438,8 +452,10 @@ Storage Desc Params:
 	serialization.format	1                   
 PREHOOK: query: drop table nzhang_part14
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table nzhang_part14
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table if not exists nzhang_part14 (key string)
   partitioned by (value string)
 PREHOOK: type: CREATETABLE
@@ -471,6 +487,7 @@ select key, value from (
 ) T
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src
+POSTHOOK: Output: default@nzhang_part14
 POSTHOOK: Output: default@nzhang_part14@value= 
 POSTHOOK: Output: default@nzhang_part14@value=__HIVE_DEFAULT_PARTITION__
 POSTHOOK: Lineage: nzhang_part14 PARTITION(value= ).key EXPRESSION []
@@ -504,8 +521,10 @@ STAGE PLANS:
 
 PREHOOK: query: drop table src5
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table src5
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table src5 as select key, value from src limit 5
 PREHOOK: type: CREATETABLE_AS_SELECT
 PREHOOK: Input: default@src
@@ -527,6 +546,7 @@ POSTHOOK: query: insert into table nzhang_part14 partition(value)
 select key, value from src5
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src5
+POSTHOOK: Output: default@nzhang_part14
 POSTHOOK: Output: default@nzhang_part14@value=val_165
 POSTHOOK: Output: default@nzhang_part14@value=val_238
 POSTHOOK: Output: default@nzhang_part14@value=val_27
@@ -576,8 +596,10 @@ STAGE PLANS:
 
 PREHOOK: query: drop table alter5
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table alter5
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table alter5 ( col1 string ) partitioned by (dt string)
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
@@ -694,6 +716,7 @@ STAGE PLANS:
       Processor Tree:
         TableScan
           alias: alter5
+          filterExpr: (dt = 'a') (type: boolean)
           Select Operator
             expressions: col1 (type: string), 'a' (type: string)
             outputColumnNames: _col0, _col1
@@ -702,10 +725,12 @@ STAGE PLANS:
 PREHOOK: query: drop table alter5
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@alter5
+PREHOOK: Output: database:default
 PREHOOK: Output: default@alter5
 POSTHOOK: query: drop table alter5
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@alter5
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@alter5
 PREHOOK: query: create table alter5 ( col1 string ) partitioned by (dt string)
 PREHOOK: type: CREATETABLE
@@ -817,6 +842,7 @@ STAGE PLANS:
       Processor Tree:
         TableScan
           alias: alter5
+          filterExpr: (dt = 'a') (type: boolean)
           Select Operator
             expressions: col1 (type: string), 'a' (type: string)
             outputColumnNames: _col0, _col1
@@ -824,8 +850,10 @@ STAGE PLANS:
 
 PREHOOK: query: drop table src_stat_part
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table src_stat_part
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table src_stat_part(key string, value string) partitioned by (partitionId int)
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
@@ -934,8 +962,10 @@ Storage Desc Params:
 	serialization.format	1                   
 PREHOOK: query: drop table srcbucket_mapjoin_n2
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table srcbucket_mapjoin_n2
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: CREATE TABLE srcbucket_mapjoin_n2(key int, value string) partitioned by (ds string) CLUSTERED BY (key) INTO 2 BUCKETS STORED AS TEXTFILE
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
@@ -946,8 +976,10 @@ POSTHOOK: Output: database:default
 POSTHOOK: Output: default@srcbucket_mapjoin_n2
 PREHOOK: query: drop table tab_part_n1
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table tab_part_n1
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: CREATE TABLE tab_part_n1 (key int, value string) PARTITIONED BY(ds STRING) CLUSTERED BY (key) SORTED BY (key) INTO 4 BUCKETS STORED AS TEXTFILE
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
@@ -958,8 +990,10 @@ POSTHOOK: Output: database:default
 POSTHOOK: Output: default@tab_part_n1
 PREHOOK: query: drop table srcbucket_mapjoin_part_n2
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table srcbucket_mapjoin_part_n2
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: CREATE TABLE srcbucket_mapjoin_part_n2 (key int, value string) partitioned by (ds string) CLUSTERED BY (key) INTO 4 BUCKETS STORED AS TEXTFILE
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
@@ -1131,10 +1165,12 @@ Storage Desc Params:
 PREHOOK: query: drop table nzhang_part14
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@nzhang_part14
+PREHOOK: Output: database:default
 PREHOOK: Output: default@nzhang_part14
 POSTHOOK: query: drop table nzhang_part14
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@nzhang_part14
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@nzhang_part14
 PREHOOK: query: create table if not exists nzhang_part14 (key string, value string)
   partitioned by (ds string, hr string)
@@ -1208,6 +1244,7 @@ select key, value, ds, hr from (
 ) T
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src
+POSTHOOK: Output: default@nzhang_part14
 POSTHOOK: Output: default@nzhang_part14@ds=1/hr=2
 POSTHOOK: Output: default@nzhang_part14@ds=1/hr=3
 POSTHOOK: Output: default@nzhang_part14@ds=2/hr=1
@@ -1319,10 +1356,12 @@ Storage Desc Params:
 PREHOOK: query: drop table nzhang_part14
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@nzhang_part14
+PREHOOK: Output: database:default
 PREHOOK: Output: default@nzhang_part14
 POSTHOOK: query: drop table nzhang_part14
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@nzhang_part14
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@nzhang_part14
 PREHOOK: query: create table if not exists nzhang_part14 (key string, value string)
 partitioned by (ds string, hr string)
@@ -1398,10 +1437,12 @@ Storage Desc Params:
 PREHOOK: query: drop table a_n3
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@a_n3
+PREHOOK: Output: database:default
 PREHOOK: Output: default@a_n3
 POSTHOOK: query: drop table a_n3
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@a_n3
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@a_n3
 PREHOOK: query: create table a_n3 (key string, value string)
 partitioned by (ds string, hr string)
@@ -1416,10 +1457,12 @@ POSTHOOK: Output: default@a_n3
 PREHOOK: query: drop table b_n3
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@b_n3
+PREHOOK: Output: database:default
 PREHOOK: Output: default@b_n3
 POSTHOOK: query: drop table b_n3
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@b_n3
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@b_n3
 PREHOOK: query: create table b_n3 (key string, value string)
 partitioned by (ds string, hr string)
@@ -1433,8 +1476,10 @@ POSTHOOK: Output: database:default
 POSTHOOK: Output: default@b_n3
 PREHOOK: query: drop table c_n1
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table c_n1
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table c_n1 (key string, value string)
 partitioned by (ds string, hr string)
 PREHOOK: type: CREATETABLE
@@ -1614,3 +1659,41 @@ STAGE PLANS:
             outputColumnNames: _col0
             ListSink
 
+PREHOOK: query: describe formatted a_n3 PARTITION (ds='2010-03-11', hr) key
+PREHOOK: type: DESCTABLE
+PREHOOK: Input: default@a_n3
+POSTHOOK: query: describe formatted a_n3 PARTITION (ds='2010-03-11', hr) key
+POSTHOOK: type: DESCTABLE
+POSTHOOK: Input: default@a_n3
+col_name            	ds                  
+data_type           	string              
+min                 	                    
+max                 	                    
+num_nulls           	0                   
+distinct_count      	1                   
+avg_col_len         	100.0               
+max_col_len         	100                 
+num_trues           	                    
+num_falses          	                    
+bit_vector          	                    
+comment             	                    
+COLUMN_STATS_ACCURATE	{\"COLUMN_STATS\":{\"ds\":\"true\"}}
+PREHOOK: query: describe formatted a_n3 PARTITION (ds='2010-03-11', hr) value
+PREHOOK: type: DESCTABLE
+PREHOOK: Input: default@a_n3
+POSTHOOK: query: describe formatted a_n3 PARTITION (ds='2010-03-11', hr) value
+POSTHOOK: type: DESCTABLE
+POSTHOOK: Input: default@a_n3
+col_name            	ds                  
+data_type           	string              
+min                 	                    
+max                 	                    
+num_nulls           	0                   
+distinct_count      	1                   
+avg_col_len         	100.0               
+max_col_len         	100                 
+num_trues           	                    
+num_falses          	                    
+bit_vector          	                    
+comment             	                    
+COLUMN_STATS_ACCURATE	{\"COLUMN_STATS\":{\"ds\":\"true\"}}

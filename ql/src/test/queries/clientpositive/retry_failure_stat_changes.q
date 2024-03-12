@@ -1,4 +1,5 @@
 SET hive.vectorized.execution.enabled=false;
+-- set hive.stats.filter.range.uniform=false;
 
 create table tx_n2(a int,u int);
 insert into tx_n2 values (1,1),(2,2),(3,3),(4,4),(5,5),(6,6),(7,7),(10,10);
@@ -9,7 +10,7 @@ insert into px values (2,2),(3,3),(5,5),(7,7),(11,11);
 
 set hive.explain.user=true;
 set hive.query.reexecution.enabled=true;
-set hive.query.reexecution.strategies=overlay,reoptimize;
+set hive.query.reexecution.strategies=overlay,reoptimize,recompile_without_cbo;
 
 explain REOPTIMIZATION 
 select sum(u*p) from tx_n2 join px on (u=p) where u<10 and p>2;

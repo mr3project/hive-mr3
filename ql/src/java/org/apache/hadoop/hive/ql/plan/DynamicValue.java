@@ -114,11 +114,13 @@ public class DynamicValue implements LiteralDelegate, Serializable {
     try {
       // Get object cache
       String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEQUERYID);
-      ObjectCache cache = ObjectCacheFactory.getCache(conf, queryId, false, true);
+      int dagIdId = HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID);
 
-      if (cache == null) {
-        return null;
+      if (dagIdId == HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID.defaultIntVal) {
+        return null;  // not in TezProcessor, DynamicValueRegistry not available
       }
+
+      ObjectCache cache = ObjectCacheFactory.getCache(conf, queryId, dagIdId, false, true);
 
       // Get the registry
       DynamicValueRegistry valueRegistry = cache.retrieve(DYNAMIC_VALUE_REGISTRY_CACHE_KEY);

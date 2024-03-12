@@ -108,11 +108,11 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_1 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
               Sorted Merge Bucket Map Join Operator
                 condition map:
                      Left Outer Join 0 to 1
@@ -120,8 +120,10 @@ STAGE PLANS:
                   0 _col1 (type: int)
                   1 _col1 (type: int)
                 outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
+                Statistics: Num rows: 6 Data size: 629 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
                   compressed: false
+                  Statistics: Num rows: 6 Data size: 629 Basic stats: COMPLETE Column stats: NONE
                   table:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -185,27 +187,33 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
-              expressions: key (type: int), value (type: int), col_1 (type: string)
-              outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              expressions: key (type: int), value (type: int), col_1 (type: string), key BETWEEN 100 AND 102 (type: boolean)
+              outputColumnNames: _col0, _col1, _col2, _col3
+              Statistics: Num rows: 6 Data size: 596 Basic stats: COMPLETE Column stats: COMPLETE
               Sorted Merge Bucket Map Join Operator
                 condition map:
                      Left Outer Join 0 to 1
                 filter predicates:
-                  0 {_col0 BETWEEN 100 AND 102}
+                  0 {_col3}
                   1 
                 keys:
                   0 _col1 (type: int)
                   1 _col1 (type: int)
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
-                File Output Operator
-                  compressed: false
-                  table:
-                      input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                      output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                outputColumnNames: _col0, _col1, _col2, _col4, _col5, _col6
+                Statistics: Num rows: 6 Data size: 655 Basic stats: COMPLETE Column stats: NONE
+                Select Operator
+                  expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string), _col4 (type: int), _col5 (type: int), _col6 (type: string)
+                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
+                  Statistics: Num rows: 6 Data size: 655 Basic stats: COMPLETE Column stats: NONE
+                  File Output Operator
+                    compressed: false
+                    Statistics: Num rows: 6 Data size: 655 Basic stats: COMPLETE Column stats: NONE
+                    table:
+                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
+                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
+                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 
   Stage: Stage-0
     Fetch Operator
@@ -272,17 +280,18 @@ STAGE PLANS:
         $hdt$_1:test2_n3 
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            filterExpr: key BETWEEN 100 AND 102 (type: boolean)
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Filter Operator
               predicate: key BETWEEN 100 AND 102 (type: boolean)
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 1 Data size: 95 Basic stats: COMPLETE Column stats: COMPLETE
               Select Operator
                 expressions: key (type: int), value (type: int), col_2 (type: string)
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 1 Data size: 95 Basic stats: COMPLETE Column stats: COMPLETE
                 HashTable Sink Operator
                   filter predicates:
-                    0 {_col0 BETWEEN 100 AND 102}
+                    0 {_col3}
                     1 
                   keys:
                     0 
@@ -293,29 +302,33 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
-              expressions: key (type: int), value (type: int), col_1 (type: string)
-              outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              expressions: key (type: int), value (type: int), col_1 (type: string), key BETWEEN 100 AND 102 (type: boolean)
+              outputColumnNames: _col0, _col1, _col2, _col3
+              Statistics: Num rows: 6 Data size: 596 Basic stats: COMPLETE Column stats: COMPLETE
               Map Join Operator
                 condition map:
                      Left Outer Join 0 to 1
                 filter predicates:
-                  0 {_col0 BETWEEN 100 AND 102}
+                  0 {_col3}
                   1 
                 keys:
                   0 
                   1 
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
-                Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
-                File Output Operator
-                  compressed: false
-                  Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
-                  table:
-                      input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                      output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                outputColumnNames: _col0, _col1, _col2, _col4, _col5, _col6
+                Statistics: Num rows: 6 Data size: 1142 Basic stats: COMPLETE Column stats: COMPLETE
+                Select Operator
+                  expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string), _col4 (type: int), _col5 (type: int), _col6 (type: string)
+                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
+                  Statistics: Num rows: 6 Data size: 1142 Basic stats: COMPLETE Column stats: COMPLETE
+                  File Output Operator
+                    compressed: false
+                    Statistics: Num rows: 6 Data size: 1142 Basic stats: COMPLETE Column stats: COMPLETE
+                    table:
+                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
+                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
+                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
       Execution mode: vectorized
       Local Work:
         Map Reduce Local Work
@@ -375,11 +388,11 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_2 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
               Sorted Merge Bucket Map Join Operator
                 condition map:
                      Right Outer Join 0 to 1
@@ -387,8 +400,10 @@ STAGE PLANS:
                   0 _col1 (type: int)
                   1 _col1 (type: int)
                 outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
+                Statistics: Num rows: 4 Data size: 422 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
                   compressed: false
+                  Statistics: Num rows: 4 Data size: 422 Basic stats: COMPLETE Column stats: NONE
                   table:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -453,14 +468,14 @@ STAGE PLANS:
         $hdt$_1:test2_n3 
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_2 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
               HashTable Sink Operator
                 filter predicates:
-                  0 {_col0 BETWEEN 100 AND 102}
+                  0 {_col3}
                   1 
                 keys:
                   0 
@@ -471,29 +486,33 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
-              expressions: key (type: int), value (type: int), col_1 (type: string)
-              outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              expressions: key (type: int), value (type: int), col_1 (type: string), key BETWEEN 100 AND 102 (type: boolean)
+              outputColumnNames: _col0, _col1, _col2, _col3
+              Statistics: Num rows: 6 Data size: 596 Basic stats: COMPLETE Column stats: COMPLETE
               Map Join Operator
                 condition map:
                      Left Outer Join 0 to 1
                 filter predicates:
-                  0 {_col0 BETWEEN 100 AND 102}
+                  0 {_col3}
                   1 
                 keys:
                   0 
                   1 
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
-                Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
-                File Output Operator
-                  compressed: false
-                  Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
-                  table:
-                      input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                      output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                outputColumnNames: _col0, _col1, _col2, _col4, _col5, _col6
+                Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
+                Select Operator
+                  expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string), _col4 (type: int), _col5 (type: int), _col6 (type: string)
+                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
+                  Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
+                  File Output Operator
+                    compressed: false
+                    Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
+                    table:
+                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
+                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
+                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
       Execution mode: vectorized
       Local Work:
         Map Reduce Local Work
@@ -568,11 +587,11 @@ STAGE PLANS:
         $hdt$_1:test2_n3 
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_2 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
               HashTable Sink Operator
                 keys:
                   0 
@@ -583,27 +602,31 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
-              expressions: key (type: int), value (type: int), col_1 (type: string)
-              outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              expressions: key (type: int), value (type: int), col_1 (type: string), key BETWEEN 100 AND 102 (type: boolean)
+              outputColumnNames: _col0, _col1, _col2, _col3
+              Statistics: Num rows: 6 Data size: 596 Basic stats: COMPLETE Column stats: COMPLETE
               Map Join Operator
                 condition map:
                      Left Outer Join 0 to 1
                 keys:
                   0 
                   1 
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
-                residual filter predicates: {((_col1 = _col4) or _col0 BETWEEN 100 AND 102 or _col3 BETWEEN 100 AND 102)}
-                Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
-                File Output Operator
-                  compressed: false
-                  Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
-                  table:
-                      input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                      output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6
+                residual filter predicates: {((_col1 = _col5) or _col3 or _col4 BETWEEN 100 AND 102)}
+                Statistics: Num rows: 24 Data size: 4676 Basic stats: COMPLETE Column stats: COMPLETE
+                Select Operator
+                  expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string), _col4 (type: int), _col5 (type: int), _col6 (type: string)
+                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
+                  Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
+                  File Output Operator
+                    compressed: false
+                    Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
+                    table:
+                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
+                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
+                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
       Local Work:
         Map Reduce Local Work
 
@@ -680,11 +703,11 @@ STAGE PLANS:
         $hdt$_1:test2_n3 
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_2 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
               HashTable Sink Operator
                 keys:
                   0 
@@ -695,27 +718,31 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
-              expressions: key (type: int), value (type: int), col_1 (type: string)
-              outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              expressions: key (type: int), value (type: int), col_1 (type: string), key BETWEEN 100 AND 102 (type: boolean)
+              outputColumnNames: _col0, _col1, _col2, _col3
+              Statistics: Num rows: 6 Data size: 596 Basic stats: COMPLETE Column stats: COMPLETE
               Map Join Operator
                 condition map:
                      Left Outer Join 0 to 1
                 keys:
                   0 
                   1 
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
-                residual filter predicates: {((_col1 = _col4) or _col0 BETWEEN 100 AND 102)}
-                Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
-                File Output Operator
-                  compressed: false
-                  Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
-                  table:
-                      input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                      output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6
+                residual filter predicates: {((_col1 = _col5) or _col3)}
+                Statistics: Num rows: 24 Data size: 4676 Basic stats: COMPLETE Column stats: COMPLETE
+                Select Operator
+                  expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string), _col4 (type: int), _col5 (type: int), _col6 (type: string)
+                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
+                  Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
+                  File Output Operator
+                    compressed: false
+                    Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
+                    table:
+                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
+                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
+                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
       Local Work:
         Map Reduce Local Work
 
@@ -790,11 +817,11 @@ STAGE PLANS:
         $hdt$_1:test2_n3 
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_2 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
               HashTable Sink Operator
                 keys:
                   0 
@@ -805,11 +832,11 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_1 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
               Map Join Operator
                 condition map:
                      Left Outer Join 0 to 1
@@ -818,10 +845,10 @@ STAGE PLANS:
                   1 
                 outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
                 residual filter predicates: {((_col1 = _col4) or _col3 BETWEEN 100 AND 102)}
-                Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
+                  Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
                   table:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -890,25 +917,31 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
-              expressions: key (type: int), value (type: int), col_1 (type: string)
-              outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              expressions: key (type: int), value (type: int), col_1 (type: string), key BETWEEN 100 AND 102 (type: boolean)
+              outputColumnNames: _col0, _col1, _col2, _col3
+              Statistics: Num rows: 6 Data size: 596 Basic stats: COMPLETE Column stats: COMPLETE
               Sorted Merge Bucket Map Join Operator
                 condition map:
                      Left Outer Join 0 to 1
                 keys:
                   0 _col1 (type: int)
                   1 _col1 (type: int)
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
-                residual filter predicates: {(_col0 BETWEEN 100 AND 102 or _col3 BETWEEN 100 AND 102)}
-                File Output Operator
-                  compressed: false
-                  table:
-                      input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                      output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6
+                residual filter predicates: {(_col3 or _col4 BETWEEN 100 AND 102)}
+                Statistics: Num rows: 6 Data size: 655 Basic stats: COMPLETE Column stats: NONE
+                Select Operator
+                  expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string), _col4 (type: int), _col5 (type: int), _col6 (type: string)
+                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
+                  Statistics: Num rows: 6 Data size: 655 Basic stats: COMPLETE Column stats: NONE
+                  File Output Operator
+                    compressed: false
+                    Statistics: Num rows: 6 Data size: 655 Basic stats: COMPLETE Column stats: NONE
+                    table:
+                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
+                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
+                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 
   Stage: Stage-0
     Fetch Operator
@@ -978,11 +1011,11 @@ STAGE PLANS:
         $hdt$_0:test1_n5 
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_1 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
               HashTable Sink Operator
                 keys:
                   0 
@@ -993,27 +1026,31 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
-              expressions: key (type: int), value (type: int), col_2 (type: string)
-              outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              expressions: key (type: int), value (type: int), col_2 (type: string), key BETWEEN 100 AND 102 (type: boolean)
+              outputColumnNames: _col0, _col1, _col2, _col3
+              Statistics: Num rows: 4 Data size: 396 Basic stats: COMPLETE Column stats: COMPLETE
               Map Join Operator
                 condition map:
                      Right Outer Join 0 to 1
                 keys:
                   0 
                   1 
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
-                residual filter predicates: {((_col1 = _col4) or _col0 BETWEEN 100 AND 102 or _col3 BETWEEN 100 AND 102)}
-                Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
-                File Output Operator
-                  compressed: false
-                  Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
-                  table:
-                      input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                      output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6
+                residual filter predicates: {((_col1 = _col4) or _col0 BETWEEN 100 AND 102 or _col6)}
+                Statistics: Num rows: 24 Data size: 4676 Basic stats: COMPLETE Column stats: COMPLETE
+                Select Operator
+                  expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string), _col3 (type: int), _col4 (type: int), _col5 (type: string)
+                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
+                  Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
+                  File Output Operator
+                    compressed: false
+                    Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
+                    table:
+                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
+                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
+                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
       Local Work:
         Map Reduce Local Work
 
@@ -1090,11 +1127,11 @@ STAGE PLANS:
         $hdt$_0:test1_n5 
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_1 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
               HashTable Sink Operator
                 keys:
                   0 
@@ -1105,11 +1142,11 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_2 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
               Map Join Operator
                 condition map:
                      Right Outer Join 0 to 1
@@ -1118,10 +1155,10 @@ STAGE PLANS:
                   1 
                 outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
                 residual filter predicates: {((_col1 = _col4) or _col0 BETWEEN 100 AND 102)}
-                Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
+                  Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
                   table:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -1197,11 +1234,11 @@ STAGE PLANS:
         $hdt$_0:test1_n5 
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_1 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
               HashTable Sink Operator
                 keys:
                   0 
@@ -1212,27 +1249,31 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
-              expressions: key (type: int), value (type: int), col_2 (type: string)
-              outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              expressions: key (type: int), value (type: int), col_2 (type: string), key BETWEEN 100 AND 102 (type: boolean)
+              outputColumnNames: _col0, _col1, _col2, _col3
+              Statistics: Num rows: 4 Data size: 396 Basic stats: COMPLETE Column stats: COMPLETE
               Map Join Operator
                 condition map:
                      Right Outer Join 0 to 1
                 keys:
                   0 
                   1 
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
-                residual filter predicates: {((_col1 = _col4) or _col3 BETWEEN 100 AND 102)}
-                Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
-                File Output Operator
-                  compressed: false
-                  Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
-                  table:
-                      input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                      output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6
+                residual filter predicates: {((_col1 = _col4) or _col6)}
+                Statistics: Num rows: 24 Data size: 4676 Basic stats: COMPLETE Column stats: COMPLETE
+                Select Operator
+                  expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string), _col3 (type: int), _col4 (type: int), _col5 (type: string)
+                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
+                  Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
+                  File Output Operator
+                    compressed: false
+                    Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
+                    table:
+                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
+                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
+                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
       Local Work:
         Map Reduce Local Work
 
@@ -1299,25 +1340,31 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
-              expressions: key (type: int), value (type: int), col_2 (type: string)
-              outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              expressions: key (type: int), value (type: int), col_2 (type: string), key BETWEEN 100 AND 102 (type: boolean)
+              outputColumnNames: _col0, _col1, _col2, _col3
+              Statistics: Num rows: 4 Data size: 396 Basic stats: COMPLETE Column stats: COMPLETE
               Sorted Merge Bucket Map Join Operator
                 condition map:
                      Right Outer Join 0 to 1
                 keys:
                   0 _col1 (type: int)
                   1 _col1 (type: int)
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
-                residual filter predicates: {(_col0 BETWEEN 100 AND 102 or _col3 BETWEEN 100 AND 102)}
-                File Output Operator
-                  compressed: false
-                  table:
-                      input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                      output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6
+                residual filter predicates: {(_col0 BETWEEN 100 AND 102 or _col6)}
+                Statistics: Num rows: 4 Data size: 422 Basic stats: COMPLETE Column stats: NONE
+                Select Operator
+                  expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string), _col3 (type: int), _col4 (type: int), _col5 (type: string)
+                  outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
+                  Statistics: Num rows: 4 Data size: 422 Basic stats: COMPLETE Column stats: NONE
+                  File Output Operator
+                    compressed: false
+                    Statistics: Num rows: 4 Data size: 422 Basic stats: COMPLETE Column stats: NONE
+                    table:
+                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
+                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
+                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
 
   Stage: Stage-0
     Fetch Operator
@@ -1379,25 +1426,27 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_1 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
               Reduce Output Operator
+                null sort order: 
                 sort order: 
-                Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
                 value expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string)
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_2 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
               Reduce Output Operator
+                null sort order: 
                 sort order: 
-                Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
                 value expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string)
       Reduce Operator Tree:
         Join Operator
@@ -1408,10 +1457,10 @@ STAGE PLANS:
             1 
           outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
           residual filter predicates: {((_col1 = _col4) or _col0 BETWEEN 100 AND 102 or _col3 BETWEEN 100 AND 102)}
-          Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
+          Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
           File Output Operator
             compressed: false
-            Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
             table:
                 input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                 output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -1484,25 +1533,27 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_1 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
               Reduce Output Operator
+                null sort order: 
                 sort order: 
-                Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
                 value expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string)
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_2 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
               Reduce Output Operator
+                null sort order: 
                 sort order: 
-                Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
                 value expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string)
       Reduce Operator Tree:
         Join Operator
@@ -1513,10 +1564,10 @@ STAGE PLANS:
             1 
           outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
           residual filter predicates: {((_col1 = _col4) or _col0 BETWEEN 100 AND 102)}
-          Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
+          Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
           File Output Operator
             compressed: false
-            Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
             table:
                 input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                 output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -1587,25 +1638,27 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_1 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
               Reduce Output Operator
+                null sort order: 
                 sort order: 
-                Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
                 value expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string)
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_2 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
               Reduce Output Operator
+                null sort order: 
                 sort order: 
-                Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
                 value expressions: _col0 (type: int), _col1 (type: int), _col2 (type: string)
       Reduce Operator Tree:
         Join Operator
@@ -1616,10 +1669,10 @@ STAGE PLANS:
             1 
           outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
           residual filter predicates: {((_col1 = _col4) or _col3 BETWEEN 100 AND 102)}
-          Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
+          Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
           File Output Operator
             compressed: false
-            Statistics: Num rows: 24 Data size: 476 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 24 Data size: 4580 Basic stats: COMPLETE Column stats: COMPLETE
             table:
                 input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                 output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -1688,29 +1741,31 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: test1_n5
-            Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_1 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
               Reduce Output Operator
                 key expressions: _col1 (type: int)
+                null sort order: z
                 sort order: +
                 Map-reduce partition columns: _col1 (type: int)
-                Statistics: Num rows: 6 Data size: 56 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 6 Data size: 572 Basic stats: COMPLETE Column stats: COMPLETE
                 value expressions: _col0 (type: int), _col2 (type: string)
           TableScan
             alias: test2_n3
-            Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
               expressions: key (type: int), value (type: int), col_2 (type: string)
               outputColumnNames: _col0, _col1, _col2
-              Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
               Reduce Output Operator
                 key expressions: _col1 (type: int)
+                null sort order: z
                 sort order: +
                 Map-reduce partition columns: _col1 (type: int)
-                Statistics: Num rows: 4 Data size: 38 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 4 Data size: 380 Basic stats: COMPLETE Column stats: COMPLETE
                 value expressions: _col0 (type: int), _col2 (type: string)
       Reduce Operator Tree:
         Join Operator
@@ -1721,10 +1776,10 @@ STAGE PLANS:
             1 _col1 (type: int)
           outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5
           residual filter predicates: {(_col0 BETWEEN 100 AND 102 or _col3 BETWEEN 100 AND 102)}
-          Statistics: Num rows: 6 Data size: 61 Basic stats: COMPLETE Column stats: NONE
+          Statistics: Num rows: 13 Data size: 1711 Basic stats: COMPLETE Column stats: COMPLETE
           File Output Operator
             compressed: false
-            Statistics: Num rows: 6 Data size: 61 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 13 Data size: 1711 Basic stats: COMPLETE Column stats: COMPLETE
             table:
                 input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                 output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -1754,12 +1809,12 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@test1_n5
 POSTHOOK: Input: default@test2_n3
 #### A masked pattern was here ####
-NULL	NULL	None	NULL	NULL	NULL
-98	NULL	None	NULL	NULL	NULL
-NULL	NULL	NULL	105	NULL	None
 99	0	Alice	NULL	NULL	NULL
 100	1	Bob	NULL	NULL	NULL
 99	2	Mat	102	2	Del
 101	2	Car	102	2	Del
 101	2	Car	103	2	Ema
 NULL	NULL	NULL	104	3	Fli
+NULL	NULL	None	NULL	NULL	NULL
+98	NULL	None	NULL	NULL	NULL
+NULL	NULL	NULL	105	NULL	None

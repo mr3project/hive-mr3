@@ -1,7 +1,7 @@
+--! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 set hive.merge.mapredfiles=true;
-set hive.merge.sparkfiles=true;
 
 -- SORT_QUERY_RESULTS
 

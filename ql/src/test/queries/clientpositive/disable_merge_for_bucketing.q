@@ -1,10 +1,10 @@
+--! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
 ;
 set hive.exec.reducers.max = 1;
 set hive.merge.mapredfiles=true;
-set hive.merge.sparkfiles=true;
 
 
 CREATE TABLE bucket2_1_n0(key int, value string) CLUSTERED BY (key) INTO 2 BUCKETS;

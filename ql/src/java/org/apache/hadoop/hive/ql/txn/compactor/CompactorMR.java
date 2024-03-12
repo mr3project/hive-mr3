@@ -67,6 +67,7 @@ import org.apache.hadoop.hive.ql.DriverUtils;
 import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.exec.DDLTask;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator.RecordWriter;
+import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils;
 import org.apache.hadoop.hive.ql.io.AcidInputFormat;
 import org.apache.hadoop.hive.ql.io.AcidOutputFormat;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
@@ -134,7 +135,7 @@ public class CompactorMR {
   static final private String TBLPROPS_PREFIX = "tblprops.";
   static final private String COMPACTOR_PREFIX = "compactor.";
 
-  private JobConf mrJob;  // the MR job for compaction
+  private JobConf mrJob;  // MR job for compaction
 
   public CompactorMR() {
   }
@@ -571,40 +572,65 @@ public class CompactorMR {
     job.setLong(MAX_TXN, maxTxn);
 
     // Add tokens for all the file system in the input path.
-    ArrayList<Path> dirs = new ArrayList<>();
-    if (baseDir != null) {
-      dirs.add(baseDir);
+    if (DAGUtils.getInstance().shouldAddPathsToCredentials(job)) {
+      ArrayList<Path> dirs = new ArrayList<>();
+      if (baseDir != null) {
+        dirs.add(baseDir);
+      }
+      dirs.addAll(deltaDirs);
+      dirs.addAll(dirsToSearch);
+      TokenCache.obtainTokensForNamenodes(job.getCredentials(), dirs.toArray(new Path[]{}), job);
     }
-    dirs.addAll(deltaDirs);
-    dirs.addAll(dirsToSearch);
-    TokenCache.obtainTokensForNamenodes(job.getCredentials(), dirs.toArray(new Path[]{}), job);
 
     if (hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_IN_TEST)) {
       mrJob = job;
     }
 
-    LOG.info("Submitting " + compactionType + " compaction job '" +
-      job.getJobName() + "' to " + job.getQueueName() + " queue.  " +
-      "(current delta dirs count=" + curDirNumber +
-      ", obsolete delta dirs count=" + obsoleteDirNumber + ". TxnIdRange[" + minTxn + "," + maxTxn + "]");
-    JobClient jc = null;
-    try {
-      jc = new JobClient(job);
-      RunningJob rj = jc.submitJob(job);
-      LOG.info("Submitted compaction job '" + job.getJobName() +
-          "' with jobID=" + rj.getID() + " compaction ID=" + id);
-      txnHandler.setHadoopJobId(rj.getID().toString(), id);
-      rj.waitForCompletion();
-      if (!rj.isSuccessful()) {
-        throw new IOException((compactionType == CompactionType.MAJOR ? "Major" : "Minor") +
-               " compactor job failed for " + jobName + "! Hadoop JobId: " + rj.getID());
+    boolean submitJobUsingMr3 = hiveConf.getBoolVar(ConfVars.HIVE_MR3_COMPACTION_USING_MR3);
+    if (submitJobUsingMr3) {
+      try {
+        job.setJobName("MR3-compaction-" + id);
+        LOG.info("Submitting " + compactionType + " compaction job '" +
+              job.getJobName() + "' to MR3 " +
+              "(current delta dirs count=" + curDirNumber +
+              ", obsolete delta dirs count=" + obsoleteDirNumber + ". TxnIdRange[" + minTxn + "," + maxTxn + "]");
+        txnHandler.setHadoopJobId(job.getJobName(), id);
+        // Each compaction job creates its own MR3CompactionHelper and discards it because:
+        //  1. the retry logic is already implemented inside the compaction thread itself.
+        //  2. MR3CompactionHelper is not created frequently.
+        new MR3CompactionHelper(hiveConf).submitJobToMr3(job);
+      } catch (Exception e) {
+        LOG.info("Compaction using MR3 failed. Retrying compaction using MR", e);
+        submitJobUsingMr3 = false;
       }
-    } finally {
-      if (jc!=null) {
-        jc.close();
+    }
+
+    if (!submitJobUsingMr3) {
+      job.setJobName("MR-compaction-" + id);
+      LOG.info("Submitting " + compactionType + " compaction job '" +
+              job.getJobName() + "' to " + job.getQueueName() + " queue.  " +
+              "(current delta dirs count=" + curDirNumber +
+              ", obsolete delta dirs count=" + obsoleteDirNumber + ". TxnIdRange[" + minTxn + "," + maxTxn + "]");
+      JobClient jc = null;
+      try {
+        jc = new JobClient(job);
+        RunningJob rj = jc.submitJob(job);
+        LOG.info("Submitted compaction job '" + job.getJobName() +
+                "' with jobID=" + rj.getID() + " compaction ID=" + id);
+        txnHandler.setHadoopJobId(rj.getID().toString(), id);
+        rj.waitForCompletion();
+        if (!rj.isSuccessful()) {
+          throw new IOException((compactionType == CompactionType.MAJOR ? "Major" : "Minor") +
+                  " compactor job failed for " + jobName + "! Hadoop JobId: " + rj.getID());
+        }
+      } finally {
+        if (jc != null) {
+          jc.close();
+        }
       }
     }
   }
+
   /**
    * Set the column names and types into the job conf for the input format
    * to use.

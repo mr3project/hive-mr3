@@ -1339,30 +1339,17 @@ public final class GenMapRedUtils {
     if (isBlockMerge) {
       cplan = GenMapRedUtils.createMergeTask(fsInputDesc, finalName,
           dpCtx != null && dpCtx.getNumDPCols() > 0, fsInput.getCompilationOpContext());
-      if (conf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+      if (true) {
         work = new TezWork(conf.getVar(HiveConf.ConfVars.HIVEQUERYID), conf);
         cplan.setName("File Merge");
         ((TezWork) work).add(cplan);
-      } else if (conf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("spark")) {
-        work = new SparkWork(conf.getVar(HiveConf.ConfVars.HIVEQUERYID));
-        cplan.setName("Spark Merge File Work");
-        ((SparkWork) work).add(cplan);
-      } else {
-        work = cplan;
       }
     } else {
       cplan = createMRWorkForMergingFiles(conf, tsMerge, fsInputDesc);
-      if (conf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+      if (true) {
         work = new TezWork(conf.getVar(HiveConf.ConfVars.HIVEQUERYID), conf);
         cplan.setName("File Merge");
         ((TezWork)work).add(cplan);
-      } else if (conf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("spark")) {
-        work = new SparkWork(conf.getVar(HiveConf.ConfVars.HIVEQUERYID));
-        cplan.setName("Spark Merge File Work");
-        ((SparkWork) work).add(cplan);
-      } else {
-        work = new MapredWork();
-        ((MapredWork)work).setMapWork(cplan);
       }
     }
     // use CombineHiveInputFormat for map-only merging

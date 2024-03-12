@@ -1,3 +1,5 @@
+--! qt:dataset:src
+--! qt:dataset:part
 set hive.mapred.mode=nonstrict;
 set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
 set hive.merge.mapfiles=false;	
@@ -6,7 +8,6 @@ set mapred.input.dir.recursive=true;
 
 -- Tests truncating a column from a list bucketing table
 
--- INCLUDE_HADOOP_MAJOR_VERSIONS(0.23)
 
 CREATE TABLE test_tab_n3 (key STRING, value STRING) PARTITIONED BY (part STRING) STORED AS RCFILE;
 

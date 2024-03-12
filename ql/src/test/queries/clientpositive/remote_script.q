@@ -1,3 +1,4 @@
+--! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 dfs -put ../../data/scripts/newline.py /newline.py;
 add file hdfs:///newline.py;
@@ -10,5 +11,5 @@ SELECT TRANSFORM(key, value) USING
 
 select * from tmp_tmp ORDER BY key ASC, value ASC;
 
-dfs -rmr /newline.py;
+dfs -rm -r -f /newline.py;
 drop table tmp_tmp;

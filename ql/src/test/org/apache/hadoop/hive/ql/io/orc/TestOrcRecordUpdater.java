@@ -24,10 +24,7 @@ import static org.junit.Assert.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.File;
-import java.io.PrintStream;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
@@ -54,9 +51,16 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.orc.impl.OrcAcidUtils;
 import org.apache.orc.tools.FileDump;
+import org.junit.Before;
 import org.junit.Test;
 
 public class TestOrcRecordUpdater {
+
+  @Before
+  public void setup() throws IOException {
+    long orcMemoryPool = 512L * 1024 * 1024;
+    OrcFile.setupOrcMemoryManager(orcMemoryPool);   // for MR3
+  }
 
   @Test
   public void testAccessors() throws Exception {

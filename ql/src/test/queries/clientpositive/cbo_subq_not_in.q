@@ -1,3 +1,7 @@
+--! qt:disabled:disabled by 382dc2084224 in 2016
+--! qt:dataset:src_cbo
+--! qt:dataset:part
+--! qt:dataset:lineitem
 set hive.mapred.mode=nonstrict;
 set hive.cbo.enable=true;
 set hive.exec.check.crossproducts=false;

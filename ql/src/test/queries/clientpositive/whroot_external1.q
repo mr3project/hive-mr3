@@ -1,6 +1,6 @@
 --! qt:dataset:src
 
-dfs -rmr -f hdfs:///tmp/whroot_ext;
+dfs -rm -r -f -f hdfs:///tmp/whroot_ext;
 dfs -mkdir -p hdfs:///tmp/whroot_ext;
 
 set hive.metastore.warehouse.external.dir=hdfs:///tmp/whroot_ext;
@@ -26,7 +26,7 @@ load data local inpath '../../data/files/kv1.txt' overwrite into table wre1_ext1
 select count(*) from wre1_ext1;
 
 -- external table with specified location should still work
-dfs -rmr -f hdfs:///tmp/wre1_ext2;
+dfs -rm -r -f -f hdfs:///tmp/wre1_ext2;
 dfs -mkdir -p hdfs:///tmp/wre1_ext2;
 create external table wre1_ext2 (c1 string, c2 string) location 'hdfs:///tmp/wre1_ext2';
 show create table wre1_ext2;
@@ -57,7 +57,7 @@ load data local inpath '../../data/files/kv1.txt' overwrite into table wre1_db.w
 select count(*) from wre1_db.wre1_ext3;
 
 -- external table with specified location should still work
-dfs -rmr -f hdfs:///tmp/wre1_ext4;
+dfs -rm -r -f -f hdfs:///tmp/wre1_ext4;
 dfs -mkdir -p hdfs:///tmp/wre1_ext4;
 create external table wre1_db.wre1_ext4 (c1 string, c2 string) location 'hdfs:///tmp/wre1_ext4';
 show create table wre1_db.wre1_ext4;
@@ -102,6 +102,29 @@ drop table wre1_ext1;
 drop table wre1_ext2;
 drop database wre1_db cascade;
 
-dfs -rmr -f hdfs:///tmp/wre1_ext2;
-dfs -rmr -f hdfs:///tmp/wre1_ext4;
-dfs -rmr -f hdfs:///tmp/whroot_ext;
+dfs -rm -r -f -f hdfs:///tmp/wre1_ext2;
+dfs -rm -r -f -f hdfs:///tmp/wre1_ext4;
+dfs -rm -r -f -f hdfs:///tmp/whroot_ext;
+
+dfs -rm -r -f -f  hdfs:///tmp/test_dec_space;
+dfs -mkdir -p  hdfs:///tmp/test_dec_space;
+dfs -copyFromLocal ../../data/files/test_dec_space.csv hdfs:///tmp/test_dec_space/;
+create external table test_dec_space (id int, value decimal) ROW FORMAT DELIMITED
+ FIELDS TERMINATED BY ',' location 'hdfs:///tmp/test_dec_space';
+select * from test_dec_space;
+
+create table tbl (fld int);
+dfs -mkdir -p  hdfs:///tmp/test_load_aux_jar;
+dfs -copyFromLocal  ${system:hive.root}/data/files/identity_udf.jar  hdfs:///tmp/test_load_aux_jar/;
+
+-- both hive.aux.jars.path and hive.reloadable.aux.jars.path pointing to the same jar.
+SET hive.aux.jars.path=hdfs:///tmp/test_load_aux_jar/identity_udf.jar;
+SET hive.reloadable.aux.jars.path=hdfs:///tmp/test_load_aux_jar/;
+
+-- reload will load the identity_udf.jar from tmp/test_load_aux_jar
+RELOAD;
+
+insert into tbl values(1);
+select * from tbl;
+
+dfs -rm -r -f -f hdfs:///tmp/test_load_aux_jar/

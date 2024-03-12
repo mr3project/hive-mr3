@@ -282,6 +282,10 @@ public class ReduceSinkMapJoinProc implements NodeProcessor {
       parentRS.getConf().setReducerTraits(EnumSet.of(FIXED));
     }
     TezEdgeProperty edgeProp = new TezEdgeProperty(null, edgeType, numBuckets);
+    if (edgeType == EdgeType.CUSTOM_EDGE || (edgeType == EdgeType.CUSTOM_SIMPLE_EDGE && !mapJoinOp.getConf().isDynamicPartitionHashJoin())) {
+      // disable auto parallelism for bucket map joins (see the above code where we use FIXED)
+      edgeProp.setFixed();
+    }
 
     if (mapJoinWork != null) {
       for (BaseWork myWork: mapJoinWork) {

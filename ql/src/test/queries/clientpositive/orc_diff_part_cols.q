@@ -1,5 +1,9 @@
+--! qt:dataset:src
+--! qt:dataset:part
+
 set hive.vectorized.execution.enabled=false;
 set hive.mapred.mode=nonstrict;
+
 -- SORT_QUERY_RESULTS
 
 CREATE TABLE test_orc_n0 (key STRING)
@@ -18,6 +22,6 @@ INSERT OVERWRITE TABLE test_orc_n0 PARTITION (part = '1') SELECT key FROM src ta
 
 ALTER TABLE test_orc_n0 ADD COLUMNS (cnt INT);
 
-INSERT OVERWRITE TABLE test_orc_n0 PARTITION (part = '2') SELECT key, count(*) FROM src GROUP BY key LIMIT 5;
+INSERT OVERWRITE TABLE test_orc_n0 PARTITION (part = '2') SELECT key, count(*) FROM src GROUP BY key ORDER BY key LIMIT 5;
 
 SELECT * FROM test_orc_n0;

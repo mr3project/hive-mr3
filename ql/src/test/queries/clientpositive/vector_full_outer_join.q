@@ -19,7 +19,7 @@ LOAD DATA LOCAL INPATH '../../data/files/tjoin2.txt' OVERWRITE INTO TABLE TJOIN2
 INSERT INTO TABLE TJOIN1 SELECT * from TJOIN1STAGE;
 INSERT INTO TABLE TJOIN2 SELECT * from TJOIN2STAGE;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 
 set hive.vectorized.execution.enabled=false;
 set hive.mapjoin.hybridgrace.hashtable=false;

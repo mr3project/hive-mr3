@@ -1,3 +1,6 @@
+--! qt:dataset:src
+--! qt:dataset:part
+--! qt:dataset:lineitem
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 -- SORT_QUERY_RESULTS
@@ -145,6 +148,10 @@ select sum(l_extendedprice) from lineitem, part where p_partkey = l_partkey and 
 explain select * from part_null_n0 where p_name IN (select p_name from part where part.p_type = part_null_n0.p_type AND p_brand NOT LIKE (select min(p_brand) from part pp where part.p_type = pp.p_type));
 select * from part_null_n0 where p_name IN (select p_name from part where part.p_type = part_null_n0.p_type AND p_brand NOT LIKE (select min(p_brand) from part pp where part.p_type = pp.p_type));
 
+-- non corr, is null , is not converted to anti join.
+explain select * from part where (select i from tnull_n0 limit 1) is null;
+select * from part where (select i from tnull_n0 limit 1) is null;
+
 drop table tnull_n0;
 drop table part_null_n0;
 drop table tempty_n0;
@@ -249,7 +256,6 @@ drop table t_n11;
 drop table tempty_n0;
 
 -- following queries shouldn't have a join with sq_count_check
-set hive.optimize.remove.sq_count_check = true;
 explain select key, count(*) from src group by key having count(*) >
     (select count(*) from src s1 group by 4);
 
@@ -266,7 +272,7 @@ CREATE TABLE `date_dim`(
   `d_date_sk` int,
   `d_year` int);
 
-explain cbo with avg_sales as
+explain with avg_sales as
  (select avg(quantity*list_price) average_sales
   from (select ss_quantity quantity
              ,ss_list_price list_price
@@ -277,7 +283,7 @@ explain cbo with avg_sales as
 select * from store_sales where ss_list_price > (select average_sales from avg_sales);
 
 -- this one should have sq_count_check branch because it contains windowing function
-explain cbo with avg_sales as
+explain with avg_sales as
  (select avg(quantity*list_price) over( partition by list_price) average_sales
   from (select ss_quantity quantity
              ,ss_list_price list_price
@@ -286,8 +292,6 @@ explain cbo with avg_sales as
        where ss_sold_date_sk = d_date_sk
          and d_year between 1999 and 2001 ) x)
 select * from store_sales where ss_list_price > (select average_sales from avg_sales);
-
-
 DROP TABLE store_sales;
 DROP TABLE date_dim;
 

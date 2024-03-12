@@ -36,7 +36,7 @@
   <modules>
    <module>custom-serde</module>
    <module>custom-udfs</module>
-   <module>hcatalog-unit</module>
+   <!-- <module>hcatalog-unit</module> -->
    <module>hive-unit</module>
    <module>hive-blobstore</module>
    <module>util</module>

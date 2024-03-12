@@ -118,6 +118,9 @@ public class TestOrcSplitElimination {
     testCaseName.getMethodName() + ".2.orc");
     fs.delete(testFilePath, false);
     fs.delete(testFilePath2, false);
+
+    long orcMemoryPool = 512L * 1024 * 1024;
+    OrcFile.setupOrcMemoryManager(orcMemoryPool);   // for MR3
   }
 
   @Test

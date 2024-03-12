@@ -1,3 +1,5 @@
+--! qt:dataset:src
+
 set hive.vectorized.execution.enabled=false;
 CREATE TABLE test_orc_n2 (key STRING, cnt INT)
 CLUSTERED BY (key) INTO 3 BUCKETS

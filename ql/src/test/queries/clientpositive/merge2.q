@@ -1,8 +1,8 @@
+--! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 set hive.merge.mapfiles=true;
 set hive.merge.mapredfiles=true;
-set hive.merge.sparkfiles=true;
 set mapred.min.split.size=256;
 set mapred.min.split.size.per.node=256;
 set mapred.min.split.size.per.rack=256;

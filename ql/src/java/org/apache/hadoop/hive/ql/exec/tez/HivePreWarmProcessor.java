@@ -68,11 +68,11 @@ public class HivePreWarmProcessor extends AbstractLogicalIOProcessor {
   }
 
   @Override
-  public void run(Map<String, LogicalInput> inputs,
+  public boolean run(Map<String, LogicalInput> inputs,
                   Map<String, LogicalOutput> outputs) throws Exception {
     if(prewarmed) {
       /* container reuse */
-      return;
+      return false;
     }
     for (LogicalInput input : inputs.values()) {
       input.start();
@@ -109,6 +109,8 @@ public class HivePreWarmProcessor extends AbstractLogicalIOProcessor {
       hivejar.close();
     }
     prewarmed = true;
+
+    return false;
   }
 
   @Override

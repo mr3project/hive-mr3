@@ -1,7 +1,9 @@
 PREHOOK: query: drop table if exists testAltCol_n0
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table if exists testAltCol_n0
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table testAltCol_n0
 (cId        TINYINT,
  cTimeStamp TIMESTAMP,
@@ -232,8 +234,10 @@ POSTHOOK: Input: default@testaltcol_n0
 4	false
 PREHOOK: query: drop table if exists testAltColT_n0
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table if exists testAltColT_n0
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table testAltColT_n0 stored as textfile as select * from testAltCol_n0
 PREHOOK: type: CREATETABLE_AS_SELECT
 PREHOOK: Input: default@testaltcol_n0
@@ -685,15 +689,19 @@ POSTHOOK: Input: default@testaltcolt_n0
 PREHOOK: query: drop table if exists testAltColT_n0
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@testaltcolt_n0
+PREHOOK: Output: database:default
 PREHOOK: Output: default@testaltcolt_n0
 POSTHOOK: query: drop table if exists testAltColT_n0
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@testaltcolt_n0
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@testaltcolt_n0
 PREHOOK: query: drop table if exists testAltColSF_n0
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table if exists testAltColSF_n0
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table testAltColSF_n0 stored as sequencefile as select * from testAltCol_n0
 PREHOOK: type: CREATETABLE_AS_SELECT
 PREHOOK: Input: default@testaltcol_n0
@@ -1145,15 +1153,19 @@ POSTHOOK: Input: default@testaltcolsf_n0
 PREHOOK: query: drop table if exists testAltColSF_n0
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@testaltcolsf_n0
+PREHOOK: Output: database:default
 PREHOOK: Output: default@testaltcolsf_n0
 POSTHOOK: query: drop table if exists testAltColSF_n0
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@testaltcolsf_n0
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@testaltcolsf_n0
 PREHOOK: query: drop table if exists testAltColORC_n0
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table if exists testAltColORC_n0
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table testAltColORC_n0 stored as orc as select * from testAltCol_n0
 PREHOOK: type: CREATETABLE_AS_SELECT
 PREHOOK: Input: default@testaltcol_n0
@@ -1258,10 +1270,10 @@ POSTHOOK: query: select cId, cTimeStamp from testAltColORC_n0 order by cId
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@testaltcolorc_n0
 #### A masked pattern was here ####
-1	2017-11-07 01:02:49.999999999
-2	1399-12-23 17:01:01.000000001
-3	1399-12-23 17:01:01.000000001
-4	1399-12-23 17:01:01.000000001
+1	2017-11-07 09:02:49.999999999
+2	1400-01-01 01:01:01.000000001
+3	1400-01-01 01:01:01.000000001
+4	1400-01-01 01:01:01.000000001
 PREHOOK: query: select cId, cDecimal, cDouble, cFloat from testAltColORC_n0 order by cId
 PREHOOK: type: QUERY
 PREHOOK: Input: default@testaltcolorc_n0
@@ -1270,10 +1282,10 @@ POSTHOOK: query: select cId, cDecimal, cDouble, cFloat from testAltColORC_n0 ord
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@testaltcolorc_n0
 #### A masked pattern was here ####
-1	12345678901234567890.123456789012345678	1.79E308	3.4E38
-2	1.1	2.2	3.3
-3	10.1	20.2	30.3
-4	-10.1	-20.2	-30.3
+1	12345678901234567890.123456789012345678	1.79E308	3.3999999521443642E38
+2	1.1	2.2	3.299999952316284
+3	10.1	20.2	30.299999237060547
+4	-10.1	-20.2	-30.299999237060547
 PREHOOK: query: select cId, cBigInt, cInt, cSmallInt, cTinyint from testAltColORC_n0 order by cId
 PREHOOK: type: QUERY
 PREHOOK: Input: default@testaltcolorc_n0
@@ -1334,10 +1346,10 @@ POSTHOOK: query: select cId, cTimeStamp from testAltColORC_n0 order by cId
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@testaltcolorc_n0
 #### A masked pattern was here ####
-1	2017-11-07 01:02:49.999999999
-2	1399-12-23 17:01:01.000000001
-3	1399-12-23 17:01:01.000000001
-4	1399-12-23 17:01:01.000000001
+1	2017-11-07 09:02:49.999999999
+2	1400-01-01 01:01:01.000000001
+3	1400-01-01 01:01:01.000000001
+4	1400-01-01 01:01:01.000000001
 PREHOOK: query: select cId, cDecimal, cDouble, cFloat from testAltColORC_n0 order by cId
 PREHOOK: type: QUERY
 PREHOOK: Input: default@testaltcolorc_n0
@@ -1346,10 +1358,10 @@ POSTHOOK: query: select cId, cDecimal, cDouble, cFloat from testAltColORC_n0 ord
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@testaltcolorc_n0
 #### A masked pattern was here ####
-1	12345678901234567890.123456789012345678	1.79E308	3.4E38
-2	1.1	2.2	3.3
-3	10.1	20.2	30.3
-4	-10.1	-20.2	-30.3
+1	12345678901234567890.123456789012345678	1.79E308	3.3999999521443642E38
+2	1.1	2.2	3.299999952316284
+3	10.1	20.2	30.299999237060547
+4	-10.1	-20.2	-30.299999237060547
 PREHOOK: query: select cId, cBigInt, cInt, cSmallInt, cTinyint from testAltColORC_n0 order by cId
 PREHOOK: type: QUERY
 PREHOOK: Input: default@testaltcolorc_n0
@@ -1410,10 +1422,10 @@ POSTHOOK: query: select cId, cTimeStamp from testAltColORC_n0 order by cId
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@testaltcolorc_n0
 #### A masked pattern was here ####
-1	2017-11-07 01:02:49.999999999                                                                       
-2	1399-12-23 17:01:01.000000001                                                                       
-3	1399-12-23 17:01:01.000000001                                                                       
-4	1399-12-23 17:01:01.000000001                                                                       
+1	2017-11-07 09:02:49.999999999                                                                       
+2	1400-01-01 01:01:01.000000001                                                                       
+3	1400-01-01 01:01:01.000000001                                                                       
+4	1400-01-01 01:01:01.000000001                                                                       
 PREHOOK: query: select cId, cDecimal, cDouble, cFloat from testAltColORC_n0 order by cId
 PREHOOK: type: QUERY
 PREHOOK: Input: default@testaltcolorc_n0
@@ -1422,10 +1434,10 @@ POSTHOOK: query: select cId, cDecimal, cDouble, cFloat from testAltColORC_n0 ord
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@testaltcolorc_n0
 #### A masked pattern was here ####
-1	12345678901234567890.123456789012345678                                                             	1.79E308                                                                                            	3.4E38                                                                                              
-2	1.1                                                                                                 	2.2                                                                                                 	3.3                                                                                                 
-3	10.1                                                                                                	20.2                                                                                                	30.3                                                                                                
-4	-10.1                                                                                               	-20.2                                                                                               	-30.3                                                                                               
+1	12345678901234567890.123456789012345678                                                             	1.79E308                                                                                            	3.3999999521443642E38                                                                               
+2	1.1                                                                                                 	2.2                                                                                                 	3.299999952316284                                                                                   
+3	10.1                                                                                                	20.2                                                                                                	30.299999237060547                                                                                  
+4	-10.1                                                                                               	-20.2                                                                                               	-30.299999237060547                                                                                 
 PREHOOK: query: select cId, cBigInt, cInt, cSmallInt, cTinyint from testAltColORC_n0 order by cId
 PREHOOK: type: QUERY
 PREHOOK: Input: default@testaltcolorc_n0
@@ -1487,9 +1499,9 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@testaltcolorc_n0
 #### A masked pattern was here ####
 1	2017
-2	1399
-3	1399
-4	1399
+2	1400
+3	1400
+4	1400
 PREHOOK: query: select cId, cDecimal, cDouble, cFloat from testAltColORC_n0 order by cId
 PREHOOK: type: QUERY
 PREHOOK: Input: default@testaltcolorc_n0
@@ -1498,9 +1510,9 @@ POSTHOOK: query: select cId, cDecimal, cDouble, cFloat from testAltColORC_n0 ord
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@testaltcolorc_n0
 #### A masked pattern was here ####
-1	1234	1.79	3.4E
-2	1.1	2.2	3.3
-3	10.1	20.2	30.3
+1	1234	1.79	3.39
+2	1.1	2.2	3.29
+3	10.1	20.2	30.2
 4	-10.	-20.	-30.
 PREHOOK: query: select cId, cBigInt, cInt, cSmallInt, cTinyint from testAltColORC_n0 order by cId
 PREHOOK: type: QUERY
@@ -1563,9 +1575,9 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@testaltcolorc_n0
 #### A masked pattern was here ####
 1	2017
-2	1399
-3	1399
-4	1399
+2	1400
+3	1400
+4	1400
 PREHOOK: query: select cId, cDecimal, cDouble, cFloat from testAltColORC_n0 order by cId
 PREHOOK: type: QUERY
 PREHOOK: Input: default@testaltcolorc_n0
@@ -1574,9 +1586,9 @@ POSTHOOK: query: select cId, cDecimal, cDouble, cFloat from testAltColORC_n0 ord
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@testaltcolorc_n0
 #### A masked pattern was here ####
-1	1234	1.79	3.4E
-2	1.1 	2.2 	3.3 
-3	10.1	20.2	30.3
+1	1234	1.79	3.39
+2	1.1 	2.2 	3.29
+3	10.1	20.2	30.2
 4	-10.	-20.	-30.
 PREHOOK: query: select cId, cBigInt, cInt, cSmallInt, cTinyint from testAltColORC_n0 order by cId
 PREHOOK: type: QUERY
@@ -1605,15 +1617,19 @@ POSTHOOK: Input: default@testaltcolorc_n0
 PREHOOK: query: drop table if exists testAltColORC_n0
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@testaltcolorc_n0
+PREHOOK: Output: database:default
 PREHOOK: Output: default@testaltcolorc_n0
 POSTHOOK: query: drop table if exists testAltColORC_n0
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@testaltcolorc_n0
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@testaltcolorc_n0
 PREHOOK: query: drop table if exists testAltColRCF_n0
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table if exists testAltColRCF_n0
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table testAltColRCF_n0 stored as rcfile as select * from testAltCol_n0
 PREHOOK: type: CREATETABLE_AS_SELECT
 PREHOOK: Input: default@testaltcol_n0
@@ -2065,15 +2081,19 @@ POSTHOOK: Input: default@testaltcolrcf_n0
 PREHOOK: query: drop table if exists testAltColRCF_n0
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@testaltcolrcf_n0
+PREHOOK: Output: database:default
 PREHOOK: Output: default@testaltcolrcf_n0
 POSTHOOK: query: drop table if exists testAltColRCF_n0
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@testaltcolrcf_n0
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@testaltcolrcf_n0
 PREHOOK: query: drop table if exists testAltColP
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table if exists testAltColP
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table testAltColP stored as parquet as select * from testAltCol_n0
 PREHOOK: type: CREATETABLE_AS_SELECT
 PREHOOK: Input: default@testaltcol_n0
@@ -2525,16 +2545,20 @@ POSTHOOK: Input: default@testaltcolp
 PREHOOK: query: drop table if exists testAltColP
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@testaltcolp
+PREHOOK: Output: database:default
 PREHOOK: Output: default@testaltcolp
 POSTHOOK: query: drop table if exists testAltColP
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@testaltcolp
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@testaltcolp
 PREHOOK: query: drop table if exists testAltCol_n0
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@testaltcol_n0
+PREHOOK: Output: database:default
 PREHOOK: Output: default@testaltcol_n0
 POSTHOOK: query: drop table if exists testAltCol_n0
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@testaltcol_n0
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@testaltcol_n0

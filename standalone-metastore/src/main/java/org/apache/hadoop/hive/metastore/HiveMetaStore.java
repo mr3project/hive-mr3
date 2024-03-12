@@ -325,8 +325,8 @@ public class HiveMetaStore extends ThriftHiveMetastore {
 
     private static ExecutorService threadPool;
 
-    static final Logger auditLog = LoggerFactory.getLogger(
-        HiveMetaStore.class.getName() + ".audit");
+    /* static final Logger auditLog = LoggerFactory.getLogger(
+        HiveMetaStore.class.getName() + ".audit"); */
 
     private static void logAuditEvent(String cmd) {
       if (cmd == null) {
@@ -345,7 +345,7 @@ public class HiveMetaStore extends ThriftHiveMetastore {
         address = "unknown-ip-addr";
       }
 
-      auditLog.info("ugi={}	ip={}	cmd={}	", ugi.getUserName(), address, cmd);
+      LOG.info("ugi={}	ip={}	cmd={}", ugi.getUserName(), address, cmd);
     }
 
     private static String getIPAddress() {

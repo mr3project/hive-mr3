@@ -50,6 +50,8 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
   protected transient ObjectCache runtimeCache;
   protected transient String limitKey;
 
+  private transient boolean calledOnLimitReached;
+
   /** Kryo ctor. */
   protected LimitOperator() {
     super();
@@ -68,8 +70,15 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
     currCount = 0;
     isMap = hconf.getBoolean("mapred.task.is.map", true);
 
-    String queryId = HiveConf.getVar(getConfiguration(), HiveConf.ConfVars.HIVEQUERYID);
-    this.runtimeCache = ObjectCacheFactory.getCache(getConfiguration(), queryId, false, true);
+    String queryId = HiveConf.getVar(hconf, HiveConf.ConfVars.HIVEQUERYID);
+    int dagIdId = HiveConf.getIntVar(hconf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID);
+    if (dagIdId == HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID.defaultIntVal) {
+      this.runtimeCache = null;   // not in TezProcessor
+    } else {
+      this.runtimeCache = ObjectCacheFactory.getCache(hconf, queryId, dagIdId, false, true);   // user per-query cache
+    }
+
+    this.calledOnLimitReached = false;
 
     // this can happen in HS2 while doing local fetch optimization, where LimitOperator is used
     if (runtimeCache == null) {
@@ -126,9 +135,13 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
   }
 
   protected void onLimitReached() {
+    if (calledOnLimitReached) {
+      return;
+    }
     super.setDone(true);
 
-    String limitReachedKey = getLimitReachedKey(getConfiguration());
+    String vertexName = getConfiguration().get(TezProcessor.HIVE_TEZ_VERTEX_NAME);
+    String limitReachedKey = getLimitReachedKey(vertexName);
 
     try {
       runtimeCache.retrieve(limitReachedKey, new Callable<AtomicBoolean>() {
@@ -139,6 +152,8 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
       }).set(true);
     } catch (HiveException e) {
       throw new RuntimeException(e);
+    } finally {
+      calledOnLimitReached = true;
     }
   }
 
@@ -163,31 +178,39 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
     }
   }
 
-  public static String getLimitReachedKey(Configuration conf) {
-    return conf.get(TezProcessor.HIVE_TEZ_VERTEX_NAME) + LIMIT_REACHED_KEY_SUFFIX;
+  private static String getLimitReachedKey(String vertexName) {
+    return vertexName + LIMIT_REACHED_KEY_SUFFIX;
   }
 
-  public static boolean checkLimitReached(JobConf jobConf) {
+  public static boolean checkLimitReached(String queryId, int dagIdId, String vertexName) {
+    String limitReachedKey = getLimitReachedKey(vertexName);
+
+    return checkPeekLimitReached(queryId, dagIdId, limitReachedKey);
+  }
+
+  public static boolean checkLimitReachedForVertex(JobConf jobConf) {
     String queryId = HiveConf.getVar(jobConf, HiveConf.ConfVars.HIVEQUERYID);
-    String limitReachedKey = getLimitReachedKey(jobConf);
+    int dagIdId = jobConf.getInt(org.apache.tez.mapreduce.input.MRInput.TEZ_MAPREDUCE_DAG_INDEX, -1);
+    String vertexName = jobConf.get(org.apache.tez.mapreduce.input.MRInput.TEZ_MAPREDUCE_VERTEX_NAME);
+    String limitReachedKey = getLimitReachedKey(vertexName);
 
-    return checkLimitReached(jobConf, queryId, limitReachedKey);
+    return checkPeekLimitReached(queryId, dagIdId, limitReachedKey);
   }
 
-  public static boolean checkLimitReachedForVertex(JobConf jobConf, String vertexName) {
-    String queryId = HiveConf.getVar(jobConf, HiveConf.ConfVars.HIVEQUERYID);
-    return checkLimitReached(jobConf, queryId, vertexName + LIMIT_REACHED_KEY_SUFFIX);
-  }
-
-  private static boolean checkLimitReached(JobConf jobConf, String queryId, String limitReachedKey) {
+  // this method never creates an entry with key 'limitReachedKey' in the per-query cache
+  // assume MR3_CONTAINER_USE_PER_QUERY_CACHE == true
+  private static boolean checkPeekLimitReached(String queryId, int dagIdId, String limitReachedKey) {
     try {
-      return ObjectCacheFactory.getCache(jobConf, queryId, false, true)
-          .retrieve(limitReachedKey, new Callable<AtomicBoolean>() {
-            @Override
-            public AtomicBoolean call() {
-              return new AtomicBoolean(false);
-            }
-          }).get();
+      ObjectCache cache = ObjectCacheFactory.peekLlapObjectCache(queryId, dagIdId);
+      if (cache != null) {
+        AtomicBoolean limitReached = cache.retrieve(limitReachedKey);
+        if (limitReached == null) {
+          return false;
+        }
+        return limitReached.get();
+      } else {
+        return false;
+      }
     } catch (HiveException e) {
       throw new RuntimeException(e);
     }

@@ -36,9 +36,10 @@ public class MergeFileTezProcessor extends TezProcessor {
   }
 
   @Override
-  public void run(Map<String, LogicalInput> inputs,
+  public boolean run(Map<String, LogicalInput> inputs,
       Map<String, LogicalOutput> outputs) throws Exception {
     rproc = new MergeFileRecordProcessor(jobConf, getContext());
     initializeAndRunProcessor(inputs, outputs);
+    return false;
   }
 }

@@ -32,7 +32,6 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hive.llap.LlapUtil;
 import org.apache.hadoop.hive.llap.io.encoded.TezCounterSource;
-import org.apache.log4j.NDC;
 import org.apache.tez.common.CallableWithNdc;
 import org.apache.tez.common.counters.FileSystemCounter;
 import org.apache.tez.common.counters.TezCounters;
@@ -105,46 +104,10 @@ public class StatsRecordingThreadPool extends ThreadPoolExecutor {
       // clone thread local file system statistics
       List<LlapUtil.StatisticsData> statsBefore = LlapUtil.cloneThreadLocalFileSystemStatistics();
 
-      setupMDCFromNDC(actualCallable);
       try {
         return actualCallable.call();
       } finally {
         updateFileSystemCounters(statsBefore, actualCallable);
-        MDC.clear();
-      }
-    }
-
-    private void setupMDCFromNDC(final Callable<V> actualCallable) {
-      if (actualCallable instanceof CallableWithNdc) {
-        CallableWithNdc callableWithNdc = (CallableWithNdc) actualCallable;
-        try {
-          // CallableWithNdc inherits from NDC only when call() is invoked. CallableWithNdc has to
-          // extended to provide access to its ndcStack that is cloned during creation. Until, then
-          // we will use reflection to access the private field.
-          // FIXME: HIVE-14243 follow to remove this reflection
-          Field field = callableWithNdc.getClass().getSuperclass().getDeclaredField("ndcStack");
-          field.setAccessible(true);
-          Stack ndcStack = (Stack) field.get(callableWithNdc);
-
-          final Stack clonedStack = (Stack) ndcStack.clone();
-          final String fragmentId = (String) clonedStack.pop();
-          final String queryId = (String) clonedStack.pop();
-          final String dagId = (String) clonedStack.pop();
-          MDC.put("dagId", dagId);
-          MDC.put("queryId", queryId);
-          MDC.put("fragmentId", fragmentId);
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("Received dagId: {} queryId: {} instanceType: {}",
-                dagId, queryId, actualCallable.getClass().getSimpleName());
-          }
-        } catch (Exception e) {
-          LOG.warn("Not setting up MDC as NDC stack cannot be accessed reflectively for" +
-                  " instance type: {} exception type: {}",
-              actualCallable.getClass().getSimpleName(), e.getClass().getSimpleName());
-        }
-      } else {
-        LOG.warn("Not setting up MDC as unknown callable instance type received: {}",
-            actualCallable.getClass().getSimpleName());
       }
     }
 

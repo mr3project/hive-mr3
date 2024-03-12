@@ -432,19 +432,20 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: over10k_orc_bucketed
-                  filterExpr: ((b = 4294967363L) and (t < 100Y)) (type: boolean)
+                  filterExpr: ((t < 100Y) and (b = 4294967363L)) (type: boolean)
                   Statistics: Num rows: 2098 Data size: 41920 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
-                    predicate: ((b = 4294967363L) and (t < 100Y)) (type: boolean)
-                    Statistics: Num rows: 2 Data size: 40 Basic stats: COMPLETE Column stats: COMPLETE
+                    predicate: ((t < 100Y) and (b = 4294967363L)) (type: boolean)
+                    Statistics: Num rows: 7 Data size: 140 Basic stats: COMPLETE Column stats: COMPLETE
                     Select Operator
                       expressions: t (type: tinyint), si (type: smallint), i (type: int)
                       outputColumnNames: _col0, _col1, _col2
-                      Statistics: Num rows: 2 Data size: 24 Basic stats: COMPLETE Column stats: COMPLETE
+                      Statistics: Num rows: 7 Data size: 84 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: tinyint), _col1 (type: smallint), _col2 (type: int)
+                        null sort order: zzz
                         sort order: +++
-                        Statistics: Num rows: 2 Data size: 24 Basic stats: COMPLETE Column stats: COMPLETE
+                        Statistics: Num rows: 7 Data size: 84 Basic stats: COMPLETE Column stats: COMPLETE
             Execution mode: vectorized, llap
             LLAP IO: may be used (ACID table)
         Reducer 2 
@@ -453,10 +454,10 @@ STAGE PLANS:
               Select Operator
                 expressions: KEY.reducesinkkey0 (type: tinyint), KEY.reducesinkkey1 (type: smallint), KEY.reducesinkkey2 (type: int)
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 2 Data size: 24 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 7 Data size: 84 Basic stats: COMPLETE Column stats: COMPLETE
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 2 Data size: 24 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 7 Data size: 84 Basic stats: COMPLETE Column stats: COMPLETE
                   table:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -506,19 +507,20 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: over10k_orc_bucketed
-                  filterExpr: ((b = 4294967363L) and (t < 100Y)) (type: boolean)
+                  filterExpr: ((t < 100Y) and (b = 4294967363L)) (type: boolean)
                   Statistics: Num rows: 2098 Data size: 41920 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
-                    predicate: ((b = 4294967363L) and (t < 100Y)) (type: boolean)
-                    Statistics: Num rows: 2 Data size: 40 Basic stats: COMPLETE Column stats: COMPLETE
+                    predicate: ((t < 100Y) and (b = 4294967363L)) (type: boolean)
+                    Statistics: Num rows: 7 Data size: 140 Basic stats: COMPLETE Column stats: COMPLETE
                     Select Operator
                       expressions: ROW__ID (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), t (type: tinyint), si (type: smallint), i (type: int)
                       outputColumnNames: _col0, _col1, _col2, _col3
-                      Statistics: Num rows: 2 Data size: 176 Basic stats: COMPLETE Column stats: COMPLETE
+                      Statistics: Num rows: 7 Data size: 616 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                        null sort order: z
                         sort order: +
-                        Statistics: Num rows: 2 Data size: 176 Basic stats: COMPLETE Column stats: COMPLETE
+                        Statistics: Num rows: 7 Data size: 616 Basic stats: COMPLETE Column stats: COMPLETE
                         value expressions: _col1 (type: tinyint), _col2 (type: smallint), _col3 (type: int)
             Execution mode: vectorized, llap
             LLAP IO: may be used (ACID table)
@@ -528,10 +530,10 @@ STAGE PLANS:
               Select Operator
                 expressions: KEY.reducesinkkey0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), VALUE._col0 (type: tinyint), VALUE._col1 (type: smallint), VALUE._col2 (type: int)
                 outputColumnNames: _col0, _col1, _col2, _col3
-                Statistics: Num rows: 2 Data size: 176 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 7 Data size: 616 Basic stats: COMPLETE Column stats: COMPLETE
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 2 Data size: 176 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 7 Data size: 616 Basic stats: COMPLETE Column stats: COMPLETE
                   table:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -551,73 +553,109 @@ POSTHOOK: query: select ROW__ID, t, si, i from over10k_orc_bucketed where b = 42
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@over10k_orc_bucketed
 #### A masked pattern was here ####
-{"writeid":0,"bucketid":536870912,"rowid":104}	5	501	65585
-{"writeid":0,"bucketid":536870912,"rowid":420}	5	501	65585
-{"writeid":0,"bucketid":536936448,"rowid":37}	-3	344	65733
-{"writeid":0,"bucketid":536936448,"rowid":295}	-3	344	65733
-{"writeid":0,"bucketid":537067520,"rowid":173}	35	463	65646
-{"writeid":0,"bucketid":537067520,"rowid":406}	35	463	65646
+{"writeid":0,"bucketid":536870912,"rowid":294}	5	501	65585
+{"writeid":0,"bucketid":536870912,"rowid":610}	5	501	65585
+{"writeid":0,"bucketid":536936448,"rowid":101}	-3	344	65733
+{"writeid":0,"bucketid":536936448,"rowid":359}	-3	344	65733
+{"writeid":0,"bucketid":537067520,"rowid":190}	35	463	65646
+{"writeid":0,"bucketid":537067520,"rowid":423}	35	463	65646
 PREHOOK: query: explain update over10k_orc_bucketed set i = 0 where b = 4294967363 and t < 100
 PREHOOK: type: QUERY
 PREHOOK: Input: default@over10k_orc_bucketed
+PREHOOK: Output: default@over10k_orc_bucketed
 PREHOOK: Output: default@over10k_orc_bucketed
 POSTHOOK: query: explain update over10k_orc_bucketed set i = 0 where b = 4294967363 and t < 100
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@over10k_orc_bucketed
 POSTHOOK: Output: default@over10k_orc_bucketed
+POSTHOOK: Output: default@over10k_orc_bucketed
 STAGE DEPENDENCIES:
-  Stage-1 is a root stage
-  Stage-2 depends on stages: Stage-1
-  Stage-0 depends on stages: Stage-2
-  Stage-3 depends on stages: Stage-0
+  Stage-2 is a root stage
+  Stage-3 depends on stages: Stage-2
+  Stage-0 depends on stages: Stage-3
+  Stage-4 depends on stages: Stage-0
+  Stage-1 depends on stages: Stage-3
+  Stage-5 depends on stages: Stage-1
 
 STAGE PLANS:
-  Stage: Stage-1
+  Stage: Stage-2
     Tez
 #### A masked pattern was here ####
       Edges:
         Reducer 2 <- Map 1 (SIMPLE_EDGE)
+        Reducer 3 <- Map 1 (SIMPLE_EDGE)
 #### A masked pattern was here ####
       Vertices:
         Map 1 
             Map Operator Tree:
                 TableScan
                   alias: over10k_orc_bucketed
-                  filterExpr: ((b = 4294967363L) and (t < 100Y)) (type: boolean)
-                  Statistics: Num rows: 2098 Data size: 706986 Basic stats: COMPLETE Column stats: COMPLETE
+                  filterExpr: ((t < 100Y) and (b = 4294967363L)) (type: boolean)
+                  Statistics: Num rows: 2098 Data size: 589538 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
-                    predicate: ((b = 4294967363L) and (t < 100Y)) (type: boolean)
-                    Statistics: Num rows: 2 Data size: 674 Basic stats: COMPLETE Column stats: COMPLETE
+                    predicate: ((t < 100Y) and (b = 4294967363L)) (type: boolean)
+                    Statistics: Num rows: 7 Data size: 2007 Basic stats: COMPLETE Column stats: COMPLETE
                     Select Operator
                       expressions: ROW__ID (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), t (type: tinyint), si (type: smallint), f (type: float), d (type: double), bo (type: boolean), s (type: string), ts (type: timestamp), dec (type: decimal(4,2)), bin (type: binary)
                       outputColumnNames: _col0, _col1, _col2, _col5, _col6, _col7, _col8, _col9, _col10, _col11
-                      Statistics: Num rows: 2 Data size: 834 Basic stats: COMPLETE Column stats: COMPLETE
-                      Reduce Output Operator
-                        key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
-                        sort order: +
-                        Map-reduce partition columns: UDFToInteger(_col0) (type: int)
-                        Statistics: Num rows: 2 Data size: 834 Basic stats: COMPLETE Column stats: COMPLETE
-                        value expressions: _col1 (type: tinyint), _col2 (type: smallint), _col5 (type: float), _col6 (type: double), _col7 (type: boolean), _col8 (type: string), _col9 (type: timestamp), _col10 (type: decimal(4,2)), _col11 (type: binary)
+                      Statistics: Num rows: 7 Data size: 2483 Basic stats: COMPLETE Column stats: COMPLETE
+                      Select Operator
+                        expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                        outputColumnNames: _col0
+                        Statistics: Num rows: 7 Data size: 532 Basic stats: COMPLETE Column stats: COMPLETE
+                        Reduce Output Operator
+                          key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                          null sort order: z
+                          sort order: +
+                          Map-reduce partition columns: UDFToInteger(_col0) (type: int)
+                          Statistics: Num rows: 7 Data size: 532 Basic stats: COMPLETE Column stats: COMPLETE
+                      Select Operator
+                        expressions: _col1 (type: tinyint), _col2 (type: smallint), 0 (type: int), 4294967363L (type: bigint), _col5 (type: float), _col6 (type: double), _col7 (type: boolean), _col8 (type: string), _col9 (type: timestamp), _col10 (type: decimal(4,2)), _col11 (type: binary)
+                        outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9, _col10
+                        Statistics: Num rows: 7 Data size: 2035 Basic stats: COMPLETE Column stats: COMPLETE
+                        Reduce Output Operator
+                          key expressions: _col1 (type: smallint)
+                          null sort order: a
+                          sort order: +
+                          Map-reduce partition columns: _col1 (type: smallint)
+                          Statistics: Num rows: 7 Data size: 2035 Basic stats: COMPLETE Column stats: COMPLETE
+                          value expressions: _col0 (type: tinyint), _col2 (type: int), _col3 (type: bigint), _col4 (type: float), _col5 (type: double), _col6 (type: boolean), _col7 (type: string), _col8 (type: timestamp), _col9 (type: decimal(4,2)), _col10 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: may be used (ACID table)
         Reducer 2 
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Select Operator
-                expressions: KEY.reducesinkkey0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), VALUE._col0 (type: tinyint), VALUE._col1 (type: smallint), 0 (type: int), 4294967363L (type: bigint), VALUE._col3 (type: float), VALUE._col4 (type: double), VALUE._col5 (type: boolean), VALUE._col6 (type: string), VALUE._col7 (type: timestamp), VALUE._col8 (type: decimal(4,2)), VALUE._col9 (type: binary)
-                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9, _col10, _col11
-                Statistics: Num rows: 2 Data size: 834 Basic stats: COMPLETE Column stats: COMPLETE
+                expressions: KEY.reducesinkkey0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                outputColumnNames: _col0
+                Statistics: Num rows: 7 Data size: 532 Basic stats: COMPLETE Column stats: COMPLETE
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 2 Data size: 834 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 7 Data size: 532 Basic stats: COMPLETE Column stats: COMPLETE
                   table:
                       input format: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                       output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
                       serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
                       name: default.over10k_orc_bucketed
-                  Write Type: UPDATE
+                  Write Type: DELETE
+        Reducer 3 
+            Execution mode: vectorized, llap
+            Reduce Operator Tree:
+              Select Operator
+                expressions: VALUE._col0 (type: tinyint), KEY.reducesinkkey0 (type: smallint), VALUE._col1 (type: int), VALUE._col2 (type: bigint), VALUE._col3 (type: float), VALUE._col4 (type: double), VALUE._col5 (type: boolean), VALUE._col6 (type: string), VALUE._col7 (type: timestamp), VALUE._col8 (type: decimal(4,2)), VALUE._col9 (type: binary)
+                outputColumnNames: _col0, _col1, _col2, _col3, _col4, _col5, _col6, _col7, _col8, _col9, _col10
+                Statistics: Num rows: 7 Data size: 2035 Basic stats: COMPLETE Column stats: COMPLETE
+                File Output Operator
+                  compressed: false
+                  Statistics: Num rows: 7 Data size: 2035 Basic stats: COMPLETE Column stats: COMPLETE
+                  table:
+                      input format: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
+                      output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
+                      serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
+                      name: default.over10k_orc_bucketed
+                  Write Type: INSERT
 
-  Stage: Stage-2
+  Stage: Stage-3
     Dependency Collection
 
   Stage: Stage-0
@@ -629,9 +667,24 @@ STAGE PLANS:
               output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
               serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
               name: default.over10k_orc_bucketed
-          Write Type: UPDATE
+          Write Type: DELETE
 
-  Stage: Stage-3
+  Stage: Stage-4
+    Stats Work
+      Basic Stats Work:
+
+  Stage: Stage-1
+    Move Operator
+      tables:
+          replace: false
+          table:
+              input format: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
+              output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
+              serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
+              name: default.over10k_orc_bucketed
+          Write Type: INSERT
+
+  Stage: Stage-5
     Stats Work
       Basic Stats Work:
 
@@ -639,10 +692,23 @@ PREHOOK: query: update over10k_orc_bucketed set i = 0 where b = 4294967363 and t
 PREHOOK: type: QUERY
 PREHOOK: Input: default@over10k_orc_bucketed
 PREHOOK: Output: default@over10k_orc_bucketed
+PREHOOK: Output: default@over10k_orc_bucketed
 POSTHOOK: query: update over10k_orc_bucketed set i = 0 where b = 4294967363 and t < 100
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@over10k_orc_bucketed
 POSTHOOK: Output: default@over10k_orc_bucketed
+POSTHOOK: Output: default@over10k_orc_bucketed
+POSTHOOK: Lineage: over10k_orc_bucketed.b SIMPLE []
+POSTHOOK: Lineage: over10k_orc_bucketed.bin SIMPLE [(over10k_orc_bucketed)over10k_orc_bucketed.FieldSchema(name:bin, type:binary, comment:null), ]
+POSTHOOK: Lineage: over10k_orc_bucketed.bo SIMPLE [(over10k_orc_bucketed)over10k_orc_bucketed.FieldSchema(name:bo, type:boolean, comment:null), ]
+POSTHOOK: Lineage: over10k_orc_bucketed.d SIMPLE [(over10k_orc_bucketed)over10k_orc_bucketed.FieldSchema(name:d, type:double, comment:null), ]
+POSTHOOK: Lineage: over10k_orc_bucketed.dec SIMPLE [(over10k_orc_bucketed)over10k_orc_bucketed.FieldSchema(name:dec, type:decimal(4,2), comment:null), ]
+POSTHOOK: Lineage: over10k_orc_bucketed.f SIMPLE [(over10k_orc_bucketed)over10k_orc_bucketed.FieldSchema(name:f, type:float, comment:null), ]
+POSTHOOK: Lineage: over10k_orc_bucketed.i SIMPLE []
+POSTHOOK: Lineage: over10k_orc_bucketed.s SIMPLE [(over10k_orc_bucketed)over10k_orc_bucketed.FieldSchema(name:s, type:string, comment:null), ]
+POSTHOOK: Lineage: over10k_orc_bucketed.si SIMPLE [(over10k_orc_bucketed)over10k_orc_bucketed.FieldSchema(name:si, type:smallint, comment:null), ]
+POSTHOOK: Lineage: over10k_orc_bucketed.t SIMPLE [(over10k_orc_bucketed)over10k_orc_bucketed.FieldSchema(name:t, type:tinyint, comment:null), ]
+POSTHOOK: Lineage: over10k_orc_bucketed.ts SIMPLE [(over10k_orc_bucketed)over10k_orc_bucketed.FieldSchema(name:ts, type:timestamp, comment:null), ]
 PREHOOK: query: select ROW__ID, t, si, i from over10k_orc_bucketed where b = 4294967363 and t < 100 order by ROW__ID
 PREHOOK: type: QUERY
 PREHOOK: Input: default@over10k_orc_bucketed
@@ -651,12 +717,12 @@ POSTHOOK: query: select ROW__ID, t, si, i from over10k_orc_bucketed where b = 42
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@over10k_orc_bucketed
 #### A masked pattern was here ####
-{"writeid":### Masked writeid ###,"bucketid":536870912,"rowid":0}	5	501	0
-{"writeid":### Masked writeid ###,"bucketid":536870912,"rowid":1}	5	501	0
-{"writeid":### Masked writeid ###,"bucketid":536936448,"rowid":0}	-3	344	0
-{"writeid":### Masked writeid ###,"bucketid":536936448,"rowid":1}	-3	344	0
-{"writeid":### Masked writeid ###,"bucketid":537067520,"rowid":0}	35	463	0
-{"writeid":### Masked writeid ###,"bucketid":537067520,"rowid":1}	35	463	0
+{"writeid":### Masked writeid ###,"bucketid":536870913,"rowid":0}	5	501	0
+{"writeid":### Masked writeid ###,"bucketid":536870913,"rowid":1}	5	501	0
+{"writeid":### Masked writeid ###,"bucketid":536936449,"rowid":0}	-3	344	0
+{"writeid":### Masked writeid ###,"bucketid":536936449,"rowid":1}	-3	344	0
+{"writeid":### Masked writeid ###,"bucketid":537067521,"rowid":0}	35	463	0
+{"writeid":### Masked writeid ###,"bucketid":537067521,"rowid":1}	35	463	0
 PREHOOK: query: explain select ROW__ID, count(*) from over10k_orc_bucketed group by ROW__ID having count(*) > 1
 PREHOOK: type: QUERY
 PREHOOK: Input: default@over10k_orc_bucketed
@@ -681,22 +747,24 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: over10k_orc_bucketed
-                  Statistics: Num rows: 2098 Data size: 622340 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 2098 Data size: 595784 Basic stats: COMPLETE Column stats: COMPLETE
                   Select Operator
                     expressions: ROW__ID (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
                     outputColumnNames: ROW__ID
-                    Statistics: Num rows: 2098 Data size: 622340 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 2098 Data size: 595784 Basic stats: COMPLETE Column stats: COMPLETE
                     Group By Operator
                       aggregations: count()
                       keys: ROW__ID (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                      minReductionHashAggr: 0.4
                       mode: hash
                       outputColumnNames: _col0, _col1
-                      Statistics: Num rows: 1049 Data size: 88116 Basic stats: COMPLETE Column stats: COMPLETE
+                      Statistics: Num rows: 2098 Data size: 176232 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
-                        Statistics: Num rows: 1049 Data size: 88116 Basic stats: COMPLETE Column stats: COMPLETE
+                        Statistics: Num rows: 2098 Data size: 176232 Basic stats: COMPLETE Column stats: COMPLETE
                         value expressions: _col1 (type: bigint)
             Execution mode: llap
             LLAP IO: may be used (ACID table)
@@ -708,13 +776,13 @@ STAGE PLANS:
                 keys: KEY._col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
                 mode: mergepartial
                 outputColumnNames: _col0, _col1
-                Statistics: Num rows: 1049 Data size: 88116 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 2098 Data size: 176232 Basic stats: COMPLETE Column stats: COMPLETE
                 Filter Operator
                   predicate: (_col1 > 1L) (type: boolean)
-                  Statistics: Num rows: 349 Data size: 29316 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 699 Data size: 58716 Basic stats: COMPLETE Column stats: COMPLETE
                   File Output Operator
                     compressed: false
-                    Statistics: Num rows: 349 Data size: 29316 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 699 Data size: 58716 Basic stats: COMPLETE Column stats: COMPLETE
                     table:
                         input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                         output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -742,3 +810,179 @@ POSTHOOK: query: select ROW__ID, * from over10k_orc_bucketed where ROW__ID is nu
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@over10k_orc_bucketed
 #### A masked pattern was here ####
+PREHOOK: query: CREATE TABLE over10k_orc STORED AS ORC as select * from over10k_n2 where t between 3 and 4
+PREHOOK: type: CREATETABLE_AS_SELECT
+PREHOOK: Input: default@over10k_n2
+PREHOOK: Output: database:default
+PREHOOK: Output: default@over10k_orc
+POSTHOOK: query: CREATE TABLE over10k_orc STORED AS ORC as select * from over10k_n2 where t between 3 and 4
+POSTHOOK: type: CREATETABLE_AS_SELECT
+POSTHOOK: Input: default@over10k_n2
+POSTHOOK: Output: database:default
+POSTHOOK: Output: default@over10k_orc
+POSTHOOK: Lineage: over10k_orc.b SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:b, type:bigint, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.bin SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:bin, type:binary, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.bo SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:bo, type:boolean, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.d SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:d, type:double, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.dec SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:dec, type:decimal(4,2), comment:null), ]
+POSTHOOK: Lineage: over10k_orc.f SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:f, type:float, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.i SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:i, type:int, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.s SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:s, type:string, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.si SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:si, type:smallint, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.t SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:t, type:tinyint, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.ts SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:ts, type:timestamp, comment:null), ]
+PREHOOK: query: INSERT INTO over10k_orc select * from over10k_n2 where t between 3 and 4
+PREHOOK: type: QUERY
+PREHOOK: Input: default@over10k_n2
+PREHOOK: Output: default@over10k_orc
+POSTHOOK: query: INSERT INTO over10k_orc select * from over10k_n2 where t between 3 and 4
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@over10k_n2
+POSTHOOK: Output: default@over10k_orc
+POSTHOOK: Lineage: over10k_orc.b SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:b, type:bigint, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.bin SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:bin, type:binary, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.bo SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:bo, type:boolean, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.d SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:d, type:double, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.dec SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:dec, type:decimal(4,2), comment:null), ]
+POSTHOOK: Lineage: over10k_orc.f SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:f, type:float, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.i SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:i, type:int, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.s SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:s, type:string, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.si SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:si, type:smallint, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.t SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:t, type:tinyint, comment:null), ]
+POSTHOOK: Lineage: over10k_orc.ts SIMPLE [(over10k_n2)over10k_n2.FieldSchema(name:ts, type:timestamp, comment:null), ]
+PREHOOK: query: alter table over10k_orc set TBLPROPERTIES ('transactional'='true')
+PREHOOK: type: ALTERTABLE_PROPERTIES
+PREHOOK: Input: default@over10k_orc
+PREHOOK: Output: default@over10k_orc
+POSTHOOK: query: alter table over10k_orc set TBLPROPERTIES ('transactional'='true')
+POSTHOOK: type: ALTERTABLE_PROPERTIES
+POSTHOOK: Input: default@over10k_orc
+POSTHOOK: Output: default@over10k_orc
+PREHOOK: query: select o1.ROW__ID r1, o1.* from over10k_orc o1 join over10k_orc o2
+on o1.ROW__ID.rowid == o2.ROW__ID.rowid and o1.ROW__ID.writeid == o2.ROW__ID.writeid and o1.ROW__ID.bucketid == o2.ROW__ID.bucketid
+PREHOOK: type: QUERY
+PREHOOK: Input: default@over10k_orc
+#### A masked pattern was here ####
+POSTHOOK: query: select o1.ROW__ID r1, o1.* from over10k_orc o1 join over10k_orc o2
+on o1.ROW__ID.rowid == o2.ROW__ID.rowid and o1.ROW__ID.writeid == o2.ROW__ID.writeid and o1.ROW__ID.bucketid == o2.ROW__ID.bucketid
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@over10k_orc
+#### A masked pattern was here ####
+{"writeid":0,"bucketid":536870912,"rowid":0}	3	260	65659	4294967508	91.53	43.18	false	oscar ovid	2013-03-01 09:11:58.703281	99.87	chemistry
+{"writeid":0,"bucketid":536870912,"rowid":1}	4	279	65745	4294967431	83.58	31.66	true	fred van buren	2013-03-01 09:11:58.703087	25.19	study skills
+{"writeid":0,"bucketid":536870912,"rowid":2}	3	469	65743	4294967428	10.66	39.84	false	victor zipper	2013-03-01 09:11:58.703181	26.60	mathematics
+{"writeid":0,"bucketid":536870912,"rowid":3}	4	392	65665	4294967391	53.27	3.86	true	zach miller	2013-03-01 09:11:58.703296	43.66	undecided
+{"writeid":0,"bucketid":536870912,"rowid":4}	3	395	65747	4294967313	57.25	3.17	true	wendy garcia	2013-03-01 09:11:58.703074	58.47	xylophone band
+{"writeid":0,"bucketid":536870912,"rowid":5}	3	277	65788	4294967403	58.08	20.55	false	xavier ovid	2013-03-01 09:11:58.703281	62.11	zync studies
+{"writeid":0,"bucketid":536870912,"rowid":6}	4	509	65776	4294967432	78.26	35.02	false	mike king	2013-03-01 09:11:58.703231	18.70	undecided
+{"writeid":0,"bucketid":536870912,"rowid":7}	3	308	65757	4294967430	49.28	38.04	false	nick zipper	2013-03-01 09:11:58.703132	1.86	kindergarten
+{"writeid":0,"bucketid":536870912,"rowid":8}	4	460	65625	4294967360	5.51	22.6	true	oscar laertes	2013-03-01 09:11:58.703293	42.86	nap time
+{"writeid":0,"bucketid":536870912,"rowid":9}	3	322	65672	4294967508	25.55	26.28	true	jessica carson	2013-03-01 09:11:58.70312	52.60	education
+{"writeid":0,"bucketid":536870912,"rowid":10}	3	464	65617	4294967424	82.3	2.92	false	ethan brown	2013-03-01 09:11:58.703076	18.51	wind surfing
+{"writeid":0,"bucketid":536870912,"rowid":11}	3	260	65659	4294967508	91.53	43.18	false	oscar ovid	2013-03-01 09:11:58.703281	99.87	chemistry
+{"writeid":0,"bucketid":536870912,"rowid":12}	4	279	65745	4294967431	83.58	31.66	true	fred van buren	2013-03-01 09:11:58.703087	25.19	study skills
+{"writeid":0,"bucketid":536870912,"rowid":13}	3	469	65743	4294967428	10.66	39.84	false	victor zipper	2013-03-01 09:11:58.703181	26.60	mathematics
+{"writeid":0,"bucketid":536870912,"rowid":14}	4	392	65665	4294967391	53.27	3.86	true	zach miller	2013-03-01 09:11:58.703296	43.66	undecided
+{"writeid":0,"bucketid":536870912,"rowid":15}	3	395	65747	4294967313	57.25	3.17	true	wendy garcia	2013-03-01 09:11:58.703074	58.47	xylophone band
+{"writeid":0,"bucketid":536870912,"rowid":16}	3	277	65788	4294967403	58.08	20.55	false	xavier ovid	2013-03-01 09:11:58.703281	62.11	zync studies
+{"writeid":0,"bucketid":536870912,"rowid":17}	4	509	65776	4294967432	78.26	35.02	false	mike king	2013-03-01 09:11:58.703231	18.70	undecided
+{"writeid":0,"bucketid":536870912,"rowid":18}	3	308	65757	4294967430	49.28	38.04	false	nick zipper	2013-03-01 09:11:58.703132	1.86	kindergarten
+{"writeid":0,"bucketid":536870912,"rowid":19}	4	460	65625	4294967360	5.51	22.6	true	oscar laertes	2013-03-01 09:11:58.703293	42.86	nap time
+{"writeid":0,"bucketid":536870912,"rowid":20}	3	322	65672	4294967508	25.55	26.28	true	jessica carson	2013-03-01 09:11:58.70312	52.60	education
+{"writeid":0,"bucketid":536870912,"rowid":21}	3	464	65617	4294967424	82.3	2.92	false	ethan brown	2013-03-01 09:11:58.703076	18.51	wind surfing
+PREHOOK: query: select o1.ROW__ID r1, o1.* from over10k_orc o1 join over10k_orc o2
+on o1.ROW__ID.rowid == o2.ROW__ID.rowid
+and o1.ROW__ID.writeid == o2.ROW__ID.writeid
+and o1.ROW__ID.bucketid == o2.ROW__ID.bucketid
+PREHOOK: type: QUERY
+PREHOOK: Input: default@over10k_orc
+#### A masked pattern was here ####
+POSTHOOK: query: select o1.ROW__ID r1, o1.* from over10k_orc o1 join over10k_orc o2
+on o1.ROW__ID.rowid == o2.ROW__ID.rowid
+and o1.ROW__ID.writeid == o2.ROW__ID.writeid
+and o1.ROW__ID.bucketid == o2.ROW__ID.bucketid
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@over10k_orc
+#### A masked pattern was here ####
+{"writeid":0,"bucketid":536870912,"rowid":0}	3	260	65659	4294967508	91.53	43.18	false	oscar ovid	2013-03-01 09:11:58.703281	99.87	chemistry
+{"writeid":0,"bucketid":536870912,"rowid":1}	4	279	65745	4294967431	83.58	31.66	true	fred van buren	2013-03-01 09:11:58.703087	25.19	study skills
+{"writeid":0,"bucketid":536870912,"rowid":2}	3	469	65743	4294967428	10.66	39.84	false	victor zipper	2013-03-01 09:11:58.703181	26.60	mathematics
+{"writeid":0,"bucketid":536870912,"rowid":3}	4	392	65665	4294967391	53.27	3.86	true	zach miller	2013-03-01 09:11:58.703296	43.66	undecided
+{"writeid":0,"bucketid":536870912,"rowid":4}	3	395	65747	4294967313	57.25	3.17	true	wendy garcia	2013-03-01 09:11:58.703074	58.47	xylophone band
+{"writeid":0,"bucketid":536870912,"rowid":5}	3	277	65788	4294967403	58.08	20.55	false	xavier ovid	2013-03-01 09:11:58.703281	62.11	zync studies
+{"writeid":0,"bucketid":536870912,"rowid":6}	4	509	65776	4294967432	78.26	35.02	false	mike king	2013-03-01 09:11:58.703231	18.70	undecided
+{"writeid":0,"bucketid":536870912,"rowid":7}	3	308	65757	4294967430	49.28	38.04	false	nick zipper	2013-03-01 09:11:58.703132	1.86	kindergarten
+{"writeid":0,"bucketid":536870912,"rowid":8}	4	460	65625	4294967360	5.51	22.6	true	oscar laertes	2013-03-01 09:11:58.703293	42.86	nap time
+{"writeid":0,"bucketid":536870912,"rowid":9}	3	322	65672	4294967508	25.55	26.28	true	jessica carson	2013-03-01 09:11:58.70312	52.60	education
+{"writeid":0,"bucketid":536870912,"rowid":10}	3	464	65617	4294967424	82.3	2.92	false	ethan brown	2013-03-01 09:11:58.703076	18.51	wind surfing
+{"writeid":0,"bucketid":536870912,"rowid":11}	3	260	65659	4294967508	91.53	43.18	false	oscar ovid	2013-03-01 09:11:58.703281	99.87	chemistry
+{"writeid":0,"bucketid":536870912,"rowid":12}	4	279	65745	4294967431	83.58	31.66	true	fred van buren	2013-03-01 09:11:58.703087	25.19	study skills
+{"writeid":0,"bucketid":536870912,"rowid":13}	3	469	65743	4294967428	10.66	39.84	false	victor zipper	2013-03-01 09:11:58.703181	26.60	mathematics
+{"writeid":0,"bucketid":536870912,"rowid":14}	4	392	65665	4294967391	53.27	3.86	true	zach miller	2013-03-01 09:11:58.703296	43.66	undecided
+{"writeid":0,"bucketid":536870912,"rowid":15}	3	395	65747	4294967313	57.25	3.17	true	wendy garcia	2013-03-01 09:11:58.703074	58.47	xylophone band
+{"writeid":0,"bucketid":536870912,"rowid":16}	3	277	65788	4294967403	58.08	20.55	false	xavier ovid	2013-03-01 09:11:58.703281	62.11	zync studies
+{"writeid":0,"bucketid":536870912,"rowid":17}	4	509	65776	4294967432	78.26	35.02	false	mike king	2013-03-01 09:11:58.703231	18.70	undecided
+{"writeid":0,"bucketid":536870912,"rowid":18}	3	308	65757	4294967430	49.28	38.04	false	nick zipper	2013-03-01 09:11:58.703132	1.86	kindergarten
+{"writeid":0,"bucketid":536870912,"rowid":19}	4	460	65625	4294967360	5.51	22.6	true	oscar laertes	2013-03-01 09:11:58.703293	42.86	nap time
+{"writeid":0,"bucketid":536870912,"rowid":20}	3	322	65672	4294967508	25.55	26.28	true	jessica carson	2013-03-01 09:11:58.70312	52.60	education
+{"writeid":0,"bucketid":536870912,"rowid":21}	3	464	65617	4294967424	82.3	2.92	false	ethan brown	2013-03-01 09:11:58.703076	18.51	wind surfing
+PREHOOK: query: delete from over10k_orc where t = 3
+PREHOOK: type: QUERY
+PREHOOK: Input: default@over10k_orc
+PREHOOK: Output: default@over10k_orc
+POSTHOOK: query: delete from over10k_orc where t = 3
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@over10k_orc
+POSTHOOK: Output: default@over10k_orc
+PREHOOK: query: select t, count(*) from over10k_orc
+group by t
+PREHOOK: type: QUERY
+PREHOOK: Input: default@over10k_orc
+#### A masked pattern was here ####
+POSTHOOK: query: select t, count(*) from over10k_orc
+group by t
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@over10k_orc
+#### A masked pattern was here ####
+4	8
+PREHOOK: query: select t, count(*) from over10k_orc
+group by t
+PREHOOK: type: QUERY
+PREHOOK: Input: default@over10k_orc
+#### A masked pattern was here ####
+POSTHOOK: query: select t, count(*) from over10k_orc
+group by t
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@over10k_orc
+#### A masked pattern was here ####
+4	8
+PREHOOK: query: select oo.ROW__ID.writeId, oo.ROW__IS__DELETED, oo.* from over10k_orc('acid.fetch.deleted.rows'='true') oo order by si
+PREHOOK: type: QUERY
+PREHOOK: Input: default@over10k_orc
+#### A masked pattern was here ####
+POSTHOOK: query: select oo.ROW__ID.writeId, oo.ROW__IS__DELETED, oo.* from over10k_orc('acid.fetch.deleted.rows'='true') oo order by si
+POSTHOOK: type: QUERY
+POSTHOOK: Input: default@over10k_orc
+#### A masked pattern was here ####
+10000001	true	3	260	65659	4294967508	91.53	43.18	false	oscar ovid	2013-03-01 09:11:58.703281	99.87	chemistry
+10000001	true	3	260	65659	4294967508	91.53	43.18	false	oscar ovid	2013-03-01 09:11:58.703281	99.87	chemistry
+10000001	true	3	277	65788	4294967403	58.08	20.55	false	xavier ovid	2013-03-01 09:11:58.703281	62.11	zync studies
+10000001	true	3	277	65788	4294967403	58.08	20.55	false	xavier ovid	2013-03-01 09:11:58.703281	62.11	zync studies
+0	false	4	279	65745	4294967431	83.58	31.66	true	fred van buren	2013-03-01 09:11:58.703087	25.19	study skills
+0	false	4	279	65745	4294967431	83.58	31.66	true	fred van buren	2013-03-01 09:11:58.703087	25.19	study skills
+10000001	true	3	308	65757	4294967430	49.28	38.04	false	nick zipper	2013-03-01 09:11:58.703132	1.86	kindergarten
+10000001	true	3	308	65757	4294967430	49.28	38.04	false	nick zipper	2013-03-01 09:11:58.703132	1.86	kindergarten
+10000001	true	3	322	65672	4294967508	25.55	26.28	true	jessica carson	2013-03-01 09:11:58.70312	52.60	education
+10000001	true	3	322	65672	4294967508	25.55	26.28	true	jessica carson	2013-03-01 09:11:58.70312	52.60	education
+0	false	4	392	65665	4294967391	53.27	3.86	true	zach miller	2013-03-01 09:11:58.703296	43.66	undecided
+0	false	4	392	65665	4294967391	53.27	3.86	true	zach miller	2013-03-01 09:11:58.703296	43.66	undecided
+10000001	true	3	395	65747	4294967313	57.25	3.17	true	wendy garcia	2013-03-01 09:11:58.703074	58.47	xylophone band
+10000001	true	3	395	65747	4294967313	57.25	3.17	true	wendy garcia	2013-03-01 09:11:58.703074	58.47	xylophone band
+0	false	4	460	65625	4294967360	5.51	22.6	true	oscar laertes	2013-03-01 09:11:58.703293	42.86	nap time
+0	false	4	460	65625	4294967360	5.51	22.6	true	oscar laertes	2013-03-01 09:11:58.703293	42.86	nap time
+10000001	true	3	464	65617	4294967424	82.3	2.92	false	ethan brown	2013-03-01 09:11:58.703076	18.51	wind surfing
+10000001	true	3	464	65617	4294967424	82.3	2.92	false	ethan brown	2013-03-01 09:11:58.703076	18.51	wind surfing
+10000001	true	3	469	65743	4294967428	10.66	39.84	false	victor zipper	2013-03-01 09:11:58.703181	26.60	mathematics
+10000001	true	3	469	65743	4294967428	10.66	39.84	false	victor zipper	2013-03-01 09:11:58.703181	26.60	mathematics
+0	false	4	509	65776	4294967432	78.26	35.02	false	mike king	2013-03-01 09:11:58.703231	18.70	undecided
+0	false	4	509	65776	4294967432	78.26	35.02	false	mike king	2013-03-01 09:11:58.703231	18.70	undecided

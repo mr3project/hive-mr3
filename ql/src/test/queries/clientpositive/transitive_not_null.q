@@ -4,30 +4,30 @@ create table tbl_2(i2 int, j2 int);
 insert into tbl_2 values(1,2),(1,null), (null, 200), (45,68);
 
 -- simple join
-explain cbo select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2;
+explain select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2;
 select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2;
 
-explain cbo select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2;
+explain select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2;
 select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2;
 
-explain cbo select * from tbl_1 full outer join tbl_2 on tbl_1.i1 = tbl_2.i2;
+explain select * from tbl_1 full outer join tbl_2 on tbl_1.i1 = tbl_2.i2;
 select * from tbl_1 full outer join tbl_2 on tbl_1.i1 = tbl_2.i2;
 
 -- conjunction
-explain cbo select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2;
+explain select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2;
 select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2;
 
-explain cbo select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2;
+explain select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2;
 select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1=tbl_2.j2;
 
 -- equi + non-equi
-explain cbo select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2;
+explain select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2;
 select * from tbl_1 left join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2;
 
-explain cbo select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2;
+explain select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2;
 select * from tbl_1 right join tbl_2 on tbl_1.i1 = tbl_2.i2 AND tbl_1.j1>tbl_2.j2;
 
-explain cbo SELECT t0.col0, t0.col1
+explain SELECT t0.col0, t0.col1
 FROM
   (
     SELECT i1 as col0, j1 as col1 FROM tbl_1

@@ -184,33 +184,6 @@ public class OpTraitsRulesProcFactory {
       }
 
       // Tez can handle unpopulated buckets
-      if (!HiveConf.getVar(pGraphContext.getConf(), HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
-        if (tbl.isPartitioned()) {
-          List<Partition> partitions = prunedParts.getNotDeniedPartns();
-          // construct a mapping of (Partition->bucket file names) and (Partition -> bucket number)
-          if (!partitions.isEmpty()) {
-            for (Partition p : partitions) {
-              List<String> fileNames =
-                      AbstractBucketJoinProc.getBucketFilePathsOfPartition(p.getDataLocation(),
-                              pGraphContext);
-              // The number of files for the table should be same as number of
-              // buckets.
-              if (fileNames.size() != 0 && fileNames.size() != numBuckets) {
-                return false;
-              }
-            }
-          }
-        } else {
-
-          List<String> fileNames =
-                  AbstractBucketJoinProc.getBucketFilePathsOfPartition(tbl.getDataLocation(),
-                          pGraphContext);
-          // The number of files for the table should be same as number of buckets.
-          if (fileNames.size() != 0 && fileNames.size() != numBuckets) {
-            return false;
-          }
-        }
-      }
       return true;
     }
 

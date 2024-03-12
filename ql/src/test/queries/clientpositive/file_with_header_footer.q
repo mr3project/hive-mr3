@@ -37,4 +37,4 @@ DROP TABLE header_footer_table_2;
 
 DROP TABLE emptytable;
 
-dfs -rmr hdfs:///tmp/test;
+dfs -rm -r -f hdfs:///tmp/test;

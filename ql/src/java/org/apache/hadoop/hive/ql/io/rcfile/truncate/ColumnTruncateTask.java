@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.io.rcfile.truncate;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.fs.FileSystem;
@@ -33,22 +34,22 @@ import org.apache.hadoop.hive.ql.QueryPlan;
 import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.Utilities;
-import org.apache.hadoop.hive.ql.exec.mr.HadoopJobExecHelper;
 import org.apache.hadoop.hive.ql.exec.mr.HadoopJobExecHook;
-import org.apache.hadoop.hive.ql.exec.mr.Throttle;
+import org.apache.hadoop.hive.ql.exec.mr3.MR3Task;
 import org.apache.hadoop.hive.ql.io.BucketizedHiveInputFormat;
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils;
 import org.apache.hadoop.hive.ql.io.HiveOutputFormatImpl;
+import org.apache.hadoop.hive.ql.plan.MapReduceMapWork;
 import org.apache.hadoop.hive.ql.plan.MapredWork;
+import org.apache.hadoop.hive.ql.plan.TezWork;
 import org.apache.hadoop.hive.ql.plan.api.StageType;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.FileInputFormat;
-import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.RunningJob;
 import org.apache.hadoop.mapreduce.MRJobConfig;
+import org.apache.hadoop.security.UserGroupInformation;
 
 @SuppressWarnings( { "deprecation", "unchecked" })
 public class ColumnTruncateTask extends Task<ColumnTruncateWork> implements Serializable,
@@ -57,14 +58,12 @@ public class ColumnTruncateTask extends Task<ColumnTruncateWork> implements Seri
   private static final long serialVersionUID = 1L;
 
   protected transient JobConf job;
-  protected HadoopJobExecHelper jobExecHelper;
 
   @Override
   public void initialize(QueryState queryState, QueryPlan queryPlan,
       DriverContext driverContext, CompilationOpContext opContext) {
     super.initialize(queryState, queryPlan, driverContext, opContext);
     job = new JobConf(conf, ColumnTruncateTask.class);
-    jobExecHelper = new HadoopJobExecHelper(job, this.console, this, this);
   }
 
   @Override
@@ -144,7 +143,6 @@ public class ColumnTruncateTask extends Task<ColumnTruncateWork> implements Seri
     job.setOutputValueClass(NullWritable.class);
 
     int returnVal = 0;
-    RunningJob rj = null;
 
     boolean noName = StringUtils.isEmpty(job.get(MRJobConfig.JOB_NAME));
 
@@ -174,27 +172,22 @@ public class ColumnTruncateTask extends Task<ColumnTruncateWork> implements Seri
       if (pwd != null) {
         HiveConf.setVar(job, HiveConf.ConfVars.METASTOREPWD, "HIVE");
       }
-      JobClient jc = new JobClient(job);
 
       String addedJars = Utilities.getResourceFiles(job, SessionState.ResourceType.JAR);
       if (!addedJars.isEmpty()) {
         job.set("tmpjars", addedJars);
       }
 
-      // make this client wait if job trcker is not behaving well.
-      Throttle.checkJobTracker(job, LOG);
-
-      // Finally SUBMIT the JOB!
-      rj = jc.submitJob(job);
-      this.jobID = rj.getJobID();
-      returnVal = jobExecHelper.progress(rj, jc, ctx);
+      // no need to set Task.jobID as we are not running MapReduce job.
+      // (TezTask and other Tasks do not set jobID.)
+      returnVal = submitJobToMr3(driverContext, job);
       success = (returnVal == 0);
 
     } catch (Exception e) {
-      String mesg = rj != null ? ("Ended Job = " + rj.getJobID()) : "Job Submission failed";
       // Has to use full name to make sure it does not conflict with
       // org.apache.commons.lang3.StringUtils
-      LOG.error(mesg, org.apache.hadoop.util.StringUtils.stringifyException(e));
+      LOG.error("Failed to run ColumnTruncateTask using MR3. Exception:\n{}",
+          org.apache.hadoop.util.StringUtils.stringifyException(e));
       setException(e);
 
       success = false;
@@ -204,17 +197,10 @@ public class ColumnTruncateTask extends Task<ColumnTruncateWork> implements Seri
         if (ctxCreated) {
           ctx.clear();
         }
-        if (rj != null) {
-          if (returnVal != 0) {
-            rj.killJob();
-          }
-        }
         ColumnTruncateMapper.jobClose(outputPath, success, job, console,
           work.getDynPartCtx(), null);
       } catch (Exception e) {
         LOG.warn("Failed while cleaning up ", e);
-      } finally {
-        HadoopJobExecHelper.runningJobs.remove(rj);
       }
     }
 
@@ -223,6 +209,20 @@ public class ColumnTruncateTask extends Task<ColumnTruncateWork> implements Seri
 
   private void addInputPaths(JobConf job, ColumnTruncateWork work) {
     FileInputFormat.addInputPath(job, work.getInputDir());
+  }
+
+  private int submitJobToMr3(DriverContext driverContext, JobConf jobConf) throws IOException {
+    jobConf.setCredentials(UserGroupInformation.getCurrentUser().getCredentials());
+    TezWork tezWork = createTezWork(jobConf);
+    MR3Task mr3Task = new MR3Task(conf, new SessionState.LogHelper(LOG), new AtomicBoolean(false));
+    return mr3Task.execute(driverContext, tezWork);
+  }
+
+  private TezWork createTezWork(JobConf jobConf) {
+    MapReduceMapWork truncateWork = new MapReduceMapWork(jobConf, getName());
+    TezWork tezWork = new TezWork(jobConf.getJobName(), jobConf);
+    tezWork.add(truncateWork);
+    return tezWork;
   }
 
   @Override

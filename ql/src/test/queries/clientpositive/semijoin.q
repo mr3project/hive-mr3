@@ -1,3 +1,5 @@
+--! qt:dataset:src
+--! qt:dataset:part
 SET hive.vectorized.execution.enabled=false;
 set hive.mapred.mode=nonstrict;
 -- SORT_QUERY_RESULTS
@@ -85,3 +87,19 @@ explain select key, value from src outr left semi join
 select key, value from src outr left semi join
     (select a.key, b.value from src a join (select distinct value from src) b on a.value > b.value group by a.key, b.value) inr
     on outr.key=inr.key and outr.value=inr.value;
+
+explain select pp.p_partkey from (select distinct p_name from part) p join part pp on pp.p_name = p.p_name;
+select pp.p_partkey from (select distinct p_name from part) p join part pp on pp.p_name = p.p_name;
+
+explain
+with ss as
+(select count(1), p_partkey, p_name from
+            part group by p_partkey ,p_name
+            having count(1) > 1)
+select count(1) from part pp where pp.p_partkey IN (select p_partkey from ss);
+
+with ss as
+(select count(1), p_partkey, p_name from
+            part group by p_partkey ,p_name
+            having count(1) > 1)
+select count(1) from part pp where pp.p_partkey IN (select p_partkey from ss);

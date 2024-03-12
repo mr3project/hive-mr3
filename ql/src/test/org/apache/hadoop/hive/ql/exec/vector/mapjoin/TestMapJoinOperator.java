@@ -410,6 +410,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testLong2() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 3553;
     int rowCount = 10;
 
@@ -430,6 +431,7 @@ public class TestMapJoinOperator {
   public boolean doTestLong2(long seed, int rowCount, int hiveConfVariation,
       VectorMapJoinVariation vectorMapJoinVariation,
       MapJoinPlanVariation mapJoinPlanVariation) throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
 
     HiveConf hiveConf = new HiveConf();
 
@@ -488,6 +490,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testLong3() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 9934;
     int rowCount = 10;
 
@@ -508,6 +511,7 @@ public class TestMapJoinOperator {
   public boolean doTestLong3(long seed, int rowCount, int hiveConfVariation,
       VectorMapJoinVariation vectorMapJoinVariation,
       MapJoinPlanVariation mapJoinPlanVariation) throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
 
     HiveConf hiveConf = new HiveConf();
 
@@ -567,6 +571,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testLong3_NoRegularKeys() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 9934;
     int rowCount = 10;
 
@@ -647,6 +652,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testLong4() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 3982;
     int rowCount = 10;
 
@@ -724,6 +730,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testLong5() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 3553;
     int rowCount = 10;
 
@@ -803,6 +810,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testLong6() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 9384;
     int rowCount = 10;
 
@@ -905,6 +913,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testMultiKey0() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 28322;
 
     int hiveConfVariation = 0;
@@ -984,6 +993,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testMultiKey1() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 87543;
 
     int hiveConfVariation = 0;
@@ -1065,6 +1075,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testMultiKey2() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 87543;
 
     int hiveConfVariation = 0;
@@ -1147,6 +1158,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testMultiKey3() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 87543;
 
     int hiveConfVariation = 0;
@@ -1227,6 +1239,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testString0() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 87543;
 
     int hiveConfVariation = 0;
@@ -1307,6 +1320,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testString1() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 3422;
 
     int hiveConfVariation = 0;
@@ -1393,6 +1407,7 @@ public class TestMapJoinOperator {
 
   @Test
   public void testString2() throws Exception {
+    org.apache.hadoop.hive.ql.exec.tez.ObjectCache.setupObjectRegistryDummy();  // for MR3
     long seed = 7439;
 
     int hiveConfVariation = 0;

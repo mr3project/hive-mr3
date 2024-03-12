@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.ReplChangeManager;
-import org.apache.hadoop.hive.shims.ShimLoader;
+import org.apache.hadoop.hive.ql.util.MR3FileUtils;
 import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.Test;
@@ -81,7 +81,7 @@ public class TestCopyUtils {
     assertFalse(copyUtils.limitReachedForLocalCopy(MB_16, 100L));
   }
 
-  @Test(expected = IOException.class)
+  @Test(expected = IllegalArgumentException.class)
   public void shouldThrowExceptionOnDistcpFailure() throws Exception {
     Path destination = mock(Path.class);
     Path source = mock(Path.class);
@@ -94,9 +94,9 @@ public class TestCopyUtils {
     mockStatic(Utils.class);
     when(destination.getFileSystem(same(conf))).thenReturn(fs);
     when(source.getFileSystem(same(conf))).thenReturn(fs);
-    when(FileUtils.distCp(same(fs), anyListOf(Path.class), same(destination),
-                          anyBoolean(), eq(null), same(conf),
-                          same(ShimLoader.getHadoopShims())))
+    when(MR3FileUtils.distCp(same(fs), anyListOf(Path.class), same(destination),
+                          anyBoolean(), eq(null), same(conf)
+                          ))
         .thenReturn(false);
     when(Utils.getUGI()).thenReturn(mock(UserGroupInformation.class));
     doReturn(false).when(copyUtils).regularCopy(same(fs), same(fs), anyListOf(ReplChangeManager.FileInfo.class));

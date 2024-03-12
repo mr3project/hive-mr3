@@ -416,6 +416,9 @@ public class TestInputOutputFormat {
     testFilePath = new Path(workDir, "TestInputOutputFormat." +
         testCaseName.getMethodName() + ".orc");
     fs.delete(testFilePath, false);
+
+    long orcMemoryPool = 512L * 1024 * 1024;
+    OrcFile.setupOrcMemoryManager(orcMemoryPool);   // for MR3
   }
 
   @Test

@@ -17,7 +17,7 @@ use importer;
 import from 'ql/test/data/exports/exim_employee_n6';
 describe formatted exim_employee_n6;
 select * from exim_employee_n6;
-dfs -rmr target/tmp/ql/test/data/exports/exim_employee_n6;
+dfs -rm -r -f target/tmp/ql/test/data/exports/exim_employee_n6;
 drop table exim_employee_n6;
 drop database importer;
 use default;

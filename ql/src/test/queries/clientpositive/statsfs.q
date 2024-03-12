@@ -1,3 +1,5 @@
+--! qt:dataset:srcpart
+--! qt:dataset:src
 set hive.stats.dbclass=fs;
 
 -- stats computation on partitioned table with analyze command
@@ -51,7 +53,6 @@ drop table t1_n120;
 
 create table t1_n120 (key string, value string) partitioned by (ds string, hr string);
 
-set hive.exec.dynamic.partition.mode=nonstrict;
 insert into table t1_n120 partition (ds,hr) select * from srcpart;
 
 describe formatted t1_n120 partition (ds='2008-04-08',hr='11');

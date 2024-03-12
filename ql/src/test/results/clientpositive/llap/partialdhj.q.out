@@ -46,6 +46,7 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: a
+                  filterExpr: value is not null (type: boolean)
                   Statistics: Num rows: 25 Data size: 2225 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
                     predicate: value is not null (type: boolean)
@@ -56,15 +57,17 @@ STAGE PLANS:
                       Statistics: Num rows: 25 Data size: 2225 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 25 Data size: 2225 Basic stats: COMPLETE Column stats: COMPLETE
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
         Map 4 
             Map Operator Tree:
                 TableScan
                   alias: b
+                  filterExpr: value is not null (type: boolean)
                   Statistics: Num rows: 25 Data size: 2225 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
                     predicate: value is not null (type: boolean)
@@ -75,15 +78,17 @@ STAGE PLANS:
                       Statistics: Num rows: 25 Data size: 2225 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 25 Data size: 2225 Basic stats: COMPLETE Column stats: COMPLETE
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
         Map 5 
             Map Operator Tree:
                 TableScan
                   alias: src
+                  filterExpr: value is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
                     predicate: value is not null (type: boolean)
@@ -94,12 +99,13 @@ STAGE PLANS:
                       Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col1 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col1 (type: string)
                         Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
                         value expressions: _col0 (type: string)
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
         Reducer 2 
             Execution mode: vectorized, llap
             Reduce Operator Tree:
@@ -116,14 +122,16 @@ STAGE PLANS:
                 DynamicPartitionHashJoin: true
                 Group By Operator
                   keys: _col0 (type: string)
+                  minReductionHashAggr: 0.40625
                   mode: hash
                   outputColumnNames: _col0
-                  Statistics: Num rows: 16 Data size: 1424 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 19 Data size: 1691 Basic stats: COMPLETE Column stats: COMPLETE
                   Reduce Output Operator
                     key expressions: _col0 (type: string)
+                    null sort order: z
                     sort order: +
                     Map-reduce partition columns: _col0 (type: string)
-                    Statistics: Num rows: 16 Data size: 1424 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 19 Data size: 1691 Basic stats: COMPLETE Column stats: COMPLETE
         Reducer 3 
             Execution mode: vectorized, llap
             Reduce Operator Tree:
@@ -131,12 +139,13 @@ STAGE PLANS:
                 keys: KEY._col0 (type: string)
                 mode: mergepartial
                 outputColumnNames: _col0
-                Statistics: Num rows: 16 Data size: 1424 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 19 Data size: 1691 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
                   key expressions: _col0 (type: string)
+                  null sort order: z
                   sort order: +
                   Map-reduce partition columns: _col0 (type: string)
-                  Statistics: Num rows: 16 Data size: 1424 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 19 Data size: 1691 Basic stats: COMPLETE Column stats: COMPLETE
         Reducer 6 
             Execution mode: vectorized, llap
             Reduce Operator Tree:
@@ -149,11 +158,11 @@ STAGE PLANS:
                 outputColumnNames: _col0, _col1, _col2
                 input vertices:
                   0 Reducer 3
-                Statistics: Num rows: 26 Data size: 6942 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 30 Data size: 8010 Basic stats: COMPLETE Column stats: COMPLETE
                 DynamicPartitionHashJoin: true
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 26 Data size: 6942 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 30 Data size: 8010 Basic stats: COMPLETE Column stats: COMPLETE
                   table:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -193,47 +202,47 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src
 POSTHOOK: Input: default@src1
 #### A masked pattern was here ####
+val_273	273	val_273
+val_401	401	val_401
+val_401	401	val_401
+val_409	409	val_409
+val_401	401	val_401
+val_401	401	val_401
+val_273	273	val_273
+val_409	409	val_409
+val_165	165	val_165
+val_311	311	val_311
+val_311	311	val_311
+val_273	273	val_273
+val_401	401	val_401
+val_484	484	val_484
+val_409	409	val_409
+val_165	165	val_165
+val_27	27	val_27
+val_311	311	val_311
 val_146	146	val_146
 val_406	406	val_406
+val_265	265	val_265
+val_255	255	val_255
 val_406	406	val_406
-val_409	409	val_409
 val_406	406	val_406
+val_193	193	val_193
 val_238	238	val_238
-val_409	409	val_409
+val_98	98	val_98
 val_278	278	val_278
 val_213	213	val_213
+val_193	193	val_193
 val_406	406	val_406
 val_146	146	val_146
 val_213	213	val_213
 val_66	66	val_66
 val_150	150	val_150
+val_193	193	val_193
+val_265	265	val_265
+val_98	98	val_98
 val_278	278	val_278
-val_409	409	val_409
+val_255	255	val_255
 val_238	238	val_238
-val_273	273	val_273
-val_401	401	val_401
-val_265	265	val_265
-val_255	255	val_255
-val_401	401	val_401
-val_193	193	val_193
-val_401	401	val_401
-val_401	401	val_401
-val_273	273	val_273
-val_98	98	val_98
-val_165	165	val_165
-val_311	311	val_311
-val_311	311	val_311
-val_193	193	val_193
-val_273	273	val_273
-val_401	401	val_401
-val_193	193	val_193
-val_265	265	val_265
-val_484	484	val_484
-val_98	98	val_98
-val_255	255	val_255
-val_165	165	val_165
-val_27	27	val_27
-val_311	311	val_311
 PREHOOK: query: EXPLAIN
 SELECT *
 FROM src
@@ -282,6 +291,7 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: src
+                  filterExpr: value is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
                     predicate: value is not null (type: boolean)
@@ -292,16 +302,18 @@ STAGE PLANS:
                       Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col1 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col1 (type: string)
                         Statistics: Num rows: 500 Data size: 89000 Basic stats: COMPLETE Column stats: COMPLETE
                         value expressions: _col0 (type: string)
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
         Map 3 
             Map Operator Tree:
                 TableScan
                   alias: a
+                  filterExpr: value is not null (type: boolean)
                   Statistics: Num rows: 25 Data size: 2225 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
                     predicate: value is not null (type: boolean)
@@ -312,15 +324,17 @@ STAGE PLANS:
                       Statistics: Num rows: 25 Data size: 2225 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 25 Data size: 2225 Basic stats: COMPLETE Column stats: COMPLETE
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
         Map 6 
             Map Operator Tree:
                 TableScan
                   alias: b
+                  filterExpr: value is not null (type: boolean)
                   Statistics: Num rows: 25 Data size: 2225 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
                     predicate: value is not null (type: boolean)
@@ -331,11 +345,12 @@ STAGE PLANS:
                       Statistics: Num rows: 25 Data size: 2225 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 25 Data size: 2225 Basic stats: COMPLETE Column stats: COMPLETE
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
         Reducer 2 
             Execution mode: vectorized, llap
             Reduce Operator Tree:
@@ -348,11 +363,11 @@ STAGE PLANS:
                 outputColumnNames: _col0, _col1, _col2
                 input vertices:
                   1 Reducer 5
-                Statistics: Num rows: 26 Data size: 6942 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 30 Data size: 8010 Basic stats: COMPLETE Column stats: COMPLETE
                 DynamicPartitionHashJoin: true
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 26 Data size: 6942 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 30 Data size: 8010 Basic stats: COMPLETE Column stats: COMPLETE
                   table:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -373,14 +388,16 @@ STAGE PLANS:
                 DynamicPartitionHashJoin: true
                 Group By Operator
                   keys: _col0 (type: string)
+                  minReductionHashAggr: 0.40625
                   mode: hash
                   outputColumnNames: _col0
-                  Statistics: Num rows: 16 Data size: 1424 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 19 Data size: 1691 Basic stats: COMPLETE Column stats: COMPLETE
                   Reduce Output Operator
                     key expressions: _col0 (type: string)
+                    null sort order: z
                     sort order: +
                     Map-reduce partition columns: _col0 (type: string)
-                    Statistics: Num rows: 16 Data size: 1424 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 19 Data size: 1691 Basic stats: COMPLETE Column stats: COMPLETE
         Reducer 5 
             Execution mode: vectorized, llap
             Reduce Operator Tree:
@@ -388,12 +405,13 @@ STAGE PLANS:
                 keys: KEY._col0 (type: string)
                 mode: mergepartial
                 outputColumnNames: _col0
-                Statistics: Num rows: 16 Data size: 1424 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 19 Data size: 1691 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
                   key expressions: _col0 (type: string)
+                  null sort order: z
                   sort order: +
                   Map-reduce partition columns: _col0 (type: string)
-                  Statistics: Num rows: 16 Data size: 1424 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 19 Data size: 1691 Basic stats: COMPLETE Column stats: COMPLETE
 
   Stage: Stage-0
     Fetch Operator
@@ -429,44 +447,44 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@src
 POSTHOOK: Input: default@src1
 #### A masked pattern was here ####
+273	val_273	val_273
+401	val_401	val_401
+401	val_401	val_401
+409	val_409	val_409
+401	val_401	val_401
+401	val_401	val_401
+273	val_273	val_273
+409	val_409	val_409
+165	val_165	val_165
+311	val_311	val_311
+311	val_311	val_311
+273	val_273	val_273
+401	val_401	val_401
+484	val_484	val_484
+409	val_409	val_409
+165	val_165	val_165
+27	val_27	val_27
+311	val_311	val_311
 146	val_146	val_146
 406	val_406	val_406
+265	val_265	val_265
+255	val_255	val_255
 406	val_406	val_406
-409	val_409	val_409
 406	val_406	val_406
+193	val_193	val_193
 238	val_238	val_238
-409	val_409	val_409
+98	val_98	val_98
 278	val_278	val_278
 213	val_213	val_213
+193	val_193	val_193
 406	val_406	val_406
 146	val_146	val_146
 213	val_213	val_213
 66	val_66	val_66
 150	val_150	val_150
+193	val_193	val_193
+265	val_265	val_265
+98	val_98	val_98
 278	val_278	val_278
-409	val_409	val_409
+255	val_255	val_255
 238	val_238	val_238
-273	val_273	val_273
-401	val_401	val_401
-265	val_265	val_265
-255	val_255	val_255
-401	val_401	val_401
-193	val_193	val_193
-401	val_401	val_401
-401	val_401	val_401
-273	val_273	val_273
-98	val_98	val_98
-165	val_165	val_165
-311	val_311	val_311
-311	val_311	val_311
-193	val_193	val_193
-273	val_273	val_273
-401	val_401	val_401
-193	val_193	val_193
-265	val_265	val_265
-484	val_484	val_484
-98	val_98	val_98
-255	val_255	val_255
-165	val_165	val_165
-27	val_27	val_27
-311	val_311	val_311

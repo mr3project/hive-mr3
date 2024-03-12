@@ -6,7 +6,7 @@ set hive.security.authorization.manager=org.apache.hadoop.hive.ql.security.autho
 create table exim_department_n1 ( dep_id int) stored as textfile;
 load data local inpath "../../data/files/test.dat" into table exim_department_n1;
 dfs ${system:test.dfs.mkdir} target/tmp/ql/test/data/exports/exim_department/temp;
-dfs -rmr target/tmp/ql/test/data/exports/exim_department;
+dfs -rm -r -f target/tmp/ql/test/data/exports/exim_department;
 export table exim_department_n1 to 'ql/test/data/exports/exim_department';
 drop table exim_department_n1;
 
@@ -23,5 +23,5 @@ set hive.security.authorization.enabled=false;
 select * from exim_department_n1;
 drop table exim_department_n1;
 drop database importer;
-dfs -rmr target/tmp/ql/test/data/exports/exim_department;
+dfs -rm -r -f target/tmp/ql/test/data/exports/exim_department;
 
