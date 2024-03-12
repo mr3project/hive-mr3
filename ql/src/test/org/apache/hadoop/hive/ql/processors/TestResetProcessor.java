@@ -34,26 +34,4 @@ import static org.mockito.Mockito.when;
 
 public class TestResetProcessor {
 
-  @Ignore
-  public void testResetClosesSparkSession() throws Exception {
-    SessionState mockSessionState = createMockSparkSessionState();
-    new ResetProcessor().run(mockSessionState, "");
-    verify(mockSessionState).closeSparkSession();
-  }
-
-  @Ignore
-  public void testResetExecutionEngineClosesSparkSession() throws Exception {
-    SessionState mockSessionState = createMockSparkSessionState();
-    new ResetProcessor().run(mockSessionState, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname);
-    verify(mockSessionState).closeSparkSession();
-  }
-
-  private static SessionState createMockSparkSessionState() {
-    SessionState mockSessionState = mock(SessionState.class);
-    Map<String, String> overriddenConfigurations = new HashMap<>();
-    overriddenConfigurations.put(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "spark");
-    when(mockSessionState.getOverriddenConfigurations()).thenReturn(overriddenConfigurations);
-    when(mockSessionState.getConf()).thenReturn(new HiveConf());
-    return mockSessionState;
-  }
 }

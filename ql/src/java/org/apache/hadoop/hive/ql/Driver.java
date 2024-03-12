@@ -2298,8 +2298,7 @@ public class Driver implements IDriver {
 
       setQueryDisplays(plan.getRootTasks());
       int mrJobs = Utilities.getMRTasks(plan.getRootTasks()).size();
-      int jobs = mrJobs + Utilities.getTezTasks(plan.getRootTasks()).size()
-          + Utilities.getSparkTasks(plan.getRootTasks()).size();
+      int jobs = mrJobs + Utilities.getTezTasks(plan.getRootTasks()).size();
       if (jobs > 0) {
         logMrWarning(mrJobs);
         console.printInfo("Query ID = " + queryId);

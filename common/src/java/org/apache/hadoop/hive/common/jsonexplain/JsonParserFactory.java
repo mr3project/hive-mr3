@@ -18,7 +18,6 @@
 
 package org.apache.hadoop.hive.common.jsonexplain;
 
-import org.apache.hadoop.hive.common.jsonexplain.spark.SparkJsonParser;
 import org.apache.hadoop.hive.common.jsonexplain.tez.TezJsonParser;
 import org.apache.hadoop.hive.conf.HiveConf;
 

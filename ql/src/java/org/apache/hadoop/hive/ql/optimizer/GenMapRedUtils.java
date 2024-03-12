@@ -63,7 +63,6 @@ import org.apache.hadoop.hive.ql.exec.UnionOperator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr.ExecDriver;
 import org.apache.hadoop.hive.ql.exec.mr.MapRedTask;
-import org.apache.hadoop.hive.ql.exec.spark.SparkTask;
 import org.apache.hadoop.hive.ql.exec.tez.TezTask;
 import org.apache.hadoop.hive.ql.hooks.ReadEntity;
 import org.apache.hadoop.hive.ql.io.RCFileInputFormat;
@@ -108,7 +107,6 @@ import org.apache.hadoop.hive.ql.plan.PlanUtils;
 import org.apache.hadoop.hive.ql.plan.RCFileMergeDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceWork;
-import org.apache.hadoop.hive.ql.plan.SparkWork;
 import org.apache.hadoop.hive.ql.plan.StatsWork;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.plan.TableScanDesc;
@@ -875,13 +873,6 @@ public final class GenMapRedUtils {
           ((MapWork)w).deriveExplainAttributes();
         }
       }
-    } else if (task instanceof SparkTask) {
-      SparkWork work = (SparkWork) task.getWork();
-      for (BaseWork w : work.getAllWorkUnsorted()) {
-        if (w instanceof MapWork) {
-          ((MapWork) w).deriveExplainAttributes();
-        }
-      }
     }
 
     if (task.getChildTasks() == null) {
@@ -940,18 +931,6 @@ public final class GenMapRedUtils {
               ((MapWork)w).internTable(interner);
               ((MapWork)w).deriveLlap(conf, false);
             }
-          }
-        }
-      }
-    }
-
-    List<SparkTask> sparkTasks = Utilities.getSparkTasks(tasks);
-    if (!sparkTasks.isEmpty()) {
-      for (SparkTask sparkTask : sparkTasks) {
-        SparkWork work = sparkTask.getWork();
-        for (BaseWork w : work.getAllWorkUnsorted()) {
-          if (w instanceof MapWork) {
-            ((MapWork) w).deriveLlap(conf, false);
           }
         }
       }
@@ -1516,11 +1495,6 @@ public final class GenMapRedUtils {
       if (mrWork.getReduceWork() != null) {
         mrWork.getReduceWork().setGatheringStats(true);
       }
-    } else if (currTask.getWork() instanceof SparkWork) {
-      SparkWork work = (SparkWork) currTask.getWork();
-      for (BaseWork w: work.getAllWork()) {
-        w.setGatheringStats(true);
-      }
     } else { // must be TezWork
       TezWork work = (TezWork) currTask.getWork();
       for (BaseWork w: work.getAllWork()) {
@@ -1913,9 +1887,6 @@ public final class GenMapRedUtils {
     if (currTask.getWork() instanceof TezWork) {
       // tez blurs the boundary between map and reduce, thus it has it's own config
       return hconf.getBoolVar(ConfVars.HIVEMERGETEZFILES);
-    } else if (currTask.getWork() instanceof SparkWork) {
-      // spark has its own config for merging
-      return hconf.getBoolVar(ConfVars.HIVEMERGESPARKFILES);
     }
     return isMergeRequiredForMr(hconf, fsOp, currTask);
   }
