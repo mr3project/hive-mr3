@@ -4021,7 +4021,14 @@ abstract class TxnHandler implements TxnStore, TxnStore.MutexAPI {
         (existingLock.isDbLock() && existingLock.type == LockType.SHARED_READ &&
           desiredLock.isPartitionLock() && desiredLock.type == LockType.EXCLUSIVE))
         ||
-
+        // 忽略写A分区，读B分区时的读锁等待排他锁问题
+        (existingLock.isPartitionLock() && existingLock.type==LockType.EXCLUSIVE
+            && desiredLock.isTableLock()&& desiredLock.type==LockType.SHARED_READ)
+        ||
+        // 忽略读A分区，写B分区时的排他锁等待读锁问题
+        (existingLock.isTableLock() && existingLock.type==LockType.SHARED_READ
+            && desiredLock.isPartitionLock() && desiredLock.type==LockType.EXCLUSIVE)
+        ||
       //different locks from same txn should not conflict with each other
       (desiredLock.txnId != 0 && desiredLock.txnId == existingLock.txnId) ||
       //txnId=0 means it's a select or IUD which does not write to ACID table, e.g
