@@ -388,17 +388,6 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-druid</artifactId>
-      <version>${calcite.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>org.apache.calcite.avatica</groupId>
-          <artifactId>avatica-core</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
       <groupId>org.apache.calcite.avatica</groupId>
       <artifactId>avatica</artifactId>
       <version>${avatica.version}</version>

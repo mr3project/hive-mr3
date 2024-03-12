@@ -26,7 +26,6 @@ import java.util.Map;
 import java.util.TreeMap;
 
 
-import org.apache.calcite.adapter.druid.DruidQuery;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelVisitor;
@@ -360,10 +359,6 @@ public class ASTConverter {
       HiveJdbcConverter f = (HiveJdbcConverter) r;
       s = new Schema(f);
       ast = ASTBuilder.table(f);
-    } else if (r instanceof DruidQuery) {
-      DruidQuery f = (DruidQuery) r;
-      s = new Schema(f);
-      ast = ASTBuilder.table(f);
     } else if (r instanceof Join) {
       Join join = (Join) r;
       QueryBlockInfo left = convertSource(join.getLeft());
@@ -441,7 +436,6 @@ public class ASTConverter {
     public void visit(RelNode node, int ordinal, RelNode parent) {
 
       if (node instanceof TableScan ||
-          node instanceof DruidQuery ||
           node instanceof HiveJdbcConverter) {
         ASTConverter.this.from = node;
       } else if (node instanceof Filter) {
@@ -770,14 +764,6 @@ public class ASTConverter {
       HiveTableScan hts = (HiveTableScan) scan;
       String tabName = hts.getTableAlias();
       for (RelDataTypeField field : scan.getRowType().getFieldList()) {
-        add(new ColumnInfo(tabName, field.getName()));
-      }
-    }
-
-    Schema(DruidQuery dq) {
-      HiveTableScan hts = (HiveTableScan) dq.getTableScan();
-      String tabName = hts.getTableAlias();
-      for (RelDataTypeField field : dq.getRowType().getFieldList()) {
         add(new ColumnInfo(tabName, field.getName()));
       }
     }

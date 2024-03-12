@@ -31,9 +31,6 @@ import org.antlr.runtime.CommonToken;
 import org.antlr.runtime.tree.Tree;
 import org.antlr.runtime.tree.TreeVisitor;
 import org.antlr.runtime.tree.TreeVisitorAction;
-import org.apache.calcite.adapter.druid.DruidQuery;
-import org.apache.calcite.adapter.druid.DruidSchema;
-import org.apache.calcite.adapter.druid.DruidTable;
 import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.adapter.jdbc.JdbcConvention;
 import org.apache.calcite.adapter.jdbc.JdbcImplementor;
@@ -176,7 +173,6 @@ import org.apache.hadoop.hive.ql.optimizer.calcite.rules.HiveAggregateProjectMer
 import org.apache.hadoop.hive.ql.optimizer.calcite.rules.HiveAggregatePullUpConstantsRule;
 import org.apache.hadoop.hive.ql.optimizer.calcite.rules.HiveAggregateReduceFunctionsRule;
 import org.apache.hadoop.hive.ql.optimizer.calcite.rules.HiveAggregateReduceRule;
-import org.apache.hadoop.hive.ql.optimizer.calcite.rules.HiveDruidRules;
 import org.apache.hadoop.hive.ql.optimizer.calcite.rules.HiveExceptRewriteRule;
 import org.apache.hadoop.hive.ql.optimizer.calcite.rules.HiveExpandDistinctAggregatesRule;
 import org.apache.hadoop.hive.ql.optimizer.calcite.rules.HiveFilterAggregateTransposeRule;
@@ -1904,26 +1900,6 @@ public class CalcitePlanner extends SemanticAnalyzer {
         perfLogger.PerfLogEnd(this.getClass().getName(), PerfLogger.OPTIMIZER, "Calcite: Window fixing rule");
       }
 
-      // 11. Apply Druid transformation rules
-      perfLogger.PerfLogBegin(this.getClass().getName(), PerfLogger.OPTIMIZER);
-      calciteOptimizedPlan = hepPlan(calciteOptimizedPlan, false, mdProvider.getMetadataProvider(), null,
-          HepMatchOrder.BOTTOM_UP,
-          HiveDruidRules.FILTER, HiveDruidRules.PROJECT_FILTER_TRANSPOSE,
-          HiveDruidRules.AGGREGATE_FILTER_TRANSPOSE,
-          HiveDruidRules.AGGREGATE_PROJECT,
-          HiveDruidRules.PROJECT,
-          HiveDruidRules.EXPAND_SINGLE_DISTINCT_AGGREGATES_DRUID_RULE,
-          HiveDruidRules.AGGREGATE,
-          HiveDruidRules.POST_AGGREGATION_PROJECT,
-          HiveDruidRules.FILTER_AGGREGATE_TRANSPOSE,
-          HiveDruidRules.FILTER_PROJECT_TRANSPOSE,
-          HiveDruidRules.HAVING_FILTER_RULE,
-          HiveDruidRules.SORT_PROJECT_TRANSPOSE,
-          HiveDruidRules.SORT,
-          HiveDruidRules.PROJECT_SORT_TRANSPOSE
-      );
-      perfLogger.PerfLogEnd(this.getClass().getName(), PerfLogger.OPTIMIZER, "Calcite: Druid transformation rules");
-
       if (conf.getBoolVar(ConfVars.HIVE_ENABLE_JDBC_PUSHDOWN)) {
         perfLogger.PerfLogBegin(this.getClass().getName(), PerfLogger.OPTIMIZER);
         calciteOptimizedPlan = hepPlan(calciteOptimizedPlan, true, mdProvider.getMetadataProvider(), null,
@@ -1957,7 +1933,7 @@ public class CalcitePlanner extends SemanticAnalyzer {
                 HepMatchOrder.BOTTOM_UP, ProjectRemoveRule.INSTANCE,
                 new ProjectMergeRule(false, HiveRelFactories.HIVE_BUILDER));
         calciteOptimizedPlan = hepPlan(calciteOptimizedPlan, true, mdProvider.getMetadataProvider(), null,
-                HiveFilterProjectTSTransposeRule.INSTANCE, HiveFilterProjectTSTransposeRule.INSTANCE_DRUID,
+                HiveFilterProjectTSTransposeRule.INSTANCE,
                 HiveProjectFilterPullUpConstantsRule.INSTANCE);
 
         // 12.2.  Introduce exchange operators below join/multijoin operators
@@ -2152,7 +2128,7 @@ public class CalcitePlanner extends SemanticAnalyzer {
       // matches FIL-PROJ-TS
       perfLogger.PerfLogBegin(this.getClass().getName(), PerfLogger.OPTIMIZER);
       basePlan = hepPlan(basePlan, true, mdProvider, executorProvider,
-          HiveFilterProjectTSTransposeRule.INSTANCE, HiveFilterProjectTSTransposeRule.INSTANCE_DRUID,
+          HiveFilterProjectTSTransposeRule.INSTANCE,
           HiveProjectFilterPullUpConstantsRule.INSTANCE);
       perfLogger.PerfLogEnd(this.getClass().getName(), PerfLogger.OPTIMIZER,
         "Calcite: Prejoin ordering transformation, Rerun PPD");
@@ -2204,18 +2180,7 @@ public class CalcitePlanner extends SemanticAnalyzer {
 
               private RelNode copyNodeScan(RelNode scan) {
                 final RelNode newScan;
-                if (scan instanceof DruidQuery) {
-                  final DruidQuery dq = (DruidQuery) scan;
-                  // Ideally we should use HiveRelNode convention. However, since Volcano planner
-                  // throws in that case because DruidQuery does not implement the interface,
-                  // we set it as Bindable. Currently, we do not use convention in Hive, hence that
-                  // should be fine.
-                  // TODO: If we want to make use of convention (e.g., while directly generating operator
-                  // tree instead of AST), this should be changed.
-                  newScan = DruidQuery.create(optCluster, optCluster.traitSetOf(BindableConvention.INSTANCE),
-                      scan.getTable(), dq.getDruidTable(),
-                      ImmutableList.<RelNode>of(dq.getTableScan()));
-                } else {
+                {
                   newScan = new HiveTableScan(optCluster, optCluster.traitSetOf(HiveRelNode.CONVENTION),
                       (RelOptHiveTable) scan.getTable(), ((RelOptHiveTable) scan.getTable()).getName(),
                       null, false, false);
@@ -2838,8 +2803,7 @@ public class CalcitePlanner extends SemanticAnalyzer {
         }
 
         // 4. Build operator
-        if (tableType == TableType.DRUID ||
-                (tableType == TableType.JDBC && tabMetaData.getProperty(Constants.JDBC_TABLE) != null)) {
+        if (tableType == TableType.JDBC && tabMetaData.getProperty(Constants.JDBC_TABLE) != null) {
           // Create case sensitive columns list
           List<String> originalColumnNames =
                   ((StandardStructObjectInspector)rowObjectInspector).getOriginalColumnNames();
@@ -2857,53 +2821,7 @@ public class CalcitePlanner extends SemanticAnalyzer {
           }
           fullyQualifiedTabName.add(tabMetaData.getTableName());
 
-          if (tableType == TableType.DRUID) {
-            // Build Druid query
-            String address = HiveConf.getVar(conf,
-                  HiveConf.ConfVars.HIVE_DRUID_BROKER_DEFAULT_ADDRESS);
-            String dataSource = tabMetaData.getParameters().get(Constants.DRUID_DATA_SOURCE);
-            Set<String> metrics = new HashSet<>();
-            RexBuilder rexBuilder = cluster.getRexBuilder();
-            RelDataTypeFactory dtFactory = rexBuilder.getTypeFactory();
-            List<RelDataType> druidColTypes = new ArrayList<>();
-            List<String> druidColNames = new ArrayList<>();
-            //@TODO FIX this, we actually do not need this anymore,
-            // in addition to that Druid allow numeric dimensions now so this check is not accurate
-            for (RelDataTypeField field : rowType.getFieldList()) {
-              if (DruidTable.DEFAULT_TIMESTAMP_COLUMN.equals(field.getName())) {
-                // Druid's time column is always not null.
-                druidColTypes.add(dtFactory.createTypeWithNullability(field.getType(), false));
-              } else {
-                druidColTypes.add(field.getType());
-              }
-              druidColNames.add(field.getName());
-              if (field.getName().equals(DruidTable.DEFAULT_TIMESTAMP_COLUMN)) {
-                // timestamp
-                continue;
-              }
-              if (field.getType().getSqlTypeName() == SqlTypeName.VARCHAR) {
-                // dimension
-                continue;
-              }
-              metrics.add(field.getName());
-            }
-
-            List<Interval> intervals = Arrays.asList(DruidTable.DEFAULT_INTERVAL);
-            rowType = dtFactory.createStructType(druidColTypes, druidColNames);
-            DruidTable druidTable = new DruidTable(new DruidSchema(address, address, false),
-                dataSource, RelDataTypeImpl.proto(rowType), metrics, DruidTable.DEFAULT_TIMESTAMP_COLUMN,
-                intervals, null, null);
-            RelOptHiveTable optTable = new RelOptHiveTable(relOptSchema, relOptSchema.getTypeFactory(), fullyQualifiedTabName,
-                rowType, tabMetaData, nonPartitionColumns, partitionColumns, virtualCols, conf,
-                partitionCache, colStatsCache, noColsMissingStats);
-            final TableScan scan = new HiveTableScan(cluster, cluster.traitSetOf(HiveRelNode.CONVENTION),
-                optTable, null == tableAlias ? tabMetaData.getTableName() : tableAlias,
-                getAliasId(tableAlias, qb), HiveConf.getBoolVar(conf,
-                    HiveConf.ConfVars.HIVE_CBO_RETPATH_HIVEOP), qb.isInsideView()
-                    || qb.getAliasInsideView().contains(tableAlias.toLowerCase()));
-            tableRel = DruidQuery.create(cluster, cluster.traitSetOf(BindableConvention.INSTANCE),
-                optTable, druidTable, ImmutableList.of(scan), DruidSqlOperatorConverter.getDefaultMap());
-          } else if (tableType == TableType.JDBC) {
+          if (tableType == TableType.JDBC) {
             RelOptHiveTable optTable = new RelOptHiveTable(relOptSchema, relOptSchema.getTypeFactory(), fullyQualifiedTabName,
                   rowType, tabMetaData, nonPartitionColumns, partitionColumns, virtualCols, conf,
                   partitionCache, colStatsCache, noColsMissingStats);
@@ -3039,11 +2957,6 @@ public class CalcitePlanner extends SemanticAnalyzer {
     private TableType obtainTableType(Table tabMetaData) {
       if (tabMetaData.getStorageHandler() != null) {
         final String storageHandlerStr = tabMetaData.getStorageHandler().toString();
-        if (storageHandlerStr
-            .equals(Constants.DRUID_HIVE_STORAGE_HANDLER_ID)) {
-          return TableType.DRUID;
-        }
-
         if (storageHandlerStr
             .equals(Constants.JDBC_HIVE_STORAGE_HANDLER_ID)) {
           return TableType.JDBC;
@@ -5121,7 +5034,6 @@ public class CalcitePlanner extends SemanticAnalyzer {
   }
 
   private enum TableType {
-    DRUID,
     NATIVE,
     JDBC
   }
