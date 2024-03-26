@@ -664,8 +664,10 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
       destTablePath = conf.getDestPath();
       isInsertOverwrite = conf.getInsertOverwrite();
       counterGroup = HiveConf.getVar(hconf, HiveConf.ConfVars.HIVE_COUNTER_GROUP);
-      LOG.info("Using serializer : " + serializer + " and formatter : " + hiveOutputFormat
-          + (isCompressed ? " with compression" : ""));
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Using serializer : " + serializer + " and formatter : " + hiveOutputFormat
+            + (isCompressed ? " with compression" : ""));
+      }
 
       // Timeout is chosen to make sure that even if one iteration takes more than
       // half of the script.timeout but less than script.timeout, we will still
