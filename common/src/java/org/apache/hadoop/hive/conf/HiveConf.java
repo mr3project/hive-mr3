@@ -101,10 +101,18 @@ public class HiveConf extends Configuration {
   private final List<String> restrictList = new ArrayList<String>();
   private final Set<String> hiddenSet = new HashSet<String>();
   private final Set<String> lockedSet = new HashSet<>();
-  private final List<String> rscList = new ArrayList<>();
 
   private Pattern modWhiteListPattern = null;
+  private volatile boolean isMr3ConfigUpdated = false;
   private static final int LOG_PREFIX_LENGTH = 64;
+
+  public boolean getMr3ConfigUpdated() {
+    return isMr3ConfigUpdated;
+  }
+
+  public void setMr3ConfigUpdated(boolean isMr3ConfigUpdated) {
+    this.isMr3ConfigUpdated = isMr3ConfigUpdated;
+  }
 
   public enum ResultFileFormat {
     INVALID_FORMAT {
@@ -5808,7 +5816,145 @@ public class HiveConf extends Configuration {
 
     HIVE_OTEL_METRICS_FREQUENCY_SECONDS("hive.otel.metrics.frequency.seconds", "0s",
         new TimeValidator(TimeUnit.SECONDS),
-        "Frequency at which the OTEL Metrics are refreshed, A value of 0 or less disable the feature");
+        "Frequency at which the OTEL Metrics are refreshed, A value of 0 or less disable the feature"),
+
+    MR3_APPLICATION_NAME_PREFIX("hive.mr3.application.name.prefix",
+        "hive-mr3",
+        "Prefix of MR3 application names."),
+    MR3_CLIENT_CONNECT_TIMEOUT("hive.mr3.client.connect.timeout",
+        "60000ms", new TimeValidator(TimeUnit.MILLISECONDS),
+        "Timeout for Hive to establish connection to MR3 Application Master."),
+    // ContainerWorker
+    // MR3_CONTAINER_MAX_JAVA_HEAP_FRACTION is not passed to ContainerWorker. Rather it is written to
+    // MR3Conf which is passed to DAGAppMaster and ContainerWorkers. That is, it is a part of mr3-conf.pb
+    // which is shared by both DAGAppMaster and ContainerWorkers as a LocalResource.
+    // It is fixed per MR3Session, i.e., at the time of creating a new MR3Session.
+    MR3_CONTAINER_MAX_JAVA_HEAP_FRACTION("hive.mr3.container.max.java.heap.fraction", 0.8f,
+        "Fraction of task memory to be used as Java heap. Fixed at the time of creating each MR3Session."),
+    // for ContainerGroup (in DAG)
+    // These configurations are used only when creating ContainerGroup.
+    // Hence, they do not affect MR3Conf (mr3-conf.pb) passed to DAGAppMaster and ContainerWorkers.
+    MR3_CONTAINERGROUP_SCHEME("hive.mr3.containergroup.scheme", "all-in-one",
+        new StringSet("all-in-one", "per-map-reduce", "per-vertex"),
+        "Scheme for assigning Vertexes to ContainerGroups"),
+    MR3_CONTAINER_ENV("hive.mr3.container.env", null,
+        "Environment string for ContainerGroups"),
+    MR3_CONTAINER_JAVA_OPTS("hive.mr3.container.java.opts", null,
+        "Java options for ContainerGroups"),
+    MR3_CONTAINER_COMBINE_TASKATTEMPTS("hive.mr3.container.combine.taskattempts", true,
+        "Allow multiple concurrent tasks in the same container"),
+    MR3_CONTAINER_REUSE("hive.mr3.container.reuse", true,
+        "Allow container reuse for running different tasks"),
+    MR3_CONTAINER_MIX_TASKATTEMPTS("hive.mr3.container.mix.taskattempts", true,
+        "Allow concurrent tasks from different DAGs in the same container"),
+    MR3_CONTAINER_USE_PER_QUERY_CACHE("hive.mr3.container.use.per.query.cache", true,
+        "Use per-query cache shared by all tasks in the same container"),
+    MR3_CONTAINER_MAX_NUM_WORKERS("hive.mr3.container.max.num.workers", Integer.MAX_VALUE,
+        "Max number of containers that can be created by a ContainerGroup"),
+    MR3_DAG_QUEUE_CAPACITY_SPECS("hive.mr3.dag.queue.capacity.specs", "",
+        "Specifications for capacity scheduling in MR3. Effective only if set to a non-empty string."),
+    // for DAG
+    // This configuration is used only when creating DAG.
+    // Hence, it does not affect MR3Conf (mr3-conf.pb) passed to DAGAppMaster and ContainerWorkers.
+    MR3_CONTAINER_STOP_CROSS_DAG_REUSE("hive.mr3.container.stop.cross.dag.reuse", false,
+        "Stop cross-DAG container reuse for ContainerGroups"),
+    MR3_DAG_QUEUE_NAME("hive.mr3.dag.queue.name", "default",
+        "Queue to which DAG is submitted when MR3 sets mr3.dag.queue.scheme to capacity"),
+    MR3_DAG_INCLUDE_INDETERMINATE_VERTEX("hive.mr3.dag.include.indeterminate.vertex", false,
+        "DAG contains indeterminate Vertexes and fault tolerance is not supported"),
+    // common to Vertex, ContainerGroup, LLAP Daemon
+    MR3_RESOURCE_VCORES_DIVISOR("hive.mr3.resource.vcores.divisor", 1,
+        "Divisor for CPU cores, between 1 and 1000"),
+    // Vertex
+    MR3_MAP_TASK_MEMORY_MB("hive.mr3.map.task.memory.mb", 1024,
+        "Memory allocated to each mapper, in MB"),
+    MR3_REDUCE_TASK_MEMORY_MB("hive.mr3.reduce.task.memory.mb", 1024,
+        "Memory allocated to each reducer, in MB"),
+    MR3_MAP_TASK_VCORES("hive.mr3.map.task.vcores", 1,
+        "CPU cores allocated to each mapper"),
+    MR3_REDUCE_TASK_VCORES("hive.mr3.reduce.task.vcores", 1,
+        "CPU cores allocated to each reducer"),
+    // ContainerGroup -- All-in-One
+    MR3_ALLINONE_CONTAINERGROUP_MEMORY_MB("hive.mr3.all-in-one.containergroup.memory.mb", 1024,
+        "Memory allocated to each ContainerGroup for All-in-One, in MB"),
+    MR3_ALLINONE_CONTAINERGROUP_VCORES("hive.mr3.all-in-one.containergroup.vcores", 1,
+        "CPU cores allocated to each ContainerGroup for All-in-One"),
+    // ContainerGroup -- Per-Map-Reduce and Per-Vertex
+    // Map/Reduce ContainerGroup size can be different from Vertex.taskResource, e.g.,
+    // 'combine TaskAttempts' is enabled
+    MR3_MAP_CONTAINERGROUP_MEMORY_MB("hive.mr3.map.containergroup.memory.mb", 1024,
+        "Memory allocated to each ContainerGroup for mappers, in MB"),
+    MR3_REDUCE_CONTAINERGROUP_MEMORY_MB("hive.mr3.reduce.containergroup.memory.mb", 1024,
+        "Memory allocated to each ContainerGroup for reducers, in MB"),
+    MR3_MAP_CONTAINERGROUP_VCORES("hive.mr3.map.containergroup.vcores", 1,
+        "CPU cores allocated to each ContainerGroup for mappers"),
+    MR3_REDUCE_CONTAINERGROUP_VCORES("hive.mr3.reduce.containergroup.vcores", 1,
+        "CPU cores allocated to each ContainerGroup for reducers"),
+    // use LLAP IO for All-in-One and Per-Map-Reduce schemes when LLAP_IO_ENABLED = true
+    MR3_LLAP_HEADROOM_MB("hive.mr3.llap.headroom.mb", 1024,
+        "Memory allocated to JVM headroom when LLAP/IO is enabled"),
+    MR3_LLAP_DAEMON_TASK_MEMORY_MB("hive.mr3.llap.daemon.task.memory.mb", 0,
+        "Memory allocated to a DaemonTaskAttempt for LLAP/IO, in MB"),
+    MR3_LLAP_DAEMON_TASK_VCORES("hive.mr3.llap.daemon.task.vcores", 0,
+        "CPU cores allocated to a DaemonTaskAttempt for LLAP I/O"),
+    MR3_LLAP_ORC_MEMORY_PER_THREAD_MB("hive.mr3.llap.orc.memory.per.thread.mb", 1024,
+        "Memory allocated to each ORC manager in low-level LLAP I/O threads, in MB"),
+    // EXEC
+    MR3_EXEC_SUMMARY("hive.mr3.exec.print.summary", false,
+        "Display breakdown of execution steps, for every query executed by the shell"),
+    MR3_EXEC_INPLACE_PROGRESS("hive.mr3.exec.inplace.progress", true,
+        "Update job execution progress in-place in the terminal"),
+    // daemon ShuffleHandler
+    MR3_USE_DAEMON_SHUFFLEHANDLER("hive.mr3.use.daemon.shufflehandler", 0,
+        "Number of daemon ShuffleHandlers in every non-local ContainerWorker"),
+    // HiveServer2
+    HIVE_SERVER2_MR3_SHARE_SESSION("hive.server2.mr3.share.session", false,
+        "Use a common MR3Session to be shared by all HiveSessions"),
+    // for internal use only
+    // -1: not stored in HiveConf yet
+    HIVE_QUERY_ESTIMATE_REDUCE_NUM_TASKS("hive.query.estimate.reducer.num.tasks.internal", -1,
+        "Estimate number of reducer tasks based on MR3SessionManagerImpl.getEstimateNumTasks() for each query"),
+    MR3_BUCKET_MAPJOIN_ESTIMATE_NUM_NODES("hive.mr3.bucket.mapjoin.estimate.num.nodes", -1,
+        "Estimate number of nodes for converting to bucket mapjoin"),
+
+    // runtime
+    MR3_MAPJOIN_INTERRUPT_CHECK_INTERVAL("hive.mr3.mapjoin.interrupt.check.interval", 100000L,
+        "Interval at which HashTableLoader checks the interrupt state"),
+    MR3_DAG_ADDITIONAL_CREDENTIALS_SOURCE("hive.mr3.dag.additional.credentials.source", "",
+        "Comma separated list of additional paths for obtaining DAG Credentials"),
+
+    // fault tolerance
+    MR3_AM_TASK_MAX_FAILED_ATTEMPTS("hive.mr3.am.task.max.failed.attempts", 3,
+        "Max number of attempts for each Task"),
+
+    // speculative execution
+    MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT("hive.mr3.am.task.concurrent.run.threshold.percent", 100,
+        "Percentage of TaskAttempts that complete before starting speculative execution. " +
+        "Can be set to an integer between 1 and 100. " +
+        "If set to 100, speculative execution of TaskAttempts is disabled."),
+
+    // deleting Vertex-local directory
+    MR3_DAG_DELETE_VERTEX_LOCAL_DIRECTORY("hive.mr3.delete.vertex.local.directory", false,
+        "Delete Vertex-local directories in ContainerWork when all destination Vertexes complete"),
+
+    // high availability
+    MR3_ZOOKEEPER_APPID_NAMESPACE("hive.mr3.zookeeper.appid.namespace", "mr3AppId",
+        "ZooKeeper namespace for sharing Application ID"),
+
+    // Kubernetes
+    HIVE_MR3_LOCALIZE_SESSION_JARS("hive.mr3.localize.session.jars", true,
+        "Localize session jars"),
+
+    // Compaction using MR3
+    HIVE_MR3_COMPACTION_USING_MR3("hive.mr3.compaction.using.mr3", false,
+        "Enable compaction using MR3. High Availability needs to be enabled."),
+
+    HIVE_MR3_QUERY_DAG_ID_ID("hive.mr3.query.dag.id.id", -1, "DAGID.id for internal use"),
+
+    HIVE_MR3_CONFIG_REMOVE_KEYS("hive.mr3.config.remove.keys", "",
+        "Comman-separated list of config keys to remove from JobConf"),
+    HIVE_MR3_CONFIG_REMOVE_PREFIXES("hive.mr3.config.remove.prefixes", "",
+        "Comma-separated list of key prefixes to remove from JobConf");
 
     public final String varname;
     public final String altName;
