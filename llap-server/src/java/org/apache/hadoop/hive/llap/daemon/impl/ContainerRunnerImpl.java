@@ -94,8 +94,8 @@ import org.apache.tez.common.security.TokenCache;
 import org.apache.tez.dag.api.TezConfiguration;
 import org.apache.tez.dag.api.TezConstants;
 import org.apache.tez.dag.records.TezTaskAttemptID;
-import org.apache.tez.hadoop.shim.HadoopShim;
-import org.apache.tez.hadoop.shim.HadoopShimsLoader;
+// import org.apache.tez.hadoop.shim.HadoopShim;
+// import org.apache.tez.hadoop.shim.HadoopShimsLoader;
 import org.apache.tez.runtime.api.impl.ExecutionContextImpl;
 import org.apache.tez.runtime.api.impl.TezEvent;
 import org.slf4j.Logger;
@@ -128,7 +128,7 @@ public class ContainerRunnerImpl extends CompositeService implements ContainerRu
   private final LlapDaemonExecutorMetrics metrics;
   private final TaskRunnerCallable.ConfParams confParams;
   private final KilledTaskHandler killedTaskHandler = new KilledTaskHandlerImpl();
-  private final HadoopShim tezHadoopShim;
+  // private final HadoopShim tezHadoopShim;
   private final LlapSignerImpl signer;
   private final String clusterId;
   private final DaemonId daemonId;
@@ -174,7 +174,7 @@ public class ContainerRunnerImpl extends CompositeService implements ContainerRu
         conf.getInt(TezConfiguration.TEZ_TASK_MAX_EVENTS_PER_HEARTBEAT,
             TezConfiguration.TEZ_TASK_MAX_EVENTS_PER_HEARTBEAT_DEFAULT)
     );
-    tezHadoopShim = new HadoopShimsLoader(conf).getHadoopShim();
+    // tezHadoopShim = new HadoopShimsLoader(conf).getHadoopShim();
 
     LOG.info("ContainerRunnerImpl config: " +
             "memoryPerExecutorDerviced=" + memoryPerExecutor
@@ -318,9 +318,9 @@ public class ContainerRunnerImpl extends CompositeService implements ContainerRu
       // TODO: ideally we'd register TezCounters here, but it seems impossible before registerTask.
       WmFragmentCounters wmCounters = new WmFragmentCounters(addTaskTimes);
       TaskRunnerCallable callable = new TaskRunnerCallable(request, fragmentInfo, callableConf,
-          new ExecutionContextImpl(llapHost), env,
+          new ExecutionContextImpl(llapHost, null, null), env,
           credentials, memoryPerExecutor, amReporter, confParams, metrics, killedTaskHandler,
-          this, tezHadoopShim, attemptId, vertex, initialEvent, fsTaskUgi,
+          this, /* tezHadoopShim, */ attemptId, vertex, initialEvent, fsTaskUgi,
           completionListener, socketFactory, isGuaranteed, wmCounters);
       submissionState = executorService.schedule(callable);
 
