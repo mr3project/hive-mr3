@@ -57,7 +57,7 @@ public class TestIcebergNegativeCliDriver {
 
   @Test
   public void testCliDriver() throws Exception {
-    ObjectCache.setupObjectRegistry(new ObjectRegistryImpl());
+    ObjectCache.setupObjectRegistryDummy();
     adapter.runTest(name, qfile);
   }
 }
