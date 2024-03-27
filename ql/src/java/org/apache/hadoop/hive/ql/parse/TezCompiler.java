@@ -840,7 +840,7 @@ public class TezCompiler extends TaskCompiler {
     }
 
     if ("llap".equalsIgnoreCase(conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_MODE))) {
-      LlapClusterStateForCompile llapInfo = LlapClusterStateForCompile.getClusterInfo(conf);
+      LlapClusterStateForCompile llapInfo = null;
       physicalCtx = new LlapDecider(llapInfo).resolve(physicalCtx);
     } else {
       LOG.debug("Skipping llap decider");
