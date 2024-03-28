@@ -332,7 +332,7 @@ public class MR3Task {
       JobConf jobConf, TezWork tezWork, Context context,
       Map<String, LocalResource> amDagCommonLocalResources, Path sessionScratchDir,
       Map<BaseWork, JobConf> workToConf) throws Exception {
-    perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.MR3_BUILD_DAG);
+    perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_BUILD_DAG);
     Map<BaseWork, Vertex> workToVertex = new HashMap<BaseWork, Vertex>();
 
     // getAllWork returns a topologically sorted list, which we use to make
@@ -386,7 +386,7 @@ public class MR3Task {
     }
 
     for (BaseWork w: ws) {
-      perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.MR3_CREATE_VERTEX + w.getName());
+      perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_CREATE_VERTEX + w.getName());
 
       if (w instanceof UnionWork) {
         buildVertexGroupEdges(
@@ -396,7 +396,7 @@ public class MR3Task {
             jobConf, dag, tezWork, w, workToVertex, workToConf, mr3ScratchDir, context);
       }
 
-      perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.MR3_CREATE_VERTEX + w.getName());
+      perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_CREATE_VERTEX + w.getName());
     }
 
     addMissingVertexManagersToDagVertices(jobConf, dag);
@@ -433,7 +433,7 @@ public class MR3Task {
       LOG.info("Skip adding credentials for DAG: " + dagName);
     }
 
-    perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.MR3_BUILD_DAG);
+    perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_BUILD_DAG);
     return dag;
   }
 

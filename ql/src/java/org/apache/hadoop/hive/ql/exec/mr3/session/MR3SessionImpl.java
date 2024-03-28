@@ -334,7 +334,7 @@ public class MR3SessionImpl implements MR3Session {
       Context ctx,
       AtomicBoolean isShutdown,
       PerfLogger perfLogger) throws Exception {
-    perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.MR3_SUBMIT_DAG);
+    perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_SUBMIT_DAG);
 
     HiveMR3Client currentHiveMr3Client;
     Map<String, LocalResource> addtlAmLocalResources = null;
@@ -368,7 +368,7 @@ public class MR3SessionImpl implements MR3Session {
     MR3JobRef mr3JobRef = currentHiveMr3Client.submitDag(
         dagProto, addtlAmCredentials, addtlAmLocalResources, workMap, dag, ctx, isShutdown);
 
-    perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.MR3_SUBMIT_DAG);
+    perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_SUBMIT_DAG);
     return mr3JobRef;
   }
 
