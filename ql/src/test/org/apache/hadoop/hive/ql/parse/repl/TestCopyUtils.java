@@ -26,6 +26,7 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.ReplChangeManager;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.hive.shims.Utils;
+import org.apache.hadoop.hive.ql.util.MR3FileUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -88,7 +89,7 @@ public class TestCopyUtils {
     }
   }
 
-  @Test(expected = IOException.class)
+  @Test(expected = IllegalArgumentException.class)
   public void shouldThrowExceptionOnDistcpFailure() throws Exception {
     Path destination = mock(Path.class);
     Path source = mock(Path.class);
@@ -102,8 +103,7 @@ public class TestCopyUtils {
     try (MockedStatic<FileUtils> fileUtilsMockedStatic = mockStatic(FileUtils.class);
          MockedStatic<Utils> utilsMockedStatic = mockStatic(Utils.class)) {
       fileUtilsMockedStatic.when(
-              () -> FileUtils.distCp(same(fs), anyList(), same(destination), anyBoolean(), eq(null), same(conf),
-                      same(ShimLoader.getHadoopShims()))).thenReturn(false);
+              () -> MR3FileUtils.distCp(same(fs), anyList(), same(destination), anyBoolean(), eq(null), same(conf))).thenReturn(false);
       utilsMockedStatic.when(Utils::getUGI).thenReturn(mock(UserGroupInformation.class));
 
       copyUtils.doCopy(destination, srcPaths);

@@ -46,6 +46,8 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.parse.LoadSemanticAnalyzer;
 import org.apache.hadoop.hive.ql.plan.api.StageType;
 
+import org.apache.hadoop.hive.ql.util.MR3FileUtils;
+
 import static org.apache.hadoop.hive.common.FileUtils.HIDDEN_FILES_PATH_FILTER;
 
 public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
@@ -91,7 +93,7 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
         ReplChangeManager.FileInfo sourceInfo = ReplChangeManager
           .getFileInfo(new Path(result[0]), result[1], result[2], result[3], conf);
         DataCopyStatistics copyStatistics = new DataCopyStatistics();
-        if (FileUtils.copy(
+        if (MR3FileUtils.copy(
           sourceInfo.getSrcFs(), sourceInfo.getSourcePath(),
           dstFs, toPath, false, false, conf, copyStatistics)) {
           // increment total bytes replicated count
