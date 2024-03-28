@@ -48,7 +48,7 @@ import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
-import org.apache.log4j.NDC;
+// import org.apache.log4j.NDC;
 import org.apache.tez.common.CallableWithNdc;
 import org.apache.tez.common.TezCommonUtils;
 import org.apache.tez.common.security.JobTokenIdentifier;
@@ -316,7 +316,7 @@ public class TaskRunnerCallable extends CallableWithNdc<TaskRunner2Result> {
     }
   }
 
-  private void setMDCFromNDC() {
+  /* private void setMDCFromNDC() {
     final Stack<String> clonedNDC = NDC.cloneStack();
     final String fragId = clonedNDC.pop();
     final String queryId = clonedNDC.pop();
@@ -324,7 +324,7 @@ public class TaskRunnerCallable extends CallableWithNdc<TaskRunner2Result> {
     MDC.put("dagId", dagId);
     MDC.put("queryId", queryId);
     MDC.put("fragmentId", fragId);
-  }
+  } */
 
   private String constructThreadNameSuffix(TezTaskAttemptID taskAttemptId) {
     StringBuilder sb = new StringBuilder();
