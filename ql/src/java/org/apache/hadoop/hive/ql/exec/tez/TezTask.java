@@ -815,16 +815,7 @@ public class TezTask extends Task<TezWork> {
   @Override
   public void shutdown() {
     super.shutdown();
-    DAGClient dagClient = null;
-    synchronized (dagClientLock) {
-      isShutdown = true;
-      dagClient = this.dagClient;
-      // Don't set dagClient to null here - execute will only clean up operators if it's set.
-    }
-    LOG.info("Shutting down Tez task " + this + " "
-        + ((dagClient == null) ? " before submit" : ""));
-    if (dagClient == null) return;
-    closeDagClientOnCancellation(dagClient);
+    isShutdownMr3.set(true);
   }
 
   /** DAG client that does dumb global sync on all the method calls;
