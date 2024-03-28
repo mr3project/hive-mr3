@@ -176,8 +176,8 @@ public class MR3JobMonitor {
     synchronized (shutdownList) {
       shutdownList.add(dagClient);
     }
-    perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.MR3_RUN_DAG);
-    perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.MR3_SUBMIT_TO_RUNNING);
+    perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_RUN_DAG);
+    perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_SUBMIT_TO_RUNNING);
     DAGState$.Value lastState = null;
     String lastReport = null;
     boolean running = false;
@@ -214,7 +214,7 @@ public class MR3JobMonitor {
               this.executionStartTime = System.currentTimeMillis();
             } else if (state == DAGState$.MODULE$.Running()) {
               if (!running) {
-                perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.MR3_SUBMIT_TO_RUNNING);
+                perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_SUBMIT_TO_RUNNING);
                 console.printInfo("Status: Running\n");
                 this.executionStartTime = System.currentTimeMillis();
                 running = true;
@@ -283,7 +283,7 @@ public class MR3JobMonitor {
       }
     }
 
-    perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.MR3_RUN_DAG);
+    perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_RUN_DAG);
     printSummary(success, dagStatus);
     return rc;
   }
@@ -417,17 +417,17 @@ public class MR3JobMonitor {
            * We may have missed the start of the vertex due to the 3 seconds interval
            */
           if (!perfLogger.startTimeHasMethod(PerfLogger.MR3_RUN_VERTEX + s)) {
-            perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.MR3_RUN_VERTEX + s);
+            perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_RUN_VERTEX + s);
           }
 
           if (!perfLogger.endTimeHasMethod(PerfLogger.MR3_RUN_VERTEX + s)) {
-            perfLogger.PerfLogEnd(CLASS_NAME, PerfLogger.MR3_RUN_VERTEX + s);
+            perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_RUN_VERTEX + s);
           }
         }
         if (complete < total && (complete > 0 || running > 0 || failed > 0)) {
 
           if (!perfLogger.startTimeHasMethod(PerfLogger.MR3_RUN_VERTEX + s)) {
-            perfLogger.PerfLogBegin(CLASS_NAME, PerfLogger.MR3_RUN_VERTEX + s);
+            perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_RUN_VERTEX + s);
           }
 
           /* vertex is started, but not complete */
