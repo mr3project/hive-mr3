@@ -88,7 +88,7 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.util.AuxiliaryServiceHelper;
-import org.apache.log4j.NDC;
+// import org.apache.log4j.NDC;
 import org.apache.tez.common.security.JobTokenIdentifier;
 import org.apache.tez.common.security.TokenCache;
 import org.apache.tez.dag.api.TezConfiguration;
@@ -258,9 +258,9 @@ public class ContainerRunnerImpl extends CompositeService implements ContainerRu
     // thread pool. For now, we will push both dagId and queryId into NDC and the custom thread
     // pool that we use for task execution and llap io (StatsRecordingThreadPool) will pop them
     // using reflection and update the MDC.
-    NDC.push(dagId);
-    NDC.push(queryId);
-    NDC.push(fragmentId);
+    // NDC.push(dagId);
+    // NDC.push(queryId);
+    // NDC.push(fragmentId);
     Scheduler.SubmissionState submissionState;
     SubmitWorkResponseProto.Builder responseBuilder = SubmitWorkResponseProto.newBuilder();
     try {
@@ -338,7 +338,7 @@ public class ContainerRunnerImpl extends CompositeService implements ContainerRu
       }
     } finally {
       MDC.clear();
-      NDC.clear();
+      // NDC.clear();
     }
 
     return responseBuilder.setUniqueNodeId(daemonId.getUniqueNodeIdInCluster())
