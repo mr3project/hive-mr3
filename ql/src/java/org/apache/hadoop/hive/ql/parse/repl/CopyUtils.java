@@ -34,7 +34,7 @@ import org.apache.hadoop.hive.ql.exec.repl.util.ReplUtils;
 import org.apache.hadoop.hive.ql.exec.util.Retryable;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.metadata.HiveFatalException;
-import org.apache.hadoop.hive.shims.ShimLoader;
+import org.apache.hadoop.hive.ql.util.MR3FileUtils;
 import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
@@ -478,14 +478,13 @@ public class CopyUtils {
           RAW_RESERVED_VIRTUAL_PATH + destinationUri.getPath());
     }
 
-    if (!FileUtils.distCp(
+    if (!MR3FileUtils.distCp(
         sourceFs, // source file system
         srcList,  // list of source paths
         destination,
         false,
         proxyUser,
-        hiveConf,
-        ShimLoader.getHadoopShims())) {
+        hiveConf)) {
       LOG.error("Distcp failed to copy files: " + srcList + " to destination: " + destination);
       throw new IOException("Distcp operation failed.");
     }
