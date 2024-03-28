@@ -195,7 +195,7 @@ public class DagUtils {
    */
   private final ConcurrentHashMap<String, Object> copyNotifiers = new ConcurrentHashMap<>();
 
-  class CollectFileSinkUrisNodeProcessor implements SemanticNodeProcessor {
+  public class CollectFileSinkUrisNodeProcessor implements SemanticNodeProcessor {
 
     private final Set<URI> uris;
     private final Set<TableDesc> tableDescs;
@@ -229,11 +229,11 @@ public class DagUtils {
     }
   }
 
-  private void addCollectFileSinkUrisRules(Map<SemanticRule, SemanticNodeProcessor> opRules, SemanticNodeProcessor np) {
+  static private void addCollectFileSinkUrisRules(Map<SemanticRule, SemanticNodeProcessor> opRules, SemanticNodeProcessor np) {
     opRules.put(new RuleRegExp("R1", FileSinkOperator.getOperatorName() + ".*"), np);
   }
 
-  private void collectFileSinkUris(List<Node> topNodes, Set<URI> uris, Set<TableDesc> tableDescs) {
+  static private void collectFileSinkUris(List<Node> topNodes, Set<URI> uris, Set<TableDesc> tableDescs) {
 
     CollectFileSinkUrisNodeProcessor np = new CollectFileSinkUrisNodeProcessor(uris, tableDescs);
 
@@ -334,7 +334,7 @@ public class DagUtils {
     dag.addURIsForCredentials(fileSinkUris);
   }
 
-  private List<Node> getTopNodes(BaseWork work) {
+  static public List<Node> getTopNodes(BaseWork work) {
     List<Node> topNodes = new ArrayList<Node>();
 
     if (work instanceof MapWork) {
