@@ -129,7 +129,7 @@ public class StatsRecordingThreadPool extends ThreadPoolExecutor {
       }
     }
 
-    private void setupMDCFromNDC(final Callable<V> actualCallable) {
+    /* private void setupMDCFromNDC(final Callable<V> actualCallable) {
       if (actualCallable instanceof CallableWithNdc) {
         CallableWithNdc callableWithNdc = (CallableWithNdc) actualCallable;
         try {
@@ -161,7 +161,7 @@ public class StatsRecordingThreadPool extends ThreadPoolExecutor {
         LOG.warn("Not setting up MDC as unknown callable instance type received: {}",
             actualCallable.getClass().getSimpleName());
       }
-    }
+    } */
 
     /**
      * LLAP IO related counters.
