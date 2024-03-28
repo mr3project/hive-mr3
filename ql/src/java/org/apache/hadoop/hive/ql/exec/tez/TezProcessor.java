@@ -214,6 +214,8 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     this.jobConf = new JobConf(conf);
     this.jobConf.getCredentials().mergeAll(UserGroupInformation.getCurrentUser().getCredentials());
     this.processorContext = getContext();
+    int dagIdId = processorContext.getDagIdentifier();
+    HiveConf.setIntVar(this.jobConf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID, dagIdId);
     initTezAttributes();
     ExecutionContext execCtx = processorContext.getExecutionContext();
     if (execCtx instanceof Hook) {
@@ -225,17 +227,16 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     IOContextMap.setThreadAttemptId(processorContext.getUniqueIdentifier());
 
     if (HiveConf.getVar(this.jobConf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
-      int dagIdId = processorContext.getDagIdentifier();
       String queryId = HiveConf.getVar(this.jobConf, HiveConf.ConfVars.HIVEQUERYID);
       processorContext.setDagShutdownHook(dagIdId,
           new Runnable() {
             public void run() {
-              ObjectCacheFactory.removeLlapQueryCache(queryId);
+              ObjectCacheFactory.removeLlapQueryCache(queryId, dagIdId);
             }
           },
           new org.apache.tez.runtime.api.TaskContext.VertexShutdown() {
             public void run(int vertexIdId) {
-              ObjectCacheFactory.removeLlapQueryVertexCache(queryId, vertexIdId);
+              ObjectCacheFactory.removeLlapQueryVertexCache(queryId, dagIdId, vertexIdId);
             }
           });
     }
