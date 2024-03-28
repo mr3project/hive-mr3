@@ -122,7 +122,7 @@ public class MR3Task {
     exception = ex;
   }
 
-  public int execute(DriverContext driverContext, TezWork tezWork) {
+  public int execute(Context contextFromTezTask, TezWork tezWork) {
     int returnCode = 1;   // 1 == error
     boolean cleanContext = false;
     Context context = null;
@@ -132,7 +132,7 @@ public class MR3Task {
     console.printInfo("MR3Task.execute(): " + tezWork.getName());
 
     try {
-      context = driverContext.getCtx();
+      context = contextFromTezTask;
       if (context == null) {
         context = new Context(conf);
         cleanContext = true;
