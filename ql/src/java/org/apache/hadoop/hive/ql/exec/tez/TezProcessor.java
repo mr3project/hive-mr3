@@ -190,9 +190,9 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
         ProcessorHandlerSetupCloseEvent phEvent = (ProcessorHandlerSetupCloseEvent) event;
         boolean setup = phEvent.getSetup();
         if (setup) {
-          IOContextMap.setThreadAttemptId(processorContext.getUniqueIdentifier());
+          IOContextMap.setThreadAttemptId(getContext().getUniqueIdentifier());
         } else {
-          IOContextMap.cleanThreadAttemptId(processorContext.getUniqueIdentifier());
+          IOContextMap.cleanThreadAttemptId(getContext().getUniqueIdentifier());
         }
       } else if (event instanceof CustomProcessorEvent) {
         CustomProcessorEvent cpEvent = (CustomProcessorEvent) event;
@@ -214,6 +214,8 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     Configuration conf = TezUtils.createConfFromUserPayload(processorContext.getUserPayload());
     this.jobConf = new JobConf(conf);
     this.jobConf.getCredentials().mergeAll(UserGroupInformation.getCurrentUser().getCredentials());
+    int dagIdId = processorContext.getDagIdentifier();
+    HiveConf.setIntVar(this.jobConf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID, dagIdId);
     initTezAttributes(processorContext);
     ExecutionContext execCtx = processorContext.getExecutionContext();
     if (execCtx instanceof Hook) {
@@ -225,17 +227,16 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     IOContextMap.setThreadAttemptId(processorContext.getUniqueIdentifier());
 
     if (HiveConf.getVar(this.jobConf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
-      int dagIdId = processorContext.getDagIdentifier();
       String queryId = HiveConf.getVar(this.jobConf, HiveConf.ConfVars.HIVE_QUERY_ID);
       processorContext.setDagShutdownHook(dagIdId,
           new Runnable() {
             public void run() {
-              ObjectCacheFactory.removeLlapQueryCache(queryId);
+              ObjectCacheFactory.removeLlapQueryCache(queryId, dagIdId);
             }
           },
           new org.apache.tez.runtime.api.TaskContext.VertexShutdown() {
             public void run(int vertexIdId) {
-              ObjectCacheFactory.removeLlapQueryVertexCache(queryId, vertexIdId);
+              ObjectCacheFactory.removeLlapQueryVertexCache(queryId, dagIdId, vertexIdId);
             }
           });
     }
@@ -338,13 +339,14 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
         && HiveConf.getBoolVar(this.jobConf, HiveConf.ConfVars.LLAP_CLIENT_CONSISTENT_SPLITS);
     String fragmentId = null;
     if (setLlapCacheCounters) {
-      TezDAGID tezDAGID = TezDAGID.getInstance(this.getContext().getApplicationId(), this.getContext().getDagIdentifier());
-      TezVertexID tezVertexID = TezVertexID.getInstance(tezDAGID, this.getContext().getTaskVertexIndex());
-      TezTaskID tezTaskID = TezTaskID.getInstance(tezVertexID, this.getContext().getTaskIndex());
-      TezTaskAttemptID tezTaskAttemptID = TezTaskAttemptID.getInstance(tezTaskID, this.getContext().getTaskAttemptNumber());
+      ProcessorContext processorContext = getContext();
+      TezDAGID tezDAGID = TezDAGID.getInstance(processorContext.getApplicationId(), processorContext.getDagIdentifier());
+      TezVertexID tezVertexID = TezVertexID.getInstance(tezDAGID, processorContext.getTaskVertexIndex());
+      TezTaskID tezTaskID = TezTaskID.getInstance(tezVertexID, processorContext.getTaskIndex());
+      TezTaskAttemptID tezTaskAttemptID = TezTaskAttemptID.getInstance(tezTaskID, processorContext.getTaskAttemptNumber());
       this.jobConf.set(MRInput.TEZ_MAPREDUCE_TASK_ATTEMPT_ID, tezTaskAttemptID.toString());
       fragmentId = LlapTezUtils.getFragmentId(this.jobConf);
-      FragmentCountersMap.registerCountersForFragment(fragmentId, this.processorContext.getCounters());
+      FragmentCountersMap.registerCountersForFragment(fragmentId, processorContext.getCounters());
     }
 
     try {
@@ -417,7 +419,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
       // 2. set aborted to true
       boolean prevAborted = aborted.getAndSet(true);
-      LOG.info("RecordProcessor cleaning up: {}, prevAborted={}", processorContext.getUniqueIdentifier(), prevAborted);
+      LOG.info("RecordProcessor cleaning up: {}, prevAborted={}", getContext().getUniqueIdentifier(), prevAborted);
 
       // 1. raise InterruptedException if necessary
       if (prevAborted && originalThrowable == null) {
@@ -425,7 +427,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       }
 
       if (originalThrowable != null) {
-        LOG.error("Failed initializeAndRunProcessor: {}, {}", processorContext.getUniqueIdentifier(), originalThrowable);
+        LOG.error("Failed initializeAndRunProcessor: {}, {}", getContext().getUniqueIdentifier(), originalThrowable);
         closeOutputTasks(outputs, MROutput::abort);
 
         ObjectCache.clearObjectRegistry();  // clear thread-local cache which may contain MAP/REDUCE_PLAN
@@ -458,17 +460,17 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
   public void abort() {
     RecordProcessor rProcLocal = null;
     synchronized (this) {
-      LOG.info("Received abort: {}", processorContext.getUniqueIdentifier());
+      LOG.info("Received abort: {}", getContext().getUniqueIdentifier());
       boolean prevAborted = aborted.getAndSet(true);
       if (!prevAborted) {
         rProcLocal = rproc;
       }
     }
     if (rProcLocal != null) {
-      LOG.info("Forwarding abort to RecordProcessor: {}", processorContext.getUniqueIdentifier());
+      LOG.info("Forwarding abort to RecordProcessor: {}", getContext().getUniqueIdentifier());
       rProcLocal.abort();
     } else {
-      LOG.info("RecordProcessor not yet setup or already completed. Abort will be ignored: {}", processorContext.getUniqueIdentifier());
+      LOG.info("RecordProcessor not yet setup or already completed. Abort will be ignored: {}", getContext().getUniqueIdentifier());
     }
   }
 
