@@ -323,15 +323,34 @@ public class ReduceRecordProcessor extends RecordProcessor {
    */
   private List<LogicalInput> getShuffleInputs(Map<String, LogicalInput> inputs) throws Exception {
     // the reduce plan inputs have tags, add all inputs that have tags
-    Map<Integer, String> tagToinput = reduceWork.getTagToInput();
     ArrayList<LogicalInput> shuffleInputs = new ArrayList<LogicalInput>();
-    for (String inpStr : tagToinput.values()) {
-      if (inputs.get(inpStr) == null) {
-        throw new AssertionError("Cound not find input: " + inpStr);
+
+    for (String inputName : reduceWork.getTagToInput().values()) {
+      if (inputs.get(inputName) == null) {
+        throw new AssertionError("Could not find input: " + inputName);
       }
-      inputs.get(inpStr).start();
-      shuffleInputs.add(inputs.get(inpStr));
+      inputs.get(inputName).start();
+      shuffleInputs.add(inputs.get(inputName));
     }
+
+    if (mergeWorkList != null) {
+      for (BaseWork mergedWork: mergeWorkList) {
+        ReduceWork mergedReduceWork = (ReduceWork) mergedWork;
+        for (String inputName: mergedReduceWork.getTagToInput().values()) {
+          if (inputs.get(inputName) == null) {
+            throw new AssertionError("Could not find input: " + inputName);
+          }
+
+          LogicalInput input = inputs.get(inputName);
+          if (shuffleInputs.contains(input)) {
+            throw new AssertionError("Input " + inputName + " is contained in more than one work");
+          }
+          input.start();
+          shuffleInputs.add(input);
+        }
+      }
+    }
+
     return shuffleInputs;
   }
 
