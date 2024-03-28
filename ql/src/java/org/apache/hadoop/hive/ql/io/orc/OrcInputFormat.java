@@ -574,7 +574,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
       return;
     }
 
-    LOG.info("ORC pushdown predicate: " + sarg);
+    if (isDebugEnabled) { LOG.debug("ORC pushdown predicate: " + sarg); }
     options.searchArgument(sarg, getSargColumnNames(
         neededColumnNames.split(","), types, options.getInclude(), isOriginal));
   }
@@ -2219,7 +2219,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
   public static boolean[] pickStripesViaTranslatedSarg(SearchArgument sarg,
       OrcFile.WriterVersion writerVersion, List<OrcProto.Type> types,
       List<StripeStatistics> stripeStats, int stripeCount) throws FileFormatException {
-    LOG.info("Translated ORC pushdown predicate: " + sarg);
+    if (isDebugEnabled) { LOG.debug("Translated ORC pushdown predicate: " + sarg); }
     assert sarg != null;
     if (stripeStats == null || writerVersion == OrcFile.WriterVersion.ORIGINAL) {
       return null; // only do split pruning if HIVE-8732 has been fixed in the writer
