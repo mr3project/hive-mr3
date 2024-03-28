@@ -88,10 +88,11 @@ public class ReduceRecordProcessor extends RecordProcessor {
 
     String queryId = HiveConf.getVar(jconf, HiveConf.ConfVars.HIVE_QUERY_ID);
     String prefixes = jconf.get(DagUtils.TEZ_MERGE_WORK_FILE_PREFIXES);
+    int dagIdId = context.getDagIdentifier();
     cache = (prefixes == null) ?    // if MergeWork does not exists
-      ObjectCacheFactory.getCache(jconf, queryId, true) :
-      ObjectCacheFactory.getPerTaskMrCache(queryId);
-    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, false, true);
+      ObjectCacheFactory.getCache(jconf, queryId, dagIdId, true) :
+      ObjectCacheFactory.getPerTaskMrCache(queryId, dagIdId);
+    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, dagIdId, false, true);
 
     String cacheKey = processorContext.getTaskVertexName() + REDUCE_PLAN_KEY;
     cacheKeys = Lists.newArrayList(cacheKey);
