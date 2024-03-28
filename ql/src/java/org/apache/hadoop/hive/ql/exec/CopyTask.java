@@ -33,6 +33,8 @@ import org.apache.hadoop.hive.ql.plan.CopyWork;
 import org.apache.hadoop.hive.ql.plan.api.StageType;
 import org.apache.hadoop.util.StringUtils;
 
+import org.apache.hadoop.hive.ql.util.MR3FileUtils;
+
 /**
  * CopyTask implementation.
  **/
@@ -125,7 +127,7 @@ public class CopyTask extends Task<CopyWork> implements Serializable {
         console.printInfo("Copying file: " + oneSrcPathStr);
         Utilities.FILE_OP_LOGGER.debug("Copying file {} to {}", oneSrcPathStr, toPath);
         DataCopyStatistics copyStatistics = new DataCopyStatistics();
-        if (!FileUtils.copy(srcFs, oneSrc.getPath(), dstFs, toPath,
+        if (!MR3FileUtils.copy(srcFs, oneSrc.getPath(), dstFs, toPath,
             false, // delete source
             work.isOverwrite(), // overwrite destination
             conf, copyStatistics)) {
