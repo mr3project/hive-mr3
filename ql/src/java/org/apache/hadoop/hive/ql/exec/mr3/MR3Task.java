@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3;
 
+import com.datamonad.mr3.api.client.DAGStatus;
+import com.datamonad.mr3.api.client.VertexStatus;
+import com.datamonad.mr3.api.common.MR3Exception;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -44,6 +47,7 @@ import org.apache.hadoop.hive.ql.plan.TezEdgeProperty;
 import org.apache.hadoop.hive.ql.plan.TezWork;
 import org.apache.hadoop.hive.ql.plan.UnionWork;
 import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hadoop.hive.ql.session.SessionStateUtil;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.util.StringUtils;
@@ -72,6 +76,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.apache.hadoop.hive.ql.exec.tez.TezTask.JOB_ID_TEMPLATE;
+import static org.apache.hadoop.hive.ql.exec.tez.TezTask.ICEBERG_PROPERTY_PREFIX;
+import static org.apache.hadoop.hive.ql.exec.tez.TezTask.ICEBERG_SERIALIZED_TABLE_PREFIX;
 
 /**
  * MR3Task handles the execution of TezWork.
@@ -102,6 +110,9 @@ public class MR3Task {
   private Path mr3ScratchDir = null;
   private boolean mr3ScratchDirCreated = false;
   private Map<String, LocalResource> amDagCommonLocalResources = null;
+
+  private Map<BaseWork, Vertex> workToVertex = null;
+  private Map<BaseWork, JobConf> workToConf = null;
 
   public MR3Task(HiveConf conf, SessionState.LogHelper console, AtomicBoolean isShutdown) {
     this.conf = conf;
@@ -201,6 +212,16 @@ public class MR3Task {
         }
       }
 
+      // save useful commit information into query state, e.g. for custom commit hooks, like Iceberg
+      if (returnCode == 0) {
+        DAGStatus dagStatus = mr3JobRef.getDagStatus();
+        if (dagStatus == null) {
+          throw new MR3Exception("DAGStatus not available with return code == 0");
+        }
+        String dagIdStr = mr3JobRef.getDagIdStr();    // may throw MR3Exception
+        collectCommitInformation(tezWork, dagStatus, dagIdStr);
+      }
+
       LOG.info("MR3Task completed");
     } catch (Exception e) {
       LOG.error("Failed to execute MR3Task", e);
@@ -235,6 +256,40 @@ public class MR3Task {
     }
 
     return returnCode;
+  }
+
+  private void collectCommitInformation(TezWork work, DAGStatus dagStatus, String dagIdStr) {
+    for (BaseWork w : work.getAllWork()) {
+      JobConf jobConf = workToConf.get(w);
+      Vertex vertex = workToVertex.get(w);
+      boolean hasIcebergCommitter = Optional.ofNullable(jobConf).map(JobConf::getOutputCommitter)
+          .map(Object::getClass).map(Class::getName)
+          .filter(name -> name.endsWith("HiveIcebergNoJobCommitter")).isPresent();
+      // we should only consider jobs with Iceberg output committer and a data sink
+      if (hasIcebergCommitter && !vertex.getDataSinks().isEmpty()) {
+        VertexStatus vertexStatus = dagStatus.vertexStatusMap().apply(vertex.getName());
+        String[] jobIdParts = dagIdStr.split("_");
+        // dagIdStr returns something like: dag_1660836356025_0465_1
+        int vertexId = vertexStatus.vertexIdId();
+        String jobId = String.format(JOB_ID_TEMPLATE, jobIdParts[1], vertexId, jobIdParts[2]);
+
+        List<String> tables = new ArrayList<>();
+        Map<String, String> icebergProperties = new HashMap<>();
+        for (Map.Entry<String, String> entry : jobConf) {
+          if (entry.getKey().startsWith(ICEBERG_SERIALIZED_TABLE_PREFIX)) {
+            // get all target tables this vertex wrote to
+            tables.add(entry.getKey().substring(ICEBERG_SERIALIZED_TABLE_PREFIX.length()));
+          } else if (entry.getKey().startsWith(ICEBERG_PROPERTY_PREFIX)) {
+            // find iceberg props in jobConf as they can be needed, but not available, during job commit
+            icebergProperties.put(entry.getKey(), entry.getValue());
+          }
+        }
+
+        // save information for each target table
+        tables.forEach(table -> SessionStateUtil.addCommitInfo(jobConf, table, jobId,
+            vertexStatus.progress().numSucceededTasks(), icebergProperties));
+      }
+    }
   }
 
   private DAG setupSubmit(JobConf jobConf, TezWork tezWork, Context context,
@@ -434,6 +489,9 @@ public class MR3Task {
     } else {
       LOG.info("Skip adding credentials for DAG: " + dagName);
     }
+
+    this.workToVertex = workToVertex;
+    this.workToConf = workToConf;
 
     perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_BUILD_DAG);
     return dag;

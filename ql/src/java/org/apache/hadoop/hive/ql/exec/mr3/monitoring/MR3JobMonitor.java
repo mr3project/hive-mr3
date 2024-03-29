@@ -473,6 +473,10 @@ public class MR3JobMonitor {
     return null;
   }
 
+  public DAGStatus getDagStatus() {
+    return dagStatus;
+  }
+
   private ProgressMonitor progressMonitor(DAGStatus status) {
     return new MR3ProgressMonitor(status, workMap, console, executionStartTime);
   }
