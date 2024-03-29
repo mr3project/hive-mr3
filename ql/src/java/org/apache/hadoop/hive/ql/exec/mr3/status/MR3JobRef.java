@@ -18,7 +18,10 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.status;
 
+import com.datamonad.mr3.api.client.DAGStatus;
 import org.apache.tez.common.counters.TezCounters;
+import com.datamonad.mr3.api.client.VertexStatus;
+import com.datamonad.mr3.api.common.MR3Exception;
 
 public interface MR3JobRef {
 
@@ -34,4 +37,7 @@ public interface MR3JobRef {
   // Invariant: must be called after monitorJob() returns
   String getDiagnostics();
   TezCounters getDagCounters();
+
+  DAGStatus getDagStatus();
+  String getDagIdStr() throws MR3Exception;
 }
