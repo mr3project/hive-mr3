@@ -84,16 +84,16 @@ public class ObjectCache implements org.apache.hadoop.hive.ql.exec.ObjectCache {
       // ObjectRegistry, which is necessary because ObjectRegistry keeps MapWork.
       int vertexIndex = context.getTaskVertexIndex();
       staticRegistryIndex.set(new ObjectRegistryVertexIndex(context.getObjectRegistry(), vertexIndex));
-      LOG.info(
-          "ObjectRegistry created from ProcessorContext: {} {} {}", vertexIndex, context.getTaskIndex(), context.getTaskAttemptNumber());
+      if (LOG.isDebugEnabled()) { LOG.debug(
+          "ObjectRegistry created from ProcessorContext: {} {} {}", vertexIndex, context.getTaskIndex(), context.getTaskAttemptNumber()); }
     } else {
       int currentVertexIndex = currentRegistryIndex.vertexIndex;
       int newVertexIndex = context.getTaskVertexIndex();
       if (currentVertexIndex != newVertexIndex) {
         currentRegistryIndex.registry = context.getObjectRegistry();
         currentRegistryIndex.vertexIndex = newVertexIndex;
-        LOG.info(
-            "ObjectRegistry reset from ProcessorContext: {} {} {}", newVertexIndex, context.getTaskIndex(), context.getTaskAttemptNumber());
+        if (LOG.isDebugEnabled()) { LOG.debug(
+            "ObjectRegistry reset from ProcessorContext: {} {} {}", newVertexIndex, context.getTaskIndex(), context.getTaskAttemptNumber()); }
       }
     }
   }
@@ -144,10 +144,10 @@ public class ObjectCache implements org.apache.hadoop.hive.ql.exec.ObjectCache {
       value = (T) registry.get(key);
       if (value == null) {
         value = fn.call();
-        LOG.info("Caching key: " + key);
+        LOG.debug("Caching key: {}", key);
         registry.cacheForVertex(key, value);
       } else {
-        LOG.info("Found " + key + " in cache with value: " + value);
+        LOG.debug("Found {} in cache with value: {}", key, value);
       }
     } catch (Exception e) {
       throw new HiveException(e);

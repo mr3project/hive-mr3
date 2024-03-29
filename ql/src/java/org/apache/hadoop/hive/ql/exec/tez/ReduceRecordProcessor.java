@@ -158,7 +158,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
     if (reducer.getConf() != null) {
       reducer.getConf().setMaxMemoryAvailable(memoryAvailableToTask);
       reducer.getConf().setEstimateNumExecutors(estimateNumExecutors);
-      LOG.info("Memory available for operators set to {} {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask), estimateNumExecutors);
+      if (LOG.isDebugEnabled()) { LOG.debug("Memory available for operators set to {} {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask), estimateNumExecutors); }
     }
     OperatorUtils.setMemoryAvailable(reducer.getChildOperators(), memoryAvailableToTask);
     OperatorUtils.setEstimateNumExecutors(reducer.getChildOperators(), estimateNumExecutors);
