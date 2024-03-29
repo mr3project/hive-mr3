@@ -359,7 +359,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
             cntr = 0;
             numRows = 1;
           }
-          LOG.info(toString() + ": records written - " + numRows);
+          LOG.info("{}: records written - {}", this, numRows);
         }
       }
 
@@ -382,7 +382,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     super.closeOp(abort);
     out = null;
     reducerHash = null;
-    LOG.info(this + ": records written - " + numRows);
+    LOG.info("{}:: records written - {}", this, numRows);
     this.runTimeNumRows = numRows;
   }
 
