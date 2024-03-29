@@ -3081,7 +3081,7 @@ public class HiveConf extends Configuration {
         "Truststore type when using a client-side certificate with TLS connectivity to ZooKeeper." +
             "Overrides any explicit value set via the zookeeper.ssl.trustStore.type " +
             "system property (note the camelCase)."),
-    HIVE_ZOOKEEPER_KILLQUERY_ENABLE("hive.zookeeper.killquery.enable", true,
+    HIVE_ZOOKEEPER_KILLQUERY_ENABLE("hive.zookeeper.killquery.enable", false,
         "Whether enabled kill query coordination with zookeeper, " +
             "when hive.server2.support.dynamic.service.discovery is enabled."),
     HIVE_ZOOKEEPER_KILLQUERY_NAMESPACE("hive.zookeeper.killquery.namespace", "killQueries",
@@ -5323,7 +5323,7 @@ public class HiveConf extends Configuration {
        new TimeValidator(TimeUnit.SECONDS),
       "How long to delay before cleaning up query files in LLAP (in seconds, for debugging).",
       "llap.file.cleanup.delay-seconds"),
-    LLAP_DAEMON_SERVICE_HOSTS("hive.llap.daemon.service.hosts", null,
+    LLAP_DAEMON_SERVICE_HOSTS("hive.llap.daemon.service.hosts", "",
       "Explicitly specified hosts to use for LLAP scheduling. Useful for testing. By default,\n" +
       "YARN registry is used.", "llap.daemon.service.hosts"),
     LLAP_DAEMON_SERVICE_REFRESH_INTERVAL("hive.llap.daemon.service.refresh.interval.sec", "60s",
@@ -5530,7 +5530,7 @@ public class HiveConf extends Configuration {
     LLAP_ENABLE_GRACE_JOIN_IN_LLAP("hive.llap.enable.grace.join.in.llap", false,
         "Override if grace join should be allowed to run in llap."),
 
-    LLAP_HS2_ENABLE_COORDINATOR("hive.llap.hs2.coordinator.enabled", true,
+    LLAP_HS2_ENABLE_COORDINATOR("hive.llap.hs2.coordinator.enabled", false,
         "Whether to create the LLAP coordinator; since execution engine and container vs llap\n" +
         "settings are both coming from job configs, we don't know at start whether this should\n" +
         "be created. Default true."),
