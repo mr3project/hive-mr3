@@ -291,7 +291,7 @@ public class MapRecordProcessor extends RecordProcessor {
       checkAbortCondition();
       mapOp.setChildren(jconf);
       mapOp.passExecContext(execContext);
-      LOG.debug(mapOp.dump(0));
+      if (LOG.isDebugEnabled()) { LOG.debug(mapOp.dump(0)); }
 
       // set memory available for operators
       long memoryAvailableToTask = processorContext.getTotalMemoryAvailableToTask();
@@ -299,7 +299,7 @@ public class MapRecordProcessor extends RecordProcessor {
       if (mapOp.getConf() != null) {
         mapOp.getConf().setMaxMemoryAvailable(memoryAvailableToTask);
         mapOp.getConf().setEstimateNumExecutors(estimateNumExecutors);
-        LOG.info("Memory available for operators set to {} {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask), estimateNumExecutors);
+        if (LOG.isDebugEnabled()) { LOG.debug("Memory available for operators set to {} {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask), estimateNumExecutors); }
       }
       OperatorUtils.setMemoryAvailable(mapOp.getChildOperators(), memoryAvailableToTask);
       OperatorUtils.setEstimateNumExecutors(mapOp.getChildOperators(), estimateNumExecutors);
