@@ -4983,8 +4983,8 @@ private void constructOneLBLocationMap(FileStatus fSta,
       if (!MR3FileUtils.copy(sourceFs, sourcePath, destFs, destFilePath,
           false,   // delete source
           false,  // overwrite destination
-          conf /*,
-          new DataCopyStatistics() */)) {
+          conf,
+          new DataCopyStatistics())) {
         LOG.error("Copy failed for source: " + sourcePath + " to destination: " + destFilePath);
         throw new IOException("File copy failed.");
       }
@@ -5116,8 +5116,8 @@ private void constructOneLBLocationMap(FileStatus fSta,
           return MR3FileUtils.copy(srcf.getFileSystem(conf), srcf, destf.getFileSystem(conf), destf,
               true,    // delete source
               replace, // overwrite destination
-              conf /*,
-              new DataCopyStatistics() */);
+              conf,
+              new DataCopyStatistics());
         } else {
           if (srcIsSubDirOfDest || destIsSubDirOfSrc) {
             FileStatus[] srcs = destFs.listStatus(srcf, FileUtils.HIDDEN_FILES_PATH_FILTER);
