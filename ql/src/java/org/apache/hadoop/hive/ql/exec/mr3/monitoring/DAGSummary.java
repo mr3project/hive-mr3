@@ -76,7 +76,7 @@ class DAGSummary implements PrintSummary {
     this.dag = dag;
     this.perfLogger = perfLogger;
 
-    this.hiveCountersGroup = HiveConf.getVar(hiveConf, HiveConf.ConfVars.HIVECOUNTERGROUP);
+    this.hiveCountersGroup = HiveConf.getVar(hiveConf, HiveConf.ConfVars.HIVE_COUNTER_GROUP);
     this.hiveCounters = hiveCounters(status);
   }
 
