@@ -381,7 +381,7 @@ public class MRCompactor implements Compactor {
       mrJob = job;
     }
 
-    boolean submitJobUsingMr3 = hiveConf.getBoolVar(ConfVars.HIVE_MR3_COMPACTION_USING_MR3);
+    boolean submitJobUsingMr3 = hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_MR3_COMPACTION_USING_MR3);
     if (submitJobUsingMr3) {
       try {
         job.setJobName("MR3-compaction-" + id);

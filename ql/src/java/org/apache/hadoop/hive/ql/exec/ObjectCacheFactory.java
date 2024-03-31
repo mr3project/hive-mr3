@@ -89,7 +89,7 @@ public class ObjectCacheFactory {
       }
     } else { // mr
       return new ObjectCacheWrapper(
-          new  org.apache.hadoop.hive.ql.exec.mr.ObjectCache(), queryId);
+          new org.apache.hadoop.hive.ql.exec.mr.ObjectCache(), queryId, dagIdId);
     }
   }
 
