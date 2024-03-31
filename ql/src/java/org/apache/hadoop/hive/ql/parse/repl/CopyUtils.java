@@ -485,7 +485,7 @@ public class CopyUtils {
         false,
         proxyUser,
         hiveConf)) {
-      LOG.error("Distcp failed to copy files: " + srcList + " to destination: " + destination);
+      LOG.error("Distcp failed to copy files: {} to destination: {}", srcList, destination);
       throw new IOException("Distcp operation failed.");
     }
     // increment bytes copied counter by the file length in each path of filesystem
