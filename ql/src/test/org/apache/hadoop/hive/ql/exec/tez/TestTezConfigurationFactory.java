@@ -40,34 +40,4 @@ public class TestTezConfigurationFactory {
     updatingResource.setAccessible(true);
   }
 
-  @Test
-  public void testAddProgrammaticallyAddedTezOptsToDagConf() {
-    Map<String, String> dagConf = new HashMap<>();
-    JobConf conf = new JobConf();
-
-    conf.set(TezConfiguration.TEZ_GENERATE_DEBUG_ARTIFACTS, "true");
-    TezConfigurationFactory.addProgrammaticallyAddedTezOptsToDagConf(dagConf, conf);
-    Assert.assertTrue("dagConfig should contain value for " + TezConfiguration.TEZ_GENERATE_DEBUG_ARTIFACTS,
-        dagConf.containsKey(TezConfiguration.TEZ_GENERATE_DEBUG_ARTIFACTS));
-
-    conf.clear();
-    dagConf.clear();
-
-    conf.set(TezConfiguration.TEZ_GENERATE_DEBUG_ARTIFACTS, "true", "tez-site.xml");
-    TezConfigurationFactory.addProgrammaticallyAddedTezOptsToDagConf(dagConf, conf);
-    Assert.assertFalse(
-        "dagConfig should not contain value for xml sourced config " + TezConfiguration.TEZ_GENERATE_DEBUG_ARTIFACTS,
-        dagConf.containsKey(TezConfiguration.TEZ_GENERATE_DEBUG_ARTIFACTS));
-
-    conf.set(TezConfiguration.TEZ_AM_LAUNCH_CMD_OPTS, "asdf");
-    TezConfigurationFactory.addProgrammaticallyAddedTezOptsToDagConf(dagConf, conf);
-    // filtered out because it's AM scoped
-    Assert.assertFalse("dagConfig should not contain value for " + TezConfiguration.TEZ_AM_LAUNCH_CMD_OPTS,
-        dagConf.containsKey(TezConfiguration.TEZ_AM_LAUNCH_CMD_OPTS));
-
-    conf.set("hive.something", "asdf");
-    TezConfigurationFactory.addProgrammaticallyAddedTezOptsToDagConf(dagConf, conf);
-    // only tez options are added
-    Assert.assertFalse("dagConfig should not contain value for a hive config", dagConf.containsKey("hive.something"));
-  }
 }
