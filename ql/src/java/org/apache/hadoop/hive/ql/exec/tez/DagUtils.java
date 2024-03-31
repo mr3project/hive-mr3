@@ -229,11 +229,11 @@ public class DagUtils {
     }
   }
 
-  static private void addCollectFileSinkUrisRules(Map<SemanticRule, SemanticNodeProcessor> opRules, SemanticNodeProcessor np) {
+  private void addCollectFileSinkUrisRules(Map<SemanticRule, SemanticNodeProcessor> opRules, SemanticNodeProcessor np) {
     opRules.put(new RuleRegExp("R1", FileSinkOperator.getOperatorName() + ".*"), np);
   }
 
-  static private void collectFileSinkUris(List<Node> topNodes, Set<URI> uris, Set<TableDesc> tableDescs) {
+  private void collectFileSinkUris(List<Node> topNodes, Set<URI> uris, Set<TableDesc> tableDescs) {
 
     CollectFileSinkUrisNodeProcessor np = new CollectFileSinkUrisNodeProcessor(uris, tableDescs);
 
@@ -318,7 +318,7 @@ public class DagUtils {
     return dagSuppliers;
   }
 
-  private void collectNeededFileSinkData(BaseWork work, Set<URI> fileSinkUris, Set<TableDesc> fileSinkTableDescs) {
+  public void collectNeededFileSinkData(BaseWork work, Set<URI> fileSinkUris, Set<TableDesc> fileSinkTableDescs) {
     List<Node> topNodes = getTopNodes(work);
     LOG.debug("Collecting file sink uris for {} topnodes: {}", work.getClass(), topNodes);
     collectFileSinkUris(topNodes, fileSinkUris, fileSinkTableDescs);
@@ -334,7 +334,7 @@ public class DagUtils {
     dag.addURIsForCredentials(fileSinkUris);
   }
 
-  static public List<Node> getTopNodes(BaseWork work) {
+  public List<Node> getTopNodes(BaseWork work) {
     List<Node> topNodes = new ArrayList<Node>();
 
     if (work instanceof MapWork) {
