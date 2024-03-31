@@ -72,6 +72,7 @@ import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.MergeJoinWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceWork;
+import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.plan.TezEdgeProperty;
 import org.apache.hadoop.hive.ql.plan.TezEdgeProperty.EdgeType;
 import org.apache.hadoop.hive.ql.plan.TezWork;
@@ -173,6 +174,8 @@ public class DAGUtils {
    */
   private final ConcurrentHashMap<String, Object> copyNotifiers = new ConcurrentHashMap<>();
 
+  private final DagUtils tezDagUtils;
+
   /**
    * Singleton
    * @return instance of this class
@@ -185,6 +188,7 @@ public class DAGUtils {
   }
 
   private DAGUtils() {
+    tezDagUtils = DagUtils.getInstance();
   }
 
   // return true if we should try to add credentials for accessing paths on HDFS
@@ -208,6 +212,11 @@ public class DAGUtils {
    * Set up credentials for the base work on secure clusters
    */
   public Set<Path> getPathsForCredentials(BaseWork work) {
+    Set<URI> fileSinkUris = new HashSet<URI>();
+    Set<TableDesc> fileSinkTableDescs = new HashSet<TableDesc>();
+    tezDagUtils.getInstance().collectNeededFileSinkData(work, fileSinkUris, fileSinkTableDescs);
+    // TODO: implement DagUtils.getCredentialsFromSuppliers() using fileSinkTableDescs[]
+
     Set<Path> paths;
     if (work instanceof MapWork) {
       paths = getPathsForCredentialsMap((MapWork) work);
@@ -215,10 +224,16 @@ public class DAGUtils {
       paths = new HashSet<Path>();
     }
 
-    Set<URI> fileSinkUris = getFileSinkUrisForCredentials(work);
+    if (LOG.isDebugEnabled()) {
+      for (URI fileSinkUri: fileSinkUris) {
+        LOG.debug("Marking {} output URI as needing credentials (filesink): {}",
+          work.getClass(), fileSinkUri);
+      }
+    }
     for (URI uri : fileSinkUris) {
       paths.add(new Path(uri));
     }
+
     return paths;
   }
 
@@ -230,24 +245,6 @@ public class DAGUtils {
       }
     }
     return paths;
-  }
-
-  private Set<URI> getFileSinkUrisForCredentials(BaseWork baseWork) {
-    Set<URI> fileSinkUris = new HashSet<URI>();
-
-    List<Node> topNodes = DagUtils.getTopNodes(baseWork);
-
-    LOG.debug("Collecting file sink uris for {} topnodes: {}", baseWork.getClass(), topNodes);
-    DagUtils.collectFileSinkUris(topNodes, fileSinkUris);
-
-    if (LOG.isDebugEnabled()) {
-      for (URI fileSinkUri: fileSinkUris) {
-        LOG.debug("Marking {} output URI as needing credentials (filesink): {}",
-            baseWork.getClass(), fileSinkUri);
-      }
-    }
-
-    return fileSinkUris;
   }
 
   public void addPathsToCredentials(
@@ -367,8 +364,7 @@ public class DAGUtils {
       vertexJobConf.setBoolean("mapreduce.tez.input.initializer.serialize.event.payload", false);
       for (int i = 0; i < mapWorkList.size(); i++) {
         mapWork = (MapWork) (mapWorkList.get(i));
-        vertexJobConf.set(org.apache.hadoop.hive.ql.exec.tez.DagUtils.TEZ_MERGE_CURRENT_MERGE_FILE_PREFIX,
-            mapWork.getName());
+        vertexJobConf.set(DagUtils.TEZ_MERGE_CURRENT_MERGE_FILE_PREFIX, mapWork.getName());
         vertexJobConf.set(Utilities.INPUT_NAME, mapWork.getName());
         LOG.info("Going through each work and adding MultiMRInput");
 
@@ -719,8 +715,7 @@ public class DAGUtils {
       inpFormat = CombineHiveInputFormat.class.getName();
     }
 
-    jobConf.set(org.apache.hadoop.hive.ql.exec.tez.DagUtils.TEZ_TMP_DIR_KEY,
-        context.getMRTmpPath().toUri().toString());
+    jobConf.set(DagUtils.TEZ_TMP_DIR_KEY, context.getMRTmpPath().toUri().toString());
     jobConf.set("mapred.mapper.class", ExecMapper.class.getName());
     jobConf.set("mapred.input.format.class", inpFormat);
 
