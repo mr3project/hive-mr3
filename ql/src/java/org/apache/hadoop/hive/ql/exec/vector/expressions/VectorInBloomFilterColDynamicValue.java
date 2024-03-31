@@ -103,7 +103,14 @@ public class VectorInBloomFilterColDynamicValue extends VectorExpression {
     }
 
     String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_QUERY_ID);
-    runtimeCache = ObjectCacheFactory.getCache(conf, queryId, false, true);
+    int dagIdId = HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID);
+
+    if (dagIdId == HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID.defaultIntVal) {
+      // TODO: check if why dagIdId is not set in conf
+      throw new IllegalStateException("VectorInBloomFilterColDynamicValue - Unsupported yet");
+    }
+
+    runtimeCache = ObjectCacheFactory.getCache(conf, queryId, dagIdId, false, true);
   }
 
   private void initValue() {
