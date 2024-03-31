@@ -21,8 +21,9 @@ package org.apache.hadoop.hive.ql.util;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.common.DataCopyStatistics;
+import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
@@ -50,7 +51,8 @@ public final class MR3FileUtils {
       FileSystem dstFS, Path dst,
       boolean deleteSource,
       boolean overwrite,
-      HiveConf conf) throws IOException {
+      HiveConf conf,
+      DataCopyStatistics copyStatistics) throws IOException {
 
     boolean copied = false;
     boolean triedDistcp = false;
@@ -68,6 +70,8 @@ public final class MR3FileUtils {
         LOG.info("Launch distributed copy (distcp) job.");
         triedDistcp = true;
         copied = distCp(srcFS, Collections.singletonList(src), dst, deleteSource, null, conf);
+        // increment bytes copied counter
+        copyStatistics.incrementBytesCopiedCounter(srcContentSummary.getLength());
       }
     }
     if (!triedDistcp) {
@@ -75,19 +79,19 @@ public final class MR3FileUtils {
       // is tried and it fails. We depend upon that behaviour in cases like replication,
       // wherein if distcp fails, there is good reason to not plod along with a trivial
       // implementation, and fail instead.
-      copied = FileUtil.copy(srcFS, src, dstFS, dst, deleteSource, overwrite, conf);
+      copied = FileUtils.doIOUtilsCopyBytes(srcFS, srcFS.getFileStatus(src), dstFS, dst, deleteSource, overwrite, FileUtils.shouldPreserveXAttrs(conf, srcFS, dstFS, src), conf, copyStatistics);
     }
     return copied;
   }
 
   public static boolean distCp(FileSystem srcFS, List<Path> srcPaths, Path dst,
-      boolean deleteSource, String doAsUser,
+      boolean deleteSource, UserGroupInformation proxyUser,
       HiveConf conf) throws IOException {
     boolean copied = false;
-    if (doAsUser == null){
+    if (proxyUser == null){
       copied = runDistCp(srcPaths, dst, conf);
     } else {
-      copied = runDistCpAs(srcPaths, dst, conf, doAsUser);
+      copied = runDistCpAs(srcPaths, dst, conf, proxyUser);
     }
     if (copied && deleteSource) {
       for (Path path : srcPaths) {
@@ -99,9 +103,7 @@ public final class MR3FileUtils {
 
   // based on org.apache.hadoop.hive.shims.HadoopShims
 
-  private static boolean runDistCpAs(List<Path> srcPaths, Path dst, HiveConf conf, String doAsUser) throws IOException {
-    UserGroupInformation proxyUser = UserGroupInformation.createProxyUser(
-        doAsUser, UserGroupInformation.getLoginUser());
+  private static boolean runDistCpAs(List<Path> srcPaths, Path dst, HiveConf conf, UserGroupInformation proxyUser) throws IOException {
     try {
       return proxyUser.doAs(new PrivilegedExceptionAction<Boolean>() {
         @Override
