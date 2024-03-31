@@ -108,7 +108,7 @@ public class ObjectCacheFactory {
     result = new LlapObjectCache();
     ObjectCache old = llapQueryCaches.putIfAbsent(cacheKey, result);
     if (old == null) {
-      LOG.info("Created object cache for " + cacheKey);
+      LOG.info("Created object cache for {}", cacheKey);
     }
     return (old != null) ? old : result;
   }
@@ -121,7 +121,7 @@ public class ObjectCacheFactory {
       if (result != null) return result;
       result = new LlapObjectCache();
       map.put(vertexIndex, result);
-      LOG.info("Created Vertex cache for " + queryId + " " + vertexIndex);
+      LOG.info("Created Vertex cache for {} {}", queryId, vertexIndex);
       return result;
     }
   }
@@ -133,7 +133,7 @@ public class ObjectCacheFactory {
     result = new HashMap<>();
     Map<Integer, LlapObjectCache> old = llapVertexCaches.putIfAbsent(cacheKey, result);
     if (old == null && LOG.isInfoEnabled()) {
-      LOG.info("Created Vertex cache map for " + cacheKey);
+      LOG.info("Created Vertex cache map for {}", cacheKey);
     }
     return (old != null) ? old : result;
   }
@@ -147,14 +147,14 @@ public class ObjectCacheFactory {
         prev = result.remove(vertexIndex);
       }
       if (prev != null && LOG.isInfoEnabled()) {
-        LOG.info("Removed Vertex cache for " + cacheKey + " " + vertexIndex);
+        LOG.info("Removed Vertex cache for {} {}", cacheKey, vertexIndex);
       }
     }
   }
 
   public static void removeLlapQueryCache(String queryId, int dagIdId) {
     String cacheKey = getCacheKey(queryId, dagIdId);
-    LOG.info("Removing object cache and Vertex cache map for " + cacheKey);
+    LOG.info("Removing object cache and Vertex cache map for {}", cacheKey);
     llapQueryCaches.remove(cacheKey);
     llapVertexCaches.remove(cacheKey);
   }
