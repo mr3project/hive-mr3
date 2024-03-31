@@ -686,28 +686,28 @@ public class DAGUtils {
     }
 
     if (mapWork.getMaxSplitSize() != null) {
-      HiveConf.setLongVar(jobConf, HiveConf.ConfVars.MAPREDMAXSPLITSIZE,
+      HiveConf.setLongVar(jobConf, HiveConf.ConfVars.MAPRED_MAX_SPLIT_SIZE,
           mapWork.getMaxSplitSize().longValue());
     }
 
     if (mapWork.getMinSplitSize() != null) {
-      HiveConf.setLongVar(jobConf, HiveConf.ConfVars.MAPREDMINSPLITSIZE,
+      HiveConf.setLongVar(jobConf, HiveConf.ConfVars.MAPRED_MIN_SPLIT_SIZE,
           mapWork.getMinSplitSize().longValue());
     }
 
     if (mapWork.getMinSplitSizePerNode() != null) {
-      HiveConf.setLongVar(jobConf, HiveConf.ConfVars.MAPREDMINSPLITSIZEPERNODE,
+      HiveConf.setLongVar(jobConf, HiveConf.ConfVars.MAPRED_MIN_SPLIT_SIZE_PER_NODE,
           mapWork.getMinSplitSizePerNode().longValue());
     }
 
     if (mapWork.getMinSplitSizePerRack() != null) {
-      HiveConf.setLongVar(jobConf, HiveConf.ConfVars.MAPREDMINSPLITSIZEPERRACK,
+      HiveConf.setLongVar(jobConf, HiveConf.ConfVars.MAPRED_MIN_SPLIT_SIZE_PER_RACK,
           mapWork.getMinSplitSizePerRack().longValue());
     }
 
     Utilities.setInputAttributes(jobConf, mapWork);
 
-    String inpFormat = HiveConf.getVar(jobConf, HiveConf.ConfVars.HIVETEZINPUTFORMAT);
+    String inpFormat = HiveConf.getVar(jobConf, HiveConf.ConfVars.HIVE_TEZ_INPUT_FORMAT);
 
     if (mapWork.isUseBucketizedHiveInputFormat()) {
       inpFormat = BucketizedHiveInputFormat.class.getName();
@@ -1161,7 +1161,7 @@ public class DAGUtils {
     boolean localizeSessionJars = HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS);
     if (localizeSessionJars) {
       String execjar = getExecJarPathLocal();
-      String auxjars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS);
+      String auxjars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_AUX_JARS);
       // need to localize the hive-exec jars and hive.aux.jars
       // we need the directory on hdfs to which we shall put all these files
       return (execjar + "," + auxjars).split(",");
@@ -1184,7 +1184,7 @@ public class DAGUtils {
       Path hdfsDirPathStr, Configuration conf) throws IOException, LoginException {
     List<LocalResource> tmpResources = new ArrayList<LocalResource>();
 
-    if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVEADDFILESUSEHDFSLOCATION)) {
+    if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_ADD_FILES_USE_HDFS_LOCATION)) {
       // reference HDFS based resource directly, to use distribute cache efficiently.
       addHdfsResource(conf, tmpResources, LocalResourceType.FILE, getHdfsTempFilesFromConf(conf));
       // local resources are session based.
@@ -1222,7 +1222,7 @@ public class DAGUtils {
   private static String[] getLocalTempFilesFromConf(Configuration conf) {
     String addedFiles = Utilities.getLocalResourceFiles(conf, SessionState.ResourceType.FILE);
     String addedJars = Utilities.getLocalResourceFiles(conf, SessionState.ResourceType.JAR);
-    String auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEAUXJARS);
+    String auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_AUX_JARS);
     String reloadableAuxJars = SessionState.get() == null ? null : SessionState.get().getReloadableAuxJars();
     String allFiles =
         HiveStringUtils.joinIgnoringEmpty(new String[]{auxJars, reloadableAuxJars, addedJars, addedFiles}, ',');
@@ -1232,11 +1232,11 @@ public class DAGUtils {
   private String[] getTempFilesFromConf(Configuration conf) {
     String addedFiles = Utilities.getResourceFiles(conf, SessionState.ResourceType.FILE);
     if (StringUtils.isNotBlank(addedFiles)) {
-      HiveConf.setVar(conf, ConfVars.HIVEADDEDFILES, addedFiles);
+      HiveConf.setVar(conf, ConfVars.HIVE_ADDED_FILES, addedFiles);
     }
     String addedJars = Utilities.getResourceFiles(conf, SessionState.ResourceType.JAR);
     if (StringUtils.isNotBlank(addedJars)) {
-      HiveConf.setVar(conf, ConfVars.HIVEADDEDJARS, addedJars);
+      HiveConf.setVar(conf, ConfVars.HIVE_ADDED_JARS, addedJars);
     }
     // do not add HiveConf.ConfVars.HIVEAUXJARS here which is added in getSessionInitJars()
     String reloadableAuxJars = SessionState.get() == null ? null : SessionState.get().getReloadableAuxJars();
@@ -1251,7 +1251,7 @@ public class DAGUtils {
   private String[] getTempArchivesFromConf(Configuration conf) {
     String addedArchives = Utilities.getResourceFiles(conf, SessionState.ResourceType.ARCHIVE);
     if (StringUtils.isNotBlank(addedArchives)) {
-      HiveConf.setVar(conf, ConfVars.HIVEADDEDARCHIVES, addedArchives);
+      HiveConf.setVar(conf, ConfVars.HIVE_ADDED_ARCHIVES, addedArchives);
       return addedArchives.split(",");
     }
     return new String[0];
@@ -1461,7 +1461,7 @@ public class DAGUtils {
     conf.set(MRJobConfig.OUTPUT_KEY_CLASS, HiveKey.class.getName());
     conf.set(MRJobConfig.OUTPUT_VALUE_CLASS, BytesWritable.class.getName());
 
-    conf.set("mapred.partitioner.class", HiveConf.getVar(conf, HiveConf.ConfVars.HIVEPARTITIONER));
+    conf.set("mapred.partitioner.class", HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_PARTITIONER));
     conf.set("tez.runtime.partitioner.class", MRPartitioner.class.getName());
 
     // Removing job credential entry/ cannot be set on the tasks

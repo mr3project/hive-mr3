@@ -153,7 +153,7 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
       // if MR3_SHARE_SESSION is enabled, the scratch directory should be created with permission 733 so that
       // each query can create its own MR3 scratch director, e.g.,
       // ..../<ugi.getShortUserName>/_mr3_scratch_dir-3/
-      hiveConf.set(HiveConf.ConfVars.SCRATCHDIRPERMISSION.varname, "733");
+      hiveConf.set(HiveConf.ConfVars.SCRATCH_DIR_PERMISSION.varname, "733");
       commonUgi = UserGroupInformation.getCurrentUser();
       commonSessionState = SessionState.get();
     }
