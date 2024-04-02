@@ -46,7 +46,7 @@ public class LlapOutputFormat<K extends Writable, V extends Writable>
 
   @Override
   public RecordWriter<K, V> getRecordWriter(FileSystem ignored, JobConf job, String name, Progressable progress) throws IOException {
-    if (!LlapProxy.isDaemon()) {
+    if (!LlapProxy.isDaemon()) {  // Hive-MR3 is not supposed to use LlapOutputFormatService
       throw new IOException("LlapOutputFormat can only be used inside Llap");
     }
     try {
