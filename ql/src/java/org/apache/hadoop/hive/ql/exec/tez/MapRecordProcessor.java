@@ -100,7 +100,7 @@ public class MapRecordProcessor extends RecordProcessor {
   public MapRecordProcessor(final JobConf jconf, final ProcessorContext context) throws Exception {
     super(jconf, context);
     String queryId = HiveConf.getVar(jconf, HiveConf.ConfVars.HIVE_QUERY_ID);
-    if (LlapProxy.isDaemon()) {
+    if (LlapProxy.isDaemon()) {   // this is not about LLAP_IO_ENABLED
       setLlapOfFragmentId(context);
     }
     String prefixes = jconf.get(DagUtils.TEZ_MERGE_WORK_FILE_PREFIXES);
