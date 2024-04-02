@@ -216,6 +216,7 @@ public class LogUtils {
    */
   public static void registerLoggingContext(Configuration conf) {
     if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
+      // MDC is required for Beeline to display progress bar, so do not remove
       MDC.put(SESSIONID_LOG_KEY, HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_SESSION_ID));
       MDC.put(QUERYID_LOG_KEY, HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_QUERY_ID));
       MDC.put(OPERATIONLOG_LEVEL_KEY, HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LEVEL));
