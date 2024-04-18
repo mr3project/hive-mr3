@@ -154,7 +154,9 @@ public class FileUtils {
     boolean triedDistcp = false;
 
     /* Run distcp if source file/dir is too big */
-    if (srcFS.getUri().getScheme().equals("hdfs")) {
+    // Metastore cannot use MR3DistCp in the module 'ql' which depends on the module 'metastore'.
+    LOG.warn("Metastore cannot use MR3DistCp, so revert to regular copy instead.");
+    /* if (srcFS.getUri().getScheme().equals("hdfs")) {
       ContentSummary srcContentSummary = srcFS.getContentSummary(src);
       if (srcContentSummary.getFileCount() >
             MetastoreConf.getLongVar(conf, ConfVars.REPL_COPYFILE_MAXNUMFILES)
@@ -169,7 +171,7 @@ public class FileUtils {
         triedDistcp = true;
         copied = distCp(srcFS, Collections.singletonList(src), dst, deleteSource, null, conf);
       }
-    }
+    } */
     if (!triedDistcp) {
       // Note : Currently, this implementation does not "fall back" to regular copy if distcp
       // is tried and it fails. We depend upon that behaviour in cases like replication,

@@ -129,7 +129,7 @@ public class CopyUtils {
     retryableFxn(() -> {
       boolean preserveXAttrs = FileUtils.shouldPreserveXAttrs(hiveConf, srcFS, dstFS, paths[0]);
       FileUtils.copy(srcFS, paths, dstFS, dst, deleteSource, overwrite, preserveXAttrs, hiveConf,
-          copyStatistics);
+          copyStatistics);  // no need to use MR3FileUtils.copy() because this is a regular copy
       return null;
     });
   }
