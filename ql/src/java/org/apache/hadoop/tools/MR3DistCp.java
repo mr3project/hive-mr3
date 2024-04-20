@@ -209,8 +209,18 @@ public class MR3DistCp extends Configured implements Tool {
       }
       jobConf.setCredentials(UserGroupInformation.getCurrentUser().getCredentials());
       TezWork tezWork = createTezWork(jobConf);
+
+      // Disable speculative execution
+      int concurrentRunThreshold = hiveConf.getIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
+      if (concurrentRunThreshold != 100) {
+        LOG.info("Disable speculative execution for MR3DistCp: {}", concurrentRunThreshold);
+        hiveConf.setIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100);
+      }
+
       MR3Task mr3Task = new MR3Task(hiveConf, new SessionState.LogHelper(LOG), new AtomicBoolean(false));
       int returnCode = mr3Task.execute(null, tezWork);  // blocking
+
+      // TODO: Restore speculative execution if necessary (when hiveConf is shared)
 
       if (returnCode != 0) {
         throw new HiveException("DistCp using MR3 failed", mr3Task.getException());
@@ -300,7 +310,8 @@ public class MR3DistCp extends Configured implements Tool {
     job.setMapOutputKeyClass(Text.class);
     job.setMapOutputValueClass(Text.class);
     job.setOutputFormatClass(CopyOutputFormat.class);
-    job.getConfiguration().set(JobContext.MAP_SPECULATIVE, "false");
+    // no need to set because we use MR3 instead of MapReduce
+    // job.getConfiguration().set(JobContext.MAP_SPECULATIVE, "false");
     job.getConfiguration().set(JobContext.NUM_MAPS,
                   String.valueOf(context.getMaxMaps()));
 
