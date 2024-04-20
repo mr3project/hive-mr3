@@ -662,7 +662,7 @@ public class DAGUtils {
     // Is this required ?
     jobConf.set("mapred.reducer.class", ExecReducer.class.getName());
 
-    jobConf.setBoolean(org.apache.hadoop.mapreduce.MRJobConfig.REDUCE_SPECULATIVE, false);
+    // MR3 allows speculative execution of reducer
 
     return jobConf;
   }

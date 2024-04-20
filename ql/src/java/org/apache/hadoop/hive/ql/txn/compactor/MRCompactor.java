@@ -365,6 +365,7 @@ public class MRCompactor implements Compactor {
     job.setLong(MIN_TXN, minTxn);
     job.setLong(MAX_TXN, maxTxn);
     // HIVE-23354 enforces that MR speculative execution is disabled
+    // do not remove for the case HIVE_MR3_COMPACTION_USING_MR3 == false
     job.setBoolean(MRJobConfig.REDUCE_SPECULATIVE, false);
     job.setBoolean(MRJobConfig.MAP_SPECULATIVE, false);
 
@@ -393,6 +394,13 @@ public class MRCompactor implements Compactor {
         } catch (TException e) {
           LOG.warn("Error setting hadoop job, jobId=" + job.getJobName()
               + " compactionId=" + id, e);
+        }
+        // Disable speculative execution
+        // hiveConf originates from CompactorThread.conf, so it is okay to update it permanently.
+        int concurrentRunThreshold = hiveConf.getIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
+        if (concurrentRunThreshold != 100) {
+          LOG.info("Disable speculative execution for compaction: {}", concurrentRunThreshold);
+          hiveConf.setIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100);
         }
         // Each compaction job creates its own MR3CompactionHelper and discards it because:
         //  1. the retry logic is already implemented inside the compaction thread itself.
