@@ -100,8 +100,9 @@ public class ColumnTruncateTask extends Task<ColumnTruncateWork> implements Seri
     // zero reducers
     job.setNumReduceTasks(0);
     // HIVE-23354 enforces that MR speculative execution is disabled
-    job.setBoolean(MRJobConfig.REDUCE_SPECULATIVE, false);
-    job.setBoolean(MRJobConfig.MAP_SPECULATIVE, false);
+    // no need to set because we use MR3 instead of MapReduce
+    // job.setBoolean(MRJobConfig.REDUCE_SPECULATIVE, false);
+    // job.setBoolean(MRJobConfig.MAP_SPECULATIVE, false);
 
     if (work.getMinSplitSize() != null) {
       HiveConf.setLongVar(job, HiveConf.ConfVars.MAPRED_MIN_SPLIT_SIZE, work
@@ -210,8 +211,17 @@ public class ColumnTruncateTask extends Task<ColumnTruncateWork> implements Seri
   private int submitJobToMr3(JobConf jobConf) throws IOException {
     jobConf.setCredentials(UserGroupInformation.getCurrentUser().getCredentials());
     TezWork tezWork = createTezWork(jobConf);
+
+    int concurrentRunThreshold = conf.getIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
+    if (concurrentRunThreshold != 100) {
+      LOG.info("Disable speculative execution for ColumnTruncateTask: {}", concurrentRunThreshold);
+      conf.setIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100);
+    }
+
     MR3Task mr3Task = new MR3Task(conf, new SessionState.LogHelper(LOG), new AtomicBoolean(false));
     return mr3Task.execute(null, tezWork);
+
+    // TODO: Restore speculative execution if necessary (when conf is shared)
   }
 
   private TezWork createTezWork(JobConf jobConf) {
