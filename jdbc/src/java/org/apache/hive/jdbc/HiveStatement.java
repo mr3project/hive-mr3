@@ -424,9 +424,9 @@ public class HiveStatement implements java.sql.Statement {
     statusReq.setGetProgressUpdate(inPlaceUpdateStream.isPresent());
 
     // Progress bar is completed if there is nothing to request
-    if (!inPlaceUpdateStream.isPresent()) {
-      inPlaceUpdateStream.get().getEventNotifier().progressBarCompleted();
-    }
+    // if (inPlaceUpdateStream.isPresent()) {
+    //   inPlaceUpdateStream.get().getEventNotifier().progressBarCompleted();
+    // }
 
     LOG.debug("Waiting on operation to complete: Polling operation status");
 
