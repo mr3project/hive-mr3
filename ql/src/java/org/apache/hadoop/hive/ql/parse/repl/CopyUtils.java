@@ -34,6 +34,7 @@ import org.apache.hadoop.hive.ql.exec.repl.util.ReplUtils;
 import org.apache.hadoop.hive.ql.exec.util.Retryable;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.metadata.HiveFatalException;
+import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.ql.util.MR3FileUtils;
 import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -184,8 +185,11 @@ public class CopyUtils {
               executorService = getExecutorService();
             }
             List<Callable<Void>> copyList = new ArrayList<>();
+            SessionState parentState = SessionState.get();
             for (Map.Entry<Path, List<ReplChangeManager.FileInfo>> destMapEntry : destMap.entrySet()) {
               copyList.add(() -> {
+                // MR3 distCp needs SessionState.
+                SessionState.setCurrentSessionState(parentState);
                 DataCopyStatistics copyStatistics = new DataCopyStatistics();
                 doCopy(destMapEntry, proxyUser, regularCopy(sourceFs, destMapEntry.getValue()), overwrite, copyStatistics);
                 incrementTotalBytesCopied(copyStatistics.getBytesCopied());
