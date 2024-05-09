@@ -39,6 +39,8 @@ import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.ql.session.SessionState.LogHelper;
 import org.apache.tez.common.counters.TezCounter;
 import org.apache.tez.common.counters.TezCounters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import scala.collection.JavaConversions$;
 
 import java.io.InterruptedIOException;
@@ -56,6 +58,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * completion.
  */
 public class MR3JobMonitor {
+
+  private static final Logger LOG = LoggerFactory.getLogger(MR3JobMonitor.class);
 
   private static final String CLASS_NAME = MR3JobMonitor.class.getName();
   private static final int CHECK_INTERVAL = 1000;   // 1000ms = 1 second
@@ -106,6 +110,7 @@ public class MR3JobMonitor {
   private final DAG dag;
   private final Context context;
   private final AtomicBoolean isShutdown;
+  private final boolean hiveServer2InPlaceProgressEnabled;
   private final UpdateFunction updateFunction;
   /**
    * Have to use the same instance to render else the number lines printed earlier is lost and the
@@ -130,6 +135,7 @@ public class MR3JobMonitor {
     this.isShutdown = isShutdown;
     console = SessionState.getConsole();
     inPlaceUpdate = new InPlaceUpdate(LogHelper.getInfoStream());
+    hiveServer2InPlaceProgressEnabled = hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_INPLACE_PROGRESS);
     updateFunction = updateFunction();
   }
 
@@ -139,7 +145,11 @@ public class MR3JobMonitor {
       public void update(DAGStatus status, String report) {
         // The output from updateProgressMonitor() and console.printInfo() gets mixed in some cases.
         // We call console.printInfo(report) first to reduce the chance. Similarly for inPlaceUpdateFunction.
-        console.printInfo(report);
+        if (hiveServer2InPlaceProgressEnabled) {
+          LOG.info(report);
+        } else {
+          console.logInfo(report);
+        }
         SessionState.get().updateProgressMonitor(progressMonitor(status));
       }
     };
