@@ -267,7 +267,7 @@ public class VectorizedOrcAcidRowBatchReader
 
     this.syntheticProps = orcSplit.getSyntheticAcidProps();
 
-    if (LlapHiveUtils.isLlapMode(conf) && HiveConf.getBoolVar(conf, ConfVars.LLAP_IO_ENABLED)
+    if (LlapHiveUtils.isLlapMode(conf) && HiveConf.getBoolVar(conf, ConfVars.LLAP_IO_ENABLED, false)
             && HiveConf.getBoolVar(conf, ConfVars.LLAP_TRACK_CACHE_USAGE))
     {
       if (mapWork == null) {
@@ -754,7 +754,7 @@ public class VectorizedOrcAcidRowBatchReader
   private static boolean shouldReadDeleteDeltasWithLlap(Configuration conf, boolean metaDataLevelSufficient) {
     String ddCacheLevel = HiveConf.getVar(conf, ConfVars.LLAP_IO_CACHE_DELETEDELTAS);
     return ("all".equals(ddCacheLevel) || (metaDataLevelSufficient && ddCacheLevel.equals("metadata")))
-        && LlapHiveUtils.isLlapMode(conf) && HiveConf.getBoolVar(conf, ConfVars.LLAP_IO_ENABLED) && LlapProxy.getIo() != null;
+        && LlapHiveUtils.isLlapMode(conf) && HiveConf.getBoolVar(conf, ConfVars.LLAP_IO_ENABLED, false) && LlapProxy.getIo() != null;
   }
 
   /**
