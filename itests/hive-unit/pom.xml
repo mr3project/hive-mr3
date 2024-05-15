@@ -424,6 +424,24 @@
       </exclusions>
     </dependency>
     <dependency>
+      <groupId>com.datamonad.mr3</groupId>
+      <artifactId>mr3-tez</artifactId>
+      <version>${mr3.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk15on</artifactId>
+      <version>1.68</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpkix-jdk15on</artifactId>
+      <version>1.68</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.apache.tez</groupId>
       <artifactId>tez-mapreduce</artifactId>
       <scope>test</scope>
