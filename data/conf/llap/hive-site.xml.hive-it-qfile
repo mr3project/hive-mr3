@@ -19,6 +19,12 @@
 
 <configuration>
 
+  <property>
+    <name>hive.metastore.client.cache.enabled</name>
+    <value>true</value>
+    <description>This property enables a Caffeiene Cache for Metastore client</description>
+  </property>
+
 <property>
   <name>hive.in.test</name>
   <value>true</value>
@@ -38,9 +44,18 @@
   <description>A base for other temporary directories.</description>
 </property>
 
+<!-- in LLAP mode hive.tez.container.size isn't used to actually determine container size, however while -->
+<!-- calculating available slots (in split generation) in it's used through -->
+<!-- the Vertex resource, so this has to be defined in order to get consistent test results -->
 <property>
   <name>hive.tez.container.size</name>
-  <value>512</value>
+  <value>128</value>
+</property>
+
+<property>
+  <name>hive.stats.fetch.column.stats</name>
+  <value>true</value>
+  <description>Use column stats to annotate stats for physical optimization phase</description>
 </property>
 
 <property>
@@ -62,6 +77,12 @@
 </property>
 
 <property>
+  <name>hive.exec.local.scratchdir</name>
+  <value>${test.tmp.dir}/localscratchdir/</value>
+  <description>Local scratch space for Hive jobs</description>
+</property>
+
+<property>
   <name>datanucleus.schema.autoCreateAll</name>
   <value>true</value>
 </property>
@@ -72,19 +93,13 @@
 </property>
 
 <property>
-  <name>hive.exec.local.scratchdir</name>
-  <value>${test.tmp.dir}/localscratchdir/</value>
-  <description>Local scratch space for Hive jobs</description>
+  <name>hive.metastore.schema.verification</name>
+  <value>false</value>
 </property>
 
 <property>
   <name>javax.jdo.option.ConnectionURL</name>
   <value>jdbc:derby:memory:${test.tmp.dir}/junit_metastore_db;create=true</value>
-</property>
-
-<property>
-  <name>hive.metastore.schema.verification</name>
-  <value>false</value>
 </property>
 
 <property>
@@ -153,7 +168,7 @@
 
 <property>
   <name>hive.exec.post.hooks</name>
-  <value>org.apache.hadoop.hive.ql.hooks.PostExecutePrinter</value>
+  <value>org.apache.hadoop.hive.ql.hooks.PostExecutePrinter, org.apache.hadoop.hive.ql.hooks.RuntimeStatsPersistenceCheckerHook, org.apache.hadoop.hive.ql.hooks.OperatorHealthCheckerHook</value>
   <description>Post Execute Hook for Tests</description>
 </property>
 
@@ -214,9 +229,9 @@
 </property>
 
 <property>
-  <name>hive.stats.fetch.column.stats</name>
-  <value>true</value>
-  <description>Use column stats to annotate stats for physical optimization phase</description>
+  <name>hive.execution.engine</name>
+  <value>tez</value>
+  <description>Whether to use MR or Tez</description>
 </property>
 
 <property>
@@ -226,20 +241,11 @@
 
 <property>
   <name>hive.prewarm.enabled</name>
-  <value>true</value>
+  <value>false</value>
   <description>
     Enables container prewarm for tez (hadoop 2 only)
   </description>
 </property>
-
-<property>
-  <name>hive.prewarm.numcontainers</name>
-  <value>3</value>
-  <description>
-    Controls the number of containers to prewarm for tez (hadoop 2 only)
-  </description>
-</property>
-
 <property>
   <name>hive.in.tez.test</name>
   <value>true</value>
@@ -247,6 +253,17 @@
     Indicates that we are in tez testing mode.
   </description>
 </property>
+
+<property>
+  <name>hive.execution.mode</name>
+  <value>llap</value>
+</property>
+
+<!--property>
+     This is determined by the cluster type, and is set in code - HadoopShims, etc.
+  <name>hive.llap.execution.mode</name>
+  <value>all</value>
+</property-->
 
 <property>
   <name>hive.tez.java.opts</name>
@@ -259,13 +276,18 @@
 </property>
 
 <property>
-  <name>hive.tez.exec.print.summary</name>
+  <name>hive.llap.cache.allow.synthetic.fileid</name>
   <value>true</value>
 </property>
 
 <property>
-  <name>hive.orc.splits.ms.footer.cache.enabled</name>
-  <value>true</value>
+  <name>hive.llap.io.allocator.direct</name>
+  <value>false</value>
+</property>
+
+<property>
+  <name>hive.explain.user</name>
+  <value>false</value>
 </property>
 
 <property>
@@ -273,6 +295,49 @@
   <value>true</value>
 </property>
 
+<!-- llap properties -->
+
+<property>
+  <name>hive.llap.daemon.service.hosts</name>
+  <value>localhost</value>
+</property>
+
+<property>
+  <name>hive.llap.daemon.service.port</name>
+  <value>0</value>
+</property>
+
+<property>
+  <name>hive.llap.daemon.num.executors</name>
+  <value>4</value>
+</property>
+
+<property>
+  <name>hive.llap.daemon.task.scheduler.wait.queue.size</name>
+  <value>4</value>
+</property>
+
+<property>
+  <name>hive.llap.cache.allow.synthetic.fileid</name>
+  <value>true</value>
+</property>
+
+<!-- hadoop IPC options -->
+<property>
+  <name>ipc.client.low-latency</name>
+  <value>true</value>
+  <description> </description>
+</property>
+<property>
+  <name>ipc.client.tcpnodelay</name>
+  <value>true</value>
+  <description> </description>
+</property>
+<property>
+  <name>ipc.clients-per-factory</name>
+  <value>4</value>
+  <description> </description>
+</property>
 <property>
   <name>hive.stats.fetch.bitvector</name>
   <value>true</value>
@@ -294,8 +359,34 @@
 </property>
 
 <property>
+  <name>tez.counters.max</name>
+  <value>1024</value>
+</property>
+
+<property>
   <name>hive.query.reexecution.stats.persist.scope</name>
   <value>query</value>
+</property>
+
+<property>
+  <name>hive.semantic.analyzer.hook</name>
+  <value>org.apache.hadoop.hive.ql.hooks.ScheduledQueryCreationRegistryHook</value>
+</property>
+
+<property>
+  <name>hive.users.in.admin.role</name>
+  <value>hive_admin_user</value>
+</property>
+
+<property>
+  <name>hive.conf.restricted.list</name>
+  <value>hive.query.max.length</value>
+  <description>Using property defined in HiveConf.ConfVars to test System property overriding</description>
+</property>
+
+<property>
+  <name>hive.strict.timestamp.conversion</name>
+  <value>false</value>
 </property>
 
 <property>
@@ -304,22 +395,11 @@
 </property>
 
 <property>
-  <name>iceberg.hive.keep.stats</name>
-  <value>true</value>
-  <description>
-    We want we keep the stats in Hive sessions.
-  </description>
-</property>
-
-<property>
   <name>hive.txn.xlock.ctas</name>
   <value>false</value>
 </property>
 
-<property>
-  <name>hive.lock.sleep.between.retries</name>
-  <value>2</value>
-</property>
+<!-- Hive-MR3 -->
 
 <property>
   <name>hive.mr3.containergroup.scheme</name>
@@ -328,16 +408,12 @@
 
 <property>
   <name>hive.mr3.all-in-one.containergroup.memory.mb</name>
-  <value>2048</value>
-  <description>
-    llap_cache_disabled.q enables LLAP IO, adding extra 2GB to ContainerGroup memory.
-    Since 4GB is the max memory allowed, we set ContainerGroup memory to 2GB.
-  </description>
+  <value>4096</value>
 </property>
 
 <property>
   <name>hive.mr3.all-in-one.containergroup.vcores</name>
-  <value>2</value>
+  <value>4</value>
 </property>
 
 <property>
@@ -351,13 +427,23 @@
 </property>
 
 <property>
+  <name>hive.mr3.llap.headroom.mb</name>
+  <value>-1024</value>
+</property>
+
+<property>
   <name>hive.mr3.use.daemon.shufflehandler</name>
   <value>1</value>
 </property>
 
 <property>
   <name>hive.aux.jars.path</name>
-  <value>/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-llap-common-4.0.0.jar,/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-llap-server-4.0.0.jar,/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-llap-tez-4.0.0.jar,/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-iceberg-handler-4.0.0.jar,/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/log4j-1.2-api-2.18.0.jar</value>
+  <value>/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-llap-common-4.0.0.jar,/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-llap-server-4.0.0.jar,/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-llap-tez-4.0.0.jar,/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-iceberg-handler-4.0.0.jar,/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/log4j-1.2-api-2.18.0.jar,/home/hive/hive-mr3/itests/util/target/hive-it-util-4.0.0.jar,/home/hive/hive-mr3/ql/target/hive-exec-4.0.0-tests.jar</value>
+</property>
+
+<property>
+  <name>hive.mr3.am.task.max.failed.attempts</name>
+  <value>2</value>
 </property>
 
 </configuration>

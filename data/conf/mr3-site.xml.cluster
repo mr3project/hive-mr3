@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+
+<property>
+  <name>mr3.runtime</name>
+  <value>tez</value>
+</property>
+
+<!-- Should be pointing valid paths -->
+<property>
+  <name>mr3.aux.uris</name>
+  <value>file:///home/hive/mr3-run/mr3/mr3lib/mr3-tez-1.10-assembly.jar,file:///home/hive/.m2/repository/org/apache/hadoop/hadoop-common/3.3.6/hadoop-common-3.3.6-tests.jar</value>
+</property>
+
+<property>
+  <name>mr3.lib.uris</name>
+  <value>file:///home/hive/mr3-run/tez/tezjar/tez-0.9.1.mr3.1.10.tar.gz</value>
+</property>
+
+<property>
+  <name>mr3.master.mode</name>
+  <value>yarn</value>
+</property>
+
+<property>
+  <name>mr3.am.worker.mode</name>
+  <value>yarn</value>
+</property>
+
+<property>
+  <name>mr3.container.resourcescheduler.type</name>
+  <value>yarn</value>
+</property>
+
+<property>
+  <name>mr3.am.resource.memory.mb</name>
+  <value>2048</value>
+</property>
+
+<property>
+  <name>mr3.am.launch.cmd-opts</name>
+  <value>-XX:+UseG1GC -XX:+ResizeTLAB -XX:+UseNUMA -server -Djava.net.preferIPv4Stack=true -Dhadoop.metrics.log.level=WARN</value>
+</property>
+
+<property>
+  <name>mr3.am.launch.env</name>
+  <value>LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HADOOP_HOME/lib/native/</value>
+</property>
+
+<property>
+  <name>mr3.am.staging-dir</name>
+  <value>/tmp/${user.name}/staging</value>
+</property>
+
+<property>
+  <name>mr3.am.local.working-dir</name>
+  <value>/tmp/${user.name}/working-dir</value>
+</property>
+
+<property>
+  <name>mr3.am.local.log-dir</name>
+  <value>/tmp/${user.name}/log-dir</value>
+</property>
+
+<property>
+  <name>mr3.container.reuse</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>mr3.container.stop.cross.dag.reuse</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>mr3.container.mix.taskattempts</name>
+  <value>false</value>
+</property>
+
+<property>
+  <name>mr3.container.combine.taskattempts</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>mr3.container.runtime.auto.start.input</name>
+  <value>false</value>
+</property>
+
+<property>
+  <name>mr3.am.permit.custom.user.class</name>
+  <value>true</value>
+</property>
+
+<property>
+  <name>mr3.base.resource.memory.mb</name>
+  <value>512</value>
+</property>
+
+<property>
+  <name>mr3.map.task.resource.scale</name>
+  <value>1</value>
+</property>
+
+<property>
+  <name>mr3.reduce.task.resource.scale</name>
+  <value>1</value>
+</property>
+
+<property>
+  <name>mr3.daemon.task.resource.scale</name>
+  <value>1</value>
+</property>
+
+<property>
+  <name>mr3.map.containergroup.resource.scale</name>
+  <value>1</value>
+</property>
+
+<property>
+  <name>mr3.reduce.containergroup.resource.scale</name>
+  <value>1</value>
+</property>
+
+<property>
+  <name>mr3.use.daemon.shufflehandler</name>
+  <value>1</value>
+</property>
+
+<property>
+  <name>mr3.dag.timeout.kill.threshold.secs</name>
+  <value>1800</value>
+</property>
+
+</configuration>
+

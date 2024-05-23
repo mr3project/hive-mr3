@@ -1,0 +1,3 @@
+org.apache.hive.jdbc.TestJdbcWithMiniHS2$SleepMsUDF
+org.apache.hive.jdbc.TestJdbcWithMiniLlapArrow$SleepMsUDF
+
