@@ -49,7 +49,7 @@
 <!-- the Vertex resource, so this has to be defined in order to get consistent test results -->
 <property>
   <name>hive.tez.container.size</name>
-  <value>256</value>
+  <value>128</value>
 </property>
 
 <property>
@@ -104,7 +104,7 @@
 
 <property>
   <name>javax.jdo.option.ConnectionDriverName</name>
-  <value>org.apache.derby.iapi.jdbc.AutoloadedDriver</value>
+  <value>org.apache.derby.jdbc.EmbeddedDriver</value>
 </property>
 
 <property>
@@ -158,12 +158,6 @@
   <name>hive.querylog.location</name>
   <value>${test.tmp.dir}/tmp</value>
   <description>Location of the structured hive logs</description>
-</property>
-
-<property>
-  <name>hive.lineage.statement.filter</name>
-  <value>ALL</value>
-  <description>Specify the types of statements for which column lineage information is generated</description>
 </property>
 
 <property>
@@ -235,6 +229,12 @@
 </property>
 
 <property>
+  <name>hive.execution.engine</name>
+  <value>tez</value>
+  <description>Whether to use MR or Tez</description>
+</property>
+
+<property>
   <name>tez.am.node-blacklisting.enabled</name>
   <value>false</value>
 </property>
@@ -273,11 +273,6 @@
 <property>
   <name>tez.am.launch.cmd-opts</name>
   <value> -Dlog4j.configurationFile=tez-container-log4j2.properties -Dtez.container.log.level=INFO -Dtez.container.root.logger=CLA </value>
-</property>
-
-<property>
-  <name>hive.tez.exec.print.summary</name>
-  <value>true</value>
 </property>
 
 <property>
@@ -395,12 +390,58 @@
 </property>
 
 <property>
+  <name>hive.cbo.fallback.strategy</name>
+  <value>TEST</value>
+</property>
+
+<property>
   <name>hive.txn.xlock.ctas</name>
   <value>false</value>
 </property>
 
+<!-- Hive-MR3 -->
+
 <property>
-  <name>hive.lock.sleep.between.retries</name>
+  <name>hive.mr3.containergroup.scheme</name>
+  <value>all-in-one</value>
+</property>
+
+<property>
+  <name>hive.mr3.all-in-one.containergroup.memory.mb</name>
+  <value>4096</value>
+</property>
+
+<property>
+  <name>hive.mr3.all-in-one.containergroup.vcores</name>
+  <value>4</value>
+</property>
+
+<property>
+  <name>hive.mr3.map.task.memory.mb</name>
+  <value>1024</value>
+</property>
+
+<property>
+  <name>hive.mr3.reduce.task.memory.mb</name>
+  <value>1024</value>
+</property>
+
+<!-- to avoid:
+  Caused by: java.lang.IllegalArgumentException: requirement failed: Container resource too large: ContainerGroup All-In-One, [5120MB, 4]
+-->
+<property>
+  <name>hive.mr3.llap.headroom.mb</name>
+  <value>-1024</value>
+</property>
+
+<property>
+  <name>hive.mr3.use.daemon.shufflehandler</name>
+  <value>1</value>
+</property>
+
+<property>
+  <name>hive.mr3.am.task.max.failed.attempts</name>
   <value>2</value>
 </property>
+
 </configuration>

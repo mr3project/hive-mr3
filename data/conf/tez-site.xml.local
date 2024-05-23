@@ -1,5 +1,4 @@
 <?xml version="1.0"?>
-<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
 <!--
    Licensed to the Apache Software Foundation (ASF) under one or more
    contributor license agreements.  See the NOTICE file distributed with
@@ -17,4 +16,30 @@
    limitations under the License.
 -->
 <configuration>
+
+  <property>
+    <name>tez.runtime.io.sort.mb</name>
+    <value>24</value>
+  </property>
+
+  <property>
+    <name>tez.runtime.unordered.output.buffer.size-mb</name>
+    <value>10</value>
+  </property>
+
+  <property>
+    <name>tez.am.shuffle.auxiliary-service.id</name>
+    <value>mapreduce_shuffle</value>
+  </property>
+
+  <property>
+    <name>tez.shuffle-vertex-manager.enable.auto-parallel</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>tez.shuffle-vertex-manager.auto-parallel.min.num.tasks</name>
+    <value>1000</value>
+  </property>
+
 </configuration>
