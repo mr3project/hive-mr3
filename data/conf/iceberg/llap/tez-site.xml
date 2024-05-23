@@ -32,4 +32,16 @@
     <name>tez.counters.max</name>
     <value>1024</value>
   </property>
+  <property>
+    <name>tez.am.shuffle.auxiliary-service.id</name>
+    <value>tez_shuffle</value>
+  </property>
+  <property>
+    <name>tez.shuffle.port</name>
+    <value>15551</value>
+  </property>
+  <property>
+    <name>tez.shuffle.indexcache.share</name>
+    <value>false</value>
+  </property>
 </configuration>
