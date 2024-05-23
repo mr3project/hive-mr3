@@ -217,6 +217,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     int dagIdId = processorContext.getDagIdentifier();
     HiveConf.setIntVar(this.jobConf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID, dagIdId);
     initTezAttributes();
+
     ExecutionContext execCtx = processorContext.getExecutionContext();
     if (execCtx instanceof Hook) {
       ((Hook)execCtx).initializeHook(this);
@@ -246,6 +247,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
 
   private void initTezAttributes() {
+    // HIVE_TEZ_VERTEX_NAME to be read in LimitOperator.onLimitReached()
     jobConf.set(HIVE_TEZ_VERTEX_NAME, processorContext.getTaskVertexName());
     jobConf.setInt(HIVE_TEZ_VERTEX_INDEX, processorContext.getTaskVertexIndex());
     jobConf.setInt(HIVE_TEZ_TASK_INDEX, processorContext.getTaskIndex());
@@ -277,11 +279,11 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
   }
 
   @Override
-  public void run(Map<String, LogicalInput> inputs, Map<String, LogicalOutput> outputs)
+  public scala.Tuple2<java.lang.Integer, java.lang.Integer> run(Map<String, LogicalInput> inputs, Map<String, LogicalOutput> outputs)
       throws Exception {
 
     if (aborted.get()) {
-      return;
+      return null;
     }
 
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.TEZ_RUN_PROCESSOR);
@@ -293,19 +295,10 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     }
 
     synchronized (this) {
-      boolean limitReached = LimitOperator.checkLimitReached(jobConf);
-      if (limitReached) {
-        LOG.info(
-            "TezProcessor exits early as query limit already reached, vertex: {}, task: {}, attempt: {}",
-            jobConf.get(HIVE_TEZ_VERTEX_NAME), jobConf.get(HIVE_TEZ_TASK_INDEX),
-            jobConf.get(HIVE_TEZ_TASK_ATTEMPT_NUMBER));
-        aborted.set(true);
-      }
-
       // This check isn't absolutely mandatory, given the aborted check outside of the
       // Processor creation.
       if (aborted.get()) {
-        return;
+        return null;
       }
 
       // leverage TEZ-3437: Improve synchronization and the progress report behavior.
@@ -327,6 +320,19 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     }
     // TODO HIVE-14042. In case of an abort request, throw an InterruptedException
     // Implement HIVE-14042 in initializeAndRunProcessor(), not here
+
+    String queryId = HiveConf.getVar(jobConf, HiveConf.ConfVars.HIVE_QUERY_ID);
+    int dagIdId = processorContext.getDagIdentifier();
+    String vertexName = processorContext.getTaskVertexName();
+    scala.Tuple2<java.lang.Integer, java.lang.Integer> limitRecords =
+      LimitOperator.getLimitRecords(jobConf, queryId, dagIdId, vertexName);
+    if (limitRecords != null) {
+      LOG.info("Reporting query limit and # of records: {}, {}, {}",
+          processorContext.getUniqueIdentifier(), limitRecords._1(), limitRecords._2());
+      return limitRecords;
+    } else {
+      return null;
+    }
   }
 
   protected void initializeAndRunProcessor(Map<String, LogicalInput> inputs,

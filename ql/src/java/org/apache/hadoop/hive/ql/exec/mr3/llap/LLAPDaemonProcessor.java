@@ -53,13 +53,13 @@ public class LLAPDaemonProcessor extends AbstractLogicalIOProcessor {
   private final Object waitLock = new Object();
 
   @Override
-  public boolean run(Map<String, LogicalInput> inputs, Map<String, LogicalOutput> outputs)
+  public scala.Tuple2<java.lang.Integer, java.lang.Integer> run(Map<String, LogicalInput> inputs, Map<String, LogicalOutput> outputs)
       throws Exception {
     LOG.info("LLAP daemon running");
     synchronized (waitLock) {
       waitLock.wait();
     }
-    return false;
+    return null;
   }
 
   @Override
