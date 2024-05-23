@@ -403,4 +403,47 @@
   <name>hive.lock.sleep.between.retries</name>
   <value>2</value>
 </property>
+
+<!-- Hive-MR3 -->
+
+<property>
+  <name>hive.mr3.containergroup.scheme</name>
+  <value>all-in-one</value>
+</property>
+
+<property>
+  <name>hive.mr3.all-in-one.containergroup.memory.mb</name>
+  <value>2048</value>
+</property>
+
+<property>
+  <name>hive.mr3.all-in-one.containergroup.vcores</name>
+  <value>16</value>
+</property>
+
+<property>
+  <name>hive.mr3.map.task.memory.mb</name>
+  <value>128</value>
+</property>
+
+<property>
+  <name>hive.mr3.reduce.task.memory.mb</name>
+  <value>128</value>
+</property>
+
+<property>
+  <name>hive.mr3.use.daemon.shufflehandler</name>
+  <value>1</value>
+</property>
+
+<property>
+  <name>hive.mr3.am.task.max.failed.attempts</name>
+  <value>2</value>
+</property>
+
+<property>
+  <name>hive.exec.orc.default.compress</name>
+  <value>SNAPPY</value>
+</property>
+
 </configuration>
