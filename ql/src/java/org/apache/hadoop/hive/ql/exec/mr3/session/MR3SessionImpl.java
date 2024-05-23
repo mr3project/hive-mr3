@@ -411,7 +411,7 @@ public class MR3SessionImpl implements MR3Session {
       confBuilder.setInt(MR3Conf$.MODULE$.MR3_CONTAINER_MAX_NUM_WORKERS(), maxNumWorkers);
     }
     if (queryId != null) {
-      confBuilder.set(HiveConf.ConfVars.HIVEQUERYID.varname, queryId);  // from HIVE-23429
+      confBuilder.set(HiveConf.ConfVars.HIVE_QUERY_ID.varname, queryId);  // from HIVE-23429
     }
     return confBuilder
         .setInt(MR3Conf$.MODULE$.MR3_AM_TASK_MAX_FAILED_ATTEMPTS(), taskMaxFailedAttempts)

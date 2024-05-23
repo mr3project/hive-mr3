@@ -227,7 +227,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     IOContextMap.setThreadAttemptId(processorContext.getUniqueIdentifier());
 
     if (HiveConf.getVar(this.jobConf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
-      String queryId = HiveConf.getVar(this.jobConf, HiveConf.ConfVars.HIVEQUERYID);
+      String queryId = HiveConf.getVar(this.jobConf, HiveConf.ConfVars.HIVE_QUERY_ID);
       processorContext.setDagShutdownHook(dagIdId,
           new Runnable() {
             public void run() {
