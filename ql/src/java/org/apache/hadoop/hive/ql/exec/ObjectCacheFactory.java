@@ -113,6 +113,12 @@ public class ObjectCacheFactory {
     return (old != null) ? old : result;
   }
 
+  public static ObjectCache peekLlapObjectCache(String queryId, int dagIdId) {
+    if (queryId == null) throw new RuntimeException("Query ID cannot be null");
+    String cacheKey = getCacheKey(queryId, dagIdId);
+    return llapQueryCaches.get(cacheKey);
+  }
+
   private static LlapObjectCache getLlapQueryVertexCache(String queryId, int dagIdId, int vertexIndex) {
     if (queryId == null) throw new RuntimeException("Query ID cannot be null");
     Map<Integer, LlapObjectCache> map = getLlapQueryVertexCacheMap(queryId, dagIdId);
