@@ -372,7 +372,7 @@ public class MR3Task {
     JSONObject json = new JSONObject().put("context", "Hive").put("description", context.getCmd());
     String dagInfo = json.toString();
     Credentials dagCredentials = jobConf.getCredentials();
-    String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVEQUERYID);
+    String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_QUERY_ID);
 
     // if doAs == true,
     //   UserGroupInformation.getCurrentUser() == the user from Beeline (auth:PROXY)
