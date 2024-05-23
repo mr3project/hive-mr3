@@ -314,4 +314,46 @@
   <value>false</value>
 </property>
 
+<!-- Hive-MR3 -->
+
+<property>
+  <name>hive.mr3.containergroup.scheme</name>
+  <value>all-in-one</value>
+</property>
+
+<property>
+  <name>hive.mr3.all-in-one.containergroup.memory.mb</name>
+  <value>4096</value>
+</property>
+
+<property>
+  <name>hive.mr3.all-in-one.containergroup.vcores</name>
+  <value>4</value>
+</property>
+
+<property>
+  <name>hive.mr3.map.task.memory.mb</name>
+  <value>1024</value>
+</property>
+
+<property>
+  <name>hive.mr3.reduce.task.memory.mb</name>
+  <value>1024</value>
+</property>
+
+<property>
+  <name>hive.mr3.llap.headroom.mb</name>
+  <value>-1024</value>
+</property>
+
+<property>
+  <name>hive.mr3.use.daemon.shufflehandler</name>
+  <value>1</value>
+</property>
+
+<property>
+  <name>hive.aux.jars.path</name>
+  <value>/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-llap-common-4.0.0.jar,/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-llap-server-4.0.0.jar,/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-llap-tez-4.0.0.jar,/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-iceberg-handler-4.0.0.jar,/home/hive/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/log4j-1.2-api-2.18.0.jar</value>
+</property>
+
 </configuration>
