@@ -162,7 +162,7 @@ public class LlapInputFormat implements InputFormat<NullWritable, VectorizedRowB
      * 2. The property "tez.mapreduce.vertex.name" is present: it is handled in MRInputBase.initialize.
      *    On Input codepaths we cannot use properties from TezProcessor.initTezAttributes.
      */
-    return LimitOperator.checkLimitReachedForVertex(job, job.get("tez.mapreduce.vertex.name"));
+    return LimitOperator.checkLimitReachedForVertex(job);
   }
 
   private RecordReader<NullWritable, VectorizedRowBatch> wrapLlapReader(
