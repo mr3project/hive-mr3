@@ -23,3 +23,4 @@ alter table authorization_part_n1 partition (ds='2010') rename to partition (ds=
 show grant user hive_test_user on table authorization_part_n1(key) partition (ds='2010_tmp');
 
 drop table authorization_part_n1;
+revoke drop on database default from user hive_test_user;
