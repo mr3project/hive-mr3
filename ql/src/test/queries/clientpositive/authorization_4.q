@@ -15,3 +15,4 @@ GRANT drop ON DATABASE default TO USER hive_test_user;
 select key from src_autho_test_n2 order by key limit 20;
 
 drop table src_autho_test_n2;
+revoke drop on database default from user hive_test_user;
