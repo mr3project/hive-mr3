@@ -107,3 +107,7 @@ POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@authorization_part_n1
 POSTHOOK: Output: database:default
 POSTHOOK: Output: default@authorization_part_n1
+PREHOOK: query: revoke drop on database default from user hive_test_user
+PREHOOK: type: REVOKE_PRIVILEGE
+POSTHOOK: query: revoke drop on database default from user hive_test_user
+POSTHOOK: type: REVOKE_PRIVILEGE
