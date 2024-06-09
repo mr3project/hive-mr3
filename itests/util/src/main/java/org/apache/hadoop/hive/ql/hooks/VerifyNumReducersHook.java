@@ -23,7 +23,7 @@ import org.junit.Assert;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.MapRedStats;
-import org.apache.hadoop.hive.ql.exec.tez.monitoring.TezProgressMonitor;
+import org.apache.hadoop.hive.ql.exec.mr3.monitoring.MR3ProgressMonitor;
 import org.apache.hadoop.hive.ql.session.SessionState;
 
 import org.apache.tez.dag.api.client.Progress;
@@ -53,15 +53,8 @@ public class VerifyNumReducersHook implements ExecuteWithHookContext {
       MapRedStats stat = stats.values().iterator().next();
       Assert.assertEquals("NumReducers is incorrect", expectedReducers, stat.getNumReduce());
     } else if (ss.getConf().get(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname).equals("tez")) {
-      TezProgressMonitor tezProgressMonitor = (TezProgressMonitor) ss.getProgressMonitor();
-      Map<String, Progress> progressMap = tezProgressMonitor.getStatus().getVertexProgress();
-      int totalReducers = 0;
-      for (Map.Entry<String, Progress> entry : progressMap.entrySet()) {
-        // relying on the name of vertex is fragile, but this will do for now for the tests
-        if (entry.getKey().contains("Reducer")) {
-          totalReducers += entry.getValue().getTotalTaskCount();
-        }
-      }
+      MR3ProgressMonitor mr3ProgressMonitor = (MR3ProgressMonitor) ss.getProgressMonitor();
+      int totalReducers = mr3ProgressMonitor.getTotalReducers();
       Assert.assertEquals("Number of reducers is incorrect", expectedReducers, totalReducers);
     }
   }
