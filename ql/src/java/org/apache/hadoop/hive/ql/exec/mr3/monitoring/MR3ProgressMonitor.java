@@ -38,7 +38,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 
-class MR3ProgressMonitor implements ProgressMonitor {
+public class MR3ProgressMonitor implements ProgressMonitor {
   private static final int COLUMN_1_WIDTH = 16;
   private final Map<String, BaseWork> workMap;
   private final SessionState.LogHelper console;
@@ -143,6 +143,16 @@ class MR3ProgressMonitor implements ProgressMonitor {
   @Override
   public String executionStatus() {
     return this.status.state().toString();
+  }
+
+  public int getTotalReducers() {
+    int totalReducers = 0;
+    for (Map.Entry<String, VertexProgress> entry : progressCountsMap.entrySet()) {
+      if (entry.getKey().contains("Reducer")) {
+        totalReducers += entry.getValue().getTotalTaskCount();
+      }
+    }
+    return totalReducers;
   }
 
   private int completed() {
@@ -252,6 +262,10 @@ class MR3ProgressMonitor implements ProgressMonitor {
 
     String killed() {
       return String.valueOf(killedTaskAttemptCount);
+    }
+
+    int getTotalTaskCount() {
+      return totalTaskCount;
     }
 
     @Override
