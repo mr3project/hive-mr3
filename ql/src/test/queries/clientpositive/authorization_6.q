@@ -24,7 +24,9 @@ show grant user hive_test_user on table authorization_part_n0(key) partition (ds
 show grant user hive_test_user on table authorization_part_n0(key);
 select key from authorization_part_n0 where ds>='2010' order by key limit 20;
 
+grant drop on database default to user hive_test_user;
 drop table authorization_part_n0;
+revoke drop on database default from user hive_test_user;
 
 set hive.security.authorization.enabled=false;
 create table authorization_part_n0 (key int, value string) partitioned by (ds string);
