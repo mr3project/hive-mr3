@@ -19,6 +19,7 @@
 package org.apache.hadoop.hive.ql.ddl.table.drop;
 
 import org.apache.hadoop.hive.common.TableName;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.llap.LlapHiveUtils;
 import org.apache.hadoop.hive.llap.ProactiveEviction;
 import org.apache.hadoop.hive.metastore.api.Database;
@@ -112,7 +113,7 @@ public class DropTableOperation extends DDLOperation<DropTableDesc> {
     context.getDb().dropTable(table, desc.isPurge());
     DDLUtils.addIfAbsentByName(new WriteEntity(table, WriteEntity.WriteType.DDL_NO_LOCK), context);
 
-    if (LlapHiveUtils.isLlapMode(context.getConf())) {
+    if (LlapHiveUtils.isLlapMode(context.getConf()) && HiveConf.getBoolVar(context.getConf(), HiveConf.ConfVars.LLAP_IO_ENABLED, false)) {
       TableName tableName = HiveTableName.of(table);
       ProactiveEviction.Request.Builder llapEvictRequestBuilder = ProactiveEviction.Request.Builder.create();
       llapEvictRequestBuilder.addTable(tableName.getDb(), tableName.getTable());
