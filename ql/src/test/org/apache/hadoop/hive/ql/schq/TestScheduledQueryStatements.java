@@ -240,7 +240,7 @@ public class TestScheduledQueryStatements {
     HiveConf conf = env_setup.getTestCtx().hiveConf;
     conf.set("hive.test.authz.sstd.hs2.mode", "true");
     conf.set("hive.security.authorization.manager",
-        "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLStdHiveAuthorizerFactoryForTest");
+        "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLStdHiveAuthorizerFactory");
     conf.set("hive.security.authenticator.manager",
         "org.apache.hadoop.hive.ql.security.SessionStateConfigUserAuthenticator");
     conf.set("hive.security.authorization.enabled", "true");
