@@ -89,7 +89,7 @@ public class TestCopyUtils {
     }
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test(expected = IOException.class)
   public void shouldThrowExceptionOnDistcpFailure() throws Exception {
     Path destination = mock(Path.class);
     Path source = mock(Path.class);
@@ -100,7 +100,7 @@ public class TestCopyUtils {
     doReturn(false).when(copyUtils).regularCopy(same(fs), anyList());
 
     when(source.getFileSystem(same(conf))).thenReturn(fs);
-    try (MockedStatic<FileUtils> fileUtilsMockedStatic = mockStatic(FileUtils.class);
+    try (MockedStatic<MR3FileUtils> fileUtilsMockedStatic = mockStatic(MR3FileUtils.class);
          MockedStatic<Utils> utilsMockedStatic = mockStatic(Utils.class)) {
       fileUtilsMockedStatic.when(
               () -> MR3FileUtils.distCp(same(fs), anyList(), same(destination), anyBoolean(), eq(null), same(conf))).thenReturn(false);
