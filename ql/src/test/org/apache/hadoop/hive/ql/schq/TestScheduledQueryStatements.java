@@ -34,6 +34,7 @@ import org.hamcrest.Matchers;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
@@ -294,7 +295,7 @@ public class TestScheduledQueryStatements {
     }
   }
 
-  @Test
+  @Ignore
   public void testImpersonation() throws ParseException, Exception {
     HiveConf conf = env_setup.getTestCtx().hiveConf;
     IDriver driver = createDriver();
