@@ -734,7 +734,7 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree /Users/ekoifman/dev/hiver
     ShowCompactResponse resp = txnHandler.showCompact(new ShowCompactRequest());
     Assert.assertEquals("Unexpected number of compactions in history", 1, resp.getCompactsSize());
     Assert.assertEquals("Unexpected 0 compaction state", TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(0).getState());
-    Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId().startsWith("job_local"));
+    Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId().startsWith("MR3-compaction"));
 
     //this should not vectorize at all
     query = "select ROW__ID, a, b, INPUT__FILE__NAME from T where b > 0 order by a, b";
@@ -825,7 +825,7 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree /Users/ekoifman/dev/hiver
     ShowCompactResponse resp = txnHandler.showCompact(new ShowCompactRequest());
     Assert.assertEquals("Unexpected number of compactions in history", 1, resp.getCompactsSize());
     Assert.assertEquals("Unexpected 0 compaction state", TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(0).getState());
-    Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId().startsWith("job_local"));
+    Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId().startsWith("MR3-compaction"));
 
     //Check basic stats are updated for p=1/q=2, and compaction is done (numFiles=1)
     partitions = Hive.get().getPartitions(hiveTable);
@@ -880,7 +880,7 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree /Users/ekoifman/dev/hiver
     ShowCompactResponse resp = txnHandler.showCompact(new ShowCompactRequest());
     Assert.assertEquals("Unexpected number of compactions in history", 1, resp.getCompactsSize());
     Assert.assertEquals("Unexpected 0 compaction state", TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(0).getState());
-    Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId().startsWith("job_local"));
+    Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId().startsWith("MR3-compaction"));
 
     //now run another compaction make sure empty dirs don't cause issues
     runStatementOnDriver("insert into T" + makeValuesClause(data));
@@ -892,7 +892,7 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree /Users/ekoifman/dev/hiver
     Assert.assertEquals("Unexpected number of compactions in history", 2, resp.getCompactsSize());
     for(int i = 0; i < 2; i++) {
       Assert.assertEquals("Unexpected 0 compaction state", TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(i).getState());
-      Assert.assertTrue(resp.getCompacts().get(i).getHadoopJobId().startsWith("job_local"));
+      Assert.assertTrue(resp.getCompacts().get(i).getHadoopJobId().startsWith("MR3-compaction"));
     }
     rs = runStatementOnDriver("select a, b from T order by a, b");
     Assert.assertEquals(stringifyValues(data), rs);

@@ -126,6 +126,14 @@ public class TestTezOutputCommitter {
     conf.setInt("tez.am.task.max.failed.attempts", MAX_TASK_ATTEMPTS);
     conf.set("mapred.output.committer.class", committerClass);
 
+    // For Hive-MR3
+    conf.setVar(HiveConf.ConfVars.MR3_CONTAINERGROUP_SCHEME, "all-in-one");
+    conf.setIntVar(HiveConf.ConfVars.MR3_ALLINONE_CONTAINERGROUP_MEMORY_MB, 2048);
+    conf.setIntVar(HiveConf.ConfVars.MR3_ALLINONE_CONTAINERGROUP_VCORES, 4);
+    conf.setIntVar(HiveConf.ConfVars.MR3_MAP_TASK_MEMORY_MB, 512);
+    conf.setIntVar(HiveConf.ConfVars.MR3_REDUCE_TASK_MEMORY_MB, 512);
+    conf.setIntVar(HiveConf.ConfVars.MR3_AM_TASK_MAX_FAILED_ATTEMPTS, MAX_TASK_ATTEMPTS);
+
     SessionState.start(conf);
     return DriverFactory.newDriver(conf);
   }
