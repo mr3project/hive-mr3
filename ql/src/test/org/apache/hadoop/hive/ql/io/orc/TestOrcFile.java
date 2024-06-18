@@ -235,6 +235,8 @@ public class TestOrcFile {
   Path testFilePath;
   private final boolean zeroCopy;
 
+  private final long orcMemoryPool = 512L * 1024 * 1024;  // for Hive-MR3
+
   @Parameters
   public static Collection<Boolean[]> data() {
     // Test Disabled with ZeroCopy=True until ORC-701
@@ -258,6 +260,8 @@ public class TestOrcFile {
     testFilePath = new Path(workDir, "TestOrcFile." +
         testCaseName.getMethodName() + ".orc");
     fs.delete(testFilePath, false);
+
+    OrcFile.setupOrcMemoryManager(orcMemoryPool);   // for Hive-MR3
   }
 
   @Test
@@ -2209,7 +2213,8 @@ public class TestOrcFile {
       OrcFile.WriterOptions opts = OrcFile.writerOptions(conf).inspector(inspector).compress(CompressionKind.ZLIB);
       Writer writer = OrcFile.createWriter(new Path(testFilePath, "-0"), opts);
       writer.close();
-      assertEquals(opts.getMemoryManager().getClass(), MemoryManagerImpl.class);
+      // Hive-MR3 tests only HIVE_ORC_WRITER_LLAP_MEMORY_MANAGER_ENABLED and does not check LlapProxy.isDaemon()
+      assertEquals(opts.getMemoryManager().getClass(), OrcFile.LlapAwareMemoryManager.class);
 
       conf.set(HiveConf.ConfVars.HIVE_EXECUTION_MODE.varname, "llap");
       LlapDaemonInfo.initialize("test", new Configuration());
@@ -2218,7 +2223,7 @@ public class TestOrcFile {
       writer = OrcFile.createWriter(new Path(testFilePath, "-1"), opts);
       writer.close();
       assertEquals(opts.getMemoryManager().getClass(), OrcFile.LlapAwareMemoryManager.class);
-      assertEquals(LlapDaemonInfo.INSTANCE.getMemoryPerExecutor() * 0.5,
+      assertEquals(orcMemoryPool * 0.5,
         ((OrcFile.LlapAwareMemoryManager) opts.getMemoryManager()).getTotalMemoryPool(), 100);
 
       conf.setBoolean(HiveConf.ConfVars.HIVE_ORC_WRITER_LLAP_MEMORY_MANAGER_ENABLED.varname, false);

@@ -103,6 +103,10 @@ public class TestVectorGroupByOperator {
 
   HiveConf hconf = new HiveConf();
 
+  private static void setupMaxMemory(GroupByDesc desc) {
+    desc.setMaxMemoryAvailable(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax());
+  }
+
   private static ExprNodeDesc buildColumnDesc(
       VectorizationContext ctx,
       String column,
@@ -202,6 +206,7 @@ public class TestVectorGroupByOperator {
     GroupByDesc desc = new GroupByDesc();
     VectorGroupByDesc vectorDesc = new VectorGroupByDesc();
 
+    setupMaxMemory(desc);
     desc.setOutputColumnNames(outputColumnNames);
     desc.setAggregators(aggs);
     vectorDesc.setProcessingMode(ProcessingMode.GLOBAL);
@@ -234,6 +239,7 @@ public class TestVectorGroupByOperator {
                 .build()});
     vectorDesc.setProcessingMode(VectorGroupByDesc.ProcessingMode.HASH);
 
+    setupMaxMemory(desc);
     desc.setOutputColumnNames(outputColumnNames);
     desc.setAggregators(aggs);
 
@@ -2428,6 +2434,7 @@ public class TestVectorGroupByOperator {
     GroupByDesc desc = new GroupByDesc();
     VectorGroupByDesc vectorGroupByDesc = new VectorGroupByDesc();
 
+    setupMaxMemory(desc);
     desc.setOutputColumnNames(outputColumnNames);
     desc.setAggregators(aggs);
     desc.setKeys(keysDesc);
@@ -2545,6 +2552,7 @@ public class TestVectorGroupByOperator {
     GroupByDesc desc = new GroupByDesc();
     VectorGroupByDesc vectorGroupByDesc = new VectorGroupByDesc();
 
+    setupMaxMemory(desc);
     desc.setOutputColumnNames(outputColumnNames);
     desc.setAggregators(aggs);
     vectorGroupByDesc.setProcessingMode(ProcessingMode.HASH);

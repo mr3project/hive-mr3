@@ -128,6 +128,8 @@ public class TestVectorLimitOperator {
   private void validateVectorLimitOperator(int limit, int batchSize, int expectedBatchSize)
       throws HiveException {
 
+    HiveConf.setLoadHiveServer2Config(true);
+
     FakeVectorRowBatchFromObjectIterables frboi = getBatch(batchSize);
 
     // Get next batch
