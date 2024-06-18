@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.ddl.database.drop;
 
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.llap.LlapHiveUtils;
 import org.apache.hadoop.hive.llap.ProactiveEviction;
 import org.apache.hadoop.hive.metastore.api.Database;
@@ -50,7 +51,7 @@ public class DropDatabaseOperation extends DDLOperation<DropDatabaseDesc> {
       }
       context.getDb().dropDatabase(desc);
 
-      if (LlapHiveUtils.isLlapMode(context.getConf())) {
+      if (LlapHiveUtils.isLlapMode(context.getConf()) && HiveConf.getBoolVar(context.getConf(), HiveConf.ConfVars.LLAP_IO_ENABLED, false)) {
         ProactiveEviction.Request.Builder llapEvictRequestBuilder = ProactiveEviction.Request.Builder.create();
         llapEvictRequestBuilder.addDb(dbName);
         ProactiveEviction.evict(context.getConf(), llapEvictRequestBuilder.build());
