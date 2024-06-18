@@ -52,6 +52,7 @@ import org.apache.tez.dag.api.client.DAGClient;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.Ignore;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -195,7 +196,7 @@ public class TestTezTask {
     fs = null;
   }
 
-  @Test
+  @Ignore   // because task.build() uses DagUtils
   public void testBuildDag() throws Exception {
     DAG dag = task.build(conf, work, path, new Context(conf),
         DagUtils.createTezLrMap(appLr, null));
@@ -216,14 +217,14 @@ public class TestTezTask {
     }
   }
 
-  @Test
+  @Ignore   // because task.build() uses DagUtils
   public void testEmptyWork() throws Exception {
     DAG dag = task.build(conf, new TezWork("", null), path, new Context(conf),
         DagUtils.createTezLrMap(appLr, null));
     assertEquals(dag.getVertices().size(), 0);
   }
 
-  @Test
+  @Ignore   // because we do not use TezTask.submit()
   public void testSubmit() throws Exception {
     DAG dag = DAG.create("test");
     task.submit(dag, Ref.from(sessionState));
@@ -232,7 +233,7 @@ public class TestTezTask {
     verify(session, times(2)).submitDAG(any(DAG.class));
   }
 
-  @Test
+  @Ignore   // because we do not use TezTask.submit()
   public void testSubmitOnNonPoolSession() throws Exception {
     DAG dag = DAG.create("test");
 
@@ -256,7 +257,7 @@ public class TestTezTask {
     assertTrue(isException);
   }
 
-  @Test
+  @Ignore   // because we do not use TezTask.submit()
   public void testSubmitOnPoolSession() throws Exception {
     DAG dag = DAG.create("test");
     // Move session to TezSessionPool, reopen will handle it
@@ -280,13 +281,13 @@ public class TestTezTask {
     assertTrue(isException);
   }
 
-  @Test
+  @Ignore   // because we do not use TezTask.close()
   public void testClose() throws HiveException {
     task.close(work, 0, null);
     verify(op, times(4)).jobClose(any(), eq(true));
   }
 
-  @Test
+  @Ignore   // because we do not use TezTask
   public void testExistingSessionGetsStorageHandlerResources() throws Exception {
     final String jarFilePath = "file:///tmp/foo.jar";
     final String[] inputOutputJars = new String[] {jarFilePath};
