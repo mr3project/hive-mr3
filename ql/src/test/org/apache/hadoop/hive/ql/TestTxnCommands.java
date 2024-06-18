@@ -1539,7 +1539,7 @@ public class TestTxnCommands extends TxnCommandsBaseForTests {
     Assert.assertEquals("Unexpected number of compactions in history", 1, resp.getCompactsSize());
     Assert.assertEquals("Unexpected 0 compaction state",
         TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(0).getState());
-    Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId().startsWith("job_local"));
+    Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId().startsWith("MR3-compaction"));
     Assert.assertTrue(resp.getCompacts().get(0).getType().equals(CompactionType.MINOR));
 
     // Check the files after minor compaction
@@ -1558,7 +1558,7 @@ public class TestTxnCommands extends TxnCommandsBaseForTests {
     Assert.assertEquals("Unexpected number of compactions in history", 2, resp.getCompactsSize());
     Assert.assertEquals("Unexpected 1 compaction state",
         TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(1).getState());
-    Assert.assertTrue(resp.getCompacts().get(1).getHadoopJobId().startsWith("job_local"));
+    Assert.assertTrue(resp.getCompacts().get(1).getHadoopJobId().startsWith("MR3-compaction"));
 
     // Check the files after major compaction
     files = fs.listFiles(new Path(getWarehouseDir(), "t"), true);
