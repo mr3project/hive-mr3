@@ -24,6 +24,7 @@ import java.util.Map;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hive.common.TableName;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.llap.LlapHiveUtils;
 import org.apache.hadoop.hive.llap.ProactiveEviction;
 import org.apache.hadoop.hive.metastore.PartitionDropOptions;
@@ -138,7 +139,7 @@ public class AlterTableDropPartitionOperation extends DDLOperation<AlterTableDro
       return;
     }
 
-    ProactiveEviction.Request.Builder llapEvictRequestBuilder = LlapHiveUtils.isLlapMode(context.getConf()) ?
+    ProactiveEviction.Request.Builder llapEvictRequestBuilder = LlapHiveUtils.isLlapMode(context.getConf()) && HiveConf.getBoolVar(context.getConf(), HiveConf.ConfVars.LLAP_IO_ENABLED, false) ?
         ProactiveEviction.Request.Builder.create() : null;
 
     for (Partition partition : droppedPartitions) {
