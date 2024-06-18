@@ -193,7 +193,7 @@ public class TestTxnCommands3 extends TxnCommandsBaseForTests {
     Assert.assertEquals("Unexpected 0 compaction state",
         TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(0).getState());
     Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId()
-        .startsWith("job_local"));
+        .startsWith("MR3-compaction"));
 
     String[][] expected2 = new String[][]{
         {"{\"writeid\":1,\"bucketid\":536870912,\"rowid\":1}\t4\t5",
@@ -238,7 +238,7 @@ public class TestTxnCommands3 extends TxnCommandsBaseForTests {
     Assert.assertEquals("Unexpected 0 compaction state",
         TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(0).getState());
     Assert.assertTrue(
-        resp.getCompacts().get(0).getHadoopJobId().startsWith("job_local"));
+        resp.getCompacts().get(0).getHadoopJobId().startsWith("MR3-compaction"));
 
     hiveConf.setBoolVar(HiveConf.ConfVars.OPTIMIZE_ACID_META_COLUMNS, true);
     rs = runStatementOnDriver("select a, b from T order by a, b");
