@@ -129,7 +129,7 @@ public class OperatorUtils {
     return found.size() >= 1 ? found.iterator().next(): null;
   }
 
-  public static <T> Set<T> findOperatorsUpstream(Collection<Operator<?>> starts, Class<T> clazz) {
+  public static <T> Set<T> findOperatorsUpstream(Collection<Operator<? extends OperatorDesc>> starts, Class<T> clazz) {
     Set<T> found = new HashSet<T>();
     for (Operator<?> start : starts) {
       findOperatorsUpstream(start, clazz, found);
