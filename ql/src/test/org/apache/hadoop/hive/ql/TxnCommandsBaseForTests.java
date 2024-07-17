@@ -41,6 +41,7 @@ import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.hadoop.hive.metastore.utils.TestTxnDbUtil;
 import org.apache.hadoop.hive.metastore.txn.TxnStore;
 import org.apache.hadoop.hive.metastore.txn.TxnUtils;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.hive.ql.io.HiveInputFormat;
 import org.apache.hadoop.hive.ql.metadata.HiveMetaStoreClientWithLocalCache;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorException;
@@ -177,6 +178,7 @@ public abstract class TxnCommandsBaseForTests {
         d.close();
         d.destroy();
         d = null;
+        MR3SessionManagerImpl.getInstance().shutdown();
       }
     } finally {
       TestTxnDbUtil.cleanDb(hiveConf);
