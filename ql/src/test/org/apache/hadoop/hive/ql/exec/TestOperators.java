@@ -568,6 +568,7 @@ public class TestOperators {
     desc.setGroupByMemoryUsage(1.0f);
     // minReductionHashAggr
     desc.setMinReductionHashAggr(0.5f);
+    desc.setEstimateNumExecutors(1);
 
     // 5. Configure hive conf and  Build group by operator
     HiveConf hconf = new HiveConf();
