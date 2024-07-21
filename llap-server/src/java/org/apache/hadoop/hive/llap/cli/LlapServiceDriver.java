@@ -89,7 +89,7 @@ public class LlapServiceDriver {
 
   private static final String[]
       DEFAULT_AUX_CLASSES =
-      new String[] { "org.apache.hive.hcatalog.data.JsonSerDe", "org.apache.hadoop.hive.druid.DruidStorageHandler",
+      new String[] { "org.apache.hive.hcatalog.data.JsonSerDe",
           "org.apache.commons.pool.impl.GenericObjectPool", "org.apache.hadoop.hive.kafka.KafkaStorageHandler" };
   private static final String HBASE_SERDE_CLASS = "org.apache.hadoop.hive.hbase.HBaseSerDe";
   private static final String[] NEEDED_CONFIGS = LlapDaemonConfiguration.DAEMON_CONFIGS;
