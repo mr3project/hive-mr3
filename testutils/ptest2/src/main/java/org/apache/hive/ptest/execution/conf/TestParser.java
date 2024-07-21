@@ -50,7 +50,6 @@ public class TestParser {
       .trimResults().omitEmptyStrings();
 
   private static final String QTEST_MODULE_NAME = "itests/qtest";
-  private static final String QTEST_SPARK_MODULE_NAME = "itests/qtest-spark";
 
   private final AtomicInteger batchIdCounter;
 
@@ -247,11 +246,7 @@ public class TestParser {
   }
 
   private String getModuleName(String driverName) {
-    if (driverName.toLowerCase().contains("spark")) {
-      return QTEST_SPARK_MODULE_NAME;
-    } else {
-      return QTEST_MODULE_NAME;
-    }
+    return QTEST_MODULE_NAME;
   }
 
   public Supplier<List<TestBatch>> parse() {

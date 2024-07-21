@@ -85,7 +85,7 @@ public class ATSHook implements ExecuteWithHookContext {
     CLIENT_IP_ADDRESS, HIVE_ADDRESS, HIVE_INSTANCE_TYPE, CONF, PERF, LLAP_APP_ID
   };
   private enum ExecutionMode {
-    MR, TEZ, LLAP, SPARK, NONE
+    MR, TEZ, LLAP, NONE
   };
   private enum PrimaryFilterTypes {
     user, requestuser, operationid, executionmode, tablesread, tableswritten, queue
@@ -324,14 +324,11 @@ public class ATSHook implements ExecuteWithHookContext {
 
   protected ExecutionMode getExecutionMode(QueryPlan plan) {
     int numMRJobs = Utilities.getMRTasks(plan.getRootTasks()).size();
-    int numSparkJobs = Utilities.getSparkTasks(plan.getRootTasks()).size();
     int numTezJobs = Utilities.getTezTasks(plan.getRootTasks()).size();
 
     ExecutionMode mode = ExecutionMode.MR;
-    if (0 == (numMRJobs + numSparkJobs + numTezJobs)) {
+    if (0 == (numMRJobs + numTezJobs)) {
       mode = ExecutionMode.NONE;
-    } else if (numSparkJobs > 0) {
-      return ExecutionMode.SPARK;
     } else if (numTezJobs > 0) {
       mode = ExecutionMode.TEZ;
       // Need to go in and check if any of the tasks is running in LLAP mode.

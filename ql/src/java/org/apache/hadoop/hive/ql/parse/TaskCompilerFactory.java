@@ -19,7 +19,6 @@
 package org.apache.hadoop.hive.ql.parse;
 
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.parse.spark.SparkCompiler;
 
 /**
  * TaskCompilerFactory is a factory class to choose the appropriate

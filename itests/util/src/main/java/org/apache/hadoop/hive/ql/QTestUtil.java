@@ -94,8 +94,6 @@ import org.apache.hadoop.hive.ql.cache.results.QueryResultsCache;
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.Utilities;
-import org.apache.hadoop.hive.ql.exec.spark.session.SparkSession;
-import org.apache.hadoop.hive.ql.exec.spark.session.SparkSessionManagerImpl;
 import org.apache.hadoop.hive.ql.exec.tez.TezSessionState;
 import org.apache.hadoop.hive.ql.lockmgr.zookeeper.CuratorFrameworkSingleton;
 import org.apache.hadoop.hive.ql.lockmgr.zookeeper.ZooKeeperHiveLockManager;
@@ -199,7 +197,6 @@ public class QTestUtil {
   private MiniLlapCluster llapCluster = null;
   private String hadoopVer = null;
   private QTestSetup setup = null;
-  private SparkSession sparkSession = null;
   private boolean isSessionStateStarted = false;
   private static final String javaVersion = getJavaVersion();
   private QOutProcessor qOutProcessor;
@@ -488,8 +485,7 @@ public class QTestUtil {
 
   private enum CoreClusterType {
     MR,
-    TEZ,
-    SPARK
+    TEZ
   }
 
   public enum FsType {
@@ -503,8 +499,6 @@ public class QTestUtil {
     mr(CoreClusterType.MR, FsType.hdfs),
     tez(CoreClusterType.TEZ, FsType.hdfs),
     tez_local(CoreClusterType.TEZ, FsType.local),
-    spark(CoreClusterType.SPARK, FsType.local),
-    miniSparkOnYarn(CoreClusterType.SPARK, FsType.hdfs),
     llap(CoreClusterType.TEZ, FsType.hdfs),
     llap_local(CoreClusterType.TEZ, FsType.local),
     none(CoreClusterType.MR, FsType.local),
@@ -537,10 +531,6 @@ public class QTestUtil {
         return tez;
       } else if (type.equals("tez_local")) {
         return tez_local;
-      } else if (type.equals("spark")) {
-        return spark;
-      } else if (type.equals("miniSparkOnYarn")) {
-        return miniSparkOnYarn;
       } else if (type.equals("llap")) {
         return llap;
       } else if (type.equals("llap_local")) {
@@ -750,8 +740,6 @@ public class QTestUtil {
         mr = shims.getMiniTezCluster(conf, numTrackers, uriString,
             isLlapIoEnabled);
       }
-    } else if (clusterType == MiniClusterType.miniSparkOnYarn) {
-      mr = shims.getMiniSparkCluster(conf, 2, uriString, 1);
     } else if (clusterType == MiniClusterType.mr) {
       mr = shims.getMiniMrCluster(conf, 2, uriString, 1);
     }
@@ -818,15 +806,6 @@ public class QTestUtil {
       kafkaCluster = null;
     }
     setup.tearDown();
-    if (sparkSession != null) {
-      try {
-        SparkSessionManagerImpl.getInstance().closeSession(sparkSession);
-      } catch (Exception ex) {
-        LOG.error("Error closing spark session.", ex);
-      } finally {
-        sparkSession = null;
-      }
-    }
     if (mr != null) {
       mr.shutdown();
       mr = null;
@@ -1412,13 +1391,6 @@ public class QTestUtil {
       TezSessionState tezSessionState = oldSs.getTezSession();
       oldSs.setTezSession(null);
       ss.setTezSession(tezSessionState);
-      oldSs.close();
-    }
-
-    if (oldSs != null && clusterType.getCoreClusterType() == CoreClusterType.SPARK) {
-      sparkSession = oldSs.getSparkSession();
-      ss.setSparkSession(sparkSession);
-      oldSs.setSparkSession(null);
       oldSs.close();
     }
   }
