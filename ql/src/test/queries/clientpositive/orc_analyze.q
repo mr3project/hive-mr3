@@ -1,3 +1,4 @@
+--! qt:replace:/(\s+totalSize\s+)\S+(\s+)/$1#Masked#/
 set hive.vectorized.execution.enabled=false;
 set hive.mapred.mode=nonstrict;
 set hive.exec.submitviachild=false;
@@ -14,7 +15,6 @@ CREATE TABLE orc_create_people_staging_n0 (
 
 LOAD DATA LOCAL INPATH '../../data/files/orc_create_people.txt' OVERWRITE INTO TABLE orc_create_people_staging_n0;
 
-set hive.exec.dynamic.partition.mode=nonstrict;
 
 set hive.stats.autogather=false;
 -- non-partitioned table

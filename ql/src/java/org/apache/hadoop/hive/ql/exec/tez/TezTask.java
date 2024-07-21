@@ -115,12 +115,13 @@ public class TezTask extends Task<TezWork> {
   Map<BaseWork, JobConf> workToConf = new HashMap<BaseWork, JobConf>();
 
   public TezTask() {
-    this(DagUtils.getInstance());
+    super();
+    this.utils = null;
   }
 
   public TezTask(DagUtils utils) {
     super();
-    this.utils = utils;
+    this.utils = null;
   }
 
   public TezCounters getTezCounters() {
@@ -130,6 +131,30 @@ public class TezTask extends Task<TezWork> {
 
   @Override
   public int execute(DriverContext driverContext) {
+    String engine = conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+    if (engine.equals("mr3")) {
+      return executeMr3(driverContext);
+    } else {
+      LOG.info("Run MR3 instead of Tez");
+      return executeMr3(driverContext);
+    }
+  }
+
+  java.util.concurrent.atomic.AtomicBoolean isShutdownMr3 = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+  private int executeMr3(DriverContext driverContext) {
+    org.apache.hadoop.hive.ql.exec.mr3.MR3Task mr3Task =
+      new org.apache.hadoop.hive.ql.exec.mr3.MR3Task(conf, console, isShutdownMr3);
+    int returnCode = mr3Task.execute(driverContext, this.getWork());
+    counters = mr3Task.getTezCounters();
+    Throwable exFromMr3 = mr3Task.getException();
+    if (exFromMr3 != null) {
+      this.setException(exFromMr3);
+    }
+    return returnCode;
+  }
+
+  private int executeTez(DriverContext driverContext) {
     int rc = 1;
     boolean cleanContext = false;
     Context ctx = null;
@@ -673,16 +698,7 @@ public class TezTask extends Task<TezWork> {
   @Override
   public void shutdown() {
     super.shutdown();
-    DAGClient dagClient = null;
-    synchronized (dagClientLock) {
-      isShutdown = true;
-      dagClient = this.dagClient;
-      // Don't set dagClient to null here - execute will only clean up operators if it's set.
-    }
-    LOG.info("Shutting down Tez task " + this + " "
-        + ((dagClient == null) ? " before submit" : ""));
-    if (dagClient == null) return;
-    closeDagClientOnCancellation(dagClient);
+    isShutdownMr3.set(true);
   }
 
   /** DAG client that does dumb global sync on all the method calls;

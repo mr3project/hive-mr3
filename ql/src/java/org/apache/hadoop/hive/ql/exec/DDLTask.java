@@ -995,15 +995,20 @@ public class DDLTask extends Task<DDLWork> implements Serializable {
     mergeWork.setAliasToWork(aliasToWork);
     DriverContext driverCxt = new DriverContext();
     Task<?> task;
-    if (conf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+    if (true) {
       TezWork tezWork = new TezWork(queryState.getQueryId(), conf);
-      mergeWork.setName("File Merge");
+      mergeWork.setName("File Merge DDLTask");
       tezWork.add(mergeWork);
       task = new TezTask();
       ((TezTask) task).setWork(tezWork);
-    } else {
-      task = new MergeFileTask();
-      ((MergeFileTask) task).setWork(mergeWork);
+    }
+
+    // Disable speculative execution
+    HiveConf hiveConf = queryState.getConf();
+    int concurrentRunThreshold = hiveConf.getIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
+    if (concurrentRunThreshold != 100) {
+      LOG.info("Disable speculative execution for File Merge DDLTask: {}", concurrentRunThreshold);
+      hiveConf.setIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100);
     }
 
     // initialize the task and execute

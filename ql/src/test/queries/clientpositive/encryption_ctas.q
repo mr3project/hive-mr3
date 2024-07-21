@@ -1,5 +1,5 @@
-DROP TABLE IF EXISTS testCT.encrypted_tablectas PURGE;
-DROP DATABASE IF EXISTS testCT;
+--! qt:dataset:src
+DROP DATABASE IF EXISTS testCT CASCADE;
 CREATE DATABASE testCT;
 dfs ${system:test.dfs.mkdir} ${hiveconf:hive.metastore.warehouse.dir}/default/encrypted_tablectas;
 

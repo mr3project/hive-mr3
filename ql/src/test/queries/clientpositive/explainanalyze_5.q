@@ -1,3 +1,6 @@
+--! qt:dataset:src1
+--! qt:dataset:src
+--! qt:dataset:alltypesorc
 SET hive.vectorized.execution.enabled=false;
 set hive.map.aggr=false;
 
@@ -25,7 +28,6 @@ describe formatted src_multi2_n7;
 
 
 set hive.mapred.mode=nonstrict;
-set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.support.concurrency=true;
 set hive.txn.manager=org.apache.hadoop.hive.ql.lockmgr.DbTxnManager;
 
@@ -85,4 +87,4 @@ delete from acid_dot_n0 where cint < -1070551679;
 
 select count(*) from acid_dot_n0;
 
-dfs -rmr ${system:test.tmp.dir}/delete_orig_table;
+dfs -rm -r -f ${system:test.tmp.dir}/delete_orig_table;

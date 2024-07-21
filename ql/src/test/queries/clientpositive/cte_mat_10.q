@@ -1,5 +1,5 @@
 set hive.optimize.cte.materialize.threshold=2;
-set hive.optimize.cte.materialize.full.aggregate.only=false;
+-- set hive.optimize.cte.materialize.full.aggregate.only=false;
 
 explain with x as ( select 'x' as id ),
 a1 as ( select 'a1' as id),

@@ -1,3 +1,5 @@
+--! qt:dataset:src1
+--! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 set hive.auto.convert.join=false;
 set hive.optimize.correlation=false;
@@ -94,7 +96,7 @@ FROM (SELECT a.key AS key1, a.cnt AS cnt1, b.key AS key2, b.cnt AS cnt2
 
 set hive.optimize.correlation=false;
 -- Full Outer Join should be handled.
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 EXPLAIN
 SELECT SUM(HASH(key1)), SUM(HASH(cnt1)), SUM(HASH(key2)), SUM(HASH(cnt2))
 FROM (SELECT a.key AS key1, a.cnt AS cnt1, b.key AS key2, b.cnt AS cnt2
@@ -108,7 +110,7 @@ FROM (SELECT a.key AS key1, a.cnt AS cnt1, b.key AS key2, b.cnt AS cnt2
       FULL OUTER JOIN (SELECT y.key as key, count(y.value) AS cnt FROM src1 y group by y.key) b
       ON (a.key = b.key)) tmp;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 SET hive.merge.nway.joins=false;
 EXPLAIN
 SELECT SUM(HASH(key1)), SUM(HASH(cnt1)), SUM(HASH(key2)), SUM(HASH(cnt2))
@@ -125,7 +127,7 @@ FROM (SELECT a.key AS key1, a.cnt AS cnt1, b.key AS key2, b.cnt AS cnt2
 SET hive.merge.nway.joins=true;
 
 set hive.optimize.correlation=true;
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 EXPLAIN
 SELECT SUM(HASH(key1)), SUM(HASH(cnt1)), SUM(HASH(key2)), SUM(HASH(cnt2))
 FROM (SELECT a.key AS key1, a.cnt AS cnt1, b.key AS key2, b.cnt AS cnt2
@@ -139,7 +141,7 @@ FROM (SELECT a.key AS key1, a.cnt AS cnt1, b.key AS key2, b.cnt AS cnt2
       FULL OUTER JOIN (SELECT y.key as key, count(y.value) AS cnt FROM src1 y group by y.key) b
       ON (a.key = b.key)) tmp;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 SET hive.merge.nway.joins=false;
 EXPLAIN
 SELECT SUM(HASH(key1)), SUM(HASH(cnt1)), SUM(HASH(key2)), SUM(HASH(cnt2))
@@ -157,7 +159,7 @@ SET hive.merge.nway.joins=true;
 
 set hive.optimize.correlation=false;
 
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 EXPLAIN
 SELECT SUM(HASH(tmp.key)), SUM(HASH(tmp.cnt))
 FROM (SELECT a.key AS key, count(1) AS cnt
@@ -173,7 +175,7 @@ FROM (SELECT a.key AS key, count(1) AS cnt
       ON (a.key = b.key)
       GROUP BY a.key) tmp;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 SET hive.merge.nway.joins=true;
 EXPLAIN
 SELECT SUM(HASH(tmp.key)), SUM(HASH(tmp.cnt))
@@ -195,7 +197,7 @@ set hive.optimize.correlation=true;
 -- After FULL OUTER JOIN, keys with null values are not grouped, right now,
 -- we have to generate 2 MR jobs for tmp, 1 MR job for a join b and another for the
 -- GroupByOperator on key.
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 EXPLAIN
 SELECT SUM(HASH(tmp.key)), SUM(HASH(tmp.cnt))
 FROM (SELECT a.key AS key, count(1) AS cnt
@@ -211,7 +213,7 @@ FROM (SELECT a.key AS key, count(1) AS cnt
       ON (a.key = b.key)
       GROUP BY a.key) tmp;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 SET hive.merge.nway.joins=false;
 EXPLAIN
 SELECT SUM(HASH(tmp.key)), SUM(HASH(tmp.cnt))
@@ -234,7 +236,7 @@ set hive.optimize.correlation=false;
 -- When Correlation Optimizer is turned on, the subquery of tmp will be evaluated in
 -- a single MR job (including the subquery a, the subquery b, and a join b). So, we
 -- will have 2 MR jobs.
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 EXPLAIN
 SELECT SUM(HASH(key1)), SUM(HASH(cnt1)), SUM(HASH(key2)), SUM(HASH(cnt2))
 FROM (SELECT a.key AS key1, a.val AS cnt1, b.key AS key2, b.cnt AS cnt2
@@ -248,7 +250,7 @@ FROM (SELECT a.key AS key1, a.val AS cnt1, b.key AS key2, b.cnt AS cnt2
       JOIN (SELECT z.key AS key, count(z.value) AS cnt FROM src1 z group by z.key) b
       ON (a.key = b.key)) tmp;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 SET hive.merge.nway.joins=false;
 EXPLAIN
 SELECT SUM(HASH(key1)), SUM(HASH(cnt1)), SUM(HASH(key2)), SUM(HASH(cnt2))
@@ -265,7 +267,7 @@ FROM (SELECT a.key AS key1, a.val AS cnt1, b.key AS key2, b.cnt AS cnt2
 SET hive.merge.nway.joins=true;
 
 set hive.optimize.correlation=true;
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 EXPLAIN
 SELECT SUM(HASH(key1)), SUM(HASH(cnt1)), SUM(HASH(key2)), SUM(HASH(cnt2))
 FROM (SELECT a.key AS key1, a.val AS cnt1, b.key AS key2, b.cnt AS cnt2
@@ -279,7 +281,7 @@ FROM (SELECT a.key AS key1, a.val AS cnt1, b.key AS key2, b.cnt AS cnt2
       JOIN (SELECT z.key AS key, count(z.value) AS cnt FROM src1 z group by z.key) b
       ON (a.key = b.key)) tmp;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 SET hive.merge.nway.joins=false;
 EXPLAIN
 SELECT SUM(HASH(key1)), SUM(HASH(cnt1)), SUM(HASH(key2)), SUM(HASH(cnt2))

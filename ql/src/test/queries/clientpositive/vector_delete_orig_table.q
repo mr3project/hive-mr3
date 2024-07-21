@@ -35,4 +35,4 @@ delete from acid_dot where cint < -1070551679;
 
 select count(*) from acid_dot;
 
-dfs -rmr ${system:test.tmp.dir}/delete_orig_table;
+dfs -rm -r -f ${system:test.tmp.dir}/delete_orig_table;

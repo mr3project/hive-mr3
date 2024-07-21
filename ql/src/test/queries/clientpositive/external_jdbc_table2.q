@@ -6,44 +6,44 @@ CREATE TEMPORARY FUNCTION dboutput AS 'org.apache.hadoop.hive.contrib.genericudf
 
 FROM src
 SELECT
-dboutput ( 'jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1;create=true','user1','passwd1',
-'CREATE TABLE SIMPLE_DERBY_TABLE1 ("ikey" INTEGER, "bkey" BIGINT, "fkey" REAL, "dkey" DOUBLE)' ),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1','user1','passwd1',
-'INSERT INTO SIMPLE_DERBY_TABLE1 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','20','20','20.0','20.0'),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1','user1','passwd1',
-'INSERT INTO SIMPLE_DERBY_TABLE1 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','-20','-20','-20.0','-20.0'),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1','user1','passwd1',
-'INSERT INTO SIMPLE_DERBY_TABLE1 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','100','-15','65.0','-74.0'),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1','user1','passwd1',
-'INSERT INTO SIMPLE_DERBY_TABLE1 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','44','53','-455.454','330.76')
+dboutput ('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1;create=true','user1','passwd1',
+'CREATE TABLE EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE1 ("ikey" INTEGER, "bkey" BIGINT, "fkey" REAL, "dkey" DOUBLE)' ),
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1','user1','passwd1',
+'INSERT INTO EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE1 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','20','20','20.0','20.0'),
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1','user1','passwd1',
+'INSERT INTO EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE1 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','-20','-20','-20.0','-20.0'),
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1','user1','passwd1',
+'INSERT INTO EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE1 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','100','-15','65.0','-74.0'),
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1','user1','passwd1',
+'INSERT INTO EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE1 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','44','53','-455.454','330.76')
 limit 1;
 
 FROM src
 SELECT
-dboutput ( 'jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2;create=true','user2','passwd2',
-'CREATE TABLE SIMPLE_DERBY_TABLE2 ("ikey" INTEGER, "bkey" BIGINT, "fkey" REAL, "dkey" DOUBLE )' ),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2','user2','passwd2',
-'INSERT INTO SIMPLE_DERBY_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','20','20','20.0','20.0'),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2','user2','passwd2',
-'INSERT INTO SIMPLE_DERBY_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','-20','8','9.0','11.0'),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2','user2','passwd2',
-'INSERT INTO SIMPLE_DERBY_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','101','-16','66.0','-75.0'),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2','user2','passwd2',
-'INSERT INTO SIMPLE_DERBY_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','40','50','-455.4543','330.767')
+dboutput ('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2_1;create=true','user2','passwd2',
+'CREATE TABLE EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2 ("ikey" INTEGER, "bkey" BIGINT, "fkey" REAL, "dkey" DOUBLE )' ),
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2_1','user2','passwd2',
+'INSERT INTO EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','20','20','20.0','20.0'),
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2_1','user2','passwd2',
+'INSERT INTO EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','-20','8','9.0','11.0'),
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2_1','user2','passwd2',
+'INSERT INTO EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','101','-16','66.0','-75.0'),
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2_1','user2','passwd2',
+'INSERT INTO EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','40','50','-455.4543','330.767')
 limit 1;
 
 FROM src
 SELECT
-dboutput ( 'jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1;create=true','user1','passwd1',
-'CREATE TABLE SIMPLE_DERBY_TABLE2 ("ikey" INTEGER, "bkey" BIGINT, "fkey" REAL, "dkey" DOUBLE )' ),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1','user1','passwd1',
-'INSERT INTO SIMPLE_DERBY_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','20','20','20.0','20.0'),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1','user1','passwd1',
-'INSERT INTO SIMPLE_DERBY_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','-20','8','9.0','11.0'),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1','user1','passwd1',
-'INSERT INTO SIMPLE_DERBY_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','101','-16','66.0','-75.0'),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1','user1','passwd1',
-'INSERT INTO SIMPLE_DERBY_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','40','50','-455.4543','330.767')
+dboutput ('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1','user1','passwd1',
+'CREATE TABLE EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2 ("ikey" INTEGER, "bkey" BIGINT, "fkey" REAL, "dkey" DOUBLE )' ),
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1','user1','passwd1',
+'INSERT INTO EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','20','20','20.0','20.0'),
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1','user1','passwd1',
+'INSERT INTO EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','-20','8','9.0','11.0'),
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1','user1','passwd1',
+'INSERT INTO EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','101','-16','66.0','-75.0'),
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1','user1','passwd1',
+'INSERT INTO EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2 ("ikey","bkey","fkey","dkey") VALUES (?,?,?,?)','40','50','-455.4543','330.767')
 limit 1;
 
 
@@ -59,10 +59,10 @@ STORED BY 'org.apache.hive.storage.jdbc.JdbcStorageHandler'
 TBLPROPERTIES (
                 "hive.sql.database.type" = "DERBY",
                 "hive.sql.jdbc.driver" = "org.apache.derby.jdbc.EmbeddedDriver",
-                "hive.sql.jdbc.url" = "jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1;collation=TERRITORY_BASED:PRIMARY",
+                "hive.sql.jdbc.url" = "jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1;collation=TERRITORY_BASED:PRIMARY",
                 "hive.sql.dbcp.username" = "user1",
                 "hive.sql.dbcp.password" = "passwd1",
-                "hive.sql.table" = "SIMPLE_DERBY_TABLE1",
+                "hive.sql.table" = "EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE1",
                 "hive.sql.dbcp.maxActive" = "1"
 );
 
@@ -77,10 +77,10 @@ STORED BY 'org.apache.hive.storage.jdbc.JdbcStorageHandler'
 TBLPROPERTIES (
                 "hive.sql.database.type" = "DERBY",
                 "hive.sql.jdbc.driver" = "org.apache.derby.jdbc.EmbeddedDriver",
-                "hive.sql.jdbc.url" = "jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2;collation=TERRITORY_BASED:PRIMARY",
+                "hive.sql.jdbc.url" = "jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2_1;collation=TERRITORY_BASED:PRIMARY",
                 "hive.sql.dbcp.username" = "user2",
                 "hive.sql.dbcp.password" = "passwd2",
-                "hive.sql.table" = "SIMPLE_DERBY_TABLE2",
+                "hive.sql.table" = "EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2",
                 "hive.sql.dbcp.maxActive" = "1"
 );
 
@@ -95,10 +95,10 @@ STORED BY 'org.apache.hive.storage.jdbc.JdbcStorageHandler'
 TBLPROPERTIES (
                 "hive.sql.database.type" = "DERBY",
                 "hive.sql.jdbc.driver" = "org.apache.derby.jdbc.EmbeddedDriver",
-                "hive.sql.jdbc.url" = "jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1;collation=TERRITORY_BASED:PRIMARY",
+                "hive.sql.jdbc.url" = "jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1;collation=TERRITORY_BASED:PRIMARY",
                 "hive.sql.dbcp.username" = "user1",
                 "hive.sql.dbcp.password" = "passwd1",
-                "hive.sql.table" = "SIMPLE_DERBY_TABLE2",
+                "hive.sql.table" = "EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2",
                 "hive.sql.dbcp.maxActive" = "1"
 );
 
@@ -134,6 +134,42 @@ SELECT * FROM db1_ext_auth1 UNION ALL SELECT * FROM db1_ext_auth2;
 
 SELECT * FROM db1_ext_auth1 UNION ALL SELECT * FROM db1_ext_auth2;
 
+EXPLAIN
+SELECT P.ikey
+FROM
+  db1_ext_auth1 P
+WHERE
+  NOT TRUE OR P.`ikey` IS NOT NULL
+  AND (P.`bkey` = 10 AND P.`dkey` = 15.15
+    OR P.`bkey` = 20 AND P.`dkey` = 25.25);
+
+SELECT P.ikey
+FROM
+  db1_ext_auth1 P
+WHERE
+  NOT TRUE OR P.`ikey` IS NOT NULL
+  AND (P.`bkey` = 10 AND P.`dkey` = 15.15
+    OR P.`bkey` = 20 AND P.`dkey` = 25.25);
+    
+EXPLAIN
+SELECT P.ikey
+FROM
+  db1_ext_auth1 P
+WHERE
+  NOT TRUE OR P.`ikey` IS NOT NULL
+  AND (P.`bkey` = 10 AND P.`dkey` = 15.15
+    OR P.`bkey` = 20 AND P.`dkey` = 25.25)
+  AND fkey = null;
+
+SELECT P.ikey
+FROM
+  db1_ext_auth1 P
+WHERE
+  NOT TRUE OR P.`ikey` IS NOT NULL
+  AND (P.`bkey` = 10 AND P.`dkey` = 15.15
+    OR P.`bkey` = 20 AND P.`dkey` = 25.25)
+  AND fkey = null;
+
 set hive.jdbc.pushdown.enable=false;
 
 EXPLAIN
@@ -147,10 +183,10 @@ DROP TABLE db1_ext_auth2;
 
 FROM src
 SELECT
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1','user1','passwd1',
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1','user1','passwd1',
 'DROP TABLE EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE1' ),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1','user1','passwd1',
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth1_1','user1','passwd1',
 'DROP TABLE EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2' ),
-dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2','user2','passwd2',
+dboutput('jdbc:derby:;databaseName=${system:test.tmp.dir}/test_derby_auth2_1','user2','passwd2',
 'DROP TABLE EXTERNAL_JDBC_SIMPLE_DERBY2_TABLE2' )
 limit 1;

@@ -27,4 +27,4 @@ show partitions table_external;
 
 drop table table_external;
 
-dfs -rmr hdfs:///tmp/temp_table_external;
+dfs -rm -r -f hdfs:///tmp/temp_table_external;

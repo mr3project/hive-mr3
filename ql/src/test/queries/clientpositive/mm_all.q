@@ -2,6 +2,7 @@
 --! qt:dataset:src
 
 -- MASK_LINEAGE
+-- SORT_QUERY_RESULTS
 
 set hive.metastore.dml.events=true;
 set hive.mapred.mode=nonstrict;
@@ -9,7 +10,6 @@ set hive.explain.user=false;
 set hive.fetch.task.conversion=none;
 set tez.grouping.min-size=1;
 set tez.grouping.max-size=2;
-set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.support.concurrency=true;
 set hive.txn.manager=org.apache.hadoop.hive.ql.lockmgr.DbTxnManager;
 
@@ -49,10 +49,8 @@ drop table simple_mm;
 -- simple DP (no bucketing)
 drop table dp_mm;
 
-set hive.exec.dynamic.partition.mode=nonstrict;
 
 set hive.merge.mapredfiles=false;
-set hive.merge.sparkfiles=false;
 set hive.merge.tezfiles=false;
 
 create table dp_mm (key int) partitioned by (key1 string, key2 int) stored as orc
@@ -224,7 +222,6 @@ select * from multi0_1_mm order by key, key2;
 select * from multi0_2_mm order by key, key2;
 
 set hive.merge.mapredfiles=true;
-set hive.merge.sparkfiles=true;
 set hive.merge.tezfiles=true;
 
 from intermediate_n0
@@ -235,7 +232,6 @@ select * from multi0_1_mm order by key, key2;
 select * from multi0_2_mm order by key, key2;
 
 set hive.merge.mapredfiles=false;
-set hive.merge.sparkfiles=false;
 set hive.merge.tezfiles=false;
 
 drop table multi0_1_mm;

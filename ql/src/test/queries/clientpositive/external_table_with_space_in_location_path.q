@@ -21,4 +21,4 @@ SELECT count(*) FROM spacetestpartition;
 
 DROP TABLE spacetestpartition;
 
-dfs -rmr hdfs:///tmp/test;
+dfs -rm -r -f hdfs:///tmp/test;

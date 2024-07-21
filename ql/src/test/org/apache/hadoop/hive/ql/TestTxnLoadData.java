@@ -379,7 +379,7 @@ public class TestTxnLoadData extends TxnCommandsBaseForTests {
     //this creates an ORC data file with correct schema under table root
     runStatementOnDriver("insert into Tstage values(1,2),(3,4)");
     // This will work with the new support of rewriting load into IAS.
-    runStatementOnDriver("load data local inpath '" + getWarehouseDir() + "/Tstage' into table T");
+    runStatementOnDriver("load data local inpath '" + getWarehouseDir() + "/tstage' into table T");   // Tstage -> tstage in MR3
   }
 
   private void checkExpected(List<String> rs, String[][] expected, String msg) {

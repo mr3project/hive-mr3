@@ -652,9 +652,9 @@ public final class BytesBytesMultiHashMap implements MemoryEstimate {
       slot = (int)(probeSlot & bucketMask);
     }
     if (largestNumberOfSteps < i) {
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Probed " + i + " slots (the longest so far) to find space");
-      }
+      // if (LOG.isDebugEnabled()) {
+      //   LOG.debug("Probed " + i + " slots (the longest so far) to find space");
+      // }
       largestNumberOfSteps = i;
       // debugDumpKeyProbe(keyOffset, keyLength, hashCode, slot);
     }
@@ -1056,10 +1056,12 @@ public final class BytesBytesMultiHashMap implements MemoryEstimate {
   }
 
   public void debugDumpMetrics() {
-    LOG.info("Map metrics: keys allocated " + this.refs.length +", keys assigned " + keysAssigned
-        + ", write conflict " + metricPutConflict  + ", write max dist " + largestNumberOfSteps
-        + ", read conflict " + metricGetConflict
-        + ", expanded " + metricExpands + " times in " + metricExpandsMs + "ms");
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Map metrics: keys allocated " + this.refs.length +", keys assigned " + keysAssigned
+          + ", write conflict " + metricPutConflict  + ", write max dist " + largestNumberOfSteps
+          + ", read conflict " + metricGetConflict
+          + ", expanded " + metricExpands + " times in " + metricExpandsMs + "ms");
+    }
   }
 
   private void debugDumpKeyProbe(long keyOffset, int keyLength, int hashCode, int finalSlot) {

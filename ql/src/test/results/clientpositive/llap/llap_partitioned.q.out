@@ -1,11 +1,15 @@
 PREHOOK: query: DROP TABLE orc_llap_part
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: DROP TABLE orc_llap_part
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: DROP TABLE orc_llap_dim_part
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: DROP TABLE orc_llap_dim_part
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: CREATE TABLE orc_llap_part(
     csmallint SMALLINT,
     cint INT,
@@ -75,6 +79,7 @@ POSTHOOK: query: INSERT OVERWRITE TABLE orc_llap_part PARTITION (ctinyint)
 SELECT csmallint, cint, cbigint, cfloat, cdouble, cstring1, cstring1, cstring1, cboolean1, cboolean2, ctinyint FROM alltypesorc
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@alltypesorc
+POSTHOOK: Output: default@orc_llap_part
 POSTHOOK: Output: default@orc_llap_part@ctinyint=-1
 POSTHOOK: Output: default@orc_llap_part@ctinyint=-10
 POSTHOOK: Output: default@orc_llap_part@ctinyint=-11
@@ -1492,6 +1497,7 @@ POSTHOOK: query: INSERT OVERWRITE TABLE orc_llap_dim_part PARTITION (ctinyint)
 SELECT null, null, sum(cbigint) as cbigint, null, null, null, null, null, null, null, ctinyint FROM alltypesorc WHERE ctinyint > 10 AND ctinyint < 21 GROUP BY ctinyint
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@alltypesorc
+POSTHOOK: Output: default@orc_llap_dim_part
 POSTHOOK: Output: default@orc_llap_dim_part@ctinyint=11
 POSTHOOK: Output: default@orc_llap_dim_part@ctinyint=12
 POSTHOOK: Output: default@orc_llap_dim_part@ctinyint=13
@@ -1604,8 +1610,10 @@ POSTHOOK: Lineage: orc_llap_dim_part PARTITION(ctinyint=20).cstring1 EXPRESSION 
 POSTHOOK: Lineage: orc_llap_dim_part PARTITION(ctinyint=20).cvchar1 EXPRESSION []
 PREHOOK: query: drop table llap_temp_table_n0
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table llap_temp_table_n0
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: explain vectorization detail
 SELECT oft.ctinyint, oft.cint, oft.cchar1, oft.cvchar1 FROM orc_llap_part oft
   INNER JOIN orc_llap_dim_part od ON oft.ctinyint = od.ctinyint
@@ -1919,7 +1927,7 @@ STAGE PLANS:
                   Statistics: Num rows: 12288 Data size: 1884148 Basic stats: COMPLETE Column stats: COMPLETE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:csmallint:smallint, 1:cint:int, 2:cbigint:bigint, 3:cfloat:float, 4:cdouble:double, 5:cstring1:string, 6:cchar1:char(255), 7:cvchar1:varchar(255), 8:cboolean1:boolean, 9:cboolean2:boolean, 10:ctinyint:tinyint, 11:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:csmallint:smallint, 1:cint:int, 2:cbigint:bigint, 3:cfloat:float, 4:cdouble:double, 5:cstring1:string, 6:cchar1:char(255), 7:cvchar1:varchar(255), 8:cboolean1:boolean, 9:cboolean2:boolean, 10:ctinyint:tinyint, 11:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>, 12:ROW__IS__DELETED:boolean]
                   Map Join Operator
                     condition map:
                          Inner Join 0 to 1
@@ -1932,7 +1940,7 @@ STAGE PLANS:
                         bigTableValueColumns: 1:int, 6:char(255), 7:varchar(255), 10:tinyint
                         className: VectorMapJoinInnerBigOnlyLongOperator
                         native: true
-                        nativeConditionsMet: hive.mapjoin.optimized.hashtable IS true, hive.vectorized.execution.mapjoin.native.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, One MapJoin Condition IS true, No nullsafe IS true, Small table vectorizes IS true, Optimized Table and Supports Key Types IS true
+                        nativeConditionsMet: hive.mapjoin.optimized.hashtable IS true, hive.vectorized.execution.mapjoin.native.enabled IS true, hive.execution.engine tez IN [tez] IS true, One MapJoin Condition IS true, No nullsafe IS true, Small table vectorizes IS true, Optimized Table and Supports Key Types IS true
                         nonOuterSmallTableKeyMapping: []
                         projectedOutput: 1:int, 6:char(255), 7:varchar(255), 10:tinyint
                         hashTableImplementationType: OPTIMIZED
@@ -1983,16 +1991,17 @@ STAGE PLANS:
                   Statistics: Num rows: 10 Data size: 120 Basic stats: COMPLETE Column stats: COMPLETE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:csmallint:smallint, 1:cint:int, 2:cbigint:bigint, 3:cfloat:float, 4:cdouble:double, 5:cstring1:string, 6:cchar1:char(255), 7:cvchar1:varchar(255), 8:cboolean1:boolean, 9:cboolean2:boolean, 10:ctinyint:tinyint, 11:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:csmallint:smallint, 1:cint:int, 2:cbigint:bigint, 3:cfloat:float, 4:cdouble:double, 5:cstring1:string, 6:cchar1:char(255), 7:cvchar1:varchar(255), 8:cboolean1:boolean, 9:cboolean2:boolean, 10:ctinyint:tinyint, 11:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>, 12:ROW__IS__DELETED:boolean]
                   Reduce Output Operator
                     key expressions: ctinyint (type: tinyint)
+                    null sort order: z
                     sort order: +
                     Map-reduce partition columns: ctinyint (type: tinyint)
                     Reduce Sink Vectorization:
                         className: VectorReduceSinkLongOperator
                         keyColumns: 10:tinyint
                         native: true
-                        nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
+                        nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
                     Statistics: Num rows: 10 Data size: 120 Basic stats: COMPLETE Column stats: COMPLETE
                   Select Operator
                     expressions: ctinyint (type: tinyint)
@@ -2011,9 +2020,10 @@ STAGE PLANS:
                           vectorProcessingMode: HASH
                           projectedOutputColumnNums: []
                       keys: _col0 (type: tinyint)
+                      minReductionHashAggr: 0.4
                       mode: hash
                       outputColumnNames: _col0
-                      Statistics: Num rows: 5 Data size: 20 Basic stats: COMPLETE Column stats: COMPLETE
+                      Statistics: Num rows: 10 Data size: 40 Basic stats: COMPLETE Column stats: COMPLETE
                       Dynamic Partitioning Event Operator
                         Target column: ctinyint (tinyint)
                         App Master Event Vectorization:
@@ -2021,7 +2031,7 @@ STAGE PLANS:
                             native: true
                         Target Input: oft
                         Partition key expr: ctinyint
-                        Statistics: Num rows: 5 Data size: 20 Basic stats: COMPLETE Column stats: COMPLETE
+                        Statistics: Num rows: 10 Data size: 40 Basic stats: COMPLETE Column stats: COMPLETE
                         Target Vertex: Map 1
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -2374,10 +2384,10 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: llap_temp_table_n0
-                  Statistics: Num rows: 1509 Data size: 984410 Basic stats: COMPLETE Column stats: NONE
+                  Statistics: Num rows: 1509 Data size: 250448 Basic stats: COMPLETE Column stats: COMPLETE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:ctinyint:tinyint, 1:cint:int, 2:cchar1:char(255), 3:cvchar1:varchar(255), 4:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:ctinyint:tinyint, 1:cint:int, 2:cchar1:char(255), 3:cvchar1:varchar(255), 4:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>, 5:ROW__IS__DELETED:boolean]
                   Select Operator
                     expressions: ctinyint (type: tinyint), cint (type: int), cchar1 (type: char(255)), cvchar1 (type: varchar(255))
                     outputColumnNames: ctinyint, cint, cchar1, cvchar1
@@ -2385,30 +2395,32 @@ STAGE PLANS:
                         className: VectorSelectOperator
                         native: true
                         projectedOutputColumnNums: [0, 1, 2, 3]
-                    Statistics: Num rows: 1509 Data size: 984410 Basic stats: COMPLETE Column stats: NONE
+                    Statistics: Num rows: 1509 Data size: 250448 Basic stats: COMPLETE Column stats: COMPLETE
                     Group By Operator
                       aggregations: sum(hash(ctinyint,cint,cchar1,cvchar1))
                       Group By Vectorization:
-                          aggregators: VectorUDAFSumLong(VectorUDFAdaptor(hash(ctinyint,cint,cchar1,cvchar1)) -> 5:int) -> bigint
+                          aggregators: VectorUDAFSumLong(VectorUDFAdaptor(hash(ctinyint,cint,cchar1,cvchar1)) -> 6:int) -> bigint
                           className: VectorGroupByOperator
                           groupByMode: HASH
                           native: false
                           vectorProcessingMode: HASH
                           projectedOutputColumnNums: [0]
+                      minReductionHashAggr: 0.99
                       mode: hash
                       outputColumnNames: _col0
-                      Statistics: Num rows: 1 Data size: 694 Basic stats: COMPLETE Column stats: NONE
+                      Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
+                        null sort order: 
                         sort order: 
                         Reduce Sink Vectorization:
                             className: VectorReduceSinkEmptyKeyOperator
                             native: true
-                            nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
+                            nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
                             valueColumns: 0:bigint
-                        Statistics: Num rows: 1 Data size: 694 Basic stats: COMPLETE Column stats: NONE
+                        Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                         value expressions: _col0 (type: bigint)
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vector.serde.deserialize IS true
@@ -2428,7 +2440,7 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Vectorization:
                 enabled: true
-                enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
+                enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez] IS true
                 reduceColumnNullOrder: 
                 reduceColumnSortOrder: 
                 allNative: false
@@ -2451,13 +2463,13 @@ STAGE PLANS:
                     projectedOutputColumnNums: [0]
                 mode: mergepartial
                 outputColumnNames: _col0
-                Statistics: Num rows: 1 Data size: 694 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                 File Output Operator
                   compressed: false
                   File Sink Vectorization:
                       className: VectorFileSinkOperator
                       native: false
-                  Statistics: Num rows: 1 Data size: 694 Basic stats: COMPLETE Column stats: NONE
+                  Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                   table:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -2481,24 +2493,30 @@ POSTHOOK: Input: default@llap_temp_table_n0
 PREHOOK: query: drop table llap_temp_table_n0
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@llap_temp_table_n0
+PREHOOK: Output: database:default
 PREHOOK: Output: default@llap_temp_table_n0
 POSTHOOK: query: drop table llap_temp_table_n0
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@llap_temp_table_n0
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@llap_temp_table_n0
 PREHOOK: query: DROP TABLE orc_llap_part
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@orc_llap_part
+PREHOOK: Output: database:default
 PREHOOK: Output: default@orc_llap_part
 POSTHOOK: query: DROP TABLE orc_llap_part
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@orc_llap_part
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@orc_llap_part
 PREHOOK: query: DROP TABLE orc_llap_dim_part
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@orc_llap_dim_part
+PREHOOK: Output: database:default
 PREHOOK: Output: default@orc_llap_dim_part
 POSTHOOK: query: DROP TABLE orc_llap_dim_part
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@orc_llap_dim_part
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@orc_llap_dim_part

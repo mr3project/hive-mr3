@@ -19,12 +19,12 @@ SELECT sum(hash(a.key,a.value,b.key,b.value)) FROM myinput1_n2 a RIGHT OUTER JOI
 SELECT sum(hash(a.key,a.value,b.key,b.value)) FROM myinput1_n2 a RIGHT OUTER JOIN myinput1_n2 b ON a.key = b.key;
 SELECT sum(hash(a.key,a.value,b.key,b.value)) FROM myinput1_n2 a RIGHT OUTER JOIN myinput1_n2 b ON a.value = b.value;
 SELECT sum(hash(a.key,a.value,b.key,b.value)) FROM myinput1_n2 a RIGHT OUTER JOIN myinput1_n2 b ON a.key=b.key and a.value = b.value;
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 SELECT sum(hash(a.key,a.value,b.key,b.value)) FROM myinput1_n2 a FULL OUTER JOIN myinput1_n2 b ON a.key = b.value;
 SELECT sum(hash(a.key,a.value,b.key,b.value)) FROM myinput1_n2 a FULL OUTER JOIN myinput1_n2 b ON a.key = b.key;
 SELECT sum(hash(a.key,a.value,b.key,b.value)) FROM myinput1_n2 a FULL OUTER JOIN myinput1_n2 b ON a.value = b.value;
 SELECT sum(hash(a.key,a.value,b.key,b.value)) FROM myinput1_n2 a FULL OUTER JOIN myinput1_n2 b ON a.value = b.value and a.key=b.key;
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 SET hive.merge.nway.joins=false;
 EXPLAIN SELECT sum(hash(a.key,a.value,b.key,b.value)) FROM myinput1_n2 a FULL OUTER JOIN myinput1_n2 b ON a.key = b.value;
 SELECT sum(hash(a.key,a.value,b.key,b.value)) FROM myinput1_n2 a FULL OUTER JOIN myinput1_n2 b ON a.key = b.value;

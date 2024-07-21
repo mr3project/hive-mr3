@@ -52,6 +52,9 @@ public class TestOrcFileStripeMergeRecordReader {
     key = new OrcFileKeyWrapper();
     value = new OrcFileValueWrapper();
     tmpPath  = prepareTmpPath();
+
+    long orcMemoryPool = 512L * 1024 * 1024;
+    OrcFile.setupOrcMemoryManager(orcMemoryPool);   // for MR3
   }
 
   @Test

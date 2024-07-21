@@ -1,9 +1,9 @@
+--! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 set mapreduce.framework.name=yarn;
 set mapreduce.jobtracker.address=localhost:58;
 set hive.exec.mode.local.auto=true;
 
--- EXCLUDE_HADOOP_MAJOR_VERSIONS( 0.20S)
 
 CREATE TABLE dest1_n122(key INT, value STRING) STORED AS TEXTFILE;
 CREATE TABLE dest2_n32(key INT, value STRING) STORED AS TEXTFILE;

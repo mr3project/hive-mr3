@@ -1,3 +1,5 @@
+--! qt:dataset:src
+--! qt:dataset:temp_udf
 SET hive.vectorized.execution.enabled=true;
 set hive.fetch.task.conversion=none;
 

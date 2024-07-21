@@ -1,10 +1,10 @@
+-- SORT_QUERY_RESULTS
+--! qt:dataset:lineitem
 set hive.cli.print.header=true;
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 set hive.fetch.task.conversion=none;
 set hive.vectorized.execution.enabled=true;
-
--- SORT_QUERY_RESULTS
 
 CREATE TABLE lineitem_test_txt (L_ORDERKEY      INT,
                                 L_PARTKEY       INT,
@@ -25,7 +25,7 @@ CREATE TABLE lineitem_test_txt (L_ORDERKEY      INT,
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY '|';
 
-LOAD DATA LOCAL INPATH '../../data/files/lineitem.txt' OVERWRITE INTO TABLE lineitem_test_txt;
+LOAD DATA LOCAL INPATH '../../data/files/tpch/tiny/lineitem.tbl.bz2' OVERWRITE INTO TABLE lineitem_test_txt;
 CREATE TABLE lineitem_test STORED AS ORC AS SELECT * FROM lineitem_test_txt;
 INSERT INTO TABLE lineitem_test VALUES (NULL,NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 

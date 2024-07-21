@@ -1,3 +1,4 @@
+--! qt:replace:/(totalSize\s+)(\S+|\s+|.+)/$1#Masked#/
 -- SORT_QUERY_RESULTS
 
 set hive.vectorized.execution.enabled=false;
@@ -5,6 +6,7 @@ set hive.support.concurrency=true;
 set hive.txn.manager=org.apache.hadoop.hive.ql.lockmgr.DbTxnManager;
 set hive.strict.checks.cartesian.product=false;
 set hive.materializedview.rewriting=true;
+-- set hive.materializedview.rewriting.sql=false;
 
 create table cmv_basetable_n10 (a int, b varchar(256), c decimal(10,2), d int) stored as orc TBLPROPERTIES ('transactional'='true');
 
@@ -14,8 +16,6 @@ insert into cmv_basetable_n10 values
  (2, 'bonnie', 172342.2, 3),
  (3, 'calvin', 978.76, 3),
  (3, 'charlie', 9.8, 1);
-
-analyze table cmv_basetable_n10 compute statistics for columns;
 
 create materialized view cmv_mat_view_n10
 as select a, b, c from cmv_basetable_n10 where a = 2;

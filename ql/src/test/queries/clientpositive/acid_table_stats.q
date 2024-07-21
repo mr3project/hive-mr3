@@ -1,10 +1,7 @@
+--! qt:dataset:srcpart
 set hive.mapred.mode=nonstrict;
 set hive.support.concurrency=true;
 set hive.txn.manager=org.apache.hadoop.hive.ql.lockmgr.DbTxnManager;
-
-set hive.exec.dynamic.partition.mode=nonstrict;
-
-set hive.optimize.sort.dynamic.partition=true;
 
 -- single level partition, sorted dynamic partition enabled
 drop table acid;

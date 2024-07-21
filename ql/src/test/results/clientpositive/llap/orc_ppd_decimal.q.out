@@ -36,6 +36,7 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
 -252951929000
+WARNING: Comparing decimal(5,3) and string may result in loss of information.
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d='0.22'
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -45,6 +46,7 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
 -252951929000
+WARNING: Comparing decimal(5,3) and string may result in loss of information.
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d='0.22'
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -90,6 +92,7 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
 334427804500
+WARNING: Comparing decimal(5,3) and string may result in loss of information.
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d!='0.22'
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -99,6 +102,7 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
 334427804500
+WARNING: Comparing decimal(5,3) and string may result in loss of information.
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d!='0.22'
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -144,6 +148,7 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
 -252951929000
+WARNING: Comparing decimal(5,3) and string may result in loss of information.
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d<'11.22'
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -153,6 +158,7 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
 -252951929000
+WARNING: Comparing decimal(5,3) and string may result in loss of information.
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d<'11.22'
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -216,6 +222,7 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
 81475875500
+WARNING: Comparing decimal(5,3) and string may result in loss of information.
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d<='11.22'
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -225,6 +232,7 @@ POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
 81475875500
+WARNING: Comparing decimal(5,3) and string may result in loss of information.
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d<='11.22'
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -377,7 +385,7 @@ POSTHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d in ('0.9', 0.22
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
--250934600000
+-252951929000
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d in (0.9, 0.22, 11.22)
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -386,7 +394,7 @@ POSTHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d in (0.9, 0.22, 
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
-85510533500
+81475875500
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d in (0.9, 0.22, 11.22)
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -395,7 +403,7 @@ POSTHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d in (0.9, 0.22, 
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
-85510533500
+81475875500
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d in ('0.9', '0.22', '11.22')
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -404,7 +412,7 @@ POSTHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d in ('0.9', '0.2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
-85510533500
+81475875500
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d in ('0.9', '0.22', '11.22')
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -413,7 +421,7 @@ POSTHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d in ('0.9', '0.2
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
-85510533500
+81475875500
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d in (cast('0.9' as float), cast('0.22' as float), cast('11.22' as float))
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -422,7 +430,7 @@ POSTHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d in (cast('0.9' 
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
-85510533500
+81475875500
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d in (cast('0.9' as float), cast('0.22' as float), cast('11.22' as float))
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5
@@ -431,7 +439,7 @@ POSTHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d in (cast('0.9' 
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@newtypesorc_n5
 #### A masked pattern was here ####
-85510533500
+81475875500
 PREHOOK: query: select sum(hash(*)) from newtypesorc_n5 where d between 0 and 1
 PREHOOK: type: QUERY
 PREHOOK: Input: default@newtypesorc_n5

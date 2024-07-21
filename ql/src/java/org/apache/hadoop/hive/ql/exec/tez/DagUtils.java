@@ -44,7 +44,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipOutputStream;
@@ -189,7 +188,7 @@ public class DagUtils {
    */
   private final ConcurrentHashMap<String, Object> copyNotifiers = new ConcurrentHashMap<>();
 
-  class CollectFileSinkUrisNodeProcessor implements NodeProcessor {
+  public static class CollectFileSinkUrisNodeProcessor implements NodeProcessor {
 
     private final Set<URI> uris;
 
@@ -219,11 +218,11 @@ public class DagUtils {
     }
   }
 
-  private void addCollectFileSinkUrisRules(Map<Rule, NodeProcessor> opRules, NodeProcessor np) {
+  static private void addCollectFileSinkUrisRules(Map<Rule, NodeProcessor> opRules, NodeProcessor np) {
     opRules.put(new RuleRegExp("R1", FileSinkOperator.getOperatorName() + ".*"), np);
   }
 
-  private void collectFileSinkUris(List<Node> topNodes, Set<URI> uris) {
+  static public void collectFileSinkUris(List<Node> topNodes, Set<URI> uris) {
 
     CollectFileSinkUrisNodeProcessor np = new CollectFileSinkUrisNodeProcessor(uris);
 
@@ -287,7 +286,7 @@ public class DagUtils {
     dag.addURIsForCredentials(fileSinkUris);
   }
 
-  private List<Node> getTopNodes(BaseWork work) {
+  static public List<Node> getTopNodes(BaseWork work) {
     List<Node> topNodes = new ArrayList<Node>();
 
     if (work instanceof MapWork) {
@@ -1382,16 +1381,13 @@ public class DagUtils {
    * @return JobConf base configuration for job execution
    * @throws IOException
    */
-  public JobConf createConfiguration(HiveConf hiveConf, boolean skipAMConf) throws IOException {
+  public JobConf createConfiguration(HiveConf hiveConf, boolean skipAMConf) throws IOException {  // skipAMConf == false
     hiveConf.setBoolean("mapred.mapper.new-api", false);
-
-    Predicate<String> findDefaults =
-        (s) -> ((s != null) && (s.endsWith(".xml") || (s.endsWith(".java") && !"HiveConf.java".equals(s))));
 
     // since this is an inclusion filter, negate the predicate
     JobConf conf =
         TezConfigurationFactory
-            .wrapWithJobConf(hiveConf, skipAMConf ? findDefaults.negate() : null);
+            .wrapWithJobConf(hiveConf, null);
 
     conf.set("mapred.output.committer.class", NullOutputCommitter.class.getName());
 
