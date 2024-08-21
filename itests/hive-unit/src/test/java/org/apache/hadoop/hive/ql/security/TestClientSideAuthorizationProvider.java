@@ -96,7 +96,7 @@ public class TestClientSideAuthorizationProvider {
     driver = DriverFactory.newDriver(clientHiveConf);
 
     // this test involves limit operator which needs an object cache
-    ObjectCache.setupObjectRegistry(new ObjectRegistryImpl());
+    ObjectCache.setupObjectRegistryDummy();
   }
 
   @After
