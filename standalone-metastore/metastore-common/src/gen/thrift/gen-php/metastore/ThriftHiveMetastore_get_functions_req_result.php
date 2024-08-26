@@ -16,7 +16,7 @@ use Thrift\Protocol\TProtocol;
 use Thrift\Protocol\TBinaryProtocolAccelerated;
 use Thrift\Exception\TApplicationException;
 
-class ThriftHiveMetastore_get_partitions_result
+class ThriftHiveMetastore_get_functions_req_result
 {
     static public $isValidate = false;
 
@@ -24,21 +24,11 @@ class ThriftHiveMetastore_get_partitions_result
         0 => array(
             'var' => 'success',
             'isRequired' => false,
-            'type' => TType::LST,
-            'etype' => TType::STRUCT,
-            'elem' => array(
-                'type' => TType::STRUCT,
-                'class' => '\metastore\Partition',
-                ),
+            'type' => TType::STRUCT,
+            'class' => '\metastore\GetFunctionsResponse',
         ),
         1 => array(
             'var' => 'o1',
-            'isRequired' => false,
-            'type' => TType::STRUCT,
-            'class' => '\metastore\NoSuchObjectException',
-        ),
-        2 => array(
-            'var' => 'o2',
             'isRequired' => false,
             'type' => TType::STRUCT,
             'class' => '\metastore\MetaException',
@@ -46,17 +36,13 @@ class ThriftHiveMetastore_get_partitions_result
     );
 
     /**
-     * @var \metastore\Partition[]
+     * @var \metastore\GetFunctionsResponse
      */
     public $success = null;
     /**
-     * @var \metastore\NoSuchObjectException
-     */
-    public $o1 = null;
-    /**
      * @var \metastore\MetaException
      */
-    public $o2 = null;
+    public $o1 = null;
 
     public function __construct($vals = null)
     {
@@ -67,15 +53,12 @@ class ThriftHiveMetastore_get_partitions_result
             if (isset($vals['o1'])) {
                 $this->o1 = $vals['o1'];
             }
-            if (isset($vals['o2'])) {
-                $this->o2 = $vals['o2'];
-            }
         }
     }
 
     public function getName()
     {
-        return 'ThriftHiveMetastore_get_partitions_result';
+        return 'ThriftHiveMetastore_get_functions_req_result';
     }
 
 
@@ -93,34 +76,17 @@ class ThriftHiveMetastore_get_partitions_result
             }
             switch ($fid) {
                 case 0:
-                    if ($ftype == TType::LST) {
-                        $this->success = array();
-                        $_size1639 = 0;
-                        $_etype1642 = 0;
-                        $xfer += $input->readListBegin($_etype1642, $_size1639);
-                        for ($_i1643 = 0; $_i1643 < $_size1639; ++$_i1643) {
-                            $elem1644 = null;
-                            $elem1644 = new \metastore\Partition();
-                            $xfer += $elem1644->read($input);
-                            $this->success []= $elem1644;
-                        }
-                        $xfer += $input->readListEnd();
+                    if ($ftype == TType::STRUCT) {
+                        $this->success = new \metastore\GetFunctionsResponse();
+                        $xfer += $this->success->read($input);
                     } else {
                         $xfer += $input->skip($ftype);
                     }
                     break;
                 case 1:
                     if ($ftype == TType::STRUCT) {
-                        $this->o1 = new \metastore\NoSuchObjectException();
+                        $this->o1 = new \metastore\MetaException();
                         $xfer += $this->o1->read($input);
-                    } else {
-                        $xfer += $input->skip($ftype);
-                    }
-                    break;
-                case 2:
-                    if ($ftype == TType::STRUCT) {
-                        $this->o2 = new \metastore\MetaException();
-                        $xfer += $this->o2->read($input);
                     } else {
                         $xfer += $input->skip($ftype);
                     }
@@ -138,27 +104,18 @@ class ThriftHiveMetastore_get_partitions_result
     public function write($output)
     {
         $xfer = 0;
-        $xfer += $output->writeStructBegin('ThriftHiveMetastore_get_partitions_result');
+        $xfer += $output->writeStructBegin('ThriftHiveMetastore_get_functions_req_result');
         if ($this->success !== null) {
-            if (!is_array($this->success)) {
+            if (!is_object($this->success)) {
                 throw new TProtocolException('Bad type in structure.', TProtocolException::INVALID_DATA);
             }
-            $xfer += $output->writeFieldBegin('success', TType::LST, 0);
-            $output->writeListBegin(TType::STRUCT, count($this->success));
-            foreach ($this->success as $iter1645) {
-                $xfer += $iter1645->write($output);
-            }
-            $output->writeListEnd();
+            $xfer += $output->writeFieldBegin('success', TType::STRUCT, 0);
+            $xfer += $this->success->write($output);
             $xfer += $output->writeFieldEnd();
         }
         if ($this->o1 !== null) {
             $xfer += $output->writeFieldBegin('o1', TType::STRUCT, 1);
             $xfer += $this->o1->write($output);
-            $xfer += $output->writeFieldEnd();
-        }
-        if ($this->o2 !== null) {
-            $xfer += $output->writeFieldBegin('o2', TType::STRUCT, 2);
-            $xfer += $this->o2->write($output);
             $xfer += $output->writeFieldEnd();
         }
         $xfer += $output->writeFieldStop();

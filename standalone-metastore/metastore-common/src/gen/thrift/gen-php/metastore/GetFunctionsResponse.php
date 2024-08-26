@@ -16,13 +16,13 @@ use Thrift\Protocol\TProtocol;
 use Thrift\Protocol\TBinaryProtocolAccelerated;
 use Thrift\Exception\TApplicationException;
 
-class WMValidateResourcePlanResponse
+class GetFunctionsResponse
 {
     static public $isValidate = false;
 
     static public $_TSPEC = array(
         1 => array(
-            'var' => 'errors',
+            'var' => 'function_names',
             'isRequired' => false,
             'type' => TType::LST,
             'etype' => TType::STRING,
@@ -31,12 +31,13 @@ class WMValidateResourcePlanResponse
                 ),
         ),
         2 => array(
-            'var' => 'warnings',
+            'var' => 'functions',
             'isRequired' => false,
             'type' => TType::LST,
-            'etype' => TType::STRING,
+            'etype' => TType::STRUCT,
             'elem' => array(
-                'type' => TType::STRING,
+                'type' => TType::STRUCT,
+                'class' => '\metastore\Function',
                 ),
         ),
     );
@@ -44,27 +45,27 @@ class WMValidateResourcePlanResponse
     /**
      * @var string[]
      */
-    public $errors = null;
+    public $function_names = null;
     /**
-     * @var string[]
+     * @var \metastore\Function[]
      */
-    public $warnings = null;
+    public $functions = null;
 
     public function __construct($vals = null)
     {
         if (is_array($vals)) {
-            if (isset($vals['errors'])) {
-                $this->errors = $vals['errors'];
+            if (isset($vals['function_names'])) {
+                $this->function_names = $vals['function_names'];
             }
-            if (isset($vals['warnings'])) {
-                $this->warnings = $vals['warnings'];
+            if (isset($vals['functions'])) {
+                $this->functions = $vals['functions'];
             }
         }
     }
 
     public function getName()
     {
-        return 'WMValidateResourcePlanResponse';
+        return 'GetFunctionsResponse';
     }
 
 
@@ -83,14 +84,14 @@ class WMValidateResourcePlanResponse
             switch ($fid) {
                 case 1:
                     if ($ftype == TType::LST) {
-                        $this->errors = array();
-                        $_size1141 = 0;
-                        $_etype1144 = 0;
-                        $xfer += $input->readListBegin($_etype1144, $_size1141);
-                        for ($_i1145 = 0; $_i1145 < $_size1141; ++$_i1145) {
-                            $elem1146 = null;
-                            $xfer += $input->readString($elem1146);
-                            $this->errors []= $elem1146;
+                        $this->function_names = array();
+                        $_size1092 = 0;
+                        $_etype1095 = 0;
+                        $xfer += $input->readListBegin($_etype1095, $_size1092);
+                        for ($_i1096 = 0; $_i1096 < $_size1092; ++$_i1096) {
+                            $elem1097 = null;
+                            $xfer += $input->readString($elem1097);
+                            $this->function_names []= $elem1097;
                         }
                         $xfer += $input->readListEnd();
                     } else {
@@ -99,14 +100,15 @@ class WMValidateResourcePlanResponse
                     break;
                 case 2:
                     if ($ftype == TType::LST) {
-                        $this->warnings = array();
-                        $_size1147 = 0;
-                        $_etype1150 = 0;
-                        $xfer += $input->readListBegin($_etype1150, $_size1147);
-                        for ($_i1151 = 0; $_i1151 < $_size1147; ++$_i1151) {
-                            $elem1152 = null;
-                            $xfer += $input->readString($elem1152);
-                            $this->warnings []= $elem1152;
+                        $this->functions = array();
+                        $_size1098 = 0;
+                        $_etype1101 = 0;
+                        $xfer += $input->readListBegin($_etype1101, $_size1098);
+                        for ($_i1102 = 0; $_i1102 < $_size1098; ++$_i1102) {
+                            $elem1103 = null;
+                            $elem1103 = new \metastore\Function();
+                            $xfer += $elem1103->read($input);
+                            $this->functions []= $elem1103;
                         }
                         $xfer += $input->readListEnd();
                     } else {
@@ -126,27 +128,27 @@ class WMValidateResourcePlanResponse
     public function write($output)
     {
         $xfer = 0;
-        $xfer += $output->writeStructBegin('WMValidateResourcePlanResponse');
-        if ($this->errors !== null) {
-            if (!is_array($this->errors)) {
+        $xfer += $output->writeStructBegin('GetFunctionsResponse');
+        if ($this->function_names !== null) {
+            if (!is_array($this->function_names)) {
                 throw new TProtocolException('Bad type in structure.', TProtocolException::INVALID_DATA);
             }
-            $xfer += $output->writeFieldBegin('errors', TType::LST, 1);
-            $output->writeListBegin(TType::STRING, count($this->errors));
-            foreach ($this->errors as $iter1153) {
-                $xfer += $output->writeString($iter1153);
+            $xfer += $output->writeFieldBegin('function_names', TType::LST, 1);
+            $output->writeListBegin(TType::STRING, count($this->function_names));
+            foreach ($this->function_names as $iter1104) {
+                $xfer += $output->writeString($iter1104);
             }
             $output->writeListEnd();
             $xfer += $output->writeFieldEnd();
         }
-        if ($this->warnings !== null) {
-            if (!is_array($this->warnings)) {
+        if ($this->functions !== null) {
+            if (!is_array($this->functions)) {
                 throw new TProtocolException('Bad type in structure.', TProtocolException::INVALID_DATA);
             }
-            $xfer += $output->writeFieldBegin('warnings', TType::LST, 2);
-            $output->writeListBegin(TType::STRING, count($this->warnings));
-            foreach ($this->warnings as $iter1154) {
-                $xfer += $output->writeString($iter1154);
+            $xfer += $output->writeFieldBegin('functions', TType::LST, 2);
+            $output->writeListBegin(TType::STRUCT, count($this->functions));
+            foreach ($this->functions as $iter1105) {
+                $xfer += $iter1105->write($output);
             }
             $output->writeListEnd();
             $xfer += $output->writeFieldEnd();

@@ -16,63 +16,71 @@ use Thrift\Protocol\TProtocol;
 use Thrift\Protocol\TBinaryProtocolAccelerated;
 use Thrift\Exception\TApplicationException;
 
-class ThriftHiveMetastore_get_table_meta_args
+class GetFunctionsRequest
 {
     static public $isValidate = false;
 
     static public $_TSPEC = array(
         1 => array(
-            'var' => 'db_patterns',
-            'isRequired' => false,
+            'var' => 'dbName',
+            'isRequired' => true,
             'type' => TType::STRING,
         ),
         2 => array(
-            'var' => 'tbl_patterns',
+            'var' => 'catalogName',
             'isRequired' => false,
             'type' => TType::STRING,
         ),
         3 => array(
-            'var' => 'tbl_types',
+            'var' => 'pattern',
             'isRequired' => false,
-            'type' => TType::LST,
-            'etype' => TType::STRING,
-            'elem' => array(
-                'type' => TType::STRING,
-                ),
+            'type' => TType::STRING,
+        ),
+        4 => array(
+            'var' => 'returnNames',
+            'isRequired' => false,
+            'type' => TType::BOOL,
         ),
     );
 
     /**
      * @var string
      */
-    public $db_patterns = null;
+    public $dbName = null;
     /**
      * @var string
      */
-    public $tbl_patterns = null;
+    public $catalogName = null;
     /**
-     * @var string[]
+     * @var string
      */
-    public $tbl_types = null;
+    public $pattern = null;
+    /**
+     * @var bool
+     */
+    public $returnNames = true;
 
     public function __construct($vals = null)
     {
         if (is_array($vals)) {
-            if (isset($vals['db_patterns'])) {
-                $this->db_patterns = $vals['db_patterns'];
+            if (isset($vals['dbName'])) {
+                $this->dbName = $vals['dbName'];
             }
-            if (isset($vals['tbl_patterns'])) {
-                $this->tbl_patterns = $vals['tbl_patterns'];
+            if (isset($vals['catalogName'])) {
+                $this->catalogName = $vals['catalogName'];
             }
-            if (isset($vals['tbl_types'])) {
-                $this->tbl_types = $vals['tbl_types'];
+            if (isset($vals['pattern'])) {
+                $this->pattern = $vals['pattern'];
+            }
+            if (isset($vals['returnNames'])) {
+                $this->returnNames = $vals['returnNames'];
             }
         }
     }
 
     public function getName()
     {
-        return 'ThriftHiveMetastore_get_table_meta_args';
+        return 'GetFunctionsRequest';
     }
 
 
@@ -91,30 +99,28 @@ class ThriftHiveMetastore_get_table_meta_args
             switch ($fid) {
                 case 1:
                     if ($ftype == TType::STRING) {
-                        $xfer += $input->readString($this->db_patterns);
+                        $xfer += $input->readString($this->dbName);
                     } else {
                         $xfer += $input->skip($ftype);
                     }
                     break;
                 case 2:
                     if ($ftype == TType::STRING) {
-                        $xfer += $input->readString($this->tbl_patterns);
+                        $xfer += $input->readString($this->catalogName);
                     } else {
                         $xfer += $input->skip($ftype);
                     }
                     break;
                 case 3:
-                    if ($ftype == TType::LST) {
-                        $this->tbl_types = array();
-                        $_size1516 = 0;
-                        $_etype1519 = 0;
-                        $xfer += $input->readListBegin($_etype1519, $_size1516);
-                        for ($_i1520 = 0; $_i1520 < $_size1516; ++$_i1520) {
-                            $elem1521 = null;
-                            $xfer += $input->readString($elem1521);
-                            $this->tbl_types []= $elem1521;
-                        }
-                        $xfer += $input->readListEnd();
+                    if ($ftype == TType::STRING) {
+                        $xfer += $input->readString($this->pattern);
+                    } else {
+                        $xfer += $input->skip($ftype);
+                    }
+                    break;
+                case 4:
+                    if ($ftype == TType::BOOL) {
+                        $xfer += $input->readBool($this->returnNames);
                     } else {
                         $xfer += $input->skip($ftype);
                     }
@@ -132,27 +138,25 @@ class ThriftHiveMetastore_get_table_meta_args
     public function write($output)
     {
         $xfer = 0;
-        $xfer += $output->writeStructBegin('ThriftHiveMetastore_get_table_meta_args');
-        if ($this->db_patterns !== null) {
-            $xfer += $output->writeFieldBegin('db_patterns', TType::STRING, 1);
-            $xfer += $output->writeString($this->db_patterns);
+        $xfer += $output->writeStructBegin('GetFunctionsRequest');
+        if ($this->dbName !== null) {
+            $xfer += $output->writeFieldBegin('dbName', TType::STRING, 1);
+            $xfer += $output->writeString($this->dbName);
             $xfer += $output->writeFieldEnd();
         }
-        if ($this->tbl_patterns !== null) {
-            $xfer += $output->writeFieldBegin('tbl_patterns', TType::STRING, 2);
-            $xfer += $output->writeString($this->tbl_patterns);
+        if ($this->catalogName !== null) {
+            $xfer += $output->writeFieldBegin('catalogName', TType::STRING, 2);
+            $xfer += $output->writeString($this->catalogName);
             $xfer += $output->writeFieldEnd();
         }
-        if ($this->tbl_types !== null) {
-            if (!is_array($this->tbl_types)) {
-                throw new TProtocolException('Bad type in structure.', TProtocolException::INVALID_DATA);
-            }
-            $xfer += $output->writeFieldBegin('tbl_types', TType::LST, 3);
-            $output->writeListBegin(TType::STRING, count($this->tbl_types));
-            foreach ($this->tbl_types as $iter1522) {
-                $xfer += $output->writeString($iter1522);
-            }
-            $output->writeListEnd();
+        if ($this->pattern !== null) {
+            $xfer += $output->writeFieldBegin('pattern', TType::STRING, 3);
+            $xfer += $output->writeString($this->pattern);
+            $xfer += $output->writeFieldEnd();
+        }
+        if ($this->returnNames !== null) {
+            $xfer += $output->writeFieldBegin('returnNames', TType::BOOL, 4);
+            $xfer += $output->writeBool($this->returnNames);
             $xfer += $output->writeFieldEnd();
         }
         $xfer += $output->writeFieldStop();
