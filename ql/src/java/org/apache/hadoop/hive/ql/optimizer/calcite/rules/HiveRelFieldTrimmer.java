@@ -25,7 +25,6 @@ import java.util.Map;
 import java.util.Set;
 
 import com.google.common.collect.ImmutableList;
-import org.apache.calcite.adapter.druid.DruidQuery;
 import org.apache.calcite.linq4j.Ord;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelOptUtil;
@@ -223,77 +222,6 @@ public class HiveRelFieldTrimmer extends RelFieldTrimmer {
             newJoinFilters);
 
     return new TrimResult(newJoin, mapping);
-  }
-
-  /**
-   * Variant of {@link #trimFields(RelNode, ImmutableBitSet, Set)} for
-   * {@link org.apache.calcite.adapter.druid.DruidQuery}.
-   */
-  public TrimResult trimFields(DruidQuery dq, ImmutableBitSet fieldsUsed,
-      Set<RelDataTypeField> extraFields) {
-    final int fieldCount = dq.getRowType().getFieldCount();
-    if (fieldsUsed.equals(ImmutableBitSet.range(fieldCount))
-        && extraFields.isEmpty()) {
-      // if there is nothing to project or if we are projecting everything
-      // then no need to introduce another RelNode
-      return trimFields(
-          (RelNode) dq, fieldsUsed, extraFields);
-    }
-    final RelNode newTableAccessRel = project(dq, fieldsUsed, extraFields, relBuilder);
-
-    // Some parts of the system can't handle rows with zero fields, so
-    // pretend that one field is used.
-    if (fieldsUsed.cardinality() == 0) {
-      RelNode input = newTableAccessRel;
-      if (input instanceof Project) {
-        // The table has implemented the project in the obvious way - by
-        // creating project with 0 fields. Strip it away, and create our own
-        // project with one field.
-        Project project = (Project) input;
-        if (project.getRowType().getFieldCount() == 0) {
-          input = project.getInput();
-        }
-      }
-      return dummyProject(fieldCount, input);
-    }
-
-    final Mapping mapping = createMapping(fieldsUsed, fieldCount);
-    return result(newTableAccessRel, mapping);
-  }
-
-  private static RelNode project(DruidQuery dq, ImmutableBitSet fieldsUsed,
-          Set<RelDataTypeField> extraFields, RelBuilder relBuilder) {
-    final int fieldCount = dq.getRowType().getFieldCount();
-    if (fieldsUsed.equals(ImmutableBitSet.range(fieldCount))
-        && extraFields.isEmpty()) {
-      return dq;
-    }
-    final List<RexNode> exprList = new ArrayList<>();
-    final List<String> nameList = new ArrayList<>();
-    final RexBuilder rexBuilder = dq.getCluster().getRexBuilder();
-    final List<RelDataTypeField> fields = dq.getRowType().getFieldList();
-
-    // Project the subset of fields.
-    for (int i : fieldsUsed) {
-      RelDataTypeField field = fields.get(i);
-      exprList.add(rexBuilder.makeInputRef(dq, i));
-      nameList.add(field.getName());
-    }
-
-    // Project nulls for the extra fields. (Maybe a sub-class table has
-    // extra fields, but we don't.)
-    for (RelDataTypeField extraField : extraFields) {
-      exprList.add(
-          rexBuilder.ensureType(
-              extraField.getType(),
-              rexBuilder.constantNull(),
-              true));
-      nameList.add(extraField.getName());
-    }
-
-    HiveProject hp = (HiveProject) relBuilder.push(dq).project(exprList, nameList).build();
-    hp.setSynthetic();
-    return hp;
   }
 
   /**
