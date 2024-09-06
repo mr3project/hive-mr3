@@ -78,19 +78,6 @@ public class PerfLogger {
   public static final String MR3_CREATE_VERTEX = "MR3CreateVertex";
   public static final String MR3_RUN_VERTEX = "MR3RunVertex";
 
-  public static final String SPARK_SUBMIT_TO_RUNNING = "SparkSubmitToRunning";
-  public static final String SPARK_BUILD_PLAN = "SparkBuildPlan";
-  public static final String SPARK_BUILD_RDD_GRAPH = "SparkBuildRDDGraph";
-  public static final String SPARK_SUBMIT_JOB = "SparkSubmitJob";
-  public static final String SPARK_RUN_JOB = "SparkRunJob";
-  public static final String SPARK_CREATE_TRAN = "SparkCreateTran.";
-  public static final String SPARK_RUN_STAGE = "SparkRunStage.";
-  public static final String SPARK_INIT_OPERATORS = "SparkInitializeOperators";
-  public static final String SPARK_GENERATE_TASK_TREE = "SparkGenerateTaskTree";
-  public static final String SPARK_OPTIMIZE_OPERATOR_TREE = "SparkOptimizeOperatorTree";
-  public static final String SPARK_OPTIMIZE_TASK_TREE = "SparkOptimizeTaskTree";
-  public static final String SPARK_FLUSH_HASHTABLE = "SparkFlushHashTable.";
-
   protected final Map<String, Long> startTimes = new HashMap<String, Long>();
   protected final Map<String, Long> endTimes = new HashMap<String, Long>();
 
