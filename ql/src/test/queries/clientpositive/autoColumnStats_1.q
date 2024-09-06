@@ -1,9 +1,11 @@
+--! qt:dataset:srcpart
+--! qt:dataset:src1
+--! qt:dataset:src
 set hive.strict.checks.bucketing=false;
 
 set hive.stats.column.autogather=true;
 set hive.stats.fetch.column.stats=true;
 set hive.exec.dynamic.partition=true;
-set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.auto.convert.join=true;
 set hive.join.emit.interval=2;
 set hive.auto.convert.join.noconditionaltask=true;

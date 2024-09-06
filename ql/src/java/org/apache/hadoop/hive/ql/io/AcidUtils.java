@@ -821,7 +821,7 @@ public class AcidUtils {
         }
       }
       else {
-        return path.compareTo(parsedDelta.path);
+        return path.getPath().compareTo(parsedDelta.path.getPath());
       }
     }
   }
@@ -1132,7 +1132,9 @@ public class AcidUtils {
      */
     Collections.sort(original, (HdfsFileStatusWithId o1, HdfsFileStatusWithId o2) -> {
       //this does "Path.uri.compareTo(that.uri)"
-      return o1.getFileStatus().compareTo(o2.getFileStatus());
+      return o1.getFileStatus().getPath().compareTo(o2.getFileStatus().getPath());
+      // TODO: for Hadoop 2.8+
+      // return o1.getFileStatus().compareTo(o2.getFileStatus());
     });
 
     // Note: isRawFormat is invalid for non-ORC tables. It will always return true, so we're good.

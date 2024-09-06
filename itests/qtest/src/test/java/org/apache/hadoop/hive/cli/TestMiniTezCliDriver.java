@@ -59,7 +59,7 @@ public class TestMiniTezCliDriver {
   @Test
   public void testCliDriver() throws Exception {
     // create a new object cache for tez-based tests which rely on that
-    ObjectCache.setupObjectRegistry(new ObjectRegistryImpl());
+    ObjectCache.setupObjectRegistryDummy();
     adapter.runTest(name, qfile);
   }
 

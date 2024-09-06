@@ -1,3 +1,4 @@
+--! qt:dataset:part
 set hive.explain.user=false;
 set hive.fetch.task.conversion=none;
 set hive.mapred.mode=nonstrict;
@@ -8,7 +9,6 @@ SET hive.vectorized.use.vector.serde.deserialize=false;
 SET hive.vectorized.use.row.serde.deserialize=false;
 SET hive.vectorized.execution.enabled=true;
 set hive.fetch.task.conversion=none;
-set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.metastore.disallow.incompatible.col.type.changes=true;
 set hive.default.fileformat=orc;
 set hive.llap.io.enabled=false;

@@ -1,3 +1,5 @@
+--! qt:dataset:srcpart
+--! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 drop table tstsrc_n0;
 
@@ -12,7 +14,6 @@ drop table tstsrc_n0;
 drop table tstsrcpart_n1;
 create table tstsrcpart_n1 like srcpart;
 
-set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.exec.dynamic.partition=true;
 
 

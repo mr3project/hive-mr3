@@ -1,6 +1,7 @@
 SET hive.vectorized.adaptor.usage.mode=all;
 SET hive.stats.autogather=false;
 SET hive.fetch.task.conversion=none;
+-- set hive.create.as.acid=true;
 SET hive.explain.user=false;
 SET hive.vectorized.use.vectorized.input.format=false;
 SET hive.vectorized.use.vector.serde.deserialize=true;

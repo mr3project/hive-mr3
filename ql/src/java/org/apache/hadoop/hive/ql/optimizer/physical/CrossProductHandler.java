@@ -30,7 +30,11 @@ import java.util.Stack;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.hive.ql.plan.*;
+import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.tez.runtime.library.cartesianproduct.CartesianProductVertexManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.exec.AbstractMapJoinOperator;
@@ -86,8 +90,24 @@ public class CrossProductHandler implements PhysicalPlanResolver, Dispatcher {
 
   @Override
   public PhysicalContext resolve(PhysicalContext pctx) throws SemanticException {
+    HiveConf conf = pctx.getConf();
     cartesianProductEdgeEnabled =
-      HiveConf.getBoolVar(pctx.getConf(), HiveConf.ConfVars.TEZ_CARTESIAN_PRODUCT_EDGE_ENABLED);
+      HiveConf.getBoolVar(conf, HiveConf.ConfVars.TEZ_CARTESIAN_PRODUCT_EDGE_ENABLED);
+    // if max parallelism isn't set by user in llap mode, set it to number of executors
+    if (cartesianProductEdgeEnabled
+      && HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_MODE).equals("llap")
+      && conf.get(CartesianProductVertexManager.TEZ_CARTESIAN_PRODUCT_MAX_PARALLELISM) == null) {
+      // MR3 only (Cf. LlapDecider.adjustAutoParallelism())
+      Resource reducerResource = DAGUtils.getReduceTaskResource(conf);
+      int reducerMemoryInMb = reducerResource.getMemory();
+      // the following code works even when reducerMemoryMb <= 0
+      int targetCount = MR3SessionManagerImpl.getEstimateNumTasksOrNodes(reducerMemoryInMb);
+      if (targetCount > 0) {
+        conf.setInt(CartesianProductVertexManager.TEZ_CARTESIAN_PRODUCT_MAX_PARALLELISM, targetCount);
+      }
+      // if targetCount == 0, e.g., no ContainerWorkers are running, do not set TEZ_CARTESIAN_PRODUCT_MAX_PARALLELISM
+    }
+
     TaskGraphWalker ogw = new TaskGraphWalker(this);
 
     ArrayList<Node> topNodes = new ArrayList<Node>();

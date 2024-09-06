@@ -1,8 +1,8 @@
+--! qt:dataset:srcpart
 set hive.explain.user=false;
 set datanucleus.cache.collections=false;
 set hive.stats.autogather=false;
 set hive.exec.dynamic.partition=true;
-set hive.exec.dynamic.partition.mode=nonstrict;
 
 -- test analyze table ... compute statistics noscan
 

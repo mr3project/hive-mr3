@@ -1,3 +1,4 @@
+--! qt:dataset:srcpart
 SET hive.vectorized.execution.enabled=false;
 set hive.compute.query.using.stats=false;
 set hive.mapred.mode=nonstrict;
@@ -195,7 +196,6 @@ select distinct(ds) from srcpart where srcpart.ds in (select max(srcpart.ds) fro
 create table srcpart_orc (key int, value string) partitioned by (ds string, hr int) stored as orc;
 
 
-set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.vectorized.execution.enabled=false;
 set hive.exec.max.dynamic.partitions=1000;
 

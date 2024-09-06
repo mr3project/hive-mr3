@@ -1009,7 +1009,7 @@ public class TestTxnCommands extends TxnCommandsBaseForTests {
     Assert.assertEquals("Unexpected number of compactions in history", 1, resp.getCompactsSize());
     Assert.assertEquals("Unexpected 0 compaction state",
         TxnStore.CLEANING_RESPONSE, resp.getCompacts().get(0).getState());
-    Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId().startsWith("job_local"));
+    // Assert.assertTrue(resp.getCompacts().get(0).getHadoopJobId().startsWith("job_local"));   // not true when using MR3
 
     rs = runStatementOnDriver("select distinct INPUT__FILE__NAME from T");
     Assert.assertTrue(rs != null && rs.size() == 1 && rs.get(0).contains(AcidUtils.BASE_PREFIX));

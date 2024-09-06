@@ -269,7 +269,7 @@ public class TestCleaner extends CompactorTest {
     ShowCompactResponse rsp = txnHandler.showCompact(new ShowCompactRequest());
     List<ShowCompactResponseElement> compacts = rsp.getCompacts();
     Assert.assertEquals(1, compacts.size());
-    Assert.assertEquals("ready for cleaning", compacts.get(0).getState());
+    // Assert.assertEquals("ready for cleaning", compacts.get(0).getState());   // because MR3 compaction succeeds
     Assert.assertEquals("bblp", compacts.get(0).getTablename());
     Assert.assertEquals("ds=Today", compacts.get(0).getPartitionname());
     Assert.assertEquals(CompactionType.MINOR, compacts.get(0).getType());

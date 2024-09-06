@@ -1,3 +1,4 @@
+--! qt:dataset:src
 insert overwrite directory '../../data/files/src_table_1'
 select * from src ;
 dfs -cat ../../data/files/src_table_1/000000_0;
@@ -108,7 +109,7 @@ STORED AS RCFILE
 select value,key from src;
 
 dfs ${system:test.dfs.mkdir} ${system:test.tmp.dir}/rctable/temp;
-dfs -rmr ${system:test.tmp.dir}/rctable;
+dfs -rm -r -f ${system:test.tmp.dir}/rctable;
 dfs ${system:test.dfs.mkdir}  ${system:test.tmp.dir}/rctable;
 dfs -put ../../data/files/rctable/000000_0 ${system:test.tmp.dir}/rctable/000000_0;
 
@@ -123,19 +124,29 @@ select key,value from rctable;
 
 dfs -cat ../../data/files/rctable_out/000000_0;
 
+-- test iow directory when query result cache is enabled
+set hive.query.results.cache.enabled=true;
+insert overwrite directory '../../data/files/iowd_out'
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY '\t'
+select key,value from rctable;
+
+dfs -cat ../../data/files/iowd_out/000000_0;
+
 drop table rctable;
 drop table array_table_n1;
 drop table map_table_n2;
-dfs -rmr ${system:test.tmp.dir}/rctable;
-dfs -rmr ../../data/files/array_table_1;
-dfs -rmr ../../data/files/array_table_2;
-dfs -rmr ../../data/files/array_table_3;
-dfs -rmr ../../data/files/array_table_4;
-dfs -rmr ../../data/files/map_table_1;
-dfs -rmr ../../data/files/map_table_2;
-dfs -rmr ../../data/files/map_table_3;
-dfs -rmr ../../data/files/map_table_4;
-dfs -rmr ../../data/files/rctable;
-dfs -rmr ../../data/files/rctable_out;
-dfs -rmr ../../data/files/src_table_1;
-dfs -rmr ../../data/files/src_table_2;
+dfs -rm -r -f ${system:test.tmp.dir}/rctable;
+dfs -rm -r -f ../../data/files/array_table_1;
+dfs -rm -r -f ../../data/files/array_table_2;
+dfs -rm -r -f ../../data/files/array_table_3;
+dfs -rm -r -f ../../data/files/array_table_4;
+dfs -rm -r -f ../../data/files/map_table_1;
+dfs -rm -r -f ../../data/files/map_table_2;
+dfs -rm -r -f ../../data/files/map_table_3;
+dfs -rm -r -f ../../data/files/map_table_4;
+dfs -rm -r -f ../../data/files/rctable;
+dfs -rm -r -f ../../data/files/rctable_out;
+dfs -rm -r -f ../../data/files/src_table_1;
+dfs -rm -r -f ../../data/files/src_table_2;
+dfs -rm -r -f ../../data/files/iowd_out;

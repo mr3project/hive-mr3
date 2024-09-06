@@ -1,3 +1,4 @@
+--! qt:dataset:srcpart
 set hive.exec.infer.bucket.sort=true;
 set hive.merge.mapfiles=false;
 set hive.merge.mapredfiles=false;
@@ -18,7 +19,7 @@ CREATE TABLE test_table_n0 (key INT, value STRING) PARTITIONED BY (ds STRING, hr
 -- and the partition for 1 will get written in one reducer.  So hr=0 should be bucketed by key
 -- and hr=1 should not.
 
-EXPLAIN
+EXPLAIN EXTENDED
 INSERT OVERWRITE TABLE test_table_n0 PARTITION (ds = '2008-04-08', hr)
 SELECT key2, value, cast(hr as int) FROM
 (SELECT if ((key % 3) < 2, 0, 1) as key2, value, (key % 2) as hr

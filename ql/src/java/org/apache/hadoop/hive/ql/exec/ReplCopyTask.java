@@ -34,6 +34,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.hadoop.hive.ql.util.MR3FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.fs.FileStatus;
@@ -85,7 +86,7 @@ public class ReplCopyTask extends Task<ReplCopyWork> implements Serializable {
         String[] result = ReplChangeManager.decodeFileUri(fromPath.toString());
         ReplChangeManager.FileInfo sourceInfo = ReplChangeManager
             .getFileInfo(new Path(result[0]), result[1], result[2], result[3], conf);
-        if (FileUtils.copy(
+        if (MR3FileUtils.copy(
             sourceInfo.getSrcFs(), sourceInfo.getSourcePath(),
             dstFs, toPath, false, false, conf)) {
           return 0;

@@ -1,7 +1,7 @@
+--! qt:dataset:srcpart
 set datanucleus.cache.collections=false;
 set hive.stats.autogather=false;
 set hive.exec.dynamic.partition=true;
-set hive.exec.dynamic.partition.mode=nonstrict;
 
 create table analyze_srcpart_n4 like srcpart;
 insert overwrite table analyze_srcpart_n4 partition (ds, hr) select * from srcpart where ds is not null;

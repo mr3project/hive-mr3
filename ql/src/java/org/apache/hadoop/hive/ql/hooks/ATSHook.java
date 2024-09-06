@@ -114,7 +114,7 @@ public class ATSHook implements ExecuteWithHookContext {
         // This can use significant resources and should not be done on the main query thread.
         LOG.info("Creating ATS executor queue with capacity " + queueCapacity);
         BlockingQueue<Runnable> queue = new LinkedBlockingQueue<Runnable>(queueCapacity);
-        ThreadFactory threadFactory = new ThreadFactoryBuilder().setDaemon(true).setNameFormat("ATS Logger %d").build();
+        ThreadFactory threadFactory = new ATSExecutorThreadFactory();
         executor = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, queue, threadFactory);
 
         // Create a separate thread to send the events.

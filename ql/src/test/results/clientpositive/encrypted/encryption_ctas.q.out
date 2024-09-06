@@ -1,10 +1,6 @@
-PREHOOK: query: DROP TABLE IF EXISTS testCT.encrypted_tablectas PURGE
-PREHOOK: type: DROPTABLE
-POSTHOOK: query: DROP TABLE IF EXISTS testCT.encrypted_tablectas PURGE
-POSTHOOK: type: DROPTABLE
-PREHOOK: query: DROP DATABASE IF EXISTS testCT
+PREHOOK: query: DROP DATABASE IF EXISTS testCT CASCADE
 PREHOOK: type: DROPDATABASE
-POSTHOOK: query: DROP DATABASE IF EXISTS testCT
+POSTHOOK: query: DROP DATABASE IF EXISTS testCT CASCADE
 POSTHOOK: type: DROPDATABASE
 PREHOOK: query: CREATE DATABASE testCT
 PREHOOK: type: CREATEDATABASE
@@ -28,6 +24,8 @@ POSTHOOK: Input: default@src
 POSTHOOK: Input: hdfs://### HDFS PATH ###
 POSTHOOK: Output: database:testct
 POSTHOOK: Output: testCT@encrypted_tablectas
+POSTHOOK: Lineage: encrypted_tablectas.key SIMPLE [(src)src.FieldSchema(name:key, type:string, comment:default), ]
+POSTHOOK: Lineage: encrypted_tablectas.value SIMPLE [(src)src.FieldSchema(name:value, type:string, comment:default), ]
 PREHOOK: query: select * from testCT.encrypted_tablectas
 PREHOOK: type: QUERY
 PREHOOK: Input: testct@encrypted_tablectas
@@ -40,10 +38,12 @@ POSTHOOK: Input: testct@encrypted_tablectas
 PREHOOK: query: DROP TABLE testCT.encrypted_tablectas PURGE
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: testct@encrypted_tablectas
+PREHOOK: Output: database:testct
 PREHOOK: Output: testct@encrypted_tablectas
 POSTHOOK: query: DROP TABLE testCT.encrypted_tablectas PURGE
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: testct@encrypted_tablectas
+POSTHOOK: Output: database:testct
 POSTHOOK: Output: testct@encrypted_tablectas
 Encryption key deleted: 'key_128'
 PREHOOK: query: DROP DATABASE testCT

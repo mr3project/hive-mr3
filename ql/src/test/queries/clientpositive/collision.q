@@ -124,7 +124,7 @@ col117 timestamp)
 partitioned by (col3 date)
 stored as orc;
 
-EXPLAIN
+explain
 CREATE OR REPLACE VIEW cpn_view.myview_1000_n AS
 SELECT
 col0

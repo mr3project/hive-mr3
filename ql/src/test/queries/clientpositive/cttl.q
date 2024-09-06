@@ -26,4 +26,4 @@ select * from temp1 order by name, age limit 10;
 drop table students;
 dfs -ls hdfs:///tmp/hive19577_cttl/;
 
-dfs -rmr hdfs:///tmp/hive19577_cttl;
+dfs -rm -r -f hdfs:///tmp/hive19577_cttl;

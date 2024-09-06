@@ -1,8 +1,10 @@
+--! qt:replace:/(totalSize\s+)(\S+|\s+|.+)/$1#Masked#/
 set hive.vectorized.execution.enabled=false;
 set hive.support.concurrency=true;
 set hive.txn.manager=org.apache.hadoop.hive.ql.lockmgr.DbTxnManager;
 set hive.strict.checks.cartesian.product=false;
 set hive.materializedview.rewriting=true;
+-- set hive.materializedview.rewriting.sql=false;
 set hive.stats.column.autogather=true;
 
 create database db1;
@@ -16,8 +18,6 @@ insert into cmv_basetable_n7 values
  (2, 'bonnie', 172342.2, 3),
  (3, 'calvin', 978.76, 3),
  (3, 'charlie', 9.8, 1);
-
-analyze table cmv_basetable_n7 compute statistics for columns;
 
 create database db2;
 use db2;

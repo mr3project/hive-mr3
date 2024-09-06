@@ -1,9 +1,9 @@
+--! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=false;
 set hive.fetch.task.conversion=none;
 set tez.grouping.min-size=1;
 set tez.grouping.max-size=2;
-set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.support.concurrency=true;
 set hive.txn.manager=org.apache.hadoop.hive.ql.lockmgr.DbTxnManager;
 
@@ -21,7 +21,9 @@ drop table simple_to_mm;
 create table simple_to_mm(key int) stored as orc tblproperties("transactional"="false");
 insert into table simple_to_mm select key from intermediate;
 select * from simple_to_mm s1 order by key;
-alter table simple_to_mm set tblproperties("transactional"="true", "transactional_properties"="insert_only");
+
+explain alter table simple_to_mm convert to acid tblproperties ("transactional_properties"="insert_only");
+alter table simple_to_mm convert to acid tblproperties ("transactional_properties"="insert_only");
 export table simple_to_mm to 'ql/test/data/exports/export0';
 select * from simple_to_mm s2 order by key;
 create table import_converted0_mm(key int) stored as orc tblproperties("transactional"="false");

@@ -1,3 +1,28 @@
+Apache Hive on MR3
+==================
+
+This repository (default branch `master3`) is a fork of Apache Hive 3.1 [branch-3.1](https://github.com/apache/hive/tree/branch-3.1).
+It applies about 800 patches obtained from the master branch for fixing critical bugs and stabilizing performance.
+
+This repository is maintained as part of developing Hive on MR3, but can also be used for building Apache Hive.
+In order to build Apache Hive, ignore the last commits, including:
+
+* Remove Druid (which removes the code related to Druid)
+* Remove Hive on Spark (which removes the code related to Hive on Spark)
+* Patches for MR3 (which adds the MR3 backend)
+
+To suggest specific patches that you want to be included
+or to discuss the development of this repository in general,
+join [MR3 Slack](https://join.slack.com/t/mr3-help/shared_invite/zt-1wpqztk35-AN8JRDznTkvxFIjtvhmiNg).
+
+This repository is not updated incrementally (by applying new patches to the branch tip) because we often add
+new commits between existing commits. If updating your local repository complains about conflicts, reset to 
+an earlier commit and then try again, e.g.:
+```sh
+$ git reset --hard 949ff1c67614d4f50a6231fc0b78ab5d753cbeb9
+$ git pull
+```
+
 Apache Hive (TM)
 ================
 [![Master Build Status](https://travis-ci.org/apache/hive.svg?branch=master)](https://travis-ci.org/apache/hive/branches)

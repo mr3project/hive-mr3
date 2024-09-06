@@ -10,7 +10,7 @@ CREATE EXTERNAL TABLE tenant_1 (
   tenant_key bigint
 ) STORED AS PARQUET;
 
-EXPLAIN CBO
+explain
 SELECT * FROM (
    SELECT date_key, tenant_id
    FROM  table2

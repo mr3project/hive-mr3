@@ -1,4 +1,6 @@
+--! qt:dataset:src
 set hive.mapred.mode=nonstrict;
+set hive.vectorized.execution.enabled=false;
 
 create table n(key int);
 

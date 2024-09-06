@@ -1,9 +1,11 @@
+--! qt:dataset:src
 set hive.fetch.task.conversion=more;
 
 EXPLAIN SELECT trunc(1234567891.1234567891,4), trunc(1234567891.1234567891,-4), trunc(1234567891.1234567891,0), trunc(1234567891.1234567891) FROM src tablesample (1 rows);
 
 SELECT trunc(1234567891.1234567891,4), trunc(1234567891.1234567891,-4), trunc(1234567891.1234567891,0), trunc(1234567891.1234567891) FROM src tablesample (1 rows);
 
+SELECT trunc(12.123891,4), trunc(12,-4) FROM src tablesample (1 rows);
 DROP TABLE sampletable;
 
 CREATE TABLE sampletable(c DOUBLE, d INT)
