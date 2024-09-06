@@ -17,6 +17,11 @@
  */
 package org.apache.hadoop.hive.serde2;
 
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.CSVWriter;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -40,9 +45,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 
-import au.com.bytecode.opencsv.CSVReader;
-import au.com.bytecode.opencsv.CSVWriter;
-
 /**
  * OpenCSVSerde use opencsv to deserialize CSV format.
  * Users can specify custom separator, quote or escape characters. And the default separator(\),
@@ -51,7 +53,8 @@ import au.com.bytecode.opencsv.CSVWriter;
  */
 @SerDeSpec(schemaProps = {
     serdeConstants.LIST_COLUMNS,
-    OpenCSVSerde.SEPARATORCHAR, OpenCSVSerde.QUOTECHAR, OpenCSVSerde.ESCAPECHAR})
+    OpenCSVSerde.SEPARATORCHAR, OpenCSVSerde.QUOTECHAR, OpenCSVSerde.ESCAPECHAR,
+    OpenCSVSerde.APPLYQUOTESTOALL})
 public final class OpenCSVSerde extends AbstractSerDe {
 
   public static final Logger LOG = LoggerFactory.getLogger(OpenCSVSerde.class.getName());
@@ -63,10 +66,12 @@ public final class OpenCSVSerde extends AbstractSerDe {
   private char separatorChar;
   private char quoteChar;
   private char escapeChar;
+  private boolean applyQuotesToAll;
 
   public static final String SEPARATORCHAR = "separatorChar";
   public static final String QUOTECHAR = "quoteChar";
   public static final String ESCAPECHAR = "escapeChar";
+  public static final String APPLYQUOTESTOALL = "applyQuotesToAll";
 
   @Override
   public void initialize(final Configuration conf, final Properties tbl) throws SerDeException {
@@ -93,6 +98,8 @@ public final class OpenCSVSerde extends AbstractSerDe {
     separatorChar = getProperty(tbl, SEPARATORCHAR, CSVWriter.DEFAULT_SEPARATOR);
     quoteChar = getProperty(tbl, QUOTECHAR, CSVWriter.DEFAULT_QUOTE_CHARACTER);
     escapeChar = getProperty(tbl, ESCAPECHAR, CSVWriter.DEFAULT_ESCAPE_CHARACTER);
+    String temp = tbl.getProperty(APPLYQUOTESTOALL);
+    applyQuotesToAll = temp != null && temp.equalsIgnoreCase("true");
   }
 
   private char getProperty(final Properties tbl, final String property, final char def) {
@@ -132,7 +139,7 @@ public final class OpenCSVSerde extends AbstractSerDe {
     final CSVWriter csv = newWriter(writer, separatorChar, quoteChar, escapeChar);
 
     try {
-      csv.writeNext(outputFields);
+      csv.writeNext(outputFields, applyQuotesToAll);
       csv.close();
 
       return new Text(writer.toString());
@@ -176,19 +183,26 @@ public final class OpenCSVSerde extends AbstractSerDe {
   private CSVReader newReader(final Reader reader, char separator, char quote, char escape) {
     // CSVReader will throw an exception if any of separator, quote, or escape is the same, but
     // the CSV format specifies that the escape character and quote char are the same... very weird
+    CSVParser parser;
     if (CSVWriter.DEFAULT_ESCAPE_CHARACTER == escape) {
-      return new CSVReader(reader, separator, quote);
+      parser = new CSVParserBuilder()
+          .withSeparator(separator)
+          .withQuoteChar(quote)
+          .build();
     } else {
-      return new CSVReader(reader, separator, quote, escape);
+      parser = new CSVParserBuilder()
+          .withSeparator(separator)
+          .withQuoteChar(quote)
+          .withEscapeChar(escape)
+          .build();
     }
+    return new CSVReaderBuilder(reader)
+        .withCSVParser(parser)
+        .build();
   }
 
   private CSVWriter newWriter(final Writer writer, char separator, char quote, char escape) {
-    if (CSVWriter.DEFAULT_ESCAPE_CHARACTER == escape) {
-      return new CSVWriter(writer, separator, quote, "");
-    } else {
-      return new CSVWriter(writer, separator, quote, escape, "");
-    }
+    return new CSVWriter(writer, separator, quote, escape, "");
   }
 
   @Override
