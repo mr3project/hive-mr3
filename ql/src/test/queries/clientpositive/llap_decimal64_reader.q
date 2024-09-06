@@ -1,7 +1,7 @@
 --! qt:dataset:alltypesorc
 SET hive.vectorized.execution.enabled=true;
 
-SET hive.llap.io.enabled=false;
+SET hive.llap.io.enabled=true;
 
 SET hive.exec.orc.default.row.index.stride=1000;
 SET hive.optimize.index.filter=true;

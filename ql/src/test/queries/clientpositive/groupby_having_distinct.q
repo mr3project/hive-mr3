@@ -15,7 +15,7 @@ INSERT INTO tmp_src1 (npp,nsoc) VALUES ('1-1000Q7V4','7273441');
 INSERT INTO tmp_src1 (npp,nsoc) VALUES ('1-1000WA85','7273554');
 INSERT INTO tmp_src1 (npp,nsoc) VALUES ('1-1000WA85','7273555');
 
-EXPLAIN CBO
+explain
 SELECT `min_nsoc`
 FROM
      (SELECT `npp`,

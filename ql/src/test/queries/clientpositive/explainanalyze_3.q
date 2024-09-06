@@ -1,3 +1,5 @@
+--! qt:dataset:srcpart
+--! qt:dataset:src
 SET hive.vectorized.execution.enabled=false;
 set hive.map.aggr=false;
 
@@ -11,7 +13,6 @@ set hive.explain.user=true;
 set hive.support.concurrency=true;
 set hive.txn.manager=org.apache.hadoop.hive.ql.lockmgr.DbTxnManager;
 
-set hive.exec.dynamic.partition.mode=nonstrict;
 set hive.vectorized.execution.enabled=true;
 set hive.llap.io.enabled=false;
 

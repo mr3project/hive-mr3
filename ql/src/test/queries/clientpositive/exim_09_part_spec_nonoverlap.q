@@ -17,7 +17,7 @@ load data local inpath "../../data/files/test.dat"
 load data local inpath "../../data/files/test.dat" 
 	into table exim_employee_n10 partition (emp_country="us", emp_state="ka");		
 dfs ${system:test.dfs.mkdir} target/tmp/ql/test/data/exports/exim_employee/temp;
-dfs -rmr target/tmp/ql/test/data/exports/exim_employee;
+dfs -rm -r -f target/tmp/ql/test/data/exports/exim_employee;
 export table exim_employee_n10 to 'ql/test/data/exports/exim_employee';
 drop table exim_employee_n10;
 
@@ -36,6 +36,6 @@ import table exim_employee_n10 partition (emp_country="us", emp_state="tn") from
 describe extended exim_employee_n10;
 select * from exim_employee_n10;
 drop table exim_employee_n10;
-dfs -rmr target/tmp/ql/test/data/exports/exim_employee;
+dfs -rm -r -f target/tmp/ql/test/data/exports/exim_employee;
 
 drop database importer;

@@ -5,7 +5,7 @@ CREATE TABLE tableA (
   quota_type string
 );
 
-EXPLAIN CBO
+explain
 SELECT a.bd_id
 FROM (
     SELECT t.bd_id

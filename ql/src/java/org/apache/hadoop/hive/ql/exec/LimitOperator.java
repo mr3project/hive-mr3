@@ -20,7 +20,6 @@ package org.apache.hadoop.hive.ql.exec;
 
 import java.io.Serializable;
 import java.util.concurrent.Callable;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.conf.Configuration;
@@ -47,8 +46,10 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
   protected transient int currCount;
   protected transient boolean isMap;
 
+  // TODO: set runtimeCache only if this LimitOperator is the last operator before RS or TerminalOperator
+
   protected transient ObjectCache runtimeCache;
-  protected transient String limitKey;
+  protected transient String limitReachedKey;
 
   /** Kryo ctor. */
   protected LimitOperator() {
@@ -68,8 +69,14 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
     currCount = 0;
     isMap = hconf.getBoolean("mapred.task.is.map", true);
 
-    String queryId = HiveConf.getVar(getConfiguration(), HiveConf.ConfVars.HIVEQUERYID);
-    this.runtimeCache = ObjectCacheFactory.getCache(getConfiguration(), queryId, false, true);
+    String queryId = HiveConf.getVar(hconf, HiveConf.ConfVars.HIVEQUERYID);
+    int dagIdId = HiveConf.getIntVar(hconf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID);
+    if (dagIdId == HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID.defaultIntVal) {
+      this.runtimeCache = null;   // not in TezProcessor
+    } else {
+      // use per-thread cache because we do not add the number of records produced by different tasks from the same vertex
+      this.runtimeCache = ObjectCacheFactory.getCache(hconf, queryId, dagIdId, true, false);
+    }
 
     // this can happen in HS2 while doing local fetch optimization, where LimitOperator is used
     if (runtimeCache == null) {
@@ -81,33 +88,22 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
       // for further processing
       this.runtimeCache = new LlapObjectCache();
     }
-    this.limitKey = getOperatorId() + "_record_count";
 
-    AtomicInteger currentCountForAllTasks = getCurrentCount();
-    int currentCountForAllTasksInt = currentCountForAllTasks.get();
-
-    if (currentCountForAllTasksInt >= limit) {
-      LOG.info("LimitOperator exits early as query limit already reached: {} >= {}",
-          currentCountForAllTasksInt, limit);
-      onLimitReached();
-    }
+    String vertexName = getConfiguration().get(TezProcessor.HIVE_TEZ_VERTEX_NAME);
+    this.limitReachedKey = getLimitReachedKey(vertexName);
+    // clean runtimeCache.limitReachedKey which should be initialized only if limit is reached
+    resetLimitRecords();
   }
 
   @Override
   public void process(Object row, int tag) throws HiveException {
-    AtomicInteger currentCountForAllTasks = getCurrentCount();
-    int currentCountForAllTasksInt = currentCountForAllTasks.get();
-
-    if (offset <= currCount && currCount < (offset + limit) && offset <= currentCountForAllTasksInt
-        && currentCountForAllTasksInt < (offset + limit)) {
+    if (offset <= currCount && currCount < (offset + limit)) {
       forward(row, inputObjInspectors[tag]);
       currCount++;
-      currentCountForAllTasks.incrementAndGet();
-    } else if (offset > currCount) {
+    } else if (currCount < offset) {
       currCount++;
-      currentCountForAllTasks.incrementAndGet();
     } else {
-      onLimitReached();
+      setDone(true);
     }
   }
 
@@ -125,37 +121,34 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
     return OperatorType.LIMIT;
   }
 
-  protected void onLimitReached() {
-    super.setDone(true);
-
-    String limitReachedKey = getLimitReachedKey(getConfiguration());
-
-    try {
-      runtimeCache.retrieve(limitReachedKey, new Callable<AtomicBoolean>() {
-        @Override
-        public AtomicBoolean call() {
-          return new AtomicBoolean(false);
-        }
-      }).set(true);
-    } catch (HiveException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
   @Override
   public void closeOp(boolean abort) throws HiveException {
     if (!isMap && currCount < leastRow) {
       throw new HiveException("No sufficient row found");
     }
+
+    LOG.info("LimitOperator {} sets the final limit and # of records: {}, {}", getOperatorId(), limit, currCount);
+    setLimitRecords(limit, currCount);
+
     super.closeOp(abort);
   }
 
-  public AtomicInteger getCurrentCount() {
+  private static String getLimitReachedKey(String vertexName) {
+    return vertexName + LIMIT_REACHED_KEY_SUFFIX;
+  }
+
+  private void resetLimitRecords() {
+    runtimeCache.remove(limitReachedKey);
+  }
+
+  private scala.Tuple2<java.lang.Integer, java.lang.Integer> setLimitRecords(int opLimit, int numRecords) {
     try {
-      return runtimeCache.retrieve(limitKey, new Callable<AtomicInteger>() {
+      // assert because resetLimitRecords() was called in initializeOp()
+      assert runtimeCache.retrieve(limitReachedKey) == null;
+      return runtimeCache.retrieve(limitReachedKey, new Callable<scala.Tuple2<java.lang.Integer, java.lang.Integer>>() {
         @Override
-        public AtomicInteger call() {
-          return new AtomicInteger();
+        public scala.Tuple2<java.lang.Integer, java.lang.Integer> call() {
+          return new scala.Tuple2<java.lang.Integer, java.lang.Integer>(opLimit, numRecords);
         }
       });
     } catch (HiveException e) {
@@ -163,33 +156,33 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
     }
   }
 
-  public static String getLimitReachedKey(Configuration conf) {
-    return conf.get(TezProcessor.HIVE_TEZ_VERTEX_NAME) + LIMIT_REACHED_KEY_SUFFIX;
+  public static boolean checkLimitReachedForVertex(JobConf jobConf) {
+    // runtimeCache.retrieve(limitReachedKey) can be accessed only from the same thread that executes LimitOperator
+    // Q. Currently inside the same thread?
+    // A. Potentially yes, e.g.,
+    //   from HiveInputFormat/LlapInputFormat.getRecordReader()
+    //   <-- MapRecordProcessor.init() <-- TezProcessor.run()
+    // However, we return false because in the case of Hive-MR3,
+    // MR3 master decides to kill remaining tasks when limit is reached.
+    return false;
   }
 
-  public static boolean checkLimitReached(JobConf jobConf) {
-    String queryId = HiveConf.getVar(jobConf, HiveConf.ConfVars.HIVEQUERYID);
-    String limitReachedKey = getLimitReachedKey(jobConf);
-
-    return checkLimitReached(jobConf, queryId, limitReachedKey);
-  }
-
-  public static boolean checkLimitReachedForVertex(JobConf jobConf, String vertexName) {
-    String queryId = HiveConf.getVar(jobConf, HiveConf.ConfVars.HIVEQUERYID);
-    return checkLimitReached(jobConf, queryId, vertexName + LIMIT_REACHED_KEY_SUFFIX);
-  }
-
-  private static boolean checkLimitReached(JobConf jobConf, String queryId, String limitReachedKey) {
-    try {
-      return ObjectCacheFactory.getCache(jobConf, queryId, false, true)
-          .retrieve(limitReachedKey, new Callable<AtomicBoolean>() {
-            @Override
-            public AtomicBoolean call() {
-              return new AtomicBoolean(false);
-            }
-          }).get();
-    } catch (HiveException e) {
-      throw new RuntimeException(e);
+  public static scala.Tuple2<java.lang.Integer, java.lang.Integer> getLimitRecords(
+      String queryId, int dagIdId, String vertexName) {
+    assert dagIdId != HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID.defaultIntVal;
+    String limitReachedKey = getLimitReachedKey(vertexName);
+    // retrieve per-thread cache and set isPlanCache == true, so conf can be set to null
+    ObjectCache runtimeCache = ObjectCacheFactory.getCache(null, queryId, dagIdId, true, false);
+    if (runtimeCache == null) {
+      // ObjectCache.clearObjectRegistry() can be called in TezProcessor.initializeAndRunProcessor(),
+      // although Exception is always thrown in such a case
+      return null;
+    } else {
+      try {
+        return runtimeCache.retrieve(limitReachedKey);
+      } catch (HiveException e) {
+        throw new RuntimeException(e);
+      }
     }
   }
 }

@@ -1,3 +1,6 @@
+--! qt:dataset:srcpart
+--! qt:dataset:src1
+--! qt:dataset:src
 set hive.mapred.mode=nonstrict;
 set hive.support.concurrency = true;
 
@@ -36,11 +39,14 @@ CREATE DATABASE test_db;
 SHOW DATABASES;
 
 -- SHOW pattern
-SHOW DATABASES LIKE 'test*';
+SHOW DATABASES LIKE 'test%';
 
 -- SHOW pattern
-SHOW DATABASES LIKE '*ef*';
+SHOW DATABASES LIKE '%ef%';
 
+-- SHOW pattern
+SHOW DATABASES LIKE 'test_d_';
+SHOW DATABASES LIKE 'test__';
 
 USE test_db;
 SHOW DATABASES;

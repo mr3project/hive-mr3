@@ -468,6 +468,9 @@ public class GenTezWork implements NodeProcessor {
             edgeProp = new TezEdgeProperty(edgeType);
             edgeProp.setSlowStart(rWork.isSlowStart());
           }
+          if (rWork.isFixed()) {
+            edgeProp.setFixed();
+          }
           tezWork.connect(work, followingWork, edgeProp);
           context.connectedReduceSinks.add(rs);
         }
@@ -512,6 +515,8 @@ public class GenTezWork implements NodeProcessor {
       GenTezProcContext context) {
     LOG.debug("Connecting union work (" + unionWork + ") with work (" + work + ")");
     TezEdgeProperty edgeProp = new TezEdgeProperty(EdgeType.CONTAINS);
+    // TODO: set isFixed because edgeProperty.isAutoReduce == false (for MR3)
+    edgeProp.setFixed();
     tezWork.connect(unionWork, work, edgeProp);
     unionWork.addUnionOperators(context.currentUnionOperators);
     context.workWithUnionOperators.add(work);

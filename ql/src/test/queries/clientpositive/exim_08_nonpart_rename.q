@@ -7,7 +7,7 @@ create table exim_department_n9 ( dep_id int comment "department id")
 	tblproperties("creator"="krishna");
 load data local inpath "../../data/files/test.dat" into table exim_department_n9;		
 dfs ${system:test.dfs.mkdir} target/tmp/ql/test/data/exports/exim_department/temp;
-dfs -rmr target/tmp/ql/test/data/exports/exim_department;
+dfs -rm -r -f target/tmp/ql/test/data/exports/exim_department;
 export table exim_department_n9 to 'ql/test/data/exports/exim_department';
 drop table exim_department_n9;
 
@@ -23,6 +23,6 @@ describe extended exim_imported_dept;
 select * from exim_imported_dept;
 drop table exim_imported_dept;
 drop table exim_department_n9;
-dfs -rmr target/tmp/ql/test/data/exports/exim_department;
+dfs -rm -r -f target/tmp/ql/test/data/exports/exim_department;
 
 drop database importer;

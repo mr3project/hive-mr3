@@ -109,10 +109,12 @@ Storage Desc Params:
 PREHOOK: query: drop table anaylyze_external
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@anaylyze_external
+PREHOOK: Output: database:default
 PREHOOK: Output: default@anaylyze_external
 POSTHOOK: query: drop table anaylyze_external
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@anaylyze_external
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@anaylyze_external
 PREHOOK: query: create table texternal(key string, val string) partitioned by (insertdate string)
 PREHOOK: type: CREATETABLE
@@ -315,17 +317,20 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: anaylyze_external
-            Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
+            filterExpr: (insertdate = '2008-01-01') (type: boolean)
+            Statistics: Num rows: 500 Data size: 9312 Basic stats: COMPLETE Column stats: COMPLETE
             Select Operator
-              Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 500 Data size: 9312 Basic stats: COMPLETE Column stats: COMPLETE
               Group By Operator
                 aggregations: count()
+                minReductionHashAggr: 0.99
                 mode: hash
                 outputColumnNames: _col0
-                Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+                  Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                   value expressions: _col0 (type: bigint)
       Execution mode: vectorized
       Reduce Operator Tree:
@@ -333,10 +338,10 @@ STAGE PLANS:
           aggregations: count(VALUE._col0)
           mode: mergepartial
           outputColumnNames: _col0
-          Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+          Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
           File Output Operator
             compressed: false
-            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
             table:
                 input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                 output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -362,8 +367,11 @@ POSTHOOK: Input: default@anaylyze_external@insertdate=2008-01-01
 PREHOOK: query: drop table anaylyze_external
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@anaylyze_external
+PREHOOK: Output: database:default
 PREHOOK: Output: default@anaylyze_external
 POSTHOOK: query: drop table anaylyze_external
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@anaylyze_external
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@anaylyze_external
+#### A masked pattern was here ####

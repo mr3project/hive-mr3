@@ -72,15 +72,12 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.util.AuxiliaryServiceHelper;
-import org.apache.log4j.NDC;
 import org.apache.tez.common.counters.TezCounters;
 import org.apache.tez.common.security.JobTokenIdentifier;
 import org.apache.tez.common.security.TokenCache;
 import org.apache.tez.dag.api.TezConfiguration;
 import org.apache.tez.dag.api.TezConstants;
 import org.apache.tez.dag.records.TezTaskAttemptID;
-import org.apache.tez.hadoop.shim.HadoopShim;
-import org.apache.tez.hadoop.shim.HadoopShimsLoader;
 import org.apache.tez.runtime.api.impl.ExecutionContextImpl;
 import org.apache.tez.runtime.api.impl.TezEvent;
 import org.slf4j.Logger;
@@ -112,7 +109,6 @@ public class ContainerRunnerImpl extends CompositeService implements ContainerRu
   private final LlapDaemonExecutorMetrics metrics;
   private final TaskRunnerCallable.ConfParams confParams;
   private final KilledTaskHandler killedTaskHandler = new KilledTaskHandlerImpl();
-  private final HadoopShim tezHadoopShim;
   private final LlapSignerImpl signer;
   private final String clusterId;
   private final DaemonId daemonId;
@@ -161,7 +157,6 @@ public class ContainerRunnerImpl extends CompositeService implements ContainerRu
         conf.getInt(TezConfiguration.TEZ_TASK_MAX_EVENTS_PER_HEARTBEAT,
             TezConfiguration.TEZ_TASK_MAX_EVENTS_PER_HEARTBEAT_DEFAULT)
     );
-    tezHadoopShim = new HadoopShimsLoader(conf).getHadoopShim();
 
     LOG.info("ContainerRunnerImpl config: " +
             "memoryPerExecutorDerviced=" + memoryPerExecutor
@@ -221,13 +216,6 @@ public class ContainerRunnerImpl extends CompositeService implements ContainerRu
     MDC.put("dagId", dagId);
     MDC.put("queryId", queryId);
     MDC.put("fragmentId", fragmentId);
-    // TODO: Ideally we want tez to use CallableWithMdc that retains the MDC for threads created in
-    // thread pool. For now, we will push both dagId and queryId into NDC and the custom thread
-    // pool that we use for task execution and llap io (StatsRecordingThreadPool) will pop them
-    // using reflection and update the MDC.
-    NDC.push(dagId);
-    NDC.push(queryId);
-    NDC.push(fragmentId);
     Scheduler.SubmissionState submissionState;
     SubmitWorkResponseProto.Builder responseBuilder = SubmitWorkResponseProto.newBuilder();
     try {
@@ -271,9 +259,9 @@ public class ContainerRunnerImpl extends CompositeService implements ContainerRu
       // TODO: ideally we'd register TezCounters here, but it seems impossible before registerTask.
       WmFragmentCounters wmCounters = new WmFragmentCounters();
       TaskRunnerCallable callable = new TaskRunnerCallable(request, fragmentInfo, callableConf,
-          new ExecutionContextImpl(localAddress.get().getHostName()), env,
+          new ExecutionContextImpl(localAddress.get().getHostName(), null, null), env,
           credentials, memoryPerExecutor, amReporter, confParams, metrics, killedTaskHandler,
-          this, tezHadoopShim, attemptId, vertex, initialEvent, fsTaskUgi,
+          this, attemptId, vertex, initialEvent, fsTaskUgi,
           completionListener, socketFactory, isGuaranteed, wmCounters);
       submissionState = executorService.schedule(callable);
 
@@ -293,7 +281,6 @@ public class ContainerRunnerImpl extends CompositeService implements ContainerRu
       }
     } finally {
       MDC.clear();
-      NDC.clear();
     }
 
     return responseBuilder.setUniqueNodeId(daemonId.getUniqueNodeIdInCluster())

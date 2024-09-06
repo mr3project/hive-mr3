@@ -1,11 +1,15 @@
 PREHOOK: query: DROP TABLE IF EXISTS DECIMAL_UDF2_txt
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: DROP TABLE IF EXISTS DECIMAL_UDF2_txt
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: DROP TABLE IF EXISTS DECIMAL_UDF2_n0
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: DROP TABLE IF EXISTS DECIMAL_UDF2_n0
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: CREATE TABLE DECIMAL_UDF2_txt (key decimal(14,5), value int)
 ROW FORMAT DELIMITED
    FIELDS TERMINATED BY ' '
@@ -87,10 +91,11 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: decimal_udf2_n0
+                  filterExpr: (key = 10) (type: boolean)
                   Statistics: Num rows: 39 Data size: 4032 Basic stats: COMPLETE Column stats: COMPLETE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:key:decimal(14,5)/DECIMAL_64, 1:value:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:key:decimal(14,5)/DECIMAL_64, 1:value:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>, 3:ROW__IS__DELETED:boolean]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
@@ -104,8 +109,8 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [3, 4, 5, 6, 7, 8, 9]
-                          selectExpressions: ConstantVectorExpression(val null) -> 3:double, ConstantVectorExpression(val null) -> 4:double, ConstantVectorExpression(val 1.4711276743037347) -> 5:double, ConstantVectorExpression(val -0.8390715290764524) -> 6:double, ConstantVectorExpression(val -0.5440211108893698) -> 7:double, ConstantVectorExpression(val 0.6483608274590866) -> 8:double, ConstantVectorExpression(val 0.17453292519943295) -> 9:double
+                          projectedOutputColumnNums: [4, 5, 6, 7, 8, 9, 10]
+                          selectExpressions: ConstantVectorExpression(val null) -> 4:double, ConstantVectorExpression(val null) -> 5:double, ConstantVectorExpression(val 1.4711276743037347) -> 6:double, ConstantVectorExpression(val -0.8390715290764524) -> 7:double, ConstantVectorExpression(val -0.5440211108893698) -> 8:double, ConstantVectorExpression(val 0.6483608274590866) -> 9:double, ConstantVectorExpression(val 0.17453292519943295) -> 10:double
                       Statistics: Num rows: 2 Data size: 96 Basic stats: COMPLETE Column stats: COMPLETE
                       File Output Operator
                         compressed: false
@@ -153,18 +158,18 @@ POSTHOOK: Input: default@decimal_udf2_n0
 #### A masked pattern was here ####
 NULL	NULL	1.4711276743037347	-0.8390715290764524	-0.5440211108893698	0.6483608274590866	0.17453292519943295
 PREHOOK: query: SELECT SUM(HASH(*))
-FROM (SELECT acos(key), asin(key), atan(key), cos(key), sin(key), tan(key), radians(key)
+FROM (SELECT acos(key), asin(key), atan(key), cos(key), sin(key), tan(key), round(radians(key),12)
 FROM DECIMAL_UDF2_n0) q
 PREHOOK: type: QUERY
 PREHOOK: Input: default@decimal_udf2_n0
 #### A masked pattern was here ####
 POSTHOOK: query: SELECT SUM(HASH(*))
-FROM (SELECT acos(key), asin(key), atan(key), cos(key), sin(key), tan(key), radians(key)
+FROM (SELECT acos(key), asin(key), atan(key), cos(key), sin(key), tan(key), round(radians(key),12)
 FROM DECIMAL_UDF2_n0) q
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@decimal_udf2_n0
 #### A masked pattern was here ####
--3806952922
+-3762999953
 PREHOOK: query: EXPLAIN VECTORIZATION DETAIL
 SELECT
   exp(key), ln(key),
@@ -200,10 +205,11 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: decimal_udf2_n0
+                  filterExpr: (key = 10) (type: boolean)
                   Statistics: Num rows: 39 Data size: 4188 Basic stats: COMPLETE Column stats: COMPLETE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:key:decimal(14,5)/DECIMAL_64, 1:value:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:key:decimal(14,5)/DECIMAL_64, 1:value:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>, 3:ROW__IS__DELETED:boolean]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
@@ -217,8 +223,8 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [3, 4, 5, 6, 7, 8, 9, 10]
-                          selectExpressions: ConstantVectorExpression(val 22026.465794806718) -> 3:double, ConstantVectorExpression(val 2.302585092994046) -> 4:double, ConstantVectorExpression(val 2.302585092994046) -> 5:double, ConstantVectorExpression(val 1.0) -> 6:double, FuncLogWithBaseLongToDouble(col 1:double) -> 7:double, VectorUDFAdaptor(log(value, 10)) -> 8:double, ConstantVectorExpression(val 1.0) -> 9:double, ConstantVectorExpression(val 3.1622776601683795) -> 10:double
+                          projectedOutputColumnNums: [4, 5, 6, 7, 8, 9, 10, 11]
+                          selectExpressions: ConstantVectorExpression(val 22026.465794806718) -> 4:double, ConstantVectorExpression(val 2.302585092994046) -> 5:double, ConstantVectorExpression(val 2.302585092994046) -> 6:double, ConstantVectorExpression(val 1.0) -> 7:double, FuncLogWithBaseLongToDouble(col 1:double) -> 8:double, VectorUDFAdaptor(log(value, 10)) -> 9:double, ConstantVectorExpression(val 1.0) -> 10:double, ConstantVectorExpression(val 3.1622776601683795) -> 11:double
                       Statistics: Num rows: 2 Data size: 128 Basic stats: COMPLETE Column stats: COMPLETE
                       File Output Operator
                         compressed: false
@@ -289,7 +295,7 @@ FROM DECIMAL_UDF2_n0) q
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@decimal_udf2_n0
 #### A masked pattern was here ####
-1514360349
+-1970715434
 PREHOOK: query: EXPLAIN VECTORIZATION DETAIL
 SELECT acos(key), asin(key), atan(key), cos(key), sin(key), tan(key), radians(key)
 FROM DECIMAL_UDF2_txt WHERE key = 10
@@ -319,10 +325,11 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: decimal_udf2_txt
+                  filterExpr: (key = 10) (type: boolean)
                   Statistics: Num rows: 1 Data size: 112 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:key:decimal(14,5)/DECIMAL_64, 1:value:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:key:decimal(14,5)/DECIMAL_64, 1:value:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>, 3:ROW__IS__DELETED:boolean]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
@@ -336,8 +343,8 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [3, 4, 5, 6, 7, 8, 9]
-                          selectExpressions: ConstantVectorExpression(val null) -> 3:double, ConstantVectorExpression(val null) -> 4:double, ConstantVectorExpression(val 1.4711276743037347) -> 5:double, ConstantVectorExpression(val -0.8390715290764524) -> 6:double, ConstantVectorExpression(val -0.5440211108893698) -> 7:double, ConstantVectorExpression(val 0.6483608274590866) -> 8:double, ConstantVectorExpression(val 0.17453292519943295) -> 9:double
+                          projectedOutputColumnNums: [4, 5, 6, 7, 8, 9, 10]
+                          selectExpressions: ConstantVectorExpression(val null) -> 4:double, ConstantVectorExpression(val null) -> 5:double, ConstantVectorExpression(val 1.4711276743037347) -> 6:double, ConstantVectorExpression(val -0.8390715290764524) -> 7:double, ConstantVectorExpression(val -0.5440211108893698) -> 8:double, ConstantVectorExpression(val 0.6483608274590866) -> 9:double, ConstantVectorExpression(val 0.17453292519943295) -> 10:double
                       Statistics: Num rows: 1 Data size: 112 Basic stats: COMPLETE Column stats: NONE
                       File Output Operator
                         compressed: false
@@ -350,7 +357,7 @@ STAGE PLANS:
                             output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
                             serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vector.serde.deserialize IS true
@@ -385,18 +392,18 @@ POSTHOOK: Input: default@decimal_udf2_txt
 #### A masked pattern was here ####
 NULL	NULL	1.4711276743037347	-0.8390715290764524	-0.5440211108893698	0.6483608274590866	0.17453292519943295
 PREHOOK: query: SELECT SUM(HASH(*))
-FROM (SELECT acos(key), asin(key), atan(key), cos(key), sin(key), tan(key), radians(key)
+FROM (SELECT acos(key), asin(key), atan(key), cos(key), sin(key), tan(key), round(radians(key), 12)
 FROM DECIMAL_UDF2_txt) q
 PREHOOK: type: QUERY
 PREHOOK: Input: default@decimal_udf2_txt
 #### A masked pattern was here ####
 POSTHOOK: query: SELECT SUM(HASH(*))
-FROM (SELECT acos(key), asin(key), atan(key), cos(key), sin(key), tan(key), radians(key)
+FROM (SELECT acos(key), asin(key), atan(key), cos(key), sin(key), tan(key), round(radians(key), 12)
 FROM DECIMAL_UDF2_txt) q
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@decimal_udf2_txt
 #### A masked pattern was here ####
--3806952922
+-3762999953
 PREHOOK: query: EXPLAIN VECTORIZATION DETAIL
 SELECT
   exp(key), ln(key),
@@ -432,10 +439,11 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: decimal_udf2_txt
+                  filterExpr: (key = 10) (type: boolean)
                   Statistics: Num rows: 1 Data size: 116 Basic stats: COMPLETE Column stats: NONE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:key:decimal(14,5)/DECIMAL_64, 1:value:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:key:decimal(14,5)/DECIMAL_64, 1:value:int, 2:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>, 3:ROW__IS__DELETED:boolean]
                   Filter Operator
                     Filter Vectorization:
                         className: VectorFilterOperator
@@ -449,8 +457,8 @@ STAGE PLANS:
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [3, 4, 5, 6, 7, 8, 9, 10]
-                          selectExpressions: ConstantVectorExpression(val 22026.465794806718) -> 3:double, ConstantVectorExpression(val 2.302585092994046) -> 4:double, ConstantVectorExpression(val 2.302585092994046) -> 5:double, ConstantVectorExpression(val 1.0) -> 6:double, FuncLogWithBaseLongToDouble(col 1:double) -> 7:double, VectorUDFAdaptor(log(value, 10)) -> 8:double, ConstantVectorExpression(val 1.0) -> 9:double, ConstantVectorExpression(val 3.1622776601683795) -> 10:double
+                          projectedOutputColumnNums: [4, 5, 6, 7, 8, 9, 10, 11]
+                          selectExpressions: ConstantVectorExpression(val 22026.465794806718) -> 4:double, ConstantVectorExpression(val 2.302585092994046) -> 5:double, ConstantVectorExpression(val 2.302585092994046) -> 6:double, ConstantVectorExpression(val 1.0) -> 7:double, FuncLogWithBaseLongToDouble(col 1:double) -> 8:double, VectorUDFAdaptor(log(value, 10)) -> 9:double, ConstantVectorExpression(val 1.0) -> 10:double, ConstantVectorExpression(val 3.1622776601683795) -> 11:double
                       Statistics: Num rows: 1 Data size: 116 Basic stats: COMPLETE Column stats: NONE
                       File Output Operator
                         compressed: false
@@ -463,7 +471,7 @@ STAGE PLANS:
                             output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
                             serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
             Execution mode: vectorized, llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vector.serde.deserialize IS true
@@ -521,20 +529,24 @@ FROM DECIMAL_UDF2_txt) q
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@decimal_udf2_txt
 #### A masked pattern was here ####
-1514360349
+-1970715434
 PREHOOK: query: DROP TABLE IF EXISTS DECIMAL_UDF2_txt
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@decimal_udf2_txt
+PREHOOK: Output: database:default
 PREHOOK: Output: default@decimal_udf2_txt
 POSTHOOK: query: DROP TABLE IF EXISTS DECIMAL_UDF2_txt
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@decimal_udf2_txt
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@decimal_udf2_txt
 PREHOOK: query: DROP TABLE IF EXISTS DECIMAL_UDF2_n0
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@decimal_udf2_n0
+PREHOOK: Output: database:default
 PREHOOK: Output: default@decimal_udf2_n0
 POSTHOOK: query: DROP TABLE IF EXISTS DECIMAL_UDF2_n0
 POSTHOOK: type: DROPTABLE
 POSTHOOK: Input: default@decimal_udf2_n0
+POSTHOOK: Output: database:default
 POSTHOOK: Output: default@decimal_udf2_n0

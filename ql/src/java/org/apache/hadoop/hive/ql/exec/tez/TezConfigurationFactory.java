@@ -31,36 +31,36 @@ public class TezConfigurationFactory {
   private static TezConfiguration defaultConf = new TezConfiguration();
 
   public static Configuration copyInto(Configuration target, Configuration src,
-      Predicate<String> sourceFilter) {
+      Predicate<String> sourceFilter) {   // sourceFilter == null
     Iterator<Map.Entry<String, String>> iter = src.iterator();
     while (iter.hasNext()) {
       Map.Entry<String, String> entry = iter.next();
       String name = entry.getKey();
       String value = entry.getValue();
-      String[] sources = src.getPropertySources(name);
-      final String source;
-      if (sources == null || sources.length == 0) {
-        source = null;
-      } else {
+      // String[] sources = src.getPropertySources(name);
+      // final String source;
+      // if (sources == null || sources.length == 0) {
+      //   source = null;
+      // } else {
         /*
          * If the property or its source wasn't found. Otherwise, returns a list of the sources of
          * the resource. The older sources are the first ones in the list.
          */
-        source = sources[sources.length - 1];
-      }
+        // source = sources[sources.length - 1];
+      // }
 
-      if (sourceFilter == null || sourceFilter.test(source)) {
+      // if (sourceFilter == null || sourceFilter.test(source)) {
         target.set(name, value);
-      } else {
-      }
+      // } else {
+      // }
     }
     return target;
   }
 
-  public static JobConf wrapWithJobConf(Configuration conf, Predicate<String> sourceFilter) {
+  public static JobConf wrapWithJobConf(Configuration conf, Predicate<String> sourceFilter) {   // sourceFilter == null
     JobConf jc = new JobConf(false);
-    copyInto(jc, defaultConf, sourceFilter);
-    copyInto(jc, conf, sourceFilter);
+    copyInto(jc, defaultConf, null);
+    copyInto(jc, conf, null);
     return jc;
   }
 }

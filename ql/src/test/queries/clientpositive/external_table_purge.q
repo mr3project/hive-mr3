@@ -1,5 +1,5 @@
 
-dfs -rmr -f  hdfs:///tmp/etp_1;
+dfs -rm -r -f -f  hdfs:///tmp/etp_1;
 
 dfs -mkdir -p  hdfs:///tmp/etp_1;
 dfs -copyFromLocal ../../data/files/kv1.txt hdfs:///tmp/etp_1/;
@@ -62,7 +62,7 @@ set test.comment;
 select count(*) from etp_1;
 
 drop table etp_1;
-dfs -rmr -f hdfs:///tmp/etp_1;
+dfs -rm -r -f -f hdfs:///tmp/etp_1;
 
 set hive.external.table.purge.default=false;
 
@@ -70,7 +70,7 @@ set hive.external.table.purge.default=false;
 -- Partitioned table
 --
 
-dfs -rmr -f  hdfs:///tmp/etp_2;
+dfs -rm -r -f -f  hdfs:///tmp/etp_2;
 dfs -mkdir -p  hdfs:///tmp/etp_2/p1=part1;
 dfs -mkdir -p  hdfs:///tmp/etp_2/p1=part2;
 dfs -copyFromLocal ../../data/files/kv1.txt hdfs:///tmp/etp_2/p1=part1/;
@@ -160,6 +160,6 @@ set test.comment;
 select count(*) from etp_2;
 
 drop table etp_2;
-dfs -rmr -f hdfs:///tmp/etp_2;
+dfs -rm -r -f -f hdfs:///tmp/etp_2;
 
 set hive.external.table.purge.default=false;

@@ -49,6 +49,8 @@ import org.apache.hadoop.hive.ql.exec.ScriptOperator;
 import org.apache.hadoop.hive.ql.exec.SelectOperator;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.hive.ql.exec.tez.TezTask;
 import org.apache.hadoop.hive.ql.io.HiveInputFormat;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
@@ -73,7 +75,7 @@ import org.apache.hadoop.hive.ql.plan.ReduceWork;
 import org.apache.hadoop.hive.ql.plan.SelectDesc;
 import org.apache.hadoop.hive.ql.plan.Statistics;
 import org.apache.hadoop.hive.ql.plan.TezWork;
-import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.yarn.api.records.Resource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -105,7 +107,7 @@ public class LlapDecider implements PhysicalPlanResolver {
   }
 
   private LlapMode mode;
-  private final LlapClusterStateForCompile clusterState;
+  private final LlapClusterStateForCompile clusterState;  // nullable
 
   public LlapDecider(LlapClusterStateForCompile clusterState) {
     this.clusterState = clusterState;
@@ -172,15 +174,26 @@ public class LlapDecider implements PhysicalPlanResolver {
       if (reduceWork.isAutoReduceParallelism() == false && reduceWork.isUniformDistribution() == false) {
         return; // Not based on ARP and cannot assume uniform distribution, bail.
       }
-      clusterState.initClusterInfo();
-      int targetCount = 0;
-      if (!clusterState.hasClusterInfo()) {
-        LOG.warn("Cannot determine LLAP cluster information");
-        targetCount = (int)Math.ceil(minReducersPerExec * 1 * executorsPerNode);
+
+      // MR3 only
+      int targetCount = conf.getIntVar(HiveConf.ConfVars.HIVE_QUERY_ESTIMATE_REDUCE_NUM_TASKS);
+      if (targetCount == -1) {  // not initialized yet
+        Resource reducerResource = DAGUtils.getReduceTaskResource(conf);
+        int reducerMemoryInMb = reducerResource.getMemory();
+        // the following code works even when reducerMemoryMb <= 0
+        int estimateNumTasks = MR3SessionManagerImpl.getEstimateNumTasksOrNodes(reducerMemoryInMb);
+        if (estimateNumTasks == 0) {  // e.g., no ContainerWorkers are running
+          LOG.info("estimateNumTasks is zero, so use LLAP_DAEMON_NUM_EXECUTORS: " + executorsPerNode);
+          targetCount = (int)Math.ceil(minReducersPerExec * 1 * executorsPerNode);
+        } else {
+          LOG.info("Use estimateNumTasks = " + estimateNumTasks + " for memory " + reducerMemoryInMb);
+          targetCount = (int)Math.ceil(minReducersPerExec * estimateNumTasks);
+        }
+        conf.setIntVar(HiveConf.ConfVars.HIVE_QUERY_ESTIMATE_REDUCE_NUM_TASKS, targetCount);
       } else {
-        targetCount = (int)Math.ceil(minReducersPerExec * (clusterState.getKnownExecutorCount()
-            + clusterState.getNodeCountWithUnknownExecutors() * executorsPerNode));
+        LOG.info("Use the cached value of targetCount: " + targetCount);
       }
+
       // We only increase the targets here.
       if (reduceWork.isAutoReduceParallelism()) {
         // Do not exceed the configured max reducers.

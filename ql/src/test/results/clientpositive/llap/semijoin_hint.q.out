@@ -197,10 +197,10 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: k
-                  filterExpr: (str is not null and (str BETWEEN DynamicValue(RS_7_v_key1_min) AND DynamicValue(RS_7_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_7_v_key1_bloom_filter)))) (type: boolean)
+                  filterExpr: (str is not null and str BETWEEN DynamicValue(RS_7_v_key1_min) AND DynamicValue(RS_7_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_7_v_key1_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
-                    predicate: ((str BETWEEN DynamicValue(RS_7_v_key1_min) AND DynamicValue(RS_7_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_7_v_key1_bloom_filter))) and str is not null) (type: boolean)
+                    predicate: (str is not null and str BETWEEN DynamicValue(RS_7_v_key1_min) AND DynamicValue(RS_7_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_7_v_key1_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                     Select Operator
                       expressions: str (type: string)
@@ -208,6 +208,7 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: str (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: str (type: string)
                         Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -228,21 +229,24 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: key1 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: key1 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Select Operator
                         expressions: key1 (type: string)
-                        outputColumnNames: _col0
+                        outputColumnNames: key1
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                         Group By Operator
-                          aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=316)
+                          aggregations: min(key1), max(key1), bloom_filter(key1, expectedEntries=316)
+                          minReductionHashAggr: 0.99
                           mode: hash
                           outputColumnNames: _col0, _col1, _col2
-                          Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                          Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                           Reduce Output Operator
+                            null sort order: 
                             sort order: 
-                            Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                            Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                             value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -260,10 +264,12 @@ STAGE PLANS:
                   Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
                   Group By Operator
                     aggregations: count()
+                    minReductionHashAggr: 0.99
                     mode: hash
                     outputColumnNames: _col0
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     Reduce Output Operator
+                      null sort order: 
                       sort order: 
                       Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                       value expressions: _col0 (type: bigint)
@@ -286,13 +292,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=316)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=316)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                  Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
 
   Stage: Stage-0
@@ -347,6 +354,7 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: str (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: str (type: string)
                         Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -367,6 +375,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: key1 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: key1 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -386,10 +395,12 @@ STAGE PLANS:
                   Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
                   Group By Operator
                     aggregations: count()
+                    minReductionHashAggr: 0.99
                     mode: hash
                     outputColumnNames: _col0
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     Reduce Output Operator
+                      null sort order: 
                       sort order: 
                       Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                       value expressions: _col0 (type: bigint)
@@ -466,6 +477,7 @@ STAGE PLANS:
                       Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: cstring (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: cstring (type: string)
                         Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
@@ -486,6 +498,7 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 356000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: value (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: value (type: string)
                         Statistics: Num rows: 2000 Data size: 356000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -496,10 +509,10 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: v
-                  filterExpr: (key1 is not null and (key1 BETWEEN DynamicValue(RS_9_srcpart_date_str_min) AND DynamicValue(RS_9_srcpart_date_str_max) and in_bloom_filter(key1, DynamicValue(RS_9_srcpart_date_str_bloom_filter)))) (type: boolean)
+                  filterExpr: (key1 is not null and key1 BETWEEN DynamicValue(RS_9_srcpart_date_str_min) AND DynamicValue(RS_9_srcpart_date_str_max) and in_bloom_filter(key1, DynamicValue(RS_9_srcpart_date_str_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                   Filter Operator
-                    predicate: ((key1 BETWEEN DynamicValue(RS_9_srcpart_date_str_min) AND DynamicValue(RS_9_srcpart_date_str_max) and in_bloom_filter(key1, DynamicValue(RS_9_srcpart_date_str_bloom_filter))) and key1 is not null) (type: boolean)
+                    predicate: (key1 is not null and key1 BETWEEN DynamicValue(RS_9_srcpart_date_str_min) AND DynamicValue(RS_9_srcpart_date_str_max) and in_bloom_filter(key1, DynamicValue(RS_9_srcpart_date_str_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Select Operator
                       expressions: key1 (type: string)
@@ -507,6 +520,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: key1 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: key1 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -522,24 +536,27 @@ STAGE PLANS:
                   0 cstring (type: string)
                   1 value (type: string)
                 outputColumnNames: str
-                Statistics: Num rows: 4110 Data size: 357570 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 3068 Data size: 266916 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
                   key expressions: str (type: string)
+                  null sort order: z
                   sort order: +
                   Map-reduce partition columns: str (type: string)
-                  Statistics: Num rows: 4110 Data size: 357570 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 3068 Data size: 266916 Basic stats: COMPLETE Column stats: COMPLETE
                 Select Operator
                   expressions: str (type: string)
-                  outputColumnNames: _col0
-                  Statistics: Num rows: 4110 Data size: 715140 Basic stats: COMPLETE Column stats: COMPLETE
+                  outputColumnNames: str
+                  Statistics: Num rows: 3068 Data size: 266916 Basic stats: COMPLETE Column stats: COMPLETE
                   Group By Operator
-                    aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=5000)
+                    aggregations: min(str), max(str), bloom_filter(str, expectedEntries=5000)
+                    minReductionHashAggr: 0.99
                     mode: hash
                     outputColumnNames: _col0, _col1, _col2
-                    Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
+                      null sort order: 
                       sort order: 
-                      Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                      Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                       value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
         Reducer 3 
             Execution mode: llap
@@ -550,15 +567,17 @@ STAGE PLANS:
                 keys:
                   0 str (type: string)
                   1 key1 (type: string)
-                Statistics: Num rows: 4521 Data size: 393327 Basic stats: PARTIAL Column stats: NONE
+                Statistics: Num rows: 3374 Data size: 293607 Basic stats: PARTIAL Column stats: NONE
                 Select Operator
-                  Statistics: Num rows: 4521 Data size: 393327 Basic stats: PARTIAL Column stats: NONE
+                  Statistics: Num rows: 3374 Data size: 293607 Basic stats: PARTIAL Column stats: NONE
                   Group By Operator
                     aggregations: count()
+                    minReductionHashAggr: 0.99
                     mode: hash
                     outputColumnNames: _col0
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     Reduce Output Operator
+                      null sort order: 
                       sort order: 
                       Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                       value expressions: _col0 (type: bigint)
@@ -581,13 +600,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=5000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=5000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
 
   Stage: Stage-0
@@ -646,21 +666,24 @@ STAGE PLANS:
                       Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: cstring (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: cstring (type: string)
                         Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
                       Select Operator
                         expressions: cstring (type: string)
-                        outputColumnNames: _col0
-                        Statistics: Num rows: 9174 Data size: 1287800 Basic stats: COMPLETE Column stats: COMPLETE
+                        outputColumnNames: cstring
+                        Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
                         Group By Operator
-                          aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=3000)
+                          aggregations: min(cstring), max(cstring), bloom_filter(cstring, expectedEntries=3000)
+                          minReductionHashAggr: 0.99
                           mode: hash
                           outputColumnNames: _col0, _col1, _col2
-                          Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                           Reduce Output Operator
+                            null sort order: 
                             sort order: 
-                            Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                            Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                             value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -668,10 +691,10 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: v
-                  filterExpr: (key1 is not null and (key1 BETWEEN DynamicValue(RS_3_i_cstring_min) AND DynamicValue(RS_3_i_cstring_max) and in_bloom_filter(key1, DynamicValue(RS_3_i_cstring_bloom_filter)))) (type: boolean)
+                  filterExpr: (key1 is not null and key1 BETWEEN DynamicValue(RS_3_i_cstring_min) AND DynamicValue(RS_3_i_cstring_max) and in_bloom_filter(key1, DynamicValue(RS_3_i_cstring_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                   Filter Operator
-                    predicate: ((key1 BETWEEN DynamicValue(RS_3_i_cstring_min) AND DynamicValue(RS_3_i_cstring_max) and in_bloom_filter(key1, DynamicValue(RS_3_i_cstring_bloom_filter))) and key1 is not null) (type: boolean)
+                    predicate: (key1 is not null and key1 BETWEEN DynamicValue(RS_3_i_cstring_min) AND DynamicValue(RS_3_i_cstring_max) and in_bloom_filter(key1, DynamicValue(RS_3_i_cstring_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Select Operator
                       expressions: key1 (type: string)
@@ -679,6 +702,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: key1 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: key1 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -699,6 +723,7 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: str (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: str (type: string)
                         Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -720,10 +745,12 @@ STAGE PLANS:
                   Statistics: Num rows: 20182 Data size: 1416580 Basic stats: PARTIAL Column stats: NONE
                   Group By Operator
                     aggregations: count()
+                    minReductionHashAggr: 0.99
                     mode: hash
                     outputColumnNames: _col0
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     Reduce Output Operator
+                      null sort order: 
                       sort order: 
                       Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                       value expressions: _col0 (type: bigint)
@@ -746,13 +773,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=3000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=3000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
 
   Stage: Stage-0
@@ -809,21 +837,24 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: str (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: str (type: string)
                         Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Select Operator
                         expressions: str (type: string)
-                        outputColumnNames: _col0
-                        Statistics: Num rows: 2000 Data size: 348000 Basic stats: COMPLETE Column stats: COMPLETE
+                        outputColumnNames: str
+                        Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                         Group By Operator
-                          aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=5000)
+                          aggregations: min(str), max(str), bloom_filter(str, expectedEntries=5000)
+                          minReductionHashAggr: 0.99
                           mode: hash
                           outputColumnNames: _col0, _col1, _col2
-                          Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                           Reduce Output Operator
+                            null sort order: 
                             sort order: 
-                            Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                            Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                             value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -831,10 +862,10 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: v
-                  filterExpr: (key1 is not null and (key1 BETWEEN DynamicValue(RS_3_k_str_min) AND DynamicValue(RS_3_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_3_k_str_bloom_filter)))) (type: boolean)
+                  filterExpr: (key1 is not null and key1 BETWEEN DynamicValue(RS_3_k_str_min) AND DynamicValue(RS_3_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_3_k_str_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                   Filter Operator
-                    predicate: ((key1 BETWEEN DynamicValue(RS_3_k_str_min) AND DynamicValue(RS_3_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_3_k_str_bloom_filter))) and key1 is not null) (type: boolean)
+                    predicate: (key1 is not null and key1 BETWEEN DynamicValue(RS_3_k_str_min) AND DynamicValue(RS_3_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_3_k_str_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Select Operator
                       expressions: key1 (type: string)
@@ -842,6 +873,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: key1 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: key1 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -861,10 +893,12 @@ STAGE PLANS:
                   Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
                   Group By Operator
                     aggregations: count()
+                    minReductionHashAggr: 0.99
                     mode: hash
                     outputColumnNames: _col0
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     Reduce Output Operator
+                      null sort order: 
                       sort order: 
                       Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                       value expressions: _col0 (type: bigint)
@@ -887,13 +921,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=5000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=5000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
 
   Stage: Stage-0
@@ -948,6 +983,7 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 182000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: value (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: value (type: string)
                         Statistics: Num rows: 2000 Data size: 182000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -968,6 +1004,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: key1 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: key1 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -987,10 +1024,12 @@ STAGE PLANS:
                   Statistics: Num rows: 2200 Data size: 200200 Basic stats: PARTIAL Column stats: NONE
                   Group By Operator
                     aggregations: count()
+                    minReductionHashAggr: 0.99
                     mode: hash
                     outputColumnNames: _col0
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     Reduce Output Operator
+                      null sort order: 
                       sort order: 
                       Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                       value expressions: _col0 (type: bigint)
@@ -1072,6 +1111,7 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -1081,12 +1121,14 @@ STAGE PLANS:
                         Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                         Group By Operator
                           aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=5000)
+                          minReductionHashAggr: 0.99
                           mode: hash
                           outputColumnNames: _col0, _col1, _col2
-                          Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                           Reduce Output Operator
+                            null sort order: 
                             sort order: 
-                            Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                            Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                             value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -1105,6 +1147,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -1114,12 +1157,14 @@ STAGE PLANS:
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                         Group By Operator
                           aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=5000)
+                          minReductionHashAggr: 0.99
                           mode: hash
                           outputColumnNames: _col0, _col1, _col2
-                          Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                          Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                           Reduce Output Operator
+                            null sort order: 
                             sort order: 
-                            Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                            Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                             value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -1127,10 +1172,10 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: s
-                  filterExpr: (key1 is not null and (key1 BETWEEN DynamicValue(RS_6_k_str_min) AND DynamicValue(RS_6_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_6_k_str_bloom_filter)))) (type: boolean)
+                  filterExpr: (key1 is not null and key1 BETWEEN DynamicValue(RS_6_k_str_min) AND DynamicValue(RS_6_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_6_k_str_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                   Filter Operator
-                    predicate: ((key1 BETWEEN DynamicValue(RS_6_k_str_min) AND DynamicValue(RS_6_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_6_k_str_bloom_filter))) and key1 is not null) (type: boolean)
+                    predicate: (key1 is not null and key1 BETWEEN DynamicValue(RS_6_k_str_min) AND DynamicValue(RS_6_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_6_k_str_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Select Operator
                       expressions: key1 (type: string)
@@ -1138,6 +1183,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -1147,10 +1193,10 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: d
-                  filterExpr: (str is not null and (str BETWEEN DynamicValue(RS_21_v_key1_min) AND DynamicValue(RS_21_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_21_v_key1_bloom_filter)))) (type: boolean)
+                  filterExpr: (str is not null and str BETWEEN DynamicValue(RS_21_v_key1_min) AND DynamicValue(RS_21_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_21_v_key1_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
-                    predicate: ((str BETWEEN DynamicValue(RS_21_v_key1_min) AND DynamicValue(RS_21_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_21_v_key1_bloom_filter))) and str is not null) (type: boolean)
+                    predicate: (str is not null and str BETWEEN DynamicValue(RS_21_v_key1_min) AND DynamicValue(RS_21_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_21_v_key1_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                     Select Operator
                       expressions: str (type: string)
@@ -1158,6 +1204,7 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -1167,13 +1214,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=5000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=5000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                  Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
         Reducer 2 
             Execution mode: llap
@@ -1187,10 +1235,12 @@ STAGE PLANS:
                 Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -1213,13 +1263,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=5000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=5000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
         Reducer 8 
             Execution mode: llap
@@ -1233,10 +1284,12 @@ STAGE PLANS:
                 Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -1301,10 +1354,10 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: k
-                  filterExpr: (str is not null and (str BETWEEN DynamicValue(RS_7_v_key1_min) AND DynamicValue(RS_7_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_7_v_key1_bloom_filter)))) (type: boolean)
+                  filterExpr: (str is not null and str BETWEEN DynamicValue(RS_7_v_key1_min) AND DynamicValue(RS_7_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_7_v_key1_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
-                    predicate: ((str BETWEEN DynamicValue(RS_7_v_key1_min) AND DynamicValue(RS_7_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_7_v_key1_bloom_filter))) and str is not null) (type: boolean)
+                    predicate: (str is not null and str BETWEEN DynamicValue(RS_7_v_key1_min) AND DynamicValue(RS_7_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_7_v_key1_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                     Select Operator
                       expressions: str (type: string)
@@ -1312,6 +1365,7 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -1332,6 +1386,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -1341,12 +1396,14 @@ STAGE PLANS:
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                         Group By Operator
                           aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=1000)
+                          minReductionHashAggr: 0.99
                           mode: hash
                           outputColumnNames: _col0, _col1, _col2
-                          Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                          Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                           Reduce Output Operator
+                            null sort order: 
                             sort order: 
-                            Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                            Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                             value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -1362,10 +1419,12 @@ STAGE PLANS:
                 Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -1388,13 +1447,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=1000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=1000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                  Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
 
   Stage: Stage-0
@@ -1449,6 +1509,7 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -1469,6 +1530,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -1486,10 +1548,12 @@ STAGE PLANS:
                 Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -1566,6 +1630,7 @@ STAGE PLANS:
                       Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
@@ -1586,6 +1651,7 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 356000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col1 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col1 (type: string)
                         Statistics: Num rows: 2000 Data size: 356000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -1596,10 +1662,10 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: v
-                  filterExpr: (key1 is not null and (key1 BETWEEN DynamicValue(RS_12_srcpart_date_str_min) AND DynamicValue(RS_12_srcpart_date_str_max) and in_bloom_filter(key1, DynamicValue(RS_12_srcpart_date_str_bloom_filter)))) (type: boolean)
+                  filterExpr: (key1 is not null and key1 BETWEEN DynamicValue(RS_12_srcpart_date_str_min) AND DynamicValue(RS_12_srcpart_date_str_max) and in_bloom_filter(key1, DynamicValue(RS_12_srcpart_date_str_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                   Filter Operator
-                    predicate: ((key1 BETWEEN DynamicValue(RS_12_srcpart_date_str_min) AND DynamicValue(RS_12_srcpart_date_str_max) and in_bloom_filter(key1, DynamicValue(RS_12_srcpart_date_str_bloom_filter))) and key1 is not null) (type: boolean)
+                    predicate: (key1 is not null and key1 BETWEEN DynamicValue(RS_12_srcpart_date_str_min) AND DynamicValue(RS_12_srcpart_date_str_max) and in_bloom_filter(key1, DynamicValue(RS_12_srcpart_date_str_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Select Operator
                       expressions: key1 (type: string)
@@ -1607,6 +1673,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -1622,24 +1689,27 @@ STAGE PLANS:
                   0 _col0 (type: string)
                   1 _col1 (type: string)
                 outputColumnNames: _col1
-                Statistics: Num rows: 4110 Data size: 357570 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 3068 Data size: 266916 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
                   key expressions: _col1 (type: string)
+                  null sort order: z
                   sort order: +
                   Map-reduce partition columns: _col1 (type: string)
-                  Statistics: Num rows: 4110 Data size: 357570 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 3068 Data size: 266916 Basic stats: COMPLETE Column stats: COMPLETE
                 Select Operator
                   expressions: _col1 (type: string)
-                  outputColumnNames: _col0
-                  Statistics: Num rows: 4110 Data size: 715140 Basic stats: COMPLETE Column stats: COMPLETE
+                  outputColumnNames: _col1
+                  Statistics: Num rows: 3068 Data size: 266916 Basic stats: COMPLETE Column stats: COMPLETE
                   Group By Operator
-                    aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=5000)
+                    aggregations: min(_col1), max(_col1), bloom_filter(_col1, expectedEntries=5000)
+                    minReductionHashAggr: 0.99
                     mode: hash
                     outputColumnNames: _col0, _col1, _col2
-                    Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
+                      null sort order: 
                       sort order: 
-                      Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                      Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                       value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
         Reducer 3 
             Execution mode: llap
@@ -1650,13 +1720,15 @@ STAGE PLANS:
                 keys:
                   0 _col1 (type: string)
                   1 _col0 (type: string)
-                Statistics: Num rows: 4521 Data size: 393327 Basic stats: PARTIAL Column stats: NONE
+                Statistics: Num rows: 3374 Data size: 293607 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -1679,13 +1751,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=5000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=5000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
 
   Stage: Stage-0
@@ -1745,6 +1818,7 @@ STAGE PLANS:
                       Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
@@ -1754,23 +1828,25 @@ STAGE PLANS:
                         Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
                         Group By Operator
                           aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=3000)
+                          minReductionHashAggr: 0.99
                           mode: hash
                           outputColumnNames: _col0, _col1, _col2
-                          Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                           Reduce Output Operator
+                            null sort order: 
                             sort order: 
-                            Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                            Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                             value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
-        Map 5 
+        Map 6 
             Map Operator Tree:
                 TableScan
                   alias: v
-                  filterExpr: (key1 is not null and (key1 BETWEEN DynamicValue(RS_9_i_cstring_min) AND DynamicValue(RS_9_i_cstring_max) and in_bloom_filter(key1, DynamicValue(RS_9_i_cstring_bloom_filter)))) (type: boolean)
+                  filterExpr: (key1 is not null and key1 BETWEEN DynamicValue(RS_9_i_cstring_min) AND DynamicValue(RS_9_i_cstring_max) and in_bloom_filter(key1, DynamicValue(RS_9_i_cstring_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                   Filter Operator
-                    predicate: ((key1 BETWEEN DynamicValue(RS_9_i_cstring_min) AND DynamicValue(RS_9_i_cstring_max) and in_bloom_filter(key1, DynamicValue(RS_9_i_cstring_bloom_filter))) and key1 is not null) (type: boolean)
+                    predicate: (key1 is not null and key1 BETWEEN DynamicValue(RS_9_i_cstring_min) AND DynamicValue(RS_9_i_cstring_max) and in_bloom_filter(key1, DynamicValue(RS_9_i_cstring_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Select Operator
                       expressions: key1 (type: string)
@@ -1778,12 +1854,13 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
             Execution mode: vectorized, llap
             LLAP IO: all inputs
-        Map 6 
+        Map 7 
             Map Operator Tree:
                 TableScan
                   alias: k
@@ -1798,6 +1875,7 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -1809,22 +1887,39 @@ STAGE PLANS:
               Merge Join Operator
                 condition map:
                      Inner Join 0 to 1
-                     Inner Join 1 to 2
                 keys:
                   0 _col0 (type: string)
                   1 _col0 (type: string)
-                  2 _col0 (type: string)
-                Statistics: Num rows: 20182 Data size: 1416580 Basic stats: PARTIAL Column stats: NONE
+                outputColumnNames: _col1
+                Statistics: Num rows: 10091 Data size: 708290 Basic stats: PARTIAL Column stats: NONE
+                Reduce Output Operator
+                  key expressions: _col1 (type: string)
+                  null sort order: z
+                  sort order: +
+                  Map-reduce partition columns: _col1 (type: string)
+                  Statistics: Num rows: 10091 Data size: 708290 Basic stats: PARTIAL Column stats: NONE
+        Reducer 3 
+            Execution mode: llap
+            Reduce Operator Tree:
+              Merge Join Operator
+                condition map:
+                     Inner Join 0 to 1
+                keys:
+                  0 _col1 (type: string)
+                  1 _col0 (type: string)
+                Statistics: Num rows: 11100 Data size: 779119 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
-        Reducer 3 
+        Reducer 4 
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
@@ -1839,17 +1934,18 @@ STAGE PLANS:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
                       serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-        Reducer 4 
+        Reducer 5 
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=3000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=3000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
 
   Stage: Stage-0
@@ -1906,6 +2002,7 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -1915,12 +2012,14 @@ STAGE PLANS:
                         Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                         Group By Operator
                           aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=5000)
+                          minReductionHashAggr: 0.99
                           mode: hash
                           outputColumnNames: _col0, _col1, _col2
-                          Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                           Reduce Output Operator
+                            null sort order: 
                             sort order: 
-                            Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                            Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                             value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -1928,10 +2027,10 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: v
-                  filterExpr: (key1 is not null and (key1 BETWEEN DynamicValue(RS_6_k_str_min) AND DynamicValue(RS_6_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_6_k_str_bloom_filter)))) (type: boolean)
+                  filterExpr: (key1 is not null and key1 BETWEEN DynamicValue(RS_6_k_str_min) AND DynamicValue(RS_6_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_6_k_str_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                   Filter Operator
-                    predicate: ((key1 BETWEEN DynamicValue(RS_6_k_str_min) AND DynamicValue(RS_6_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_6_k_str_bloom_filter))) and key1 is not null) (type: boolean)
+                    predicate: (key1 is not null and key1 BETWEEN DynamicValue(RS_6_k_str_min) AND DynamicValue(RS_6_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_6_k_str_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Select Operator
                       expressions: key1 (type: string)
@@ -1939,6 +2038,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -1956,10 +2056,12 @@ STAGE PLANS:
                 Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -1982,13 +2084,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=5000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=5000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
 
   Stage: Stage-0
@@ -2043,6 +2146,7 @@ STAGE PLANS:
                       Statistics: Num rows: 2000 Data size: 182000 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 2000 Data size: 182000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -2063,6 +2167,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Reduce Output Operator
                         key expressions: _col0 (type: string)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: string)
                         Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -2080,10 +2185,12 @@ STAGE PLANS:
                 Statistics: Num rows: 2200 Data size: 200200 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -2161,21 +2268,24 @@ STAGE PLANS:
                     Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
                       key expressions: str (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: str (type: string)
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                     Select Operator
                       expressions: str (type: string)
-                      outputColumnNames: _col0
-                      Statistics: Num rows: 2000 Data size: 348000 Basic stats: COMPLETE Column stats: COMPLETE
+                      outputColumnNames: str
+                      Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Group By Operator
-                        aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=5000)
+                        aggregations: min(str), max(str), bloom_filter(str, expectedEntries=5000)
+                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0, _col1, _col2
-                        Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                        Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                         Reduce Output Operator
+                          null sort order: 
                           sort order: 
-                          Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                           value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -2190,21 +2300,24 @@ STAGE PLANS:
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Reduce Output Operator
                       key expressions: key1 (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: key1 (type: string)
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Select Operator
                       expressions: key1 (type: string)
-                      outputColumnNames: _col0
+                      outputColumnNames: key1
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Group By Operator
-                        aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=5000)
+                        aggregations: min(key1), max(key1), bloom_filter(key1, expectedEntries=5000)
+                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0, _col1, _col2
-                        Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                        Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                         Reduce Output Operator
+                          null sort order: 
                           sort order: 
-                          Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                          Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                           value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -2212,13 +2325,14 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: s
-                  filterExpr: (key1 is not null and (key1 BETWEEN DynamicValue(RS_3_k_str_min) AND DynamicValue(RS_3_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_3_k_str_bloom_filter)))) (type: boolean)
+                  filterExpr: (key1 is not null and key1 BETWEEN DynamicValue(RS_3_k_str_min) AND DynamicValue(RS_3_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_3_k_str_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                   Filter Operator
-                    predicate: ((key1 BETWEEN DynamicValue(RS_3_k_str_min) AND DynamicValue(RS_3_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_3_k_str_bloom_filter))) and key1 is not null) (type: boolean)
+                    predicate: (key1 is not null and key1 BETWEEN DynamicValue(RS_3_k_str_min) AND DynamicValue(RS_3_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_3_k_str_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Reduce Output Operator
                       key expressions: key1 (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: key1 (type: string)
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -2228,13 +2342,14 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: d
-                  filterExpr: (str is not null and (str BETWEEN DynamicValue(RS_17_v_key1_min) AND DynamicValue(RS_17_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_17_v_key1_bloom_filter)))) (type: boolean)
+                  filterExpr: (str is not null and str BETWEEN DynamicValue(RS_17_v_key1_min) AND DynamicValue(RS_17_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_17_v_key1_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
-                    predicate: ((str BETWEEN DynamicValue(RS_17_v_key1_min) AND DynamicValue(RS_17_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_17_v_key1_bloom_filter))) and str is not null) (type: boolean)
+                    predicate: (str is not null and str BETWEEN DynamicValue(RS_17_v_key1_min) AND DynamicValue(RS_17_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_17_v_key1_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
                       key expressions: str (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: str (type: string)
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -2244,13 +2359,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=5000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=5000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                  Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
         Reducer 2 
             Execution mode: llap
@@ -2264,10 +2380,12 @@ STAGE PLANS:
                 Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -2290,13 +2408,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=5000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=5000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
         Reducer 8 
             Execution mode: llap
@@ -2310,10 +2429,12 @@ STAGE PLANS:
                 Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -2378,13 +2499,14 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: k
-                  filterExpr: (str is not null and (str BETWEEN DynamicValue(RS_5_v_key1_min) AND DynamicValue(RS_5_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_5_v_key1_bloom_filter)))) (type: boolean)
+                  filterExpr: (str is not null and str BETWEEN DynamicValue(RS_5_v_key1_min) AND DynamicValue(RS_5_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_5_v_key1_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                   Filter Operator
-                    predicate: ((str BETWEEN DynamicValue(RS_5_v_key1_min) AND DynamicValue(RS_5_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_5_v_key1_bloom_filter))) and str is not null) (type: boolean)
+                    predicate: (str is not null and str BETWEEN DynamicValue(RS_5_v_key1_min) AND DynamicValue(RS_5_v_key1_max) and in_bloom_filter(str, DynamicValue(RS_5_v_key1_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
                       key expressions: str (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: str (type: string)
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -2401,21 +2523,24 @@ STAGE PLANS:
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Reduce Output Operator
                       key expressions: key1 (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: key1 (type: string)
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Select Operator
                       expressions: key1 (type: string)
-                      outputColumnNames: _col0
+                      outputColumnNames: key1
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                       Group By Operator
-                        aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=316)
+                        aggregations: min(key1), max(key1), bloom_filter(key1, expectedEntries=316)
+                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0, _col1, _col2
-                        Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                        Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                         Reduce Output Operator
+                          null sort order: 
                           sort order: 
-                          Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                          Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                           value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -2431,10 +2556,12 @@ STAGE PLANS:
                 Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -2457,13 +2584,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=316)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=316)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 639 Basic stats: PARTIAL Column stats: PARTIAL
+                  Statistics: Num rows: 1 Data size: 599 Basic stats: PARTIAL Column stats: PARTIAL
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
 
   Stage: Stage-0
@@ -2514,6 +2642,7 @@ STAGE PLANS:
                     Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
                       key expressions: str (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: str (type: string)
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -2530,6 +2659,7 @@ STAGE PLANS:
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Reduce Output Operator
                       key expressions: key1 (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: key1 (type: string)
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -2547,10 +2677,12 @@ STAGE PLANS:
                 Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -2623,22 +2755,25 @@ STAGE PLANS:
                     Statistics: Num rows: 2000 Data size: 356000 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
                       key expressions: str (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: str (type: string)
                       Statistics: Num rows: 2000 Data size: 356000 Basic stats: COMPLETE Column stats: COMPLETE
                       value expressions: value (type: string)
                     Select Operator
                       expressions: str (type: string)
-                      outputColumnNames: _col0
-                      Statistics: Num rows: 2000 Data size: 348000 Basic stats: COMPLETE Column stats: COMPLETE
+                      outputColumnNames: str
+                      Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Group By Operator
-                        aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=5000)
+                        aggregations: min(str), max(str), bloom_filter(str, expectedEntries=5000)
+                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0, _col1, _col2
-                        Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                        Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                         Reduce Output Operator
+                          null sort order: 
                           sort order: 
-                          Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                           value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -2646,13 +2781,14 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: v
-                  filterExpr: (key1 is not null and (key1 BETWEEN DynamicValue(RS_4_srcpart_date_str_min) AND DynamicValue(RS_4_srcpart_date_str_max) and in_bloom_filter(key1, DynamicValue(RS_4_srcpart_date_str_bloom_filter)))) (type: boolean)
+                  filterExpr: (key1 is not null and key1 BETWEEN DynamicValue(RS_4_srcpart_date_str_min) AND DynamicValue(RS_4_srcpart_date_str_max) and in_bloom_filter(key1, DynamicValue(RS_4_srcpart_date_str_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                   Filter Operator
-                    predicate: ((key1 BETWEEN DynamicValue(RS_4_srcpart_date_str_min) AND DynamicValue(RS_4_srcpart_date_str_max) and in_bloom_filter(key1, DynamicValue(RS_4_srcpart_date_str_bloom_filter))) and key1 is not null) (type: boolean)
+                    predicate: (key1 is not null and key1 BETWEEN DynamicValue(RS_4_srcpart_date_str_min) AND DynamicValue(RS_4_srcpart_date_str_max) and in_bloom_filter(key1, DynamicValue(RS_4_srcpart_date_str_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Reduce Output Operator
                       key expressions: key1 (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: key1 (type: string)
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -2669,6 +2805,7 @@ STAGE PLANS:
                     Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
                       key expressions: cstring (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: cstring (type: string)
                       Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
@@ -2687,6 +2824,7 @@ STAGE PLANS:
                 Statistics: Num rows: 2200 Data size: 391600 Basic stats: PARTIAL Column stats: NONE
                 Reduce Output Operator
                   key expressions: _col1 (type: string)
+                  null sort order: z
                   sort order: +
                   Map-reduce partition columns: _col1 (type: string)
                   Statistics: Num rows: 2200 Data size: 391600 Basic stats: PARTIAL Column stats: NONE
@@ -2702,10 +2840,12 @@ STAGE PLANS:
                 Statistics: Num rows: 10091 Data size: 708290 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -2728,13 +2868,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=5000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=5000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
 
   Stage: Stage-0
@@ -2790,28 +2931,30 @@ STAGE PLANS:
                     Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
                       key expressions: str (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: str (type: string)
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
             Execution mode: vectorized, llap
             LLAP IO: all inputs
-        Map 4 
+        Map 5 
             Map Operator Tree:
                 TableScan
                   alias: v
-                  filterExpr: (key1 is not null and (key1 BETWEEN DynamicValue(RS_8_i_cstring_min) AND DynamicValue(RS_8_i_cstring_max) and in_bloom_filter(key1, DynamicValue(RS_8_i_cstring_bloom_filter)))) (type: boolean)
+                  filterExpr: (key1 is not null and key1 BETWEEN DynamicValue(RS_11_i_cstring_min) AND DynamicValue(RS_11_i_cstring_max) and in_bloom_filter(key1, DynamicValue(RS_11_i_cstring_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                   Filter Operator
-                    predicate: ((key1 BETWEEN DynamicValue(RS_8_i_cstring_min) AND DynamicValue(RS_8_i_cstring_max) and in_bloom_filter(key1, DynamicValue(RS_8_i_cstring_bloom_filter))) and key1 is not null) (type: boolean)
+                    predicate: (key1 is not null and key1 BETWEEN DynamicValue(RS_11_i_cstring_min) AND DynamicValue(RS_11_i_cstring_max) and in_bloom_filter(key1, DynamicValue(RS_11_i_cstring_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Reduce Output Operator
                       key expressions: key1 (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: key1 (type: string)
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
             Execution mode: vectorized, llap
             LLAP IO: all inputs
-        Map 5 
+        Map 6 
             Map Operator Tree:
                 TableScan
                   alias: i
@@ -2822,21 +2965,24 @@ STAGE PLANS:
                     Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
                       key expressions: cstring (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: cstring (type: string)
                       Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
                     Select Operator
                       expressions: cstring (type: string)
-                      outputColumnNames: _col0
-                      Statistics: Num rows: 9174 Data size: 1287800 Basic stats: COMPLETE Column stats: COMPLETE
+                      outputColumnNames: cstring
+                      Statistics: Num rows: 9174 Data size: 643900 Basic stats: COMPLETE Column stats: COMPLETE
                       Group By Operator
-                        aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=3000)
+                        aggregations: min(cstring), max(cstring), bloom_filter(cstring, expectedEntries=3000)
+                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0, _col1, _col2
-                        Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                        Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                         Reduce Output Operator
+                          null sort order: 
                           sort order: 
-                          Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                           value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -2846,22 +2992,39 @@ STAGE PLANS:
               Merge Join Operator
                 condition map:
                      Inner Join 0 to 1
-                     Inner Join 1 to 2
                 keys:
                   0 str (type: string)
                   1 key1 (type: string)
-                  2 cstring (type: string)
-                Statistics: Num rows: 20182 Data size: 1416580 Basic stats: PARTIAL Column stats: NONE
+                outputColumnNames: _col7
+                Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
+                Reduce Output Operator
+                  key expressions: _col7 (type: string)
+                  null sort order: z
+                  sort order: +
+                  Map-reduce partition columns: _col7 (type: string)
+                  Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
+        Reducer 3 
+            Execution mode: llap
+            Reduce Operator Tree:
+              Merge Join Operator
+                condition map:
+                     Inner Join 0 to 1
+                keys:
+                  0 _col7 (type: string)
+                  1 cstring (type: string)
+                Statistics: Num rows: 10091 Data size: 708290 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
-        Reducer 3 
+        Reducer 4 
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
@@ -2876,17 +3039,18 @@ STAGE PLANS:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
                       serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-        Reducer 6 
+        Reducer 7 
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=3000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=3000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
 
   Stage: Stage-0
@@ -2939,21 +3103,24 @@ STAGE PLANS:
                     Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
                       key expressions: str (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: str (type: string)
                       Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                     Select Operator
                       expressions: str (type: string)
-                      outputColumnNames: _col0
-                      Statistics: Num rows: 2000 Data size: 348000 Basic stats: COMPLETE Column stats: COMPLETE
+                      outputColumnNames: str
+                      Statistics: Num rows: 2000 Data size: 174000 Basic stats: COMPLETE Column stats: COMPLETE
                       Group By Operator
-                        aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=5000)
+                        aggregations: min(str), max(str), bloom_filter(str, expectedEntries=5000)
+                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0, _col1, _col2
-                        Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                        Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                         Reduce Output Operator
+                          null sort order: 
                           sort order: 
-                          Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                          Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                           value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -2961,13 +3128,14 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: v
-                  filterExpr: (key1 is not null and (key1 BETWEEN DynamicValue(RS_3_k_str_min) AND DynamicValue(RS_3_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_3_k_str_bloom_filter)))) (type: boolean)
+                  filterExpr: (key1 is not null and key1 BETWEEN DynamicValue(RS_3_k_str_min) AND DynamicValue(RS_3_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_3_k_str_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                   Filter Operator
-                    predicate: ((key1 BETWEEN DynamicValue(RS_3_k_str_min) AND DynamicValue(RS_3_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_3_k_str_bloom_filter))) and key1 is not null) (type: boolean)
+                    predicate: (key1 is not null and key1 BETWEEN DynamicValue(RS_3_k_str_min) AND DynamicValue(RS_3_k_str_max) and in_bloom_filter(key1, DynamicValue(RS_3_k_str_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Reduce Output Operator
                       key expressions: key1 (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: key1 (type: string)
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -2985,10 +3153,12 @@ STAGE PLANS:
                 Statistics: Num rows: 2200 Data size: 191400 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -3011,13 +3181,14 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=5000)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=5000)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 552 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 1 Data size: 512 Basic stats: COMPLETE Column stats: COMPLETE
                   value expressions: _col0 (type: string), _col1 (type: string), _col2 (type: binary)
 
   Stage: Stage-0
@@ -3068,6 +3239,7 @@ STAGE PLANS:
                     Statistics: Num rows: 2000 Data size: 182000 Basic stats: COMPLETE Column stats: COMPLETE
                     Reduce Output Operator
                       key expressions: value (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: value (type: string)
                       Statistics: Num rows: 2000 Data size: 182000 Basic stats: COMPLETE Column stats: COMPLETE
@@ -3084,6 +3256,7 @@ STAGE PLANS:
                     Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
                     Reduce Output Operator
                       key expressions: key1 (type: string)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: key1 (type: string)
                       Statistics: Num rows: 1000 Data size: 87000 Basic stats: PARTIAL Column stats: PARTIAL
@@ -3101,10 +3274,12 @@ STAGE PLANS:
                 Statistics: Num rows: 2200 Data size: 200200 Basic stats: PARTIAL Column stats: NONE
                 Group By Operator
                   aggregations: count()
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
                   Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                   Reduce Output Operator
+                    null sort order: 
                     sort order: 
                     Statistics: Num rows: 1 Data size: 8 Basic stats: PARTIAL Column stats: NONE
                     value expressions: _col0 (type: bigint)
@@ -3151,25 +3326,37 @@ WHEN MATCHED AND s.a > 8 THEN DELETE
 WHEN MATCHED THEN UPDATE SET b = 7
 WHEN NOT MATCHED THEN INSERT VALUES(s.a, s.b)
 PREHOOK: type: QUERY
+PREHOOK: Input: default@acidtbl
+PREHOOK: Input: default@nonacidorctbl
+PREHOOK: Output: default@acidtbl
+PREHOOK: Output: default@acidtbl
+PREHOOK: Output: default@merge_tmp_table
 POSTHOOK: query: explain merge into acidTbl as t using nonAcidOrcTbl s ON t.a = s.a
 WHEN MATCHED AND s.a > 8 THEN DELETE
 WHEN MATCHED THEN UPDATE SET b = 7
 WHEN NOT MATCHED THEN INSERT VALUES(s.a, s.b)
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@acidtbl
+POSTHOOK: Input: default@nonacidorctbl
+POSTHOOK: Output: default@acidtbl
+POSTHOOK: Output: default@acidtbl
+POSTHOOK: Output: default@merge_tmp_table
 STAGE DEPENDENCIES:
-  Stage-4 is a root stage
-  Stage-5 depends on stages: Stage-4
-  Stage-0 depends on stages: Stage-5
-  Stage-6 depends on stages: Stage-0
-  Stage-2 depends on stages: Stage-5
-  Stage-7 depends on stages: Stage-2
-  Stage-3 depends on stages: Stage-5
-  Stage-8 depends on stages: Stage-3
-  Stage-1 depends on stages: Stage-5
-  Stage-9 depends on stages: Stage-1
+  Stage-5 is a root stage
+  Stage-6 depends on stages: Stage-5
+  Stage-0 depends on stages: Stage-6
+  Stage-7 depends on stages: Stage-0
+  Stage-1 depends on stages: Stage-6
+  Stage-8 depends on stages: Stage-1
+  Stage-2 depends on stages: Stage-6
+  Stage-9 depends on stages: Stage-2
+  Stage-4 depends on stages: Stage-6
+  Stage-10 depends on stages: Stage-4
+  Stage-3 depends on stages: Stage-6
+  Stage-11 depends on stages: Stage-3
 
 STAGE PLANS:
-  Stage: Stage-4
+  Stage: Stage-5
     Tez
 #### A masked pattern was here ####
       Edges:
@@ -3179,24 +3366,30 @@ STAGE PLANS:
         Reducer 4 <- Reducer 2 (SIMPLE_EDGE)
         Reducer 5 <- Reducer 2 (SIMPLE_EDGE)
         Reducer 6 <- Reducer 2 (SIMPLE_EDGE)
-        Reducer 7 <- Reducer 6 (CUSTOM_SIMPLE_EDGE)
+        Reducer 7 <- Reducer 2 (SIMPLE_EDGE)
         Reducer 9 <- Map 8 (CUSTOM_SIMPLE_EDGE)
 #### A masked pattern was here ####
       Vertices:
         Map 1 
             Map Operator Tree:
                 TableScan
-                  alias: t
+                  alias: acidtbl
+                  filterExpr: (a BETWEEN DynamicValue(RS_4_s_a_min) AND DynamicValue(RS_4_s_a_max) and in_bloom_filter(a, DynamicValue(RS_4_s_a_bloom_filter))) (type: boolean)
                   Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
-                    predicate: (a BETWEEN DynamicValue(RS_3_s_a_min) AND DynamicValue(RS_3_s_a_max) and in_bloom_filter(a, DynamicValue(RS_3_s_a_bloom_filter))) (type: boolean)
+                    predicate: (a BETWEEN DynamicValue(RS_4_s_a_min) AND DynamicValue(RS_4_s_a_max) and in_bloom_filter(a, DynamicValue(RS_4_s_a_bloom_filter))) (type: boolean)
                     Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
-                    Reduce Output Operator
-                      key expressions: a (type: int)
-                      sort order: +
-                      Map-reduce partition columns: a (type: int)
+                    Select Operator
+                      expressions: ROW__ID (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), a (type: int)
+                      outputColumnNames: _col0, _col1
                       Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
-                      value expressions: ROW__ID (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                      Reduce Output Operator
+                        key expressions: _col1 (type: int)
+                        null sort order: z
+                        sort order: +
+                        Map-reduce partition columns: _col1 (type: int)
+                        Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
+                        value expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
             Execution mode: vectorized, llap
             LLAP IO: may be used (ACID table)
         Map 8 
@@ -3206,22 +3399,25 @@ STAGE PLANS:
                   Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: a (type: int)
+                    null sort order: z
                     sort order: +
                     Map-reduce partition columns: a (type: int)
                     Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                     value expressions: b (type: int)
                   Select Operator
                     expressions: a (type: int)
-                    outputColumnNames: _col0
+                    outputColumnNames: a
                     Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                     Group By Operator
-                      aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=1)
+                      aggregations: min(a), max(a), bloom_filter(a, expectedEntries=1)
+                      minReductionHashAggr: 0.99
                       mode: hash
                       outputColumnNames: _col0, _col1, _col2
-                      Statistics: Num rows: 1 Data size: 20 Basic stats: COMPLETE Column stats: NONE
+                      Statistics: Num rows: 1 Data size: 160 Basic stats: COMPLETE Column stats: NONE
                       Reduce Output Operator
+                        null sort order: 
                         sort order: 
-                        Statistics: Num rows: 1 Data size: 20 Basic stats: COMPLETE Column stats: NONE
+                        Statistics: Num rows: 1 Data size: 160 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col0 (type: int), _col1 (type: int), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
@@ -3232,66 +3428,84 @@ STAGE PLANS:
                 condition map:
                      Right Outer Join 0 to 1
                 keys:
-                  0 a (type: int)
+                  0 _col1 (type: int)
                   1 a (type: int)
-                outputColumnNames: _col0, _col4, _col5, _col6
+                outputColumnNames: _col0, _col1, _col3, _col4
                 Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                 Filter Operator
-                  predicate: ((_col0 = _col5) and (_col5 > 8)) (type: boolean)
+                  predicate: ((_col3 > 8) and (_col1 = _col3)) (type: boolean)
                   Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
-                    expressions: _col4 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                    expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
                     outputColumnNames: _col0
                     Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: UDFToInteger(_col0) (type: int)
                       Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                 Filter Operator
-                  predicate: ((_col0 = _col5) and (_col5 <= 8)) (type: boolean)
+                  predicate: ((_col3 <= 8) and (_col1 = _col3)) (type: boolean)
                   Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
-                    expressions: _col4 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), _col0 (type: int)
-                    outputColumnNames: _col0, _col1
+                    expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                    outputColumnNames: _col0
                     Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: UDFToInteger(_col0) (type: int)
                       Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
-                      value expressions: _col1 (type: int)
                 Filter Operator
-                  predicate: (_col0 = _col5) (type: boolean)
+                  predicate: ((_col3 <= 8) and (_col1 = _col3)) (type: boolean)
                   Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
-                    expressions: _col4 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
-                    outputColumnNames: _col4
+                    expressions: _col1 (type: int)
+                    outputColumnNames: _col0
+                    Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
+                    Reduce Output Operator
+                      key expressions: _col0 (type: int)
+                      null sort order: a
+                      sort order: +
+                      Map-reduce partition columns: _col0 (type: int)
+                      Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
+                Filter Operator
+                  predicate: (_col1 = _col3) (type: boolean)
+                  Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
+                  Select Operator
+                    expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                    outputColumnNames: _col0
                     Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                     Group By Operator
                       aggregations: count()
-                      keys: _col4 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                      keys: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                      minReductionHashAggr: 0.99
                       mode: hash
                       outputColumnNames: _col0, _col1
                       Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                       Reduce Output Operator
                         key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
                         Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col1 (type: bigint)
                 Filter Operator
-                  predicate: _col0 is null (type: boolean)
+                  predicate: _col1 is null (type: boolean)
                   Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
-                    expressions: _col5 (type: int), _col6 (type: int)
+                    expressions: _col3 (type: int), _col4 (type: int)
                     outputColumnNames: _col0, _col1
                     Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
-                      sort order: 
+                      key expressions: _col0 (type: int)
+                      null sort order: a
+                      sort order: +
                       Map-reduce partition columns: _col0 (type: int)
                       Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
-                      value expressions: _col0 (type: int), _col1 (type: int)
+                      value expressions: _col1 (type: int)
         Reducer 3 
             Execution mode: vectorized, llap
             Reduce Operator Tree:
@@ -3312,8 +3526,8 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Select Operator
-                expressions: KEY.reducesinkkey0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), VALUE._col0 (type: int), 7 (type: int)
-                outputColumnNames: _col0, _col1, _col2
+                expressions: KEY.reducesinkkey0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                outputColumnNames: _col0
                 Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
                   compressed: false
@@ -3323,8 +3537,24 @@ STAGE PLANS:
                       output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
                       serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
                       name: default.acidtbl
-                  Write Type: UPDATE
+                  Write Type: DELETE
         Reducer 5 
+            Execution mode: vectorized, llap
+            Reduce Operator Tree:
+              Select Operator
+                expressions: KEY.reducesinkkey0 (type: int), 7 (type: int)
+                outputColumnNames: _col0, _col1
+                Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
+                File Output Operator
+                  compressed: false
+                  Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
+                  table:
+                      input format: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
+                      output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
+                      serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
+                      name: default.acidtbl
+                  Write Type: INSERT
+        Reducer 6 
             Execution mode: llap
             Reduce Operator Tree:
               Group By Operator
@@ -3348,31 +3578,11 @@ STAGE PLANS:
                           output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                           serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                           name: default.merge_tmp_table
-                    Select Operator
-                      expressions: _col0 (type: int)
-                      outputColumnNames: val
-                      Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
-                      Group By Operator
-                        aggregations: compute_stats(val, 'hll')
-                        mode: complete
-                        outputColumnNames: _col0
-                        Statistics: Num rows: 1 Data size: 432 Basic stats: COMPLETE Column stats: NONE
-                        Select Operator
-                          expressions: _col0 (type: struct<columntype:string,min:bigint,max:bigint,countnulls:bigint,numdistinctvalues:bigint,ndvbitvector:binary>)
-                          outputColumnNames: _col0
-                          Statistics: Num rows: 1 Data size: 432 Basic stats: COMPLETE Column stats: NONE
-                          File Output Operator
-                            compressed: false
-                            Statistics: Num rows: 1 Data size: 432 Basic stats: COMPLETE Column stats: NONE
-                            table:
-                                input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                                output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                                serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-        Reducer 6 
-            Execution mode: llap
+        Reducer 7 
+            Execution mode: vectorized, llap
             Reduce Operator Tree:
               Select Operator
-                expressions: VALUE._col0 (type: int), VALUE._col1 (type: int)
+                expressions: KEY.reducesinkkey0 (type: int), VALUE._col0 (type: int)
                 outputColumnNames: _col0, _col1
                 Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
@@ -3384,48 +3594,21 @@ STAGE PLANS:
                       serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
                       name: default.acidtbl
                   Write Type: INSERT
-                Select Operator
-                  expressions: _col0 (type: int), _col1 (type: int)
-                  outputColumnNames: a, b
-                  Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
-                  Group By Operator
-                    aggregations: compute_stats(a, 'hll'), compute_stats(b, 'hll')
-                    mode: hash
-                    outputColumnNames: _col0, _col1
-                    Statistics: Num rows: 1 Data size: 848 Basic stats: COMPLETE Column stats: NONE
-                    Reduce Output Operator
-                      sort order: 
-                      Statistics: Num rows: 1 Data size: 848 Basic stats: COMPLETE Column stats: NONE
-                      value expressions: _col0 (type: struct<columntype:string,min:bigint,max:bigint,countnulls:bigint,bitvector:binary>), _col1 (type: struct<columntype:string,min:bigint,max:bigint,countnulls:bigint,bitvector:binary>)
-        Reducer 7 
-            Execution mode: llap
-            Reduce Operator Tree:
-              Group By Operator
-                aggregations: compute_stats(VALUE._col0), compute_stats(VALUE._col1)
-                mode: mergepartial
-                outputColumnNames: _col0, _col1
-                Statistics: Num rows: 1 Data size: 880 Basic stats: COMPLETE Column stats: NONE
-                File Output Operator
-                  compressed: false
-                  Statistics: Num rows: 1 Data size: 880 Basic stats: COMPLETE Column stats: NONE
-                  table:
-                      input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                      output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
         Reducer 9 
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=1)
+                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, 1, expectedEntries=1)
                 mode: final
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 20 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 1 Data size: 160 Basic stats: COMPLETE Column stats: NONE
                 Reduce Output Operator
+                  null sort order: 
                   sort order: 
-                  Statistics: Num rows: 1 Data size: 20 Basic stats: COMPLETE Column stats: NONE
+                  Statistics: Num rows: 1 Data size: 160 Basic stats: COMPLETE Column stats: NONE
                   value expressions: _col0 (type: int), _col1 (type: int), _col2 (type: binary)
 
-  Stage: Stage-5
+  Stage: Stage-6
     Dependency Collection
 
   Stage: Stage-0
@@ -3439,11 +3622,11 @@ STAGE PLANS:
               name: default.acidtbl
           Write Type: DELETE
 
-  Stage: Stage-6
+  Stage: Stage-7
     Stats Work
       Basic Stats Work:
 
-  Stage: Stage-2
+  Stage: Stage-1
     Move Operator
       tables:
           replace: false
@@ -3452,31 +3635,13 @@ STAGE PLANS:
               output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
               serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
               name: default.acidtbl
-          Write Type: UPDATE
-
-  Stage: Stage-7
-    Stats Work
-      Basic Stats Work:
-
-  Stage: Stage-3
-    Move Operator
-      tables:
-          replace: false
-          table:
-              input format: org.apache.hadoop.mapred.TextInputFormat
-              output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
-              serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-              name: default.merge_tmp_table
+          Write Type: DELETE
 
   Stage: Stage-8
     Stats Work
       Basic Stats Work:
-      Column Stats Desc:
-          Columns: val
-          Column Types: int
-          Table: default.merge_tmp_table
 
-  Stage: Stage-1
+  Stage: Stage-2
     Move Operator
       tables:
           replace: false
@@ -3490,62 +3655,99 @@ STAGE PLANS:
   Stage: Stage-9
     Stats Work
       Basic Stats Work:
-      Column Stats Desc:
-          Columns: a, b
-          Column Types: int, int
-          Table: default.acidtbl
+
+  Stage: Stage-4
+    Move Operator
+      tables:
+          replace: false
+          table:
+              input format: org.apache.hadoop.mapred.TextInputFormat
+              output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+              serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+              name: default.merge_tmp_table
+
+  Stage: Stage-10
+    Stats Work
+      Basic Stats Work:
+
+  Stage: Stage-3
+    Move Operator
+      tables:
+          replace: false
+          table:
+              input format: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
+              output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
+              serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
+              name: default.acidtbl
+          Write Type: INSERT
+
+  Stage: Stage-11
+    Stats Work
+      Basic Stats Work:
 
 PREHOOK: query: explain merge  /*+ semi(s, a, t, 1000)*/  into acidTbl as t using nonAcidOrcTbl s ON t.a = s.a
 WHEN MATCHED AND s.a > 8 THEN DELETE
 WHEN MATCHED THEN UPDATE SET b = 7
 WHEN NOT MATCHED THEN INSERT VALUES(s.a, s.b)
 PREHOOK: type: QUERY
+PREHOOK: Input: default@acidtbl
+PREHOOK: Input: default@nonacidorctbl
+PREHOOK: Output: default@acidtbl
+PREHOOK: Output: default@acidtbl
+PREHOOK: Output: default@merge_tmp_table
 POSTHOOK: query: explain merge  /*+ semi(s, a, t, 1000)*/  into acidTbl as t using nonAcidOrcTbl s ON t.a = s.a
 WHEN MATCHED AND s.a > 8 THEN DELETE
 WHEN MATCHED THEN UPDATE SET b = 7
 WHEN NOT MATCHED THEN INSERT VALUES(s.a, s.b)
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@acidtbl
+POSTHOOK: Input: default@nonacidorctbl
+POSTHOOK: Output: default@acidtbl
+POSTHOOK: Output: default@acidtbl
+POSTHOOK: Output: default@merge_tmp_table
 STAGE DEPENDENCIES:
-  Stage-4 is a root stage
-  Stage-5 depends on stages: Stage-4
-  Stage-0 depends on stages: Stage-5
-  Stage-6 depends on stages: Stage-0
-  Stage-2 depends on stages: Stage-5
-  Stage-7 depends on stages: Stage-2
-  Stage-3 depends on stages: Stage-5
-  Stage-8 depends on stages: Stage-3
-  Stage-1 depends on stages: Stage-5
-  Stage-9 depends on stages: Stage-1
+  Stage-5 is a root stage
+  Stage-6 depends on stages: Stage-5
+  Stage-0 depends on stages: Stage-6
+  Stage-7 depends on stages: Stage-0
+  Stage-1 depends on stages: Stage-6
+  Stage-8 depends on stages: Stage-1
+  Stage-2 depends on stages: Stage-6
+  Stage-9 depends on stages: Stage-2
+  Stage-4 depends on stages: Stage-6
+  Stage-10 depends on stages: Stage-4
+  Stage-3 depends on stages: Stage-6
+  Stage-11 depends on stages: Stage-3
 
 STAGE PLANS:
-  Stage: Stage-4
+  Stage: Stage-5
     Tez
 #### A masked pattern was here ####
       Edges:
-        Map 1 <- Reducer 9 (BROADCAST_EDGE)
         Reducer 2 <- Map 1 (SIMPLE_EDGE), Map 8 (SIMPLE_EDGE)
         Reducer 3 <- Reducer 2 (SIMPLE_EDGE)
         Reducer 4 <- Reducer 2 (SIMPLE_EDGE)
         Reducer 5 <- Reducer 2 (SIMPLE_EDGE)
         Reducer 6 <- Reducer 2 (SIMPLE_EDGE)
-        Reducer 7 <- Reducer 6 (CUSTOM_SIMPLE_EDGE)
-        Reducer 9 <- Map 8 (CUSTOM_SIMPLE_EDGE)
+        Reducer 7 <- Reducer 2 (SIMPLE_EDGE)
 #### A masked pattern was here ####
       Vertices:
         Map 1 
             Map Operator Tree:
                 TableScan
-                  alias: t
+                  alias: acidtbl
                   Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
-                  Filter Operator
-                    predicate: (a BETWEEN DynamicValue(RS_3_s_a_min) AND DynamicValue(RS_3_s_a_max) and in_bloom_filter(a, DynamicValue(RS_3_s_a_bloom_filter))) (type: boolean)
+                  Select Operator
+                    expressions: ROW__ID (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), a (type: int)
+                    outputColumnNames: _col0, _col1
                     Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
-                      key expressions: a (type: int)
+                      key expressions: _col1 (type: int)
+                      null sort order: z
                       sort order: +
-                      Map-reduce partition columns: a (type: int)
+                      Map-reduce partition columns: _col1 (type: int)
                       Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
-                      value expressions: ROW__ID (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                      value expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
             Execution mode: vectorized, llap
             LLAP IO: may be used (ACID table)
         Map 8 
@@ -3555,23 +3757,11 @@ STAGE PLANS:
                   Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                   Reduce Output Operator
                     key expressions: a (type: int)
+                    null sort order: z
                     sort order: +
                     Map-reduce partition columns: a (type: int)
                     Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                     value expressions: b (type: int)
-                  Select Operator
-                    expressions: a (type: int)
-                    outputColumnNames: _col0
-                    Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
-                    Group By Operator
-                      aggregations: min(_col0), max(_col0), bloom_filter(_col0, expectedEntries=1000)
-                      mode: hash
-                      outputColumnNames: _col0, _col1, _col2
-                      Statistics: Num rows: 1 Data size: 20 Basic stats: COMPLETE Column stats: NONE
-                      Reduce Output Operator
-                        sort order: 
-                        Statistics: Num rows: 1 Data size: 20 Basic stats: COMPLETE Column stats: NONE
-                        value expressions: _col0 (type: int), _col1 (type: int), _col2 (type: binary)
             Execution mode: vectorized, llap
             LLAP IO: all inputs
         Reducer 2 
@@ -3581,66 +3771,84 @@ STAGE PLANS:
                 condition map:
                      Right Outer Join 0 to 1
                 keys:
-                  0 a (type: int)
+                  0 _col1 (type: int)
                   1 a (type: int)
-                outputColumnNames: _col0, _col4, _col5, _col6
+                outputColumnNames: _col0, _col1, _col3, _col4
                 Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                 Filter Operator
-                  predicate: ((_col0 = _col5) and (_col5 > 8)) (type: boolean)
+                  predicate: ((_col3 > 8) and (_col1 = _col3)) (type: boolean)
                   Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
-                    expressions: _col4 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                    expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
                     outputColumnNames: _col0
                     Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: UDFToInteger(_col0) (type: int)
                       Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                 Filter Operator
-                  predicate: ((_col0 = _col5) and (_col5 <= 8)) (type: boolean)
+                  predicate: ((_col3 <= 8) and (_col1 = _col3)) (type: boolean)
                   Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
-                    expressions: _col4 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), _col0 (type: int)
-                    outputColumnNames: _col0, _col1
+                    expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                    outputColumnNames: _col0
                     Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
                       key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                      null sort order: z
                       sort order: +
                       Map-reduce partition columns: UDFToInteger(_col0) (type: int)
                       Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
-                      value expressions: _col1 (type: int)
                 Filter Operator
-                  predicate: (_col0 = _col5) (type: boolean)
+                  predicate: ((_col3 <= 8) and (_col1 = _col3)) (type: boolean)
                   Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
-                    expressions: _col4 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
-                    outputColumnNames: _col4
+                    expressions: _col1 (type: int)
+                    outputColumnNames: _col0
+                    Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
+                    Reduce Output Operator
+                      key expressions: _col0 (type: int)
+                      null sort order: a
+                      sort order: +
+                      Map-reduce partition columns: _col0 (type: int)
+                      Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
+                Filter Operator
+                  predicate: (_col1 = _col3) (type: boolean)
+                  Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
+                  Select Operator
+                    expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                    outputColumnNames: _col0
                     Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                     Group By Operator
                       aggregations: count()
-                      keys: _col4 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                      keys: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                      minReductionHashAggr: 0.99
                       mode: hash
                       outputColumnNames: _col0, _col1
                       Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                       Reduce Output Operator
                         key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                        null sort order: z
                         sort order: +
                         Map-reduce partition columns: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
                         Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col1 (type: bigint)
                 Filter Operator
-                  predicate: _col0 is null (type: boolean)
+                  predicate: _col1 is null (type: boolean)
                   Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                   Select Operator
-                    expressions: _col5 (type: int), _col6 (type: int)
+                    expressions: _col3 (type: int), _col4 (type: int)
                     outputColumnNames: _col0, _col1
                     Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                     Reduce Output Operator
-                      sort order: 
+                      key expressions: _col0 (type: int)
+                      null sort order: a
+                      sort order: +
                       Map-reduce partition columns: _col0 (type: int)
                       Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
-                      value expressions: _col0 (type: int), _col1 (type: int)
+                      value expressions: _col1 (type: int)
         Reducer 3 
             Execution mode: vectorized, llap
             Reduce Operator Tree:
@@ -3661,8 +3869,8 @@ STAGE PLANS:
             Execution mode: vectorized, llap
             Reduce Operator Tree:
               Select Operator
-                expressions: KEY.reducesinkkey0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), VALUE._col0 (type: int), 7 (type: int)
-                outputColumnNames: _col0, _col1, _col2
+                expressions: KEY.reducesinkkey0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
+                outputColumnNames: _col0
                 Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
                   compressed: false
@@ -3672,8 +3880,24 @@ STAGE PLANS:
                       output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
                       serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
                       name: default.acidtbl
-                  Write Type: UPDATE
+                  Write Type: DELETE
         Reducer 5 
+            Execution mode: vectorized, llap
+            Reduce Operator Tree:
+              Select Operator
+                expressions: KEY.reducesinkkey0 (type: int), 7 (type: int)
+                outputColumnNames: _col0, _col1
+                Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
+                File Output Operator
+                  compressed: false
+                  Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
+                  table:
+                      input format: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
+                      output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
+                      serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
+                      name: default.acidtbl
+                  Write Type: INSERT
+        Reducer 6 
             Execution mode: llap
             Reduce Operator Tree:
               Group By Operator
@@ -3697,31 +3921,11 @@ STAGE PLANS:
                           output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                           serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
                           name: default.merge_tmp_table
-                    Select Operator
-                      expressions: _col0 (type: int)
-                      outputColumnNames: val
-                      Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
-                      Group By Operator
-                        aggregations: compute_stats(val, 'hll')
-                        mode: complete
-                        outputColumnNames: _col0
-                        Statistics: Num rows: 1 Data size: 432 Basic stats: COMPLETE Column stats: NONE
-                        Select Operator
-                          expressions: _col0 (type: struct<columntype:string,min:bigint,max:bigint,countnulls:bigint,numdistinctvalues:bigint,ndvbitvector:binary>)
-                          outputColumnNames: _col0
-                          Statistics: Num rows: 1 Data size: 432 Basic stats: COMPLETE Column stats: NONE
-                          File Output Operator
-                            compressed: false
-                            Statistics: Num rows: 1 Data size: 432 Basic stats: COMPLETE Column stats: NONE
-                            table:
-                                input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                                output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                                serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-        Reducer 6 
-            Execution mode: llap
+        Reducer 7 
+            Execution mode: vectorized, llap
             Reduce Operator Tree:
               Select Operator
-                expressions: VALUE._col0 (type: int), VALUE._col1 (type: int)
+                expressions: KEY.reducesinkkey0 (type: int), VALUE._col0 (type: int)
                 outputColumnNames: _col0, _col1
                 Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
@@ -3733,48 +3937,8 @@ STAGE PLANS:
                       serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
                       name: default.acidtbl
                   Write Type: INSERT
-                Select Operator
-                  expressions: _col0 (type: int), _col1 (type: int)
-                  outputColumnNames: a, b
-                  Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
-                  Group By Operator
-                    aggregations: compute_stats(a, 'hll'), compute_stats(b, 'hll')
-                    mode: hash
-                    outputColumnNames: _col0, _col1
-                    Statistics: Num rows: 1 Data size: 848 Basic stats: COMPLETE Column stats: NONE
-                    Reduce Output Operator
-                      sort order: 
-                      Statistics: Num rows: 1 Data size: 848 Basic stats: COMPLETE Column stats: NONE
-                      value expressions: _col0 (type: struct<columntype:string,min:bigint,max:bigint,countnulls:bigint,bitvector:binary>), _col1 (type: struct<columntype:string,min:bigint,max:bigint,countnulls:bigint,bitvector:binary>)
-        Reducer 7 
-            Execution mode: llap
-            Reduce Operator Tree:
-              Group By Operator
-                aggregations: compute_stats(VALUE._col0), compute_stats(VALUE._col1)
-                mode: mergepartial
-                outputColumnNames: _col0, _col1
-                Statistics: Num rows: 1 Data size: 880 Basic stats: COMPLETE Column stats: NONE
-                File Output Operator
-                  compressed: false
-                  Statistics: Num rows: 1 Data size: 880 Basic stats: COMPLETE Column stats: NONE
-                  table:
-                      input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                      output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                      serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-        Reducer 9 
-            Execution mode: vectorized, llap
-            Reduce Operator Tree:
-              Group By Operator
-                aggregations: min(VALUE._col0), max(VALUE._col1), bloom_filter(VALUE._col2, expectedEntries=1000)
-                mode: final
-                outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 1 Data size: 20 Basic stats: COMPLETE Column stats: NONE
-                Reduce Output Operator
-                  sort order: 
-                  Statistics: Num rows: 1 Data size: 20 Basic stats: COMPLETE Column stats: NONE
-                  value expressions: _col0 (type: int), _col1 (type: int), _col2 (type: binary)
 
-  Stage: Stage-5
+  Stage: Stage-6
     Dependency Collection
 
   Stage: Stage-0
@@ -3788,11 +3952,11 @@ STAGE PLANS:
               name: default.acidtbl
           Write Type: DELETE
 
-  Stage: Stage-6
+  Stage: Stage-7
     Stats Work
       Basic Stats Work:
 
-  Stage: Stage-2
+  Stage: Stage-1
     Move Operator
       tables:
           replace: false
@@ -3801,31 +3965,13 @@ STAGE PLANS:
               output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
               serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
               name: default.acidtbl
-          Write Type: UPDATE
-
-  Stage: Stage-7
-    Stats Work
-      Basic Stats Work:
-
-  Stage: Stage-3
-    Move Operator
-      tables:
-          replace: false
-          table:
-              input format: org.apache.hadoop.mapred.TextInputFormat
-              output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
-              serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-              name: default.merge_tmp_table
+          Write Type: DELETE
 
   Stage: Stage-8
     Stats Work
       Basic Stats Work:
-      Column Stats Desc:
-          Columns: val
-          Column Types: int
-          Table: default.merge_tmp_table
 
-  Stage: Stage-1
+  Stage: Stage-2
     Move Operator
       tables:
           replace: false
@@ -3839,8 +3985,33 @@ STAGE PLANS:
   Stage: Stage-9
     Stats Work
       Basic Stats Work:
-      Column Stats Desc:
-          Columns: a, b
-          Column Types: int, int
-          Table: default.acidtbl
+
+  Stage: Stage-4
+    Move Operator
+      tables:
+          replace: false
+          table:
+              input format: org.apache.hadoop.mapred.TextInputFormat
+              output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+              serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+              name: default.merge_tmp_table
+
+  Stage: Stage-10
+    Stats Work
+      Basic Stats Work:
+
+  Stage: Stage-3
+    Move Operator
+      tables:
+          replace: false
+          table:
+              input format: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
+              output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
+              serde: org.apache.hadoop.hive.ql.io.orc.OrcSerde
+              name: default.acidtbl
+          Write Type: INSERT
+
+  Stage: Stage-11
+    Stats Work
+      Basic Stats Work:
 

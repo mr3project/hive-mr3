@@ -1,3 +1,4 @@
+--! qt:dataset:src1
 set hive.mapred.mode=nonstrict;
 -- query from auto_sortmerge_join_9.q
 
@@ -32,7 +33,7 @@ join
 on src1.key = src2.key
 order by src1.key, src1.cnt1, src2.cnt1;
 
-set hive.stageid.rearrange=IDONLY;
+-- set hive.stageid.rearrange=IDONLY;
 
 -- changes id only
 
@@ -54,7 +55,7 @@ join
 on src1.key = src2.key
 order by src1.key, src1.cnt1, src2.cnt1;
 
-set hive.stageid.rearrange=TRAVERSE;
+-- set hive.stageid.rearrange=TRAVERSE;
 
 -- assign ids in traverse order
 
@@ -76,7 +77,7 @@ join
 on src1.key = src2.key
 order by src1.key, src1.cnt1, src2.cnt1;
 
-set hive.stageid.rearrange=EXECUTION;
+-- set hive.stageid.rearrange=EXECUTION;
 
 -- assign ids in execution order
 

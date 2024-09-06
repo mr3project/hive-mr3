@@ -19,7 +19,6 @@
 package org.apache.hadoop.hive.ql.exec.vector;
 
 import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryMXBean;
 import java.lang.ref.SoftReference;
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
@@ -34,7 +33,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.type.DataTypePhysicalVariation;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.llap.LlapUtil;
-import org.apache.hadoop.hive.llap.io.api.LlapProxy;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.GroupByOperator;
 import org.apache.hadoop.hive.ql.exec.IConfigureJobConf;
@@ -150,7 +148,6 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
   private float memoryThreshold;
 
-  private boolean isLlap = false;
   /**
    * Interface for processing mode: global, hash, unsorted streaming, or group batch
    */
@@ -519,8 +516,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
           keyWrappersBatch.getKeysFixedSize() +
           aggregationBatchInfo.getAggregatorsFixedSize();
 
-      MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
-      maxMemory = isLlap ? getConf().getMaxMemoryAvailable() : memoryMXBean.getHeapMemoryUsage().getMax();
+      maxMemory = getConf().getMaxMemoryAvailable();    // assume MR3, so do not use MemoryMXBean. Cf. HIVE-20648
       memoryThreshold = conf.getMemoryThreshold();
       // Tests may leave this unitialized, so better set it to 1
       if (memoryThreshold == 0.0f) {
@@ -531,7 +527,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
       if (LOG.isDebugEnabled()) {
         LOG.debug("GBY memory limits - isLlap: {} maxMemory: {} ({} * {}) fixSize:{} (key:{} agg:{})",
-          isLlap,
+          true,
           LlapUtil.humanReadableByteCount(maxHashTblMemory),
           LlapUtil.humanReadableByteCount(maxMemory),
           memoryThreshold,
@@ -981,7 +977,6 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
   @Override
   protected void initializeOp(Configuration hconf) throws HiveException {
     super.initializeOp(hconf);
-    isLlap = LlapProxy.isDaemon();
     VectorExpression.doTransientInit(keyExpressions, hconf);
 
     List<ObjectInspector> objectInspectors = new ArrayList<ObjectInspector>();

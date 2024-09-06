@@ -31,6 +31,8 @@ POSTHOOK: type: CREATE_MATERIALIZED_VIEW
 POSTHOOK: Input: default@cmv_basetable_n8
 POSTHOOK: Output: database:default
 POSTHOOK: Output: default@cmv_mat_view_n8
+POSTHOOK: Lineage: cmv_mat_view_n8.a SIMPLE [(cmv_basetable_n8)cmv_basetable_n8.FieldSchema(name:a, type:int, comment:null), ]
+POSTHOOK: Lineage: cmv_mat_view_n8.c SIMPLE [(cmv_basetable_n8)cmv_basetable_n8.FieldSchema(name:c, type:decimal(10,2), comment:null), ]
 PREHOOK: query: describe cmv_mat_view_n8
 PREHOOK: type: DESCTABLE
 PREHOOK: Input: default@cmv_mat_view_n8
@@ -66,14 +68,14 @@ Retention:          	0
 #### A masked pattern was here ####
 Table Type:         	MATERIALIZED_VIEW   	 
 Table Parameters:	 	 
-	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
+	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"a\":\"true\",\"c\":\"true\"}}
 	bucketing_version   	2                   
 	comment             	this is the first view
 	key                 	foo                 
 	numFiles            	1                   
 	numRows             	5                   
 	rawDataSize         	580                 
-	totalSize           	354                 
+	totalSize           	362                 
 #### A masked pattern was here ####
 	 	 
 # Storage Information	 	 
@@ -90,18 +92,23 @@ Original Query:     	select a, c from cmv_basetable_n8
 Expanded Query:     	select `cmv_basetable_n8`.`a`, `cmv_basetable_n8`.`c` from `default`.`cmv_basetable_n8`	 
 Rewrite Enabled:    	No                  	 
 Outdated for Rewriting:	Unknown             	 
+	 	 
+# Materialized View Source table information	 	 
+Table name          	Snapshot            	 
+default.cmv_basetable_n8	N/A                 	 
 PREHOOK: query: show tblproperties cmv_mat_view_n8
 PREHOOK: type: SHOW_TBLPROPERTIES
 POSTHOOK: query: show tblproperties cmv_mat_view_n8
 POSTHOOK: type: SHOW_TBLPROPERTIES
-COLUMN_STATS_ACCURATE	{"BASIC_STATS":"true"}
+COLUMN_STATS_ACCURATE	{"BASIC_STATS":"true","COLUMN_STATS":{"a":"true","c":"true"}}
 bucketing_version	2
 comment	this is the first view
 key	foo
 numFiles	1
+numFilesErasureCoded	0
 numRows	5
 rawDataSize	580
-totalSize	354
+totalSize	362
 #### A masked pattern was here ####
 PREHOOK: query: select a, c from cmv_mat_view_n8
 PREHOOK: type: QUERY
@@ -140,6 +147,7 @@ POSTHOOK: type: CREATE_MATERIALIZED_VIEW
 POSTHOOK: Input: default@cmv_basetable_n8
 POSTHOOK: Output: database:default
 POSTHOOK: Output: default@cmv_mat_view2_n3
+POSTHOOK: Lineage: cmv_mat_view2_n3.a SIMPLE [(cmv_basetable_n8)cmv_basetable_n8.FieldSchema(name:a, type:int, comment:null), ]
 PREHOOK: query: describe formatted cmv_mat_view2_n3
 PREHOOK: type: DESCTABLE
 PREHOOK: Input: default@cmv_mat_view2_n3
@@ -156,7 +164,7 @@ Retention:          	0
 #### A masked pattern was here ####
 Table Type:         	MATERIALIZED_VIEW   	 
 Table Parameters:	 	 
-	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
+	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"a\":\"true\"}}
 	bucketing_version   	2                   
 	comment             	this is the second view
 	key                 	alice               
@@ -181,6 +189,10 @@ Original Query:     	select a from cmv_basetable_n8
 Expanded Query:     	select `cmv_basetable_n8`.`a` from `default`.`cmv_basetable_n8`	 
 Rewrite Enabled:    	No                  	 
 Outdated for Rewriting:	Unknown             	 
+	 	 
+# Materialized View Source table information	 	 
+Table name          	Snapshot            	 
+default.cmv_basetable_n8	N/A                 	 
 PREHOOK: query: select a from cmv_mat_view2_n3
 PREHOOK: type: QUERY
 PREHOOK: Input: default@cmv_mat_view2_n3
@@ -220,6 +232,9 @@ POSTHOOK: type: CREATE_MATERIALIZED_VIEW
 POSTHOOK: Input: default@cmv_basetable_n8
 POSTHOOK: Output: database:default
 POSTHOOK: Output: default@cmv_mat_view3_n0
+POSTHOOK: Lineage: cmv_mat_view3_n0.a SIMPLE [(cmv_basetable_n8)cmv_basetable_n8.FieldSchema(name:a, type:int, comment:null), ]
+POSTHOOK: Lineage: cmv_mat_view3_n0.b SIMPLE [(cmv_basetable_n8)cmv_basetable_n8.FieldSchema(name:b, type:varchar(256), comment:null), ]
+POSTHOOK: Lineage: cmv_mat_view3_n0.c SIMPLE [(cmv_basetable_n8)cmv_basetable_n8.FieldSchema(name:c, type:decimal(10,2), comment:null), ]
 PREHOOK: query: describe formatted cmv_mat_view3_n0
 PREHOOK: type: DESCTABLE
 PREHOOK: Input: default@cmv_mat_view3_n0
@@ -238,13 +253,13 @@ Retention:          	0
 #### A masked pattern was here ####
 Table Type:         	MATERIALIZED_VIEW   	 
 Table Parameters:	 	 
-	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
+	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"a\":\"true\",\"b\":\"true\",\"c\":\"true\"}}
 	bucketing_version   	2                   
 	comment             	this is the third view
 	numFiles            	1                   
 	numRows             	5                   
 	rawDataSize         	1025                
-	totalSize           	509                 
+	totalSize           	516                 
 #### A masked pattern was here ####
 	 	 
 # Storage Information	 	 
@@ -261,6 +276,10 @@ Original Query:     	select * from cmv_basetable_n8
 Expanded Query:     	select `cmv_basetable_n8`.`a`, `cmv_basetable_n8`.`b`, `cmv_basetable_n8`.`c` from `default`.`cmv_basetable_n8`	 
 Rewrite Enabled:    	No                  	 
 Outdated for Rewriting:	Unknown             	 
+	 	 
+# Materialized View Source table information	 	 
+Table name          	Snapshot            	 
+default.cmv_basetable_n8	N/A                 	 
 PREHOOK: query: select a, b, c from cmv_mat_view3_n0
 PREHOOK: type: QUERY
 PREHOOK: Input: default@cmv_mat_view3_n0
@@ -282,8 +301,8 @@ POSTHOOK: query: select distinct a from cmv_mat_view3_n0
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@cmv_mat_view3_n0
 #### A masked pattern was here ####
-1
 3
+1
 2
 PREHOOK: query: drop materialized view cmv_mat_view3_n0
 PREHOOK: type: DROP_MATERIALIZED_VIEW
@@ -313,6 +332,7 @@ POSTHOOK: Input: default@cmv_basetable_n8
 #### A masked pattern was here ####
 POSTHOOK: Output: database:default
 POSTHOOK: Output: default@cmv_mat_view4_n0
+POSTHOOK: Lineage: cmv_mat_view4_n0.a SIMPLE [(cmv_basetable_n8)cmv_basetable_n8.FieldSchema(name:a, type:int, comment:null), ]
 PREHOOK: query: describe formatted cmv_mat_view4_n0
 PREHOOK: type: DESCTABLE
 PREHOOK: Input: default@cmv_mat_view4_n0
@@ -329,7 +349,7 @@ Retention:          	0
 #### A masked pattern was here ####
 Table Type:         	MATERIALIZED_VIEW   	 
 Table Parameters:	 	 
-	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
+	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\",\"COLUMN_STATS\":{\"a\":\"true\"}}
 	bucketing_version   	2                   
 	comment             	this is the last view
 	numFiles            	1                   
@@ -352,6 +372,10 @@ Original Query:     	select a from cmv_basetable_n8
 Expanded Query:     	select `cmv_basetable_n8`.`a` from `default`.`cmv_basetable_n8`	 
 Rewrite Enabled:    	No                  	 
 Outdated for Rewriting:	Unknown             	 
+	 	 
+# Materialized View Source table information	 	 
+Table name          	Snapshot            	 
+default.cmv_basetable_n8	N/A                 	 
 PREHOOK: query: select a from cmv_mat_view4_n0
 PREHOOK: type: QUERY
 PREHOOK: Input: default@cmv_mat_view4_n0

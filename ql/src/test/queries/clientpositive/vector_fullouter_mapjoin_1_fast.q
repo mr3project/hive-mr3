@@ -61,7 +61,7 @@ analyze table fullouter_long_small_1a_nonull compute statistics;
 analyze table fullouter_long_small_1a_nonull compute statistics for columns;
 
 -- Do first one with FULL OUTER MapJoin NOT Enabled.
-SET hive.mapjoin.full.outer=false;
+-- set hive.mapjoin.full.outer=false;
 EXPLAIN VECTORIZATION DETAIL
 SELECT b.key, s.key, s.s_date FROM fullouter_long_big_1a b FULL OUTER JOIN fullouter_long_small_1a s ON b.key = s.key
 order by b.key;
@@ -69,7 +69,7 @@ order by b.key;
 SELECT b.key, s.key, s.s_date FROM fullouter_long_big_1a b FULL OUTER JOIN fullouter_long_small_1a s ON b.key = s.key
 order by b.key;
 
-SET hive.mapjoin.full.outer=true;
+-- set hive.mapjoin.full.outer=true;
 
 EXPLAIN VECTORIZATION DETAIL
 SELECT b.key, s.key, s.s_date FROM fullouter_long_big_1a b FULL OUTER JOIN fullouter_long_small_1a s ON b.key = s.key

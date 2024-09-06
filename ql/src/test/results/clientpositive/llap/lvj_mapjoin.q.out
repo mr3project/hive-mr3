@@ -1,19 +1,27 @@
 PREHOOK: query: drop table sour1
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table sour1
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: drop table sour2
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table sour2
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: drop table expod1
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table expod1
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: drop table expod2
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table expod2
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table sour1(id int, av1 string, av2 string, av3 string) row format delimited fields terminated by ','
 PREHOOK: type: CREATETABLE
 PREHOOK: Output: database:default
@@ -125,132 +133,137 @@ STAGE PLANS:
                   Filter Operator
                     predicate: aid is not null (type: boolean)
                     Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
-                    Lateral View Forward
+                    Select Operator
+                      expressions: aid (type: int), av (type: array<string>)
+                      outputColumnNames: _col0, _col1
                       Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
-                      Select Operator
-                        expressions: aid (type: int)
-                        outputColumnNames: aid
+                      Lateral View Forward
                         Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
-                        Lateral View Join Operator
-                          outputColumnNames: _col0, _col5
-                          Statistics: Num rows: 6 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
-                          Select Operator
-                            expressions: _col0 (type: int), _col5 (type: string)
-                            outputColumnNames: _col0, _col1
-                            Statistics: Num rows: 6 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
-                            Map Join Operator
-                              condition map:
-                                   Inner Join 0 to 1
-                              keys:
-                                0 _col0 (type: int)
-                                1 _col0 (type: int)
-                              outputColumnNames: _col0, _col1, _col2, _col3
-                              input vertices:
-                                1 Map 2
-                              Statistics: Num rows: 6 Data size: 12698 Basic stats: COMPLETE Column stats: NONE
-                              Filter Operator
-                                predicate: (_col0 = _col2) (type: boolean)
-                                Statistics: Num rows: 3 Data size: 6349 Basic stats: COMPLETE Column stats: NONE
-                                Select Operator
-                                  expressions: _col0 (type: int), _col1 (type: string), _col3 (type: string)
-                                  outputColumnNames: _col0, _col1, _col2
-                                  Statistics: Num rows: 3 Data size: 6349 Basic stats: COMPLETE Column stats: NONE
-                                  File Output Operator
-                                    compressed: false
-                                    Statistics: Num rows: 3 Data size: 6349 Basic stats: COMPLETE Column stats: NONE
-                                    table:
-                                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
-                                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
-                                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-                      Select Operator
-                        expressions: av (type: array<string>)
-                        outputColumnNames: _col0
-                        Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
-                        UDTF Operator
+                        Select Operator
+                          expressions: _col0 (type: int)
+                          outputColumnNames: _col0
                           Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
-                          function name: explode
                           Lateral View Join Operator
-                            outputColumnNames: _col0, _col5
-                            Statistics: Num rows: 6 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
+                            outputColumnNames: _col0, _col6
+                            Statistics: Num rows: 3 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
                             Select Operator
-                              expressions: _col0 (type: int), _col5 (type: string)
+                              expressions: _col0 (type: int), _col6 (type: string)
                               outputColumnNames: _col0, _col1
-                              Statistics: Num rows: 6 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
+                              Statistics: Num rows: 3 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
                               Map Join Operator
                                 condition map:
                                      Inner Join 0 to 1
                                 keys:
                                   0 _col0 (type: int)
                                   1 _col0 (type: int)
-                                outputColumnNames: _col0, _col1, _col2, _col3
+                                outputColumnNames: _col0, _col1, _col3
                                 input vertices:
                                   1 Map 2
-                                Statistics: Num rows: 6 Data size: 12698 Basic stats: COMPLETE Column stats: NONE
-                                Filter Operator
-                                  predicate: (_col0 = _col2) (type: boolean)
-                                  Statistics: Num rows: 3 Data size: 6349 Basic stats: COMPLETE Column stats: NONE
+                                Statistics: Num rows: 3 Data size: 12698 Basic stats: COMPLETE Column stats: NONE
+                                Select Operator
+                                  expressions: _col0 (type: int), _col1 (type: string), _col3 (type: string)
+                                  outputColumnNames: _col0, _col1, _col2
+                                  Statistics: Num rows: 3 Data size: 12698 Basic stats: COMPLETE Column stats: NONE
+                                  File Output Operator
+                                    compressed: false
+                                    Statistics: Num rows: 3 Data size: 12698 Basic stats: COMPLETE Column stats: NONE
+                                    table:
+                                        input format: org.apache.hadoop.mapred.SequenceFileInputFormat
+                                        output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
+                                        serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+                        Select Operator
+                          expressions: _col1 (type: array<string>)
+                          outputColumnNames: _col0
+                          Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
+                          UDTF Operator
+                            Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
+                            function name: explode
+                            Lateral View Join Operator
+                              outputColumnNames: _col0, _col6
+                              Statistics: Num rows: 3 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
+                              Select Operator
+                                expressions: _col0 (type: int), _col6 (type: string)
+                                outputColumnNames: _col0, _col1
+                                Statistics: Num rows: 3 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
+                                Map Join Operator
+                                  condition map:
+                                       Inner Join 0 to 1
+                                  keys:
+                                    0 _col0 (type: int)
+                                    1 _col0 (type: int)
+                                  outputColumnNames: _col0, _col1, _col3
+                                  input vertices:
+                                    1 Map 2
+                                  Statistics: Num rows: 3 Data size: 12698 Basic stats: COMPLETE Column stats: NONE
                                   Select Operator
                                     expressions: _col0 (type: int), _col1 (type: string), _col3 (type: string)
                                     outputColumnNames: _col0, _col1, _col2
-                                    Statistics: Num rows: 3 Data size: 6349 Basic stats: COMPLETE Column stats: NONE
+                                    Statistics: Num rows: 3 Data size: 12698 Basic stats: COMPLETE Column stats: NONE
                                     File Output Operator
                                       compressed: false
-                                      Statistics: Num rows: 3 Data size: 6349 Basic stats: COMPLETE Column stats: NONE
+                                      Statistics: Num rows: 3 Data size: 12698 Basic stats: COMPLETE Column stats: NONE
                                       table:
                                           input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                                           output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
                                           serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
             Execution mode: llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
         Map 2 
             Map Operator Tree:
                 TableScan
                   alias: expod2
+                  filterExpr: bid is not null (type: boolean)
                   Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: bid is not null (type: boolean)
                     Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
-                    Lateral View Forward
+                    Select Operator
+                      expressions: bid (type: int), bv (type: array<string>)
+                      outputColumnNames: _col0, _col1
                       Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
-                      Select Operator
-                        expressions: bid (type: int)
-                        outputColumnNames: bid
+                      Lateral View Forward
                         Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
-                        Lateral View Join Operator
-                          outputColumnNames: _col0, _col5
-                          Statistics: Num rows: 6 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
-                          Select Operator
-                            expressions: _col0 (type: int), _col5 (type: string)
-                            outputColumnNames: _col0, _col1
-                            Statistics: Num rows: 6 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
-                            Reduce Output Operator
-                              key expressions: _col0 (type: int)
-                              sort order: +
-                              Map-reduce partition columns: _col0 (type: int)
-                              Statistics: Num rows: 6 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
-                              value expressions: _col1 (type: string)
-                      Select Operator
-                        expressions: bv (type: array<string>)
-                        outputColumnNames: _col0
-                        Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
-                        UDTF Operator
+                        Select Operator
+                          expressions: _col0 (type: int)
+                          outputColumnNames: _col0
                           Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
-                          function name: explode
                           Lateral View Join Operator
-                            outputColumnNames: _col0, _col5
-                            Statistics: Num rows: 6 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
+                            outputColumnNames: _col0, _col6
+                            Statistics: Num rows: 3 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
                             Select Operator
-                              expressions: _col0 (type: int), _col5 (type: string)
+                              expressions: _col0 (type: int), _col6 (type: string)
                               outputColumnNames: _col0, _col1
-                              Statistics: Num rows: 6 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
+                              Statistics: Num rows: 3 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
                               Reduce Output Operator
                                 key expressions: _col0 (type: int)
+                                null sort order: z
                                 sort order: +
                                 Map-reduce partition columns: _col0 (type: int)
-                                Statistics: Num rows: 6 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
+                                Statistics: Num rows: 3 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
                                 value expressions: _col1 (type: string)
+                        Select Operator
+                          expressions: _col1 (type: array<string>)
+                          outputColumnNames: _col0
+                          Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
+                          UDTF Operator
+                            Statistics: Num rows: 3 Data size: 5772 Basic stats: COMPLETE Column stats: NONE
+                            function name: explode
+                            Lateral View Join Operator
+                              outputColumnNames: _col0, _col6
+                              Statistics: Num rows: 3 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
+                              Select Operator
+                                expressions: _col0 (type: int), _col6 (type: string)
+                                outputColumnNames: _col0, _col1
+                                Statistics: Num rows: 3 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
+                                Reduce Output Operator
+                                  key expressions: _col0 (type: int)
+                                  null sort order: z
+                                  sort order: +
+                                  Map-reduce partition columns: _col0 (type: int)
+                                  Statistics: Num rows: 3 Data size: 11544 Basic stats: COMPLETE Column stats: NONE
+                                  value expressions: _col1 (type: string)
             Execution mode: llap
-            LLAP IO: no inputs
+            LLAP IO: all inputs
 
   Stage: Stage-0
     Fetch Operator

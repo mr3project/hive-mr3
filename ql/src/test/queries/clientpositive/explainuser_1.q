@@ -1,8 +1,18 @@
+--! qt:dataset:srcpart
+--! qt:dataset:src_cbo
+--! qt:dataset:src1
+--! qt:dataset:src
+--! qt:dataset:part
+--! qt:dataset:lineitem
+--! qt:dataset:cbo_t3
+--! qt:dataset:cbo_t2
+--! qt:dataset:cbo_t1
 set hive.vectorized.execution.enabled=false;
 set hive.strict.checks.bucketing=false;
 
 set hive.mapred.mode=nonstrict;
 set hive.explain.user=true;
+-- set hive.auto.convert.anti.join=true;
 
 explain create table src_orc_merge_test_part_n1(key int, value string) partitioned by (ds string, ts string) stored as orc;
 create table src_orc_merge_test_part_n1(key int, value string) partitioned by (ds string, ts string) stored as orc;
@@ -319,19 +329,30 @@ CREATE TABLE myinput1_n7(key int, value int);
 LOAD DATA LOCAL INPATH '../../data/files/in8.txt' INTO TABLE myinput1_n7;
 
 explain select * from myinput1_n7 a join myinput1_n7 b on a.key<=>b.value;
+explain select * from myinput1_n7 a join myinput1_n7 b on a.key<=>b.value;
 
+explain select * from myinput1_n7 a join myinput1_n7 b on a.key<=>b.value join myinput1_n7 c on a.key=c.key;
 explain select * from myinput1_n7 a join myinput1_n7 b on a.key<=>b.value join myinput1_n7 c on a.key=c.key;
 
 explain select * from myinput1_n7 a join myinput1_n7 b on a.key<=>b.value join myinput1_n7 c on a.key<=>c.key;
+explain select * from myinput1_n7 a join myinput1_n7 b on a.key<=>b.value join myinput1_n7 c on a.key<=>c.key;
 
+explain select * from myinput1_n7 a join myinput1_n7 b on a.key<=>b.value AND a.value=b.key join myinput1_n7 c on a.key<=>c.key AND a.value=c.value;
 explain select * from myinput1_n7 a join myinput1_n7 b on a.key<=>b.value AND a.value=b.key join myinput1_n7 c on a.key<=>c.key AND a.value=c.value;
 
 explain select * from myinput1_n7 a join myinput1_n7 b on a.key<=>b.value AND a.value<=>b.key join myinput1_n7 c on a.key<=>c.key AND a.value<=>c.value;
+explain select * from myinput1_n7 a join myinput1_n7 b on a.key<=>b.value AND a.value<=>b.key join myinput1_n7 c on a.key<=>c.key AND a.value<=>c.value;
 
 explain select * FROM myinput1_n7 a LEFT OUTER JOIN myinput1_n7 b ON a.key<=>b.value;
+explain select * FROM myinput1_n7 a LEFT OUTER JOIN myinput1_n7 b ON a.key<=>b.value;
+
 explain select * FROM myinput1_n7 a RIGHT OUTER JOIN myinput1_n7 b ON a.key<=>b.value;
+explain select * FROM myinput1_n7 a RIGHT OUTER JOIN myinput1_n7 b ON a.key<=>b.value;
+
+explain select * FROM myinput1_n7 a FULL OUTER JOIN myinput1_n7 b ON a.key<=>b.value;
 explain select * FROM myinput1_n7 a FULL OUTER JOIN myinput1_n7 b ON a.key<=>b.value;
 
+explain select /*+ MAPJOIN(b) */ * FROM myinput1_n7 a JOIN myinput1_n7 b ON a.key<=>b.value;
 explain select /*+ MAPJOIN(b) */ * FROM myinput1_n7 a JOIN myinput1_n7 b ON a.key<=>b.value;
 
 CREATE TABLE smb_input_n0(key int, value int);
@@ -355,9 +376,18 @@ SET hive.input.format = org.apache.hadoop.hive.ql.io.BucketizedHiveInputFormat;
 analyze table smb_input1_n2 compute statistics;
 
 explain select /*+ MAPJOIN(a) */ * FROM smb_input1_n2 a JOIN smb_input1_n2 b ON a.key <=> b.key;
+explain select /*+ MAPJOIN(a) */ * FROM smb_input1_n2 a JOIN smb_input1_n2 b ON a.key <=> b.key;
+
 explain select /*+ MAPJOIN(a) */ * FROM smb_input1_n2 a JOIN smb_input1_n2 b ON a.key <=> b.key AND a.value <=> b.value;
+explain select /*+ MAPJOIN(a) */ * FROM smb_input1_n2 a JOIN smb_input1_n2 b ON a.key <=> b.key AND a.value <=> b.value;
+
 explain select /*+ MAPJOIN(a) */ * FROM smb_input1_n2 a RIGHT OUTER JOIN smb_input1_n2 b ON a.key <=> b.key;
+explain select /*+ MAPJOIN(a) */ * FROM smb_input1_n2 a RIGHT OUTER JOIN smb_input1_n2 b ON a.key <=> b.key;
+
 explain select /*+ MAPJOIN(b) */ * FROM smb_input1_n2 a JOIN smb_input1_n2 b ON a.key <=> b.key;
+explain select /*+ MAPJOIN(b) */ * FROM smb_input1_n2 a JOIN smb_input1_n2 b ON a.key <=> b.key;
+
+explain select /*+ MAPJOIN(b) */ * FROM smb_input1_n2 a LEFT OUTER JOIN smb_input1_n2 b ON a.key <=> b.key;
 explain select /*+ MAPJOIN(b) */ * FROM smb_input1_n2 a LEFT OUTER JOIN smb_input1_n2 b ON a.key <=> b.key;
 
 drop table sales_n0;
@@ -670,3 +700,46 @@ explain FROM T1_n119 a RIGHT OUTER JOIN T2_n70 c ON c.key+1=a.key select /*+ STR
 explain FROM T1_n119 a FULL OUTER JOIN T2_n70 c ON c.key+1=a.key select /*+ STREAMTABLE(a) */ sum(hash(a.key)), sum(hash(a.val)), sum(hash(c.key));
 
 explain select /*+ mapjoin(v)*/ sum(hash(k.key)), sum(hash(v.val)) from T1_n119 k left outer join T1_n119 v on k.key+1=v.key;
+
+-- set hive.auto.convert.anti.join=false;
+
+explain select *
+from src_cbo b
+where not exists
+  (select distinct a.key
+  from src_cbo a
+  where b.value = a.value and a.value > 'val_2'
+  )
+;
+
+explain select *
+from src_cbo b
+group by key, value
+having not exists
+  (select a.key
+  from src_cbo a
+  where b.value = a.value  and a.key = b.key and a.value > 'val_12'
+  )
+;
+
+create view cv1_n5_anti as
+select *
+from src_cbo b
+where not exists
+  (select a.key
+  from src_cbo a
+  where b.value = a.value  and a.key = b.key and a.value > 'val_9')
+;
+
+explain select * from cv1_n5_anti;
+
+explain select *
+from (select *
+      from src_cbo b
+      where not exists
+          (select a.key
+          from src_cbo a
+          where b.value = a.value  and a.key = b.key and a.value > 'val_9')
+     ) a
+;
+-- set hive.auto.convert.anti.join=true;

@@ -1,15 +1,21 @@
 PREHOOK: query: drop table if exists x1_store_sales
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table if exists x1_store_sales
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: drop table if exists x1_date_dim
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table if exists x1_date_dim
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: drop table if exists x1_item
 PREHOOK: type: DROPTABLE
+PREHOOK: Output: database:default
 POSTHOOK: query: drop table if exists x1_item
 POSTHOOK: type: DROPTABLE
+POSTHOOK: Output: database:default
 PREHOOK: query: create table x1_store_sales 
 (
 	ss_item_sk	int
@@ -117,6 +123,11 @@ select   count(*) cnt
 	and s.ss_sold_date_sk = d.d_date_sk
 	and d.d_year=2000
 PREHOOK: type: QUERY
+PREHOOK: Input: default@x1_date_dim
+PREHOOK: Input: default@x1_store_sales
+PREHOOK: Input: default@x1_store_sales@ss_sold_date_sk=1
+PREHOOK: Input: default@x1_store_sales@ss_sold_date_sk=2
+#### A masked pattern was here ####
 POSTHOOK: query: explain 
 select   count(*) cnt
  from
@@ -127,6 +138,11 @@ select   count(*) cnt
 	and s.ss_sold_date_sk = d.d_date_sk
 	and d.d_year=2000
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@x1_date_dim
+POSTHOOK: Input: default@x1_store_sales
+POSTHOOK: Input: default@x1_store_sales@ss_sold_date_sk=1
+POSTHOOK: Input: default@x1_store_sales@ss_sold_date_sk=2
+#### A masked pattern was here ####
 Plan optimized by CBO.
 
 Vertex dependency in root stage
@@ -150,16 +166,16 @@ Stage-0
               <-Map 3 [BROADCAST_EDGE] vectorized, llap
                 BROADCAST [RS_26]
                   PartitionCols:_col0
-                  Select Operator [SEL_25] (rows=28 width=8)
+                  Select Operator [SEL_25] (rows=28 width=4)
                     Output:["_col0"]
                     Filter Operator [FIL_24] (rows=28 width=8)
                       predicate:((d_year = 2000) and d_date_sk is not null)
                       TableScan [TS_3] (rows=56 width=8)
                         default@x1_date_dim,d,Tbl:COMPLETE,Col:COMPLETE,Output:["d_date_sk","d_year"]
-                Dynamic Partitioning Event Operator [EVENT_29] (rows=1 width=8)
-                  Group By Operator [GBY_28] (rows=1 width=8)
+                Dynamic Partitioning Event Operator [EVENT_29] (rows=2 width=4)
+                  Group By Operator [GBY_28] (rows=2 width=4)
                     Output:["_col0"],keys:_col0
-                    Select Operator [SEL_27] (rows=28 width=8)
+                    Select Operator [SEL_27] (rows=28 width=4)
                       Output:["_col0"]
                        Please refer to the previous Select Operator [SEL_25]
               <-Select Operator [SEL_30] (rows=123457 width=4)
@@ -207,6 +223,11 @@ select   count(*) cnt
 	and s.ss_sold_date_sk = d.d_date_sk
 	and d.d_year=2000
 PREHOOK: type: QUERY
+PREHOOK: Input: default@x1_date_dim
+PREHOOK: Input: default@x1_store_sales
+PREHOOK: Input: default@x1_store_sales@ss_sold_date_sk=1
+PREHOOK: Input: default@x1_store_sales@ss_sold_date_sk=2
+#### A masked pattern was here ####
 POSTHOOK: query: explain reoptimization
 select   count(*) cnt
  from
@@ -217,6 +238,11 @@ select   count(*) cnt
 	and s.ss_sold_date_sk = d.d_date_sk
 	and d.d_year=2000
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@x1_date_dim
+POSTHOOK: Input: default@x1_store_sales
+POSTHOOK: Input: default@x1_store_sales@ss_sold_date_sk=1
+POSTHOOK: Input: default@x1_store_sales@ss_sold_date_sk=2
+#### A masked pattern was here ####
 Plan optimized by CBO.
 
 Vertex dependency in root stage
@@ -240,16 +266,16 @@ Stage-0
               <-Map 3 [BROADCAST_EDGE] vectorized, llap
                 BROADCAST [RS_26]
                   PartitionCols:_col0
-                  Select Operator [SEL_25] (runtime: rows=1 width=8)
+                  Select Operator [SEL_25] (runtime: rows=1 width=4)
                     Output:["_col0"]
                     Filter Operator [FIL_24] (runtime: rows=1 width=8)
                       predicate:((d_year = 2000) and d_date_sk is not null)
                       TableScan [TS_3] (runtime: rows=2 width=8)
                         default@x1_date_dim,d,Tbl:COMPLETE,Col:COMPLETE,Output:["d_date_sk","d_year"]
-                Dynamic Partitioning Event Operator [EVENT_29] (runtime: rows=1 width=8)
-                  Group By Operator [GBY_28] (runtime: rows=1 width=8)
+                Dynamic Partitioning Event Operator [EVENT_29] (runtime: rows=1 width=4)
+                  Group By Operator [GBY_28] (runtime: rows=1 width=4)
                     Output:["_col0"],keys:_col0
-                    Select Operator [SEL_27] (runtime: rows=1 width=8)
+                    Select Operator [SEL_27] (runtime: rows=1 width=4)
                       Output:["_col0"]
                        Please refer to the previous Select Operator [SEL_25]
               <-Select Operator [SEL_30] (runtime: rows=1 width=4)

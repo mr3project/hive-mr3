@@ -9,6 +9,8 @@ set hive.auto.convert.join.noconditionaltask=true;
 set hive.auto.convert.join.noconditionaltask.size=10000;
 set hive.auto.convert.sortmerge.join.bigtable.selection.policy = org.apache.hadoop.hive.ql.optimizer.TableSizeBasedBigTableSelectorForAutoSMJ;
 
+-- SORT_QUERY_RESULTS
+
 -- Single partition
 -- Regular load happens.
 CREATE TABLE srcbucket_mapjoin_n8(key int, value string) partitioned by (ds string) STORED AS TEXTFILE;
@@ -107,4 +109,16 @@ CREATE TABLE orc_test_txn (`id` integer, name string, dept string) PARTITIONED B
 explain load data local inpath '../../data/files/load_data_job_acid' into table orc_test_txn;
 load data local inpath '../../data/files/load_data_job_acid' into table orc_test_txn;
 
+select * from orc_test_txn;
+
+-- Test Load Overwrite.
+
+load data local inpath '../../data/files/load_data_job_acid' OVERWRITE into table orc_test_txn;
+
+select count(*) from orc_test_txn;
+select * from orc_test_txn;
+
+load data local inpath '../../data/files/load_data_job_acid' OVERWRITE into table orc_test_txn;
+
+select count(*) from orc_test_txn;
 select * from orc_test_txn;

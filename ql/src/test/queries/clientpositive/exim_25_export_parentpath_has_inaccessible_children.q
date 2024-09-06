@@ -1,4 +1,3 @@
-set hive.security.authorization.manager=org.apache.hadoop.hive.ql.security.authorization.DefaultHiveAuthorizationProvider;
 set hive.security.authorization.manager=org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLStdHiveAuthorizerFactory;
 set hive.security.authenticator.manager=org.apache.hadoop.hive.ql.security.SessionStateConfigUserAuthenticator;
 
@@ -12,7 +11,7 @@ create table t_exppath ( dep_id int) stored as textfile;
 load data local inpath "../../data/files/test.dat" into table t_exppath;
 
 dfs ${system:test.dfs.mkdir} ${system:test.tmp.dir}/t_exppath/nope;
-dfs -rmr ${system:test.tmp.dir}/t_exppath/;
+dfs -rm -r -f ${system:test.tmp.dir}/t_exppath/;
 dfs ${system:test.dfs.mkdir} ${system:test.tmp.dir}/t_exppath/;
 dfs ${system:test.dfs.mkdir} ${system:test.tmp.dir}/t_exppath/nope;
 dfs -chmod -R 400 ${system:test.tmp.dir}/t_exppath/nope;

@@ -1,4 +1,4 @@
--- INCLUDE_HADOOP_MAJOR_VERSIONS(0.23)
+--! qt:dataset:src
 
 CREATE TABLE fact_daily_n1(x int) PARTITIONED BY (ds STRING);
 CREATE TABLE fact_tz_n0(x int) PARTITIONED BY (ds STRING, hr STRING)

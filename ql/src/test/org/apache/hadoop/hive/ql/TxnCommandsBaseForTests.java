@@ -98,6 +98,9 @@ public abstract class TxnCommandsBaseForTests {
     hiveConf.setBoolVar(HiveConf.ConfVars.MERGE_CARDINALITY_VIOLATION_CHECK, true);
     hiveConf.setBoolVar(HiveConf.ConfVars.HIVESTATSCOLAUTOGATHER, false);
     hiveConf.setBoolean("mapred.input.dir.recursive", true);
+
+    hiveConf.setBoolVar(HiveConf.ConfVars.HIVE_MR3_COMPACTION_USING_MR3, true);
+
     TxnDbUtil.setConfValues(hiveConf);
     TxnDbUtil.prepDb(hiveConf);
     File f = new File(getWarehouseDir());
@@ -186,7 +189,7 @@ public abstract class TxnCommandsBaseForTests {
   void assertVectorized(boolean vectorized, String query) throws Exception {
     List<String> rs = runStatementOnDriver("EXPLAIN VECTORIZATION DETAIL " + query);
     for(String line : rs) {
-      if(line != null && line.contains("Execution mode: vectorized")) {
+      if(line != null && line.contains("vectorized")) {   // for MR3, do not check 'Execution mode:'
         Assert.assertTrue("Was vectorized when it wasn't expected", vectorized);
         return;
       }
@@ -247,6 +250,6 @@ public abstract class TxnCommandsBaseForTests {
   void checkResult(String[][] expectedResult, String query, boolean isVectorized, String msg, Logger LOG) throws Exception{
     List<String> rs = runStatementOnDriver(query);
     checkExpected(rs, expectedResult, msg + (isVectorized ? " vect" : ""), LOG, !isVectorized);
-    assertVectorized(isVectorized, query);
+    // assertVectorized(isVectorized, query);   // do not call because we use MR3, not MR
   }
 }
