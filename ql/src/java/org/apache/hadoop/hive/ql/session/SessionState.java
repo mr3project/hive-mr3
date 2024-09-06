@@ -75,8 +75,6 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManager;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
-import org.apache.hadoop.hive.ql.exec.spark.session.SparkSession;
-import org.apache.hadoop.hive.ql.exec.spark.session.SparkSessionManagerImpl;
 import org.apache.hadoop.hive.ql.exec.tez.TezSessionPoolManager;
 import org.apache.hadoop.hive.ql.exec.tez.TezSessionState;
 import org.apache.hadoop.hive.ql.history.HiveHistory;
@@ -244,8 +242,6 @@ public class SessionState {
       "hive.internal.ss.authz.settings.applied.marker";
 
   private String userIpAddress;
-
-  private SparkSession sparkSession;
 
   private MR3Session mr3Session;
 
@@ -1755,7 +1751,6 @@ public class SessionState {
     }
 
     try {
-      closeSparkSession();
       registry.closeCUDFLoaders();
       dropSessionPaths(sessionConf);
       unCacheDataNucleusClassLoaders();
@@ -1791,18 +1786,6 @@ public class SessionState {
       }
     } catch (Exception e) {
       LOG.info("Failed to remove classloaders from DataNucleus ", e);
-    }
-  }
-
-  public void closeSparkSession() {
-    if (sparkSession != null) {
-      try {
-        SparkSessionManagerImpl.getInstance().closeSession(sparkSession);
-      } catch (Exception ex) {
-        LOG.error("Error closing spark session.", ex);
-      } finally {
-        sparkSession = null;
-      }
     }
   }
 
@@ -1893,14 +1876,6 @@ public class SessionState {
    */
   public void setUserIpAddress(String userIpAddress) {
     this.userIpAddress = userIpAddress;
-  }
-
-  public SparkSession getSparkSession() {
-    return sparkSession;
-  }
-
-  public void setSparkSession(SparkSession sparkSession) {
-    this.sparkSession = sparkSession;
   }
 
   public MR3Session getMr3Session() {

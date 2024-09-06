@@ -25,7 +25,6 @@ import java.io.IOException;
 
 import org.apache.hadoop.hive.common.metrics.common.Metrics;
 import org.apache.hadoop.hive.common.metrics.common.MetricsConstant;
-import org.apache.hadoop.hive.ql.exec.spark.SparkTask;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -41,7 +40,6 @@ public class TestMapRedTask {
 
     verify(mockMetrics, times(1)).incrementCounter(MetricsConstant.HIVE_MR_TASKS);
     verify(mockMetrics, never()).incrementCounter(MetricsConstant.HIVE_TEZ_TASKS);
-    verify(mockMetrics, never()).incrementCounter(MetricsConstant.HIVE_SPARK_TASKS);
   }
 
 }

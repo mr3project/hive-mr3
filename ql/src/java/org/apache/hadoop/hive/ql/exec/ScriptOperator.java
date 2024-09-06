@@ -55,9 +55,6 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.util.Shell;
 import org.apache.hadoop.util.StringUtils;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkEnv;
-import org.apache.spark.SparkFiles;
 
 /**
  * ScriptOperator.
