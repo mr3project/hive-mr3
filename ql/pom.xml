@@ -442,7 +442,7 @@
       <version>${stax.version}</version>
     </dependency>
     <dependency>
-      <groupId>net.sf.opencsv</groupId>
+      <groupId>com.opencsv</groupId>
       <artifactId>opencsv</artifactId>
       <version>${opencsv.version}</version>
     </dependency>
@@ -914,7 +914,7 @@
                   <include>com.fasterxml.jackson.core:jackson-annotations</include>
                   <include>com.fasterxml.jackson.core:jackson-databind</include>
                   <include>com.google.guava:guava</include>
-                  <include>net.sf.opencsv:opencsv</include>
+                  <include>com.opencsv:opencsv</include>
                   <include>org.apache.hive:hive-storage-api</include>
                   <include>org.apache.orc:orc-core</include>
                   <include>org.apache.orc:orc-shims</include>
