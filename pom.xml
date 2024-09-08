@@ -66,6 +66,8 @@
     <standalone-metastore.version>4.0.0</standalone-metastore.version>
     <hive.version.shortname>4.0.0</hive.version.shortname>
     <!-- Build Properties -->
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
     <maven.compiler.useIncrementalCompilation>false</maven.compiler.useIncrementalCompilation>
     <maven.repo.local>${settings.localRepository}</maven.repo.local>
     <hive.path.to.root>.</hive.path.to.root>
@@ -649,6 +651,10 @@
           <exclusion>
             <groupId>org.apache.hive</groupId>
             <artifactId>hive-storage-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-client-api</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
