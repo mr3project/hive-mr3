@@ -88,34 +88,35 @@ public class Utils {
       }
       return locationProviderImpl;
     } else if (useCustomLocations) {
+      // emulate HostAffinitySplitLocationProvider with the same getHashInputForSplit()
       splitLocationProvider = new SplitLocationProvider() {
         @Override
         public String[] getLocations(InputSplit split) throws IOException {
           if (!(split instanceof FileSplit)) {
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("Split: {} is not a FileSplit. Using default locations", split);
+            }
             return split.getLocations();
           }
           FileSplit fsplit = (FileSplit) split;
-          long hash = hash1(getHashInputForSplit(fsplit.getPath().toString(), fsplit.getStart()));
+          byte[] bytes = getHashInputForSplit(fsplit);
+          long hash = hash1(bytes);
           String location = context.getLocationHintFromHash(hash);
           if (LOG.isDebugEnabled()) {
-            String splitDesc = "Split at " + fsplit.getPath() + " with offset=" + fsplit.getStart();
-            LOG.debug(splitDesc + " mapped to location=" + location);
+            String splitDesc = "Split at " + fsplit.getPath() + " with offset= " + fsplit.getStart() + ", length=" + fsplit.getLength();
+            LOG.debug("{} mapped to location={}", splitDesc, location);
           }
           return (location != null) ? new String[] { location } : null;
         }
 
-        private byte[] getHashInputForSplit(String path, long start) {
-          // Explicitly using only the start offset of a split, and not the length. Splits generated on
-          // block boundaries and stripe boundaries can vary slightly. Try hashing both to the same node.
-          // There is the drawback of potentially hashing the same data on multiple nodes though, when a
-          // large split is sent to 1 node, and a second invocation uses smaller chunks of the previous
-          // large split and send them to different nodes.
-          byte[] pathBytes = path.getBytes();
-          byte[] allBytes = new byte[pathBytes.length + 8];
-          System.arraycopy(pathBytes, 0, allBytes, 0, pathBytes.length);
-          SerDeUtils.writeLong(allBytes, pathBytes.length, start >> 3);
-          return allBytes;
-         }
+        // from HostAffinitySplitLocationProvider.getHashInputForSplit()
+        private byte[] getHashInputForSplit(FileSplit fsplit) {
+          if (fsplit instanceof HashableInputSplit) {
+            return ((HashableInputSplit)fsplit).getBytesForHash();
+          } else {
+            throw new RuntimeException("Split is not a HashableInputSplit: " + fsplit);
+          }
+        }
 
         private long hash1(byte[] bytes) {
           final int PRIME = 104729; // Same as hash64's default seed.
@@ -123,8 +124,7 @@ public class Utils {
         }
 
         @Override
-        public String toString() {
-          return "LLAP SplitLocationProvider";
+        public String toString() { return "MR3 HostAffinitySplitLocationProvider for LLAP";
         }
       };
     } else {
