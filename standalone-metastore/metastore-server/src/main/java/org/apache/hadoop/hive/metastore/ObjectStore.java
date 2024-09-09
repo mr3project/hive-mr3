@@ -13366,7 +13366,7 @@ public class ObjectStore implements RawStore, Configurable {
       committed = commitTransaction();
     } finally {
       if (!committed) {
-        commitTransaction();
+        rollbackTransaction();
       }
     }
   }
