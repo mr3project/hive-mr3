@@ -148,7 +148,7 @@ public class MR3JobMonitor {
         if (hiveServer2InPlaceProgressEnabled) {
           LOG.info(report);
         } else {
-          console.logInfo(report);
+          console.printInfo(report);
         }
         SessionState.get().updateProgressMonitor(progressMonitor(status));
       }
