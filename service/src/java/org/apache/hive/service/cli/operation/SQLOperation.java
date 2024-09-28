@@ -390,13 +390,17 @@ public class SQLOperation extends ExecuteStatementOperation {
 
     //Need shut down background thread gracefully, driver.close will inform background thread
     //a cancel request is sent.
-    if (shouldRunAsync() && state != OperationState.CANCELED && state != OperationState.TIMEDOUT) {
+    // When Hue cancels a running query, we have state == OperationState.CLOSED. In this case, we want to
+    // avoid interrupting the background Future because it may interrupt MR3 DAGClientRPC.getDagStatusWait(),
+    // after which all other concurrent RPC connections to MR3 DAGAppMaster are also interrupted.
+    // Even when state == OperationState.CLOSED, we call driver.close() anyway, so the query is terminated gracefully.
+    if (shouldRunAsync() && state != OperationState.CLOSED && state != OperationState.CANCELED && state != OperationState.TIMEDOUT) {
       Future<?> backgroundHandle = getBackgroundHandle();
       if (backgroundHandle != null) {
         boolean success = backgroundHandle.cancel(true);
         String queryId = queryState.getQueryId();
         if (success) {
-          log.info("The running operation has been successfully interrupted: {}", queryId);
+          log.info("The running operation has been successfully interrupted: {}, state: {}", queryId, state);
         } else if (log.isDebugEnabled()) {
           log.debug("The running operation could not be cancelled, typically because it has already completed normally: {}", queryId);
         }
@@ -404,7 +408,7 @@ public class SQLOperation extends ExecuteStatementOperation {
     }
 
     if (driver != null) {
-      driver.close();
+      driver.close();     // eventually calls MR3Task.shutdown(), thus calling tryKillDag()
       driver.destroy();
     }
     driver = null;
