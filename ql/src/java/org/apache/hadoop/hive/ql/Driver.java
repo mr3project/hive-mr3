@@ -779,6 +779,7 @@ public class Driver implements IDriver {
       DriverState.removeDriverState();
     }
     destroy();
+    LOG.info("Driver closed");
   }
 
   // TaskQueue could be released in the query and close processes at same
