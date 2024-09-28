@@ -837,6 +837,7 @@ public class TezTask extends Task<TezWork> {
   public void shutdown() {
     super.shutdown();
     isShutdownMr3.set(true);
+    LOG.info("Setting isShutdownMr3 to true");
   }
 
   /** DAG client that does dumb global sync on all the method calls;

@@ -772,6 +772,7 @@ public class Driver implements IDriver {
       DriverState.removeDriverState();
     }
     destroy();
+    LOG.info("Driver closed");
   }
 
   private void logQueryHistory() {
