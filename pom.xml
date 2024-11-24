@@ -35,10 +35,10 @@
     <module>cli</module>
     <module>common</module>
     <module>contrib</module>
-    <module>druid-handler</module>
+    <!-- <module>druid-handler</module> -->
     <module>hbase-handler</module>
     <module>jdbc-handler</module>
-    <module>hcatalog</module>
+    <!-- <module>hcatalog</module> -->
     <module>hplsql</module>
     <module>jdbc</module>
     <module>metastore</module>
@@ -66,8 +66,6 @@
     <standalone-metastore.version>4.0.0</standalone-metastore.version>
     <hive.version.shortname>4.0.0</hive.version.shortname>
     <!-- Build Properties -->
-    <maven.compiler.source>1.8</maven.compiler.source>
-    <maven.compiler.target>1.8</maven.compiler.target>
     <maven.compiler.useIncrementalCompilation>false</maven.compiler.useIncrementalCompilation>
     <maven.repo.local>${settings.localRepository}</maven.repo.local>
     <hive.path.to.root>.</hive.path.to.root>
@@ -1486,6 +1484,14 @@
     <pluginManagement>
       <plugins>
         <!-- plugins are always listed in sorted order by groupId, artifactId -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.8.1</version>
+          <configuration>
+            <release>11</release>
+          </configuration>
+        </plugin>
         <plugin>
           <groupId>org.antlr</groupId>
           <artifactId>antlr3-maven-plugin</artifactId>
