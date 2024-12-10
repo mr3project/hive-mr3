@@ -19,6 +19,7 @@
 package org.apache.hadoop.hive.ql.parse;
 
 import static org.apache.hadoop.hive.ql.plan.ReduceSinkDesc.ReducerTraits.AUTOPARALLEL;
+import static org.apache.hadoop.hive.ql.plan.ReduceSinkDesc.ReducerTraits.FIXED;
 import static org.apache.hadoop.hive.ql.plan.ReduceSinkDesc.ReducerTraits.UNIFORM;
 
 import java.util.*;
@@ -99,7 +100,7 @@ public class GenTezUtils {
     int defaultTinyBufferSize = context.conf.getIntVar(HiveConf.ConfVars.TEZ_SIMPLE_CUSTOM_EDGE_TINY_BUFFER_SIZE_MB);
 
     ReduceWork reduceWork = new ReduceWork(Utilities.REDUCENAME + context.nextSequenceNumber());
-    LOG.debug("Adding reduce work (" + reduceWork.getName() + ") for " + root);
+    LOG.debug("Adding reduce work ({}) for {}", reduceWork.getName(), root);
     reduceWork.setReducer(root);
     reduceWork.setNeedsTagging(GenMapRedUtils.needsTagging(reduceWork));
 
@@ -174,6 +175,11 @@ public class GenTezUtils {
     edgeProp.setBufferSize(obtainBufferSize(root, reduceSink, defaultTinyBufferSize));
     reduceWork.setEdgePropRef(edgeProp);
 
+    if (reduceSink.getConf().getReducerTraits().contains(FIXED)) {
+      LOG.info("Setting EdgeProp.isFixed: {}", reduceSink.getName());
+      edgeProp.setFixed();
+    }
+
     tezWork.connect(
         context.preceedingWork,
         reduceWork, edgeProp);
@@ -185,8 +191,8 @@ public class GenTezUtils {
   private static void setupReduceSink(
       GenTezProcContext context, ReduceWork reduceWork, ReduceSinkOperator reduceSink) {
 
-    LOG.debug("Setting up reduce sink: " + reduceSink
-        + " with following reduce work: " + reduceWork.getName());
+    LOG.debug("Setting up reduce sink: {} with following reduce work: {}",
+        reduceSink, reduceWork.getName());
 
     // need to fill in information about the key and value in the reducer
     GenMapRedUtils.setKeyAndValueDesc(reduceWork, reduceSink);
@@ -204,7 +210,7 @@ public class GenTezUtils {
       TezWork tezWork, PrunedPartitionList partitions) throws SemanticException {
     assert root.getParentOperators().isEmpty();
     MapWork mapWork = new MapWork(Utilities.MAPNAME + context.nextSequenceNumber());
-    LOG.debug("Adding map work (" + mapWork.getName() + ") for " + root);
+    LOG.debug("Adding map work ({}) for {}", mapWork.getName(), root);
 
     // map work starts with table scan operators
     assert root instanceof TableScanOperator;
@@ -480,7 +486,7 @@ public class GenTezUtils {
         operators.addAll(current.getChildOperators());
       }
     }
-    LOG.debug("Setting dummy ops for work " + work.getName() + ": " + dummyOps);
+    LOG.debug("Setting dummy ops for work {}: {}", work.getName(), dummyOps);
     work.setDummyOps(dummyOps);
     work.replaceRoots(replacementMap);
   }
@@ -688,13 +694,13 @@ public class GenTezUtils {
     }
 
     TableScanOperator ts = sjInfo.getTsOp();
-    LOG.debug("ResduceSink " + rs + " to TableScan " + ts);
+    LOG.debug("ReduceSink {} to TableScan {}", rs, ts);
 
     BaseWork parentWork = rsWorkList.get(0);
     BaseWork childWork = procCtx.rootToWorkMap.get(ts);
 
-    // Connect parent/child work with a brodacast edge.
-    LOG.debug("Connecting Baswork - " + parentWork.getName() + " to " + childWork.getName());
+    // Connect parent/child work with a broadcast edge.
+    LOG.debug("Connecting BaseWork {} to {}", parentWork.getName(), childWork.getName());
     TezEdgeProperty edgeProperty = new TezEdgeProperty(EdgeType.BROADCAST_EDGE);
     TezWork tezWork = procCtx.currentTask.getWork();
     tezWork.connect(parentWork, childWork, edgeProperty);
@@ -718,7 +724,7 @@ public class GenTezUtils {
                                      TableScanOperator ts) throws SemanticException{
     // Cleanup the synthetic predicate in the tablescan operator by
     // replacing it with "true"
-    LOG.debug("Removing ReduceSink " + rs + " and TableScan " + ts);
+    LOG.debug("Removing ReduceSink {} and TableScan {}", rs, ts);
     ExprNodeDesc constNode = new ExprNodeConstantDesc(
             TypeInfoFactory.booleanTypeInfo, Boolean.TRUE);
     // TS operator
@@ -800,7 +806,7 @@ public class GenTezUtils {
           AppMasterEventOperator eventOp, TableScanOperator ts) throws SemanticException{
     // Cleanup the synthetic predicate in the tablescan operator and filter by
     // replacing it with "true"
-    LOG.debug("Removing AppMasterEventOperator " + eventOp + " and TableScan " + ts);
+    LOG.debug("Removing AppMasterEventOperator {} and TableScan {}", eventOp, ts);
     ExprNodeDesc constNode = new ExprNodeConstantDesc(
             TypeInfoFactory.booleanTypeInfo, Boolean.TRUE);
     // Retrieve generator
