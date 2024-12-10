@@ -220,9 +220,9 @@ public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
     if (tableSize == 0) {
       tableSize = 1;
     }
-    LOG.info("Mapjoin " + mapJoinOp + "(bucket map join = " + joinConf.isBucketMapJoin()
-    + "), pos: " + pos + " --> " + parentWork.getName() + " (" + keyCount
-    + " keys estimated from " + rowCount + " rows, " + bucketCount + " buckets)");
+    LOG.info("Mapjoin {}(bucket map join = {}), pos: {} --> {} ({} keys estimated from {} rows, {} buckets)",
+        mapJoinOp, joinConf.isBucketMapJoin(),
+        pos, parentWork.getName(), keyCount, rowCount, bucketCount);
     joinConf.getParentToInput().put(pos, parentWork.getName());
     if (keyCount != Long.MAX_VALUE) {
       joinConf.getParentKeyCounts().put(pos, keyCount);
@@ -283,6 +283,12 @@ public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
       parentRS.getConf().setReducerTraits(EnumSet.of(FIXED));
     }
     TezEdgeProperty edgeProp = new TezEdgeProperty(null, edgeType, numBuckets);
+
+    if (edgeType == EdgeType.CUSTOM_EDGE || (edgeType == EdgeType.CUSTOM_SIMPLE_EDGE && !mapJoinOp.getConf()
+        .isDynamicPartitionHashJoin())) {
+      // disable auto parallelism for bucket map joins (see the above code where we use FIXED)
+      edgeProp.setFixed();
+    }
 
     if (mapJoinWork != null) {
       for (BaseWork myWork: mapJoinWork) {
