@@ -799,7 +799,7 @@ public class DAGUtils {
 
     org.apache.tez.dag.api.EdgeProperty ep = createTezEdgeProperty(edgeProp, parentJobConf, work, tezWork);
     EdgeProperty edgeProperty = MR3Utils.convertTezEdgeProperty(ep);
-    if (!edgeProp.isAutoReduce()) {
+    if (edgeProp.isFixed()) {   // access edgeProp directly
       LOG.info("Set VertexManager setting FIXED: GroupInputEdge to {}, {}",
           destVertex.getName(), edgeProp.getEdgeType());
       edgeProperty.setFixed();
@@ -855,7 +855,7 @@ public class DAGUtils {
 
     org.apache.tez.dag.api.EdgeProperty ep = createTezEdgeProperty(edgeProp, vConf, work, tezWork);
     EdgeProperty edgeProperty = MR3Utils.convertTezEdgeProperty(ep);
-    if (!edgeProp.isAutoReduce()) {   // access edgeProp directly
+    if (edgeProp.isFixed()) {   // access edgeProp directly
       LOG.info("Set VertexManager setting FIXED: Edge from {} to {}, {}",
           v.getName(), w.getName(), edgeProp.getEdgeType());
       edgeProperty.setFixed();
@@ -1606,9 +1606,10 @@ public class DAGUtils {
     throws IOException {
     if (!edgeProp.isSlowStart()) {
       String vertexManagerClassName = ShuffleVertexManager.class.getName();
-      boolean isAutoParallelism = edgeProp.isAutoReduce() &&
-          jobConf.getBoolean(ShuffleVertexManager.TEZ_SHUFFLE_VERTEX_MANAGER_ENABLE_AUTO_PARALLEL,
-              ShuffleVertexManager.TEZ_SHUFFLE_VERTEX_MANAGER_ENABLE_AUTO_PARALLEL_DEFAULT);
+
+      boolean isAutoParallelism = !edgeProp.isFixed() && jobConf.getBoolean(
+          ShuffleVertexManager.TEZ_SHUFFLE_VERTEX_MANAGER_ENABLE_AUTO_PARALLEL,
+          ShuffleVertexManager.TEZ_SHUFFLE_VERTEX_MANAGER_ENABLE_AUTO_PARALLEL_DEFAULT);
       Configuration pluginConf;
       if (isAutoParallelism) {
         pluginConf = createPluginConfShuffleVertexManagerAutoParallel(jobConf);
