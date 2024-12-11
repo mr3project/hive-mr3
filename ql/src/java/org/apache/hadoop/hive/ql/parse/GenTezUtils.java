@@ -180,6 +180,8 @@ public class GenTezUtils {
     edgeProp.setBufferSize(obtainBufferSize(root, reduceSink, defaultTinyBufferSize));
     reduceWork.setEdgePropRef(edgeProp);
 
+    // context.preceedingWork={..., reduceSink} --> (edgeProp) --> reduceWork
+    // where reduceSink has the trait FIXED.
     if (reduceSink.getConf().getReducerTraits().contains(FIXED)) {
       LOG.info("Setting EdgeProp.isFixed: {}", reduceSink.getName());
       edgeProp.setFixed();
@@ -742,6 +744,7 @@ public class GenTezUtils {
     // Connect parent/child work with a broadcast edge.
     LOG.debug("Connecting BaseWork {} to {}", parentWork.getName(), childWork.getName());
     TezEdgeProperty edgeProperty = new TezEdgeProperty(EdgeType.BROADCAST_EDGE);
+    edgeProperty.setFixed();  // set isFixed because edgeProperty.isAutoReduce == false (for MR3)
     TezWork tezWork = procCtx.currentTask.getWork();
     tezWork.connect(parentWork, childWork, edgeProperty);
 
