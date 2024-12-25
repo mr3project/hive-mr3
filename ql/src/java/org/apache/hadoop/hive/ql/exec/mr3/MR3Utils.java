@@ -78,8 +78,6 @@ public class MR3Utils {
 
     Credentials credentials = src.getCredentials();
 
-    int numShards = src.getNumberOfShards();
-
     List<TaskLocationHint> taskLocationHints = null;
     if (src.getLocationHint() != null &&
         src.getLocationHint().getTaskLocationHints() != null) {
@@ -96,7 +94,6 @@ public class MR3Utils {
         logicalInputDescriptor,
         inputInitializerDescriptor,
         credentials,
-        numShards,
         taskLocationHints);
   }
 
