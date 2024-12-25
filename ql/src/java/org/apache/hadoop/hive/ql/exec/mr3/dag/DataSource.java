@@ -20,7 +20,6 @@ package org.apache.hadoop.hive.ql.exec.mr3.dag;
 
 import org.apache.hadoop.security.Credentials;
 import com.datamonad.mr3.DAGAPI;
-import com.datamonad.mr3.api.common.MR3Conf;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -31,19 +30,16 @@ public class DataSource {
   private final EntityDescriptor logicalInputDescriptor;
   private final EntityDescriptor inputInitializerDescriptor;
   private final Credentials credentials;
-  private final int numShards;
   private final List<TaskLocationHint> taskLocationHints;
 
   public DataSource(
       EntityDescriptor logicalInputDescriptor,
       @Nullable EntityDescriptor inputInitializerDescriptor,
       @Nullable Credentials credentials,
-      int numShards,
       @Nullable List<TaskLocationHint> taskLocationHints) {
     this.logicalInputDescriptor = logicalInputDescriptor;
     this.inputInitializerDescriptor = inputInitializerDescriptor;
     this.credentials = credentials;
-    this.numShards = numShards;
     this.taskLocationHints = taskLocationHints;
   }
 
