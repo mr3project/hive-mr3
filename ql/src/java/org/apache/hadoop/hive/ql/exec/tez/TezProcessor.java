@@ -210,7 +210,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
   @Override
   public void initialize() throws IOException {
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.TEZ_INITIALIZE_PROCESSOR);
-    Configuration conf = TezUtils.createConfFromUserPayload(getContext().getUserPayload());
+    Configuration conf = getContext().getConfigurationFromUserPayload(false);
     this.jobConf = new JobConf(conf);
     this.jobConf.getCredentials().mergeAll(UserGroupInformation.getCurrentUser().getCredentials());
     this.processorContext = getContext();
