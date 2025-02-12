@@ -352,7 +352,6 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     }
 
     try {
-
       MRTaskReporter mrReporter = new MRTaskReporter(getContext());
       // Init and run are both potentially long, and blocking operations. Synchronization
       // with the 'abort' operation will not work since if they end up blocking on a monitor
@@ -369,8 +368,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       if (originalThrowable != null && (originalThrowable instanceof Error ||
         Throwables.getRootCause(originalThrowable) instanceof Error)) {
         LOG.error("Cannot recover from this FATAL error", originalThrowable);
-        getContext().reportFailure(TaskFailureType.FATAL, originalThrowable,
-                      "Cannot recover from this error");
+        getContext().reportFailure(TaskFailureType.FATAL, originalThrowable, "Cannot recover from this error");
 
         ObjectCache.clearObjectRegistry();  // clear thread-local cache which may contain MAP/REDUCE_PLAN
         Utilities.clearWork(jobConf);       // clear thread-local gWorkMap which may contain MAP/REDUCE_PLAN
@@ -423,13 +421,15 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
       // 2. set aborted to true
       boolean prevAborted = aborted.getAndSet(true);
+      LOG.info("RecordProcessor cleaning up: {}, prevAborted={}", processorContext.getUniqueIdentifier(), prevAborted);
+
       // 1. raise InterruptedException if necessary
       if (prevAborted && originalThrowable == null) {
         originalThrowable = new InterruptedException("abort() was called, but RecordProcessor successfully returned");
       }
 
       if (originalThrowable != null) {
-        LOG.error("Failed initializeAndRunProcessor", originalThrowable);
+        LOG.error("Failed initializeAndRunProcessor: {}", originalThrowable, processorContext.getUniqueIdentifier());
         // abort the output tasks
         for (LogicalOutput output : outputs.values()) {
           if (output instanceof MROutput) {
@@ -459,17 +459,17 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
   public void abort() {
     RecordProcessor rProcLocal = null;
     synchronized (this) {
-      LOG.info("Received abort");
+      LOG.info("Received abort: {}", processorContext.getUniqueIdentifier());
       boolean prevAborted = aborted.getAndSet(true);
       if (!prevAborted) {
         rProcLocal = rproc;
       }
     }
     if (rProcLocal != null) {
-      LOG.info("Forwarding abort to RecordProcessor");
+      LOG.info("Forwarding abort to RecordProcessor: {}", processorContext.getUniqueIdentifier());
       rProcLocal.abort();
     } else {
-      LOG.info("RecordProcessor not yet setup or already completed. Abort will be ignored");
+      LOG.info("RecordProcessor not yet setup or already completed. Abort will be ignored: {}", processorContext.getUniqueIdentifier());
     }
   }
 
