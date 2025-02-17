@@ -1946,13 +1946,8 @@ public final class Utilities {
     }
     HashMap<String, FileStatus> taskIdToFile = new HashMap<String, FileStatus>();
 
-    // This method currently does not support speculative execution due to
-    // compareTempOrDuplicateFiles not being able to de-duplicate speculative
-    // execution created files
-    if (isSpeculativeExecution(conf)) {
-      String engine = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
-      throw new IOException("Speculative execution is not supported for engine " + engine);
-    }
+    // Do not check speculative execution because we undo HIVE-23354 in compareTempOrDuplicateFiles()
+    // which is called from ponderRemovingTempOrDuplicateFile()
 
     for (FileStatus one : files) {
       if (isTempPath(one)) {
@@ -2011,11 +2006,7 @@ public final class Utilities {
     // Undo the logic in HIVE-23354
     FileStatus toDelete = null, toRetain = null;
 
-    // This method currently does not support speculative execution
-    if (isSpeculativeExecution(conf)) {
-      String engine = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
-      throw new IOException("Speculative execution is not supported for engine " + engine);
-    }
+    // Do not check speculative execution because we undo HIVE-23354
 
     // "LOAD .. INTO" and "INSERT INTO" commands will generate files with
     // "_copy_x" suffix. These files are usually read by map tasks and the
@@ -2051,9 +2042,8 @@ public final class Utilities {
           + ". Existing file: " + toRetain.getPath());
     }
 
-    LOG.warn("Duplicate taskid file removed: " + toDelete.getPath() + " with length "
-        + toDelete.getLen() + ". Existing file: " + toRetain.getPath() + " with length "
-        + toRetain.getLen());
+    LOG.warn("Duplicate taskid file removed: {} with length {}. Existing file: {} with length {}",
+        toDelete.getPath(), toDelete.getLen(), toRetain.getPath(), toRetain.getLen());
     return toRetain;
   }
 
