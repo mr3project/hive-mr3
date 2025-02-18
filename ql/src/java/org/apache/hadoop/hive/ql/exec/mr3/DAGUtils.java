@@ -65,13 +65,11 @@ import org.apache.hadoop.hive.ql.io.HiveOutputFormatImpl;
 import org.apache.hadoop.hive.ql.io.merge.MergeFileMapper;
 import org.apache.hadoop.hive.ql.io.merge.MergeFileOutputFormat;
 import org.apache.hadoop.hive.ql.io.merge.MergeFileWork;
-import org.apache.hadoop.hive.ql.lib.Node;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.MapReduceMapWork;
 import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.MergeJoinWork;
-import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceWork;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.plan.TezEdgeProperty;
@@ -138,12 +136,15 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import javax.security.auth.login.LoginException;
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1172,14 +1173,23 @@ public class DAGUtils {
    * @param conf
    * @return
      */
-  public String[] getSessionInitJars(Configuration conf) throws URISyntaxException  {
+  public String[] getMr3SessionInitJars(Configuration conf) throws URISyntaxException  {
     boolean localizeSessionJars = HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS);
     if (localizeSessionJars) {
-      String execjar = getExecJarPathLocal();
-      String auxjars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_AUX_JARS);
-      // need to localize the hive-exec jars and hive.aux.jars
+      // need to localize the hive-exec jars and hive.mr3.aux.jars
       // we need the directory on hdfs to which we shall put all these files
-      return (execjar + "," + auxjars).split(",");
+      URI execJar = getExecJarPathLocal();
+      String auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_MR3_AUX_JARS);
+
+      final java.nio.file.Path parentPath = Paths.get(execJar).getParent();
+      String[] auxJarsPaths = Arrays.stream(auxJars.split(","))
+        .map(path -> parentPath.resolve(path).toString())
+        .toArray(String[]::new);
+
+      String[] allPaths = Arrays.copyOf(auxJarsPaths, auxJarsPaths.length + 1);
+      allPaths[auxJarsPaths.length] = execJar.toString();
+
+      return allPaths;
     } else {
       LOG.info("Skipping localizing initial session jars");
       return new String[0];
@@ -1299,8 +1309,7 @@ public class DAGUtils {
         continue;
       }
       Path hdfsFilePath = new Path(hdfsDirPathStr, getResourceBaseName(new Path(file)));
-      LocalResource localResource = localizeResource(new Path(file),
-          hdfsFilePath, type, conf);
+      LocalResource localResource = localizeResource(new Path(file), hdfsFilePath, type, conf);
       tmpResources.add(localResource);
     }
   }
@@ -1318,9 +1327,9 @@ public class DAGUtils {
   }
 
   // the api that finds the jar being used by this class on disk
-  public String getExecJarPathLocal () throws URISyntaxException {
+  public URI getExecJarPathLocal() throws URISyntaxException {
     // returns the location on disc of the jar of this class.
-    return DAGUtils.class.getProtectionDomain().getCodeSource().getLocation().toURI().toString();
+    return DAGUtils.class.getProtectionDomain().getCodeSource().getLocation().toURI();
   }
 
   /*
