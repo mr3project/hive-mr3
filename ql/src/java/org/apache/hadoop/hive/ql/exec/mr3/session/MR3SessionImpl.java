@@ -19,6 +19,7 @@
 package org.apache.hadoop.hive.ql.exec.mr3.session;
 
 import com.google.common.base.Preconditions;
+import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -522,5 +523,13 @@ public class MR3SessionImpl implements MR3Session {
       currentHiveMr3Client = hiveMr3Client;
     }
     return currentHiveMr3Client.getEstimateNumTasksOrNodes(taskMemoryInMb);
+  }
+
+  public void sendDaemonMessage(String daemonId, ByteString payload) throws Exception {
+    HiveMR3Client currentHiveMr3Client;
+    synchronized (this) {
+      currentHiveMr3Client = hiveMr3Client;
+    }
+    currentHiveMr3Client.sendDaemonMessage(daemonId, payload);
   }
 }

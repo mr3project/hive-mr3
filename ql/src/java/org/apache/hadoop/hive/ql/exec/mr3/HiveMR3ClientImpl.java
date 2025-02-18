@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.mr3;
 
 import com.datamonad.mr3.api.common.MR3Conf$;
 import com.datamonad.mr3.api.common.MR3ConfBuilder;
+import com.google.protobuf.ByteString;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
@@ -176,5 +177,10 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
     // getNumContainerWorkers() returns an estimate number of Tasks if taskMemoryInMb > 0
     // getNumContainerWorkers() returns the number of Nodes if taskMemoryInMb <= 0
     return mr3Client.getNumContainerWorkers(taskMemoryInMb);
+  }
+
+  @Override
+  public void sendDaemonMessage(String daemonId, ByteString payload) throws Exception {
+    mr3Client.sendDaemonMessage(daemonId, payload);
   }
 }
