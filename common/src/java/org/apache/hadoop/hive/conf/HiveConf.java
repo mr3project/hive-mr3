@@ -5941,9 +5941,14 @@ public class HiveConf extends Configuration {
     MR3_ZOOKEEPER_APPID_NAMESPACE("hive.mr3.zookeeper.appid.namespace", "mr3AppId",
         "ZooKeeper namespace for sharing Application ID"),
 
-    // Kubernetes
+    // Yarn - set to true in order to localize Hive-exec-jar and MR3_HIVE_AUX_JARS on HDFS
+    // Kubernetes - set to false because no jars are localized
     HIVE_MR3_LOCALIZE_SESSION_JARS("hive.mr3.localize.session.jars", true,
         "Localize session jars"),
+
+    // Additional jars to include as initial session resoures
+    HIVE_MR3_AUX_JARS("hive.mr3.aux.jars", "",
+      "Additional jars relative to the directory where Hive-exec-jar is located."),
 
     // Compaction using MR3
     HIVE_MR3_COMPACTION_USING_MR3("hive.mr3.compaction.using.mr3", false,
