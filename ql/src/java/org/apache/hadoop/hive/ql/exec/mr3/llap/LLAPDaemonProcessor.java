@@ -18,7 +18,11 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.llap;
 
+import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.EvictEntityRequestProto;
+import org.apache.hadoop.hive.llap.daemon.rpc.MR3LlapDaemonProtocolProtos.MR3LlapDaemonProcessorEventProto;
+import org.apache.hadoop.hive.llap.daemon.rpc.MR3LlapDaemonProtocolProtos.MR3LlapDaemonProcessorEventType;
 import org.apache.hadoop.hive.llap.io.api.LlapProxy;
 import org.apache.tez.common.TezUtils;
 import org.apache.tez.runtime.api.AbstractLogicalIOProcessor;
@@ -26,6 +30,7 @@ import org.apache.tez.runtime.api.Event;
 import org.apache.tez.runtime.api.LogicalInput;
 import org.apache.tez.runtime.api.LogicalOutput;
 import org.apache.tez.runtime.api.ProcessorContext;
+import org.apache.tez.runtime.api.events.DaemonPayloadEvent;
 import org.apache.tez.runtime.api.events.TaskAttemptStopRequestEvent;
 import org.apache.tez.runtime.api.events.TaskAttemptDAGJoiningEvent;
 import org.apache.tez.runtime.api.events.TaskAttemptDAGLeavingEvent;
@@ -37,6 +42,8 @@ import java.util.List;
 import java.util.Map;
 
 public class LLAPDaemonProcessor extends AbstractLogicalIOProcessor {
+
+  public final static String daemonVertexName = "LLAP";
 
   private static final Logger LOG = LoggerFactory.getLogger(LLAPDaemonProcessor.class.getName());
 
@@ -74,11 +81,33 @@ public class LLAPDaemonProcessor extends AbstractLogicalIOProcessor {
         TaskAttemptDAGJoiningEvent ev = (TaskAttemptDAGJoiningEvent)event;
       } else if (event instanceof TaskAttemptDAGLeavingEvent) {
         TaskAttemptDAGLeavingEvent ev = (TaskAttemptDAGLeavingEvent)event;
+      } else if (event instanceof DaemonPayloadEvent) {
+        DaemonPayloadEvent dpe = (DaemonPayloadEvent)event;
+        try {
+          handleDaemonPayloadEvent(dpe);
+        } catch (Exception e) {
+          LOG.warn("Failed to handle DaemonPayloadEvent", e);
+        }
       }
     }
   }
 
   @Override
   public void close() throws IOException {
+  }
+
+  private void handleDaemonPayloadEvent(DaemonPayloadEvent dpe) throws Exception {
+    ByteString payload = dpe.payload;
+    MR3LlapDaemonProcessorEventProto eventProto = MR3LlapDaemonProcessorEventProto.parseFrom(payload);
+
+    if (eventProto.getType() == MR3LlapDaemonProcessorEventType.PURGE) {
+      assert eventProto.getEvictedEntitiesList().isEmpty();
+      LlapProxy.getIo().purge();
+    } else if (eventProto.getType() == MR3LlapDaemonProcessorEventType.PROACTIVE_EVICTION) {
+      assert !eventProto.getEvictedEntitiesList().isEmpty();
+      for (EvictEntityRequestProto evictEntity: eventProto.getEvictedEntitiesList()) {
+        LlapProxy.getIo().evictEntity(evictEntity);
+      }
+    }
   }
 }
