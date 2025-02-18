@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.session;
 
+import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -81,4 +82,6 @@ public interface MR3Session {
   boolean isRunningFromApplicationReport();
 
   int getEstimateNumTasksOrNodes(int taskMemoryInMb) throws Exception;
+
+  void sendDaemonMessage(String daemonId, ByteString payload) throws Exception;
 }
