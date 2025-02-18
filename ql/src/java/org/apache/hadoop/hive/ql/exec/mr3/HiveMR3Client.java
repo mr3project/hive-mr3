@@ -19,6 +19,7 @@
 package org.apache.hadoop.hive.ql.exec.mr3;
 
 import com.datamonad.mr3.api.common.MR3Exception;
+import com.google.protobuf.ByteString;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRef;
@@ -68,4 +69,6 @@ public interface HiveMR3Client {
   boolean isRunningFromApplicationReport() throws Exception;
 
   int getEstimateNumTasksOrNodes(int taskMemoryInMb) throws Exception;
+
+  void sendDaemonMessage(String daemonId, ByteString payload) throws Exception;
 }
