@@ -176,7 +176,7 @@ public class MR3SessionImpl implements MR3Session {
 
     // getSessionInitJars() returns hive-exec.jar + HIVEAUXJARS
     List<LocalResource> hiveJarLocalResources =
-        dagUtils.localizeTempFiles(sessionScratchDir, conf, dagUtils.getSessionInitJars(conf));
+        dagUtils.localizeTempFiles(sessionScratchDir, conf, dagUtils.getMr3SessionInitJars(conf));
     Map<String, LocalResource> additionalSessionLocalResources =
         dagUtils.convertLocalResourceListToMap(hiveJarLocalResources);
 
