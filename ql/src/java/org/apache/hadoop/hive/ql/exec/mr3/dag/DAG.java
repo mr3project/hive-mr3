@@ -270,7 +270,7 @@ public class DAG {
     EntityDescriptor vertexManagerPluginDescriptor = new EntityDescriptor(pluginClassName, null);
 
     DAGAPI.DaemonVertexProto daemonVertexProto = DAGAPI.DaemonVertexProto.newBuilder()
-        .setName("LLAP")
+        .setName(LLAPDaemonProcessor.daemonVertexName)
         .setResource(resource)
         .setProcessor(processorDescriptor.createEntityDescriptorProto())
         .setVertexManagerPlugin(vertexManagerPluginDescriptor.createEntityDescriptorProto())
