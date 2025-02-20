@@ -136,7 +136,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import javax.security.auth.login.LoginException;
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
@@ -1471,11 +1470,29 @@ public class DAGUtils {
     // mapred.mapper.new-api can be overridden in vertexJobConf created in initializeVertexConf()
     // e.g., for MapReduceMapWork created by MR3DistCp
 
-    JobConf conf =
-        TezConfigurationFactory
-            .wrapWithJobConf(hiveConf, null);
+    JobConf conf = TezConfigurationFactory.wrapWithJobConf(hiveConf, null);
 
-    removeConfigKey(hiveConf, conf);
+    // 1. remove config keys
+
+    // Removing job credential entry/ cannot be set on the tasks
+    conf.unset("mapreduce.job.credentials.binary");
+
+    hiveConf.stripHiddenConfigurations(conf);
+
+    // Remove hive configs which are used only in HS2 and not needed for execution
+    conf.unset(ConfVars.HIVE_AUTHORIZATION_SQL_STD_AUTH_CONFIG_WHITELIST.varname);
+
+    // additional removal by Hive-MR3
+    String[] configRemoveKeys = HiveConf.getTrimmedStringsVar(hiveConf,
+      ConfVars.HIVE_MR3_CONFIG_REMOVE_KEYS);
+    String[] configRemovePrefixes = HiveConf.getTrimmedStringsVar(hiveConf,
+      ConfVars.HIVE_MR3_DAG_CONFIG_REMOVE_PREFIXES);
+    for (String key : configRemoveKeys) {
+      conf.unset(key);
+    }
+    removeConfigKeyPrefix(conf, configRemovePrefixes);
+
+    // 2. add/set config keys
 
     conf.set("mapred.output.committer.class", NullOutputCommitter.class.getName());
 
@@ -1490,24 +1507,23 @@ public class DAGUtils {
     conf.set("mapred.partitioner.class", HiveConf.getVar(conf, HiveConf.ConfVars.HIVEPARTITIONER));
     conf.set("tez.runtime.partitioner.class", MRPartitioner.class.getName());
 
-    // Removing job credential entry/ cannot be set on the tasks
-    conf.unset("mapreduce.job.credentials.binary");
+    return conf;
+  }
 
-    hiveConf.stripHiddenConfigurations(conf);
+  // Based on createConfiguration(), but for MR3Client
+  // Originally returns: new JobConf(new TezConfiguration(hiveConf))
+  public JobConf createConfigurationForMr3Client(HiveConf hiveConf) {
+    JobConf conf = TezConfigurationFactory.wrapWithJobConf(hiveConf, null);
 
-    // Remove hive configs which are used only in HS2 and not needed for execution
-    conf.unset(ConfVars.HIVE_AUTHORIZATION_SQL_STD_AUTH_CONFIG_WHITELIST.varname);
+    // HIVE_MR3_SESSION_CONFIG_REMOVE_PREFIXES can contain "metastore." and "hive." which are not read by MR3
+    String[] configRemovePrefixes = HiveConf.getTrimmedStringsVar(hiveConf,
+        ConfVars.HIVE_MR3_SESSION_CONFIG_REMOVE_PREFIXES);
+    removeConfigKeyPrefix(conf, configRemovePrefixes);
 
     return conf;
   }
 
-  private void removeConfigKey(HiveConf hiveConf, JobConf conf) {
-    String[] configRemoveKeys = HiveConf.getTrimmedStringsVar(hiveConf, ConfVars.HIVE_MR3_CONFIG_REMOVE_KEYS);
-    for (String key : configRemoveKeys) {
-      conf.unset(key);
-    }
-
-    String[] configRemovePrefixes = HiveConf.getTrimmedStringsVar(hiveConf, ConfVars.HIVE_MR3_CONFIG_REMOVE_PREFIXES);
+  private void removeConfigKeyPrefix(JobConf conf, String[] configRemovePrefixes) {
     List<String> keysToRemove = new ArrayList<>();
     for (Map.Entry<String, String> entry : conf) {
       for (String name : configRemovePrefixes) {
