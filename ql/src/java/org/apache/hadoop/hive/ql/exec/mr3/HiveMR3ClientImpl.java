@@ -89,10 +89,7 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
   }
 
   private MR3Conf createMr3Conf(HiveConf hiveConf) {
-    JobConf jobConf = new JobConf(new TezConfiguration(hiveConf));
-    // TODO: why not use the following?
-    // DAGUtils dagUtils = DAGUtils.getInstance();
-    // JobConf jobConf = dagUtils.createConfiguration(hiveConf);
+    JobConf jobConf = DAGUtils.getInstance().createConfigurationForMr3Client(hiveConf);
 
     float maxJavaHeapFraction = HiveConf.getFloatVar(hiveConf,
         HiveConf.ConfVars.MR3_CONTAINER_MAX_JAVA_HEAP_FRACTION);

@@ -145,10 +145,10 @@ public class MR3SessionImpl implements MR3Session {
     }
   }
 
-  public synchronized void connect(HiveConf conf, ApplicationId appId) throws HiveException {
-    this.sessionConf = conf;
+  public synchronized void connect(HiveConf hiveConf, ApplicationId appId) throws HiveException {
+    this.sessionConf = hiveConf;
     try {
-      setupHiveMr3Client(conf);
+      setupHiveMr3Client(hiveConf);
 
       LOG.info("Connecting HiveMR3Client: " + appId);
       hiveMr3Client.connect(appId);
@@ -169,33 +169,33 @@ public class MR3SessionImpl implements MR3Session {
     return this.appId;
   }
 
-  private void setupHiveMr3Client(HiveConf conf) throws Exception {
+  private void setupHiveMr3Client(HiveConf hiveConf) throws Exception {
     sessionScratchDir = createSessionScratchDir(sessionId);
     setAmStagingDir(sessionScratchDir);
 
     // 1. read hiveJarLocalResources
 
-    // getSessionInitJars() returns hive-exec.jar + HIVEAUXJARS
+    // getSessionInitJars() returns hive-exec.jar + HIVE_MR3_AUX_JARS
     List<LocalResource> hiveJarLocalResources =
-        dagUtils.localizeTempFiles(sessionScratchDir, conf, dagUtils.getMr3SessionInitJars(conf));
+        dagUtils.localizeTempFiles(sessionScratchDir, hiveConf, dagUtils.getMr3SessionInitJars(hiveConf));
     Map<String, LocalResource> additionalSessionLocalResources =
         dagUtils.convertLocalResourceListToMap(hiveJarLocalResources);
 
     Credentials additionalSessionCredentials = null;  // null okay because it is passed to scala Option()
-    if (dagUtils.shouldAddPathsToCredentials(conf)) {
+    if (dagUtils.shouldAddPathsToCredentials(hiveConf)) {
       additionalSessionCredentials = new Credentials();
       Set<Path> allPaths = new HashSet<Path>();
       for (LocalResource lr: additionalSessionLocalResources.values()) {
         allPaths.add(ConverterUtils.getPathFromYarnURL(lr.getResource()));
       }
-      dagUtils.addPathsToCredentials(additionalSessionCredentials, allPaths, conf);
+      dagUtils.addPathsToCredentials(additionalSessionCredentials, allPaths, hiveConf);
     }
 
     // 2. read confLocalResources
 
     // confLocalResource = specific to this MR3Session obtained from sessionConf
     // localizeTempFilesFromConf() updates sessionConf by calling HiveConf.setVar(HIVEADDEDFILES/JARS/ARCHIVES)
-    List<LocalResource> confLocalResources = dagUtils.localizeTempFilesFromConf(sessionScratchDir, conf);
+    List<LocalResource> confLocalResources = dagUtils.localizeTempFilesFromConf(sessionScratchDir, hiveConf);
 
     // We do not add confLocalResources to additionalSessionLocalResources because
     // dagUtils.localizeTempFilesFromConf() will be called each time a new DAG is submitted.
@@ -210,14 +210,14 @@ public class MR3SessionImpl implements MR3Session {
     // 4. update amLocalResource and create HiveMR3Client
 
     updateAmLocalResources(initAmLocalResourcesMap);
-    updateAmCredentials(initAmLocalResourcesMap, conf);
+    updateAmCredentials(initAmLocalResourcesMap, hiveConf);
 
     LOG.info("Creating HiveMR3Client (id: " + sessionId + ", scratch dir: " + sessionScratchDir + ")");
     hiveMr3Client = HiveMR3ClientFactory.createHiveMr3Client(
         sessionId,
         amCredentials, amLocalResources,
         additionalSessionCredentials, additionalSessionLocalResources,
-        conf);
+        hiveConf);
   }
 
   private void setAmStagingDir(Path sessionScratchDir) {

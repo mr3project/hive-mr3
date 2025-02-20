@@ -5958,9 +5958,11 @@ public class HiveConf extends Configuration {
     HIVE_MR3_QUERY_DAG_ID_ID("hive.mr3.query.dag.id.id", -1, "DAGID.id for internal use"),
 
     HIVE_MR3_CONFIG_REMOVE_KEYS("hive.mr3.config.remove.keys", "",
-        "Comman-separated list of config keys to remove from JobConf"),
-    HIVE_MR3_CONFIG_REMOVE_PREFIXES("hive.mr3.config.remove.prefixes", "",
-        "Comma-separated list of key prefixes to remove from JobConf");
+      "Comman-separated list of config keys to remove from JobConf for DAG"),
+    HIVE_MR3_DAG_CONFIG_REMOVE_PREFIXES("hive.mr3.dag.config.remove.prefixes", "",
+      "Comma-separated list of key prefixes to remove from JobConf for DAG"),
+    HIVE_MR3_SESSION_CONFIG_REMOVE_PREFIXES("hive.mr3.session.config.remove.prefixes", "",
+      "Comma-separated list of key prefixes to remove from JobConf for MR3 session");
 
     public final String varname;
     public final String altName;
