@@ -329,7 +329,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       LimitOperator.getLimitRecords(jobConf, queryId, dagIdId, vertexName);
     if (limitRecords != null) {
       LOG.info("Reporting query limit and # of records: {}, {}, {}",
-          processorContext.getUniqueIdentifier(), limitRecords._1(), limitRecords._2());
+          processorContext.getTaskAttemptIdStr(), limitRecords._1(), limitRecords._2());
       return limitRecords;
     } else {
       return null;
@@ -353,7 +353,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       TezTaskAttemptID tezTaskAttemptID = TezTaskAttemptID.getInstance(tezTaskID, processorContext.getTaskAttemptNumber());
       this.jobConf.set(MRInput.TEZ_MAPREDUCE_TASK_ATTEMPT_ID, tezTaskAttemptID.toString());
       // should be consistent with setting in MRInputBase.initialize()
-      jobConf.set(MRInput.TEZ_MAPREDUCE_TASK_ATTEMPT_ID, processorContext.getUniqueIdentifier());
+      jobConf.set(MRInput.TEZ_MAPREDUCE_TASK_ATTEMPT_ID, processorContext.getTaskAttemptIdStr());
       fragmentId = LlapTezUtils.getFragmentId(this.jobConf);
       FragmentCountersMap.registerCountersForFragment(fragmentId, processorContext.getCounters());
     }
@@ -428,7 +428,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
       // 2. set aborted to true
       boolean prevAborted = aborted.getAndSet(true);
-      LOG.info("RecordProcessor cleaning up: {}, prevAborted={}", getContext().getUniqueIdentifier(), prevAborted);
+      LOG.info("RecordProcessor cleaning up: {}, prevAborted={}", getContext().getTaskAttemptIdStr(), prevAborted);
 
       // 1. raise InterruptedException if necessary
       if (prevAborted && originalThrowable == null) {
@@ -436,7 +436,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       }
 
       if (originalThrowable != null) {
-        LOG.error("Failed initializeAndRunProcessor: {}, {}", getContext().getUniqueIdentifier(), originalThrowable);
+        LOG.error("Failed initializeAndRunProcessor: {}, {}", getContext().getTaskAttemptIdStr(), originalThrowable);
         closeOutputTasks(outputs, MROutput::abort);
 
         ObjectCache.clearObjectRegistry();  // clear thread-local cache which may contain MAP/REDUCE_PLAN
@@ -468,18 +468,20 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
   @Override
   public void abort() {
     RecordProcessor rProcLocal = null;
+    ProcessorContext processorContext = getContext();
     synchronized (this) {
-      LOG.info("Received abort: {}", getContext().getUniqueIdentifier());
+      LOG.info("Received abort: {}", processorContext.getTaskAttemptIdStr());
       boolean prevAborted = aborted.getAndSet(true);
       if (!prevAborted) {
         rProcLocal = rproc;
       }
     }
     if (rProcLocal != null) {
-      LOG.info("Forwarding abort to RecordProcessor: {}", getContext().getUniqueIdentifier());
+      LOG.info("Forwarding abort to RecordProcessor: {}", processorContext.getTaskAttemptIdStr());
       rProcLocal.abort();
     } else {
-      LOG.info("RecordProcessor not yet setup or already completed. Abort will be ignored: {}", getContext().getUniqueIdentifier());
+      LOG.info("RecordProcessor not yet setup or already completed. Abort will be ignored: {}",
+          processorContext.getTaskAttemptIdStr());
     }
   }
 
