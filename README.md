@@ -16,8 +16,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 {% endcomment %}
 -->
-Apache Hive on MR3
-==================
+MR3
+===
 
 MR3 is a new execution engine for Hadoop and Kubernetes. Similar in spirit to
 MapReduce and Tez, it is a new execution engine with simpler design, better
@@ -26,10 +26,15 @@ Hadoop and Kubernetes. MR3 also supports standalone mode which does not require
 a resource manager such as Hadoop or Kubernetes.
 
 The main application of MR3 is Hive on MR3. With MR3 as the execution engine,
-the user can run Hive not only on Hadoop but also directly on Kubernetes.  By
-exploiting standalone mode supported by MR3, the user can run Hive virtually in
-any type of cluster regardless of the availability of Hadoop or Kubernetes and
-the version of Java installed in the system.
+the user can run Apache Hive not only on Hadoop but also directly on Kubernetes.
+By exploiting standalone mode supported by MR3, the user can run Apache Hive
+virtually in any type of cluster regardless of the availability of Hadoop or
+Kubernetes and the version of Java installed in the system.
+
+MR3 is implemented in Scala.
+
+Hive on MR3
+===========
 
 Hive on MR3 is much easier to install and operate than Apache Hive. For
 performance, it achieves the speed of Hive-LLAP with no additional
@@ -37,16 +42,20 @@ configuration. For executing typical workloads (such as TPC-DS), Hive on MR3 is
 indeed faster than Hive-LLAP. We actively maintain Hive on MR3 by backporting
 critical patches from Apache Hive.
 
-This repository (branch `master4.0.0`) is a fork of Apache Hive 4.0.0
-for running Hive on the execution engine MR3 with Java 17.
-It backports patches from the `master` branch that do not break the compatibility with Hive 4.0.0.
-For Apache Hive 4.0.1 on MR3,
-check out [branch `master4.0.1`](https://github.com/mr3project/hive-mr3/tree/master4.0.1).
-For Apache Hive 3.1 on MR3,
+This repository is a fork of Apache Hive adapted to run on MR3.
+
+* For Apache Hive 4.0.0 on MR3,
+check out [branch `master4.0.0`](https://github.com/mr3project/hive-mr3/tree/master4.0.0).
+
+* For Apache Hive 3.1 on MR3,
 check out [branch `master3`](https://github.com/mr3project/hive-mr3/tree/master3).
 
-To discuss the development of this repository in general,
-join [MR3 Slack](https://join.slack.com/t/mr3-help/shared_invite/zt-1wpqztk35-AN8JRDznTkvxFIjtvhmiNg).
+For the full documentation on MR3 (including Quick Start Guide), please visit:
+
+  https://mr3docs.datamonad.com/
+
+* [MR3 Slack](https://join.slack.com/t/mr3-help/shared_invite/zt-1wpqztk35-AN8JRDznTkvxFIjtvhmiNg)
+* [MR3 Google Group](https://groups.google.com/g/hive-mr3)
 
 Apache Hive (TM)
 ================
