@@ -1503,8 +1503,8 @@ public class DAGUtils {
 
     conf.setClass("mapred.output.format.class", HiveOutputFormatImpl.class, OutputFormat.class);
 
-    conf.set(MRJobConfig.OUTPUT_KEY_CLASS, HiveKey.class.getName());
-    conf.set(MRJobConfig.OUTPUT_VALUE_CLASS, BytesWritable.class.getName());
+    conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_KEY_CLASS, HiveKey.class.getName());
+    conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_VALUE_CLASS, BytesWritable.class.getName());
 
     conf.set("mapred.partitioner.class", HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_PARTITIONER));
     conf.set("tez.runtime.partitioner.class", MRPartitioner.class.getName());
