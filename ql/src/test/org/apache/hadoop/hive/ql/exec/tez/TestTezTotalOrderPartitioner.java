@@ -40,8 +40,8 @@ import org.apache.hadoop.io.serializer.JavaSerializationComparator;
 import org.apache.hadoop.io.serializer.Serialization;
 import org.apache.hadoop.io.serializer.WritableSerialization;
 import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.lib.partition.TotalOrderPartitioner;
+import org.apache.tez.runtime.library.api.TezRuntimeConfiguration;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -184,7 +184,7 @@ public class TestTezTotalOrderPartitioner {
     Path p = TestTezTotalOrderPartitioner.<HiveKey> writePartitionFile("totalordercustomcomparator",
         conf, revSplitStrings);
     conf.setBoolean(TotalOrderPartitioner.NATURAL_ORDER, false);
-    conf.setClass(MRJobConfig.KEY_COMPARATOR, ReverseHiveKeyComparator.class, RawComparator.class);
+    conf.setClass(TezRuntimeConfiguration.TEZ_RUNTIME_KEY_COMPARATOR_CLASS, ReverseHiveKeyComparator.class, RawComparator.class);
     ArrayList<Check<HiveKey>> revCheck = new ArrayList<Check<HiveKey>>();
     revCheck.add(new Check<HiveKey>(new HiveKey("aaaaa".getBytes()), 9));
     revCheck.add(new Check<HiveKey>(new HiveKey("aaabb".getBytes()), 9));
