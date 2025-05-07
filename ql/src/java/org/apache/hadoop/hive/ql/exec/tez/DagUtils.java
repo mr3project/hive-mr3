@@ -147,7 +147,6 @@ import org.apache.tez.dag.api.Vertex.VertexExecutionContext;
 import org.apache.tez.dag.api.VertexGroup;
 import org.apache.tez.dag.api.VertexManagerPluginDescriptor;
 import org.apache.tez.dag.library.vertexmanager.ShuffleVertexManager;
-import org.apache.tez.mapreduce.hadoop.MRHelpers;
 import org.apache.tez.mapreduce.hadoop.MRInputHelpers;
 import org.apache.tez.mapreduce.hadoop.MRJobConfig;
 import org.apache.tez.mapreduce.input.MRInputLegacy;
@@ -493,7 +492,7 @@ public class DagUtils {
   private EdgeProperty createEdgeProperty(Vertex w, TezEdgeProperty edgeProp,
                                           Configuration conf, BaseWork work, TezWork tezWork)
           throws IOException {
-    MRHelpers.translateMRConfToTez(conf);
+    // do not call MRHelpers because we do not use Tez
     String keyClass = conf.get(TezRuntimeConfiguration.TEZ_RUNTIME_KEY_CLASS);
     String valClass = conf.get(TezRuntimeConfiguration.TEZ_RUNTIME_VALUE_CLASS);
     String partitionerClassName = conf.get("mapred.partitioner.class");
@@ -616,12 +615,8 @@ public class DagUtils {
    * container size isn't set.
    */
   public static Resource getContainerResource(Configuration conf) {
-    int memory = HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVETEZCONTAINERSIZE) > 0 ?
-      HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVETEZCONTAINERSIZE) :
-      conf.getInt(MRJobConfig.MAP_MEMORY_MB, MRJobConfig.DEFAULT_MAP_MEMORY_MB);
-    int cpus = HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVETEZCPUVCORES) > 0 ?
-      HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVETEZCPUVCORES) :
-      conf.getInt(MRJobConfig.MAP_CPU_VCORES, MRJobConfig.DEFAULT_MAP_CPU_VCORES);
+    int memory = HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVETEZCONTAINERSIZE);
+    int cpus = HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVETEZCPUVCORES);
     return Resource.newInstance(memory, cpus);
   }
 
@@ -630,7 +625,7 @@ public class DagUtils {
    */
   private Map<String, String> getContainerEnvironment(Configuration conf, boolean isMap) {
     Map<String, String> environment = new HashMap<String, String>();
-    MRHelpers.updateEnvBasedOnMRTaskEnv(conf, environment, isMap);
+    // do not call MRHelpers because we do not use Tez
     return environment;
   }
 
@@ -662,7 +657,8 @@ public class DagUtils {
         LOG.warn(HiveConf.ConfVars.HIVETEZJAVAOPTS + " will be ignored because "
                  + HiveConf.ConfVars.HIVETEZCONTAINERSIZE + " is not set!");
       }
-      return logLevel + " " + MRHelpers.getJavaOptsForMRMapper(conf);
+      // do not call MRHelpers because we do not use Tez
+      return logLevel; 
     }
   }
 
@@ -873,12 +869,6 @@ public class DagUtils {
 
     // Is this required ?
     conf.set("mapred.reducer.class", ExecReducer.class.getName());
-
-    boolean useSpeculativeExecReducers = HiveConf.getBoolVar(conf,
-        HiveConf.ConfVars.HIVESPECULATIVEEXECREDUCERS);
-    conf.setBoolean(org.apache.hadoop.mapreduce.MRJobConfig.REDUCE_SPECULATIVE,
-        useSpeculativeExecReducers);
-
     return conf;
   }
 
@@ -1396,8 +1386,8 @@ public class DagUtils {
 
     conf.setClass("mapred.output.format.class", HiveOutputFormatImpl.class, OutputFormat.class);
 
-    conf.set(MRJobConfig.OUTPUT_KEY_CLASS, HiveKey.class.getName());
-    conf.set(MRJobConfig.OUTPUT_VALUE_CLASS, BytesWritable.class.getName());
+    conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_KEY_CLASS, HiveKey.class.getName());
+    conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_VALUE_CLASS, BytesWritable.class.getName());
 
     conf.set("mapred.partitioner.class", HiveConf.getVar(conf, HiveConf.ConfVars.HIVEPARTITIONER));
     conf.set("tez.runtime.partitioner.class", MRPartitioner.class.getName());
