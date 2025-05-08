@@ -148,7 +148,6 @@ import org.apache.tez.dag.api.VertexGroup;
 import org.apache.tez.dag.api.VertexManagerPluginDescriptor;
 import org.apache.tez.dag.library.vertexmanager.ShuffleVertexManager;
 import org.apache.tez.mapreduce.hadoop.MRInputHelpers;
-import org.apache.tez.mapreduce.hadoop.MRJobConfig;
 import org.apache.tez.mapreduce.input.MRInputLegacy;
 import org.apache.tez.mapreduce.input.MultiMRInput;
 import org.apache.hadoop.hive.ql.exec.tez.NullMROutput;
@@ -317,11 +316,6 @@ public class DagUtils {
     JobConf conf = new JobConf(baseConf);
 
     conf.set(Operator.CONTEXT_NAME_KEY, mapWork.getName());
-
-    if (mapWork.getNumMapTasks() != null) {
-      // Is this required ?
-      conf.setInt(MRJobConfig.NUM_MAPS, mapWork.getNumMapTasks().intValue());
-    }
 
     if (mapWork.getMaxSplitSize() != null) {
       HiveConf.setLongVar(conf, HiveConf.ConfVars.MAPREDMAXSPLITSIZE,
