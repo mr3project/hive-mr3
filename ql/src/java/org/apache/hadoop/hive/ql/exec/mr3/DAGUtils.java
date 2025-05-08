@@ -678,10 +678,7 @@ public class DAGUtils {
     JobConf jobConf = new JobConf(baseConf);
 
     jobConf.set(Operator.CONTEXT_NAME_KEY, reduceWork.getName());
-
-    // Is this required ?
-    jobConf.set("mapred.reducer.class", ExecReducer.class.getName());
-
+    jobConf.set(Utilities.MAPRED_REDUCER_CLASS, ExecReducer.class.getName());
     // MR3 allows speculative execution of reducer
 
     return jobConf;
@@ -696,10 +693,8 @@ public class DAGUtils {
 
     jobConf.set(Operator.CONTEXT_NAME_KEY, mapWork.getName());
 
-    if (mapWork.getNumMapTasks() != null) {
-      // Is this required ?
-      jobConf.setInt(MRJobConfig.NUM_MAPS, mapWork.getNumMapTasks().intValue());
-    }
+    // do not set NUM_MAPS which is never read
+    // jobConf.setInt(MRJobConfig.NUM_MAPS, mapWork.getNumMapTasks().intValue());
 
     if (mapWork.getMaxSplitSize() != null) {
       HiveConf.setLongVar(jobConf, HiveConf.ConfVars.MAPRED_MAX_SPLIT_SIZE,
@@ -736,13 +731,13 @@ public class DAGUtils {
     }
 
     jobConf.set(DagUtils.TEZ_TMP_DIR_KEY, context.getMRTmpPath().toUri().toString());
-    jobConf.set("mapred.mapper.class", ExecMapper.class.getName());
+    jobConf.set(Utilities.MAPRED_MAPPER_CLASS, ExecMapper.class.getName());
     jobConf.set("mapred.input.format.class", inpFormat);
 
     if (mapWork instanceof MergeFileWork) {
       MergeFileWork mfWork = (MergeFileWork) mapWork;
       // This mapper class is used for serialization/deserialization of merge file work.
-      jobConf.set("mapred.mapper.class", MergeFileMapper.class.getName());
+      jobConf.set(Utilities.MAPRED_MAPPER_CLASS, MergeFileMapper.class.getName());
       jobConf.set("mapred.input.format.class", mfWork.getInputformat());
       jobConf.setClass("mapred.output.format.class", MergeFileOutputFormat.class,
           FileOutputFormat.class);
