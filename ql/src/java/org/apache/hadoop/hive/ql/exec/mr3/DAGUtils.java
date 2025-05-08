@@ -1494,19 +1494,18 @@ public class DAGUtils {
 
     // 2. add/set config keys
 
+    // MROutputCommitter reads "mapred.output.committer.class" to create an instance, so required
     if (conf.get("mapred.output.committer.class") == null) {
       conf.set("mapred.output.committer.class", NullOutputCommitter.class.getName());
     }
 
-    conf.setBoolean("mapred.committer.job.setup.cleanup.needed", false);
-    conf.setBoolean("mapred.committer.job.task.cleanup.needed", false);
-
+    // MROutput reads "mapred.output.format.class", so required
     conf.setClass("mapred.output.format.class", HiveOutputFormatImpl.class, OutputFormat.class);
 
     conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_KEY_CLASS, HiveKey.class.getName());
     conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_VALUE_CLASS, BytesWritable.class.getName());
 
-    // MRPartitioner reads "mapred.partitioner.class" to instantiate HIVE_PARTITIONER
+    // MRPartitioner reads "mapred.partitioner.class" to instantiate HIVE_PARTITIONER, so required
     conf.set("mapred.partitioner.class", HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_PARTITIONER));
     conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_PARTITIONER_CLASS, MRPartitioner.class.getName());
 
