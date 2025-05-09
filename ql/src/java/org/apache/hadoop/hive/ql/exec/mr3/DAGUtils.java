@@ -1464,6 +1464,8 @@ public class DAGUtils {
         TezConfigurationFactory
             .wrapWithJobConf(hiveConf, null);
 
+    removeConfigKey(hiveConf, conf);
+
     conf.set("mapred.output.committer.class", NullOutputCommitter.class.getName());
 
     conf.setBoolean("mapred.committer.job.setup.cleanup.needed", false);
@@ -1485,6 +1487,10 @@ public class DAGUtils {
     // Remove hive configs which are used only in HS2 and not needed for execution
     conf.unset(ConfVars.HIVE_AUTHORIZATION_SQL_STD_AUTH_CONFIG_WHITELIST.varname);
 
+    return conf;
+  }
+
+  private void removeConfigKey(HiveConf hiveConf, JobConf conf) {
     String[] configRemoveKeys = HiveConf.getTrimmedStringsVar(hiveConf, ConfVars.HIVE_MR3_CONFIG_REMOVE_KEYS);
     for (String key : configRemoveKeys) {
       conf.unset(key);
@@ -1502,8 +1508,6 @@ public class DAGUtils {
     for (String key : keysToRemove) {
       conf.unset(key);
     }
-
-    return conf;
   }
 
   /**
