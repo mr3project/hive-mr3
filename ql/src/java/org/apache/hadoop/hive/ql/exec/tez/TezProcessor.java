@@ -331,11 +331,8 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
         && HiveConf.getBoolVar(this.jobConf, HiveConf.ConfVars.LLAP_CLIENT_CONSISTENT_SPLITS);
     String fragmentId = null;
     if (setLlapCacheCounters) {
-      TezDAGID tezDAGID = TezDAGID.getInstance(this.getContext().getApplicationId(), this.getContext().getDagIdentifier());
-      TezVertexID tezVertexID = TezVertexID.getInstance(tezDAGID, this.getContext().getTaskVertexIndex());
-      TezTaskID tezTaskID = TezTaskID.getInstance(tezVertexID, this.getContext().getTaskIndex());
-      TezTaskAttemptID tezTaskAttemptID = TezTaskAttemptID.getInstance(tezTaskID, this.getContext().getTaskAttemptNumber());
-      this.jobConf.set(MRInput.TEZ_MAPREDUCE_TASK_ATTEMPT_ID, tezTaskAttemptID.toString());
+      // should be consistent with setting in MRInputBase.initialize()
+      jobConf.set(MRInput.TEZ_MAPREDUCE_TASK_ATTEMPT_ID, getContext().getUniqueIdentifier());
       fragmentId = LlapTezUtils.getFragmentId(this.jobConf);
       FragmentCountersMap.registerCountersForFragment(fragmentId, this.processorContext.getCounters());
     }
