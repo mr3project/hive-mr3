@@ -21,6 +21,7 @@ package org.apache.hadoop.hive.ql.exec.vector.expressions;
 import java.util.Arrays;
 
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
+import org.apache.tez.runtime.library.utils.FastByteComparisons;
 
 /**
  * String expression evaluation helper functions.
@@ -35,15 +36,7 @@ public class StringExpr {
    * positive if arg1 > arg2.
    */
   public static int compare(byte[] arg1, int start1, int len1, byte[] arg2, int start2, int len2) {
-    for (int i = 0; i < len1 && i < len2; i++) {
-      // Note the "& 0xff" is just a way to convert unsigned bytes to signed integer.
-      int b1 = arg1[i + start1] & 0xff;
-      int b2 = arg2[i + start2] & 0xff;
-      if (b1 != b2) {
-        return b1 - b2;
-      }
-    }
-    return len1 - len2;
+    return FastByteComparisons.compareTo(arg1, start1, len1, arg2, start2, len2);
   }
 
   /* Determine if two strings are equal from two byte arrays each
