@@ -18,6 +18,9 @@
 
 package org.apache.hive.common.util;
 
+import sun.misc.Unsafe;
+import java.lang.reflect.Field;
+
 /**
  * Murmur3 is successor to Murmur2 fast non-crytographic hash algorithms.
  *
@@ -31,6 +34,20 @@ package org.apache.hive.common.util;
  * to their code."
  */
 public class Murmur3 {
+
+  private static final Unsafe unsafe = getUnsafe();
+  private static final long BASE_OFFSET = unsafe.arrayBaseOffset(byte[].class);
+
+  private static Unsafe getUnsafe() {
+    try {
+      Field f = Unsafe.class.getDeclaredField("theUnsafe");
+      f.setAccessible(true);
+      return (Unsafe) f.get(null);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   // from 64-bit linear congruential generator
   public static final long NULL_HASHCODE = 2862933555777941757L;
 
@@ -533,10 +550,10 @@ public class Murmur3 {
     }
 
     private void processBlock(byte[] data, int offset) {
-      int k1 = readIntLE(data, offset);
-      int k2 = readIntLE(data, offset + 4);
-      int k3 = readIntLE(data, offset + 8);
-      int k4 = readIntLE(data, offset + 12);
+      int k1 = unsafe.getInt(data, BASE_OFFSET + offset);
+      int k2 = unsafe.getInt(data, BASE_OFFSET + offset + 4);
+      int k3 = unsafe.getInt(data, BASE_OFFSET + offset + 8);
+      int k4 = unsafe.getInt(data, BASE_OFFSET + offset + 12);
 
       v1 = round(v1, k1);
       v2 = round(v2, k2);
@@ -573,7 +590,7 @@ public class Murmur3 {
 
       // Process 4-byte chunks from the tail
       while (idx + 4 <= tailLen) {
-        int k1 = readIntLE(tail, idx);
+        int k1 = unsafe.getInt(tail, BASE_OFFSET + idx);
         h32 += k1 * PRIME3;
         h32 = Integer.rotateLeft(h32, 17);
         h32 *= PRIME4;
@@ -596,14 +613,6 @@ public class Murmur3 {
       h32 ^= h32 >>> 16;
 
       return h32;
-    }
-
-    // Helper method to read an int in little-endian format
-    private static int readIntLE(byte[] buf, int offset) {
-      return (buf[offset] & 0xFF) |
-             ((buf[offset + 1] & 0xFF) << 8) |
-             ((buf[offset + 2] & 0xFF) << 16) |
-             ((buf[offset + 3] & 0xFF) << 24);
     }
   }
 }
