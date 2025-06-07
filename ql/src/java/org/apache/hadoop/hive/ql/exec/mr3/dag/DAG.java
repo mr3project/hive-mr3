@@ -40,6 +40,7 @@ import com.datamonad.mr3.tez.shufflehandler.ShuffleHandlerDaemonProcessor;
 import com.datamonad.mr3.tez.shufflehandler.ShuffleHandlerDaemonVertexManagerPlugin;
 import org.apache.tez.runtime.library.common.shuffle.ShuffleServerDaemonProcessor;
 import org.apache.tez.runtime.library.common.shuffle.ShuffleServerDaemonVertexManagerPlugin;
+import org.apache.tez.runtime.library.common.shuffle.ShuffleUtils;
 import org.apache.tez.dag.api.TezConfiguration;
 
 import javax.annotation.Nullable;
@@ -197,10 +198,13 @@ public class DAG {
     TezConfiguration tezConf = null;
     List<DAGAPI.DaemonVertexProto> shuffleHandlerDaemonVertexProtos = null;
     tezConf = new TezConfiguration(mr3TaskConf);
+
     ByteString userPayload = org.apache.tez.common.TezUtils.createByteStringFromConf(tezConf);
     if (scheme == DAG.ContainerGroupScheme.ALL_IN_ONE) {
-      int useDaemonShuffleHandler = HiveConf.getIntVar(mr3TaskConf, HiveConf.ConfVars.MR3_USE_DAEMON_SHUFFLEHANDLER);
-      if (useDaemonShuffleHandler > 0) {
+      // ShuffleHandler DaemonVertex is created only for tez_shuffle
+      if (ShuffleUtils.isTezShuffleHandler(tezConf)) {
+        int useDaemonShuffleHandler = Math.max(
+            HiveConf.getIntVar(mr3TaskConf, HiveConf.ConfVars.MR3_USE_DAEMON_SHUFFLEHANDLER), 1);
         shuffleHandlerDaemonVertexProtos = createShuffleHandlerDaemonVertexProto(useDaemonShuffleHandler, userPayload);
       }
     }
@@ -528,9 +532,7 @@ public class DAG {
 
     builder.setInt(MR3Conf$.MODULE$.MR3_USE_DAEMON_SHUFFLEHANDLER(), useDaemonShuffleHandler);
     if (tezConf != null) {
-      String serviceId = tezConf.get(
-          TezConfiguration.TEZ_AM_SHUFFLE_AUXILIARY_SERVICE_ID,
-          TezConfiguration.TEZ_AM_SHUFFLE_AUXILIARY_SERVICE_ID_DEFAULT);
+      String serviceId = ShuffleUtils.getTezShuffleHandlerServiceId(tezConf);
       int port = tezConf.getInt(ShuffleHandler.SHUFFLE_PORT_CONFIG_KEY, ShuffleHandler.DEFAULT_SHUFFLE_PORT);
       builder.set(MR3Conf$.MODULE$.MR3_DAEMON_SHUFFLE_SERVICE_ID(), serviceId);
       builder.setInt(MR3Conf$.MODULE$.MR3_DAEMON_SHUFFLE_PORT(), port);
