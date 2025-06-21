@@ -15,7 +15,7 @@
 
 <property>
   <name>mr3.lib.uris</name>
-  <value>file:///home/hive/mr3-run/tez/tezjar/tez-0.9.1.mr3.1.10.tar.gz</value>
+  <value>file:///home/hive/mr3-run/tez/tezjar/tez-0.9.1.mr3.2.0.tar.gz</value>
 </property>
 
 <property>
