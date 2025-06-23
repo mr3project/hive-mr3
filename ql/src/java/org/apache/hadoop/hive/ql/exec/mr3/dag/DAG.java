@@ -195,9 +195,9 @@ public class DAG {
       llapDaemonVertexProto = createLlapDaemonVertexProto(userPayload, llapMemory, llapCpus);
     }
 
-    TezConfiguration tezConf = null;
     List<DAGAPI.DaemonVertexProto> shuffleHandlerDaemonVertexProtos = null;
-    tezConf = new TezConfiguration(mr3TaskConf);
+    // ShuffleHandler and ShuffleServer are in the Tez library, and thus do not need hive-site.xml
+    TezConfiguration tezConf = new TezConfiguration(true);
 
     ByteString userPayload = org.apache.tez.common.TezUtils.createByteStringFromConf(tezConf);
     if (scheme == DAG.ContainerGroupScheme.ALL_IN_ONE) {
