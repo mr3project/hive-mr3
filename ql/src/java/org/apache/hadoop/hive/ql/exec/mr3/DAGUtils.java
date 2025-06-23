@@ -993,9 +993,9 @@ public class DAGUtils {
       Configuration baseConf) {
     Map<String, String> partitionerConf = new HashMap<String, String>();
     partitionerConf.put("mapred.partitioner.class", partitionerClassName);
-    if (baseConf.get("mapreduce.totalorderpartitioner.path") != null) {
-      partitionerConf.put("mapreduce.totalorderpartitioner.path",
-      baseConf.get("mapreduce.totalorderpartitioner.path"));
+    String path = baseConf.get("mapreduce.totalorderpartitioner.path");
+    if (path != null) {
+      partitionerConf.put("mapreduce.totalorderpartitioner.path", path);
     }
     return partitionerConf;
   }
