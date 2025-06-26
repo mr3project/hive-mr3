@@ -352,15 +352,13 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     // forward is not called
     if (null != out) {
       numRows++;
-      if (LOG.isInfoEnabled()) {
-        if (numRows == cntr) {
-          cntr = logEveryNRows == 0 ? cntr * 10 : numRows + logEveryNRows;
-          if (cntr < 0 || numRows < 0) {
-            cntr = 0;
-            numRows = 1;
-          }
-          LOG.info("{}: records written - {}", this, numRows);
+      if (numRows == cntr) {
+        cntr = logEveryNRows == 0 ? cntr * 10 : numRows + logEveryNRows;
+        if (cntr < 0 || numRows < 0) {
+          cntr = 0;
+          numRows = 1;
         }
+        LOG.info("{}: records written - {}", this, numRows);
       }
 
       // BytesWritable valueBytesWritable = (BytesWritable) valueWritable;
