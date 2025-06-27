@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.commons.io.function.IOConsumer;
 import org.apache.hadoop.hive.conf.Constants;
 import org.apache.tez.mapreduce.output.MROutput;
 import org.apache.tez.runtime.api.TaskFailureType;
@@ -38,7 +39,6 @@ import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.tez.common.TezUtils;
 import org.apache.tez.mapreduce.processor.MRTaskReporter;
 import org.apache.tez.runtime.api.AbstractLogicalIOProcessor;
 import org.apache.tez.runtime.api.Event;
@@ -57,10 +57,6 @@ import org.apache.hadoop.hive.ql.exec.ObjectCacheFactory;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.io.IOContextMap;
 import org.apache.hadoop.hive.ql.io.orc.OrcFile;
-import org.apache.tez.dag.records.TezDAGID;
-import org.apache.tez.dag.records.TezTaskAttemptID;
-import org.apache.tez.dag.records.TezTaskID;
-import org.apache.tez.dag.records.TezVertexID;
 import org.apache.tez.mapreduce.input.MRInput;
 import org.apache.tez.runtime.api.events.ProcessorHandlerSetupCloseEvent;
 
@@ -79,7 +75,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
    * This provides the ability to pass things into TezProcessor, which is normally impossible
    * because of how Tez APIs are structured. Piggyback on ExecutionContext.
    */
-  public static interface Hook {
+  private interface Hook {
     void initializeHook(TezProcessor source);
   }
 
@@ -360,13 +356,13 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       rproc.init(mrReporter, inputs, outputs);
       rproc.run();
 
-      perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.TEZ_RUN_PROCESSOR);
     } catch (Throwable t) {
       rproc.setAborted(true);
       originalThrowable = t;
+
     } finally {
       if (originalThrowable != null && (originalThrowable instanceof Error ||
-        Throwables.getRootCause(originalThrowable) instanceof Error)) {
+          Throwables.getRootCause(originalThrowable) instanceof Error)) {
         LOG.error("Cannot recover from this FATAL error", originalThrowable);
         getContext().reportFailure(TaskFailureType.FATAL, originalThrowable, "Cannot recover from this error");
 
@@ -383,21 +379,9 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
         if (rproc != null) {
           rproc.close();
         }
-      } catch (Throwable t) {
         if (originalThrowable == null) {
-          originalThrowable = t;
-        }
-      }
-
-      // commit the output tasks
-      try {
-        for (LogicalOutput output : outputs.values()) {
-          if (output instanceof MROutput) {
-            MROutput mrOutput = (MROutput) output;
-            if (mrOutput.isCommitRequired()) {
-              mrOutput.commit();
-            }
-          }
+          closeOutputTasks(outputs, MROutput::commit);
+          perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.TEZ_RUN_PROCESSOR);
         }
       } catch (Throwable t) {
         if (originalThrowable == null) {
@@ -430,26 +414,29 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
       if (originalThrowable != null) {
         LOG.error("Failed initializeAndRunProcessor: {}", originalThrowable, processorContext.getTaskAttemptIdStr());
-        // abort the output tasks
-        for (LogicalOutput output : outputs.values()) {
-          if (output instanceof MROutput) {
-            MROutput mrOutput = (MROutput) output;
-            if (mrOutput.isCommitRequired()) {
-              mrOutput.abort();
-            }
-          }
-        }
+        closeOutputTasks(outputs, MROutput::abort);
 
         ObjectCache.clearObjectRegistry();  // clear thread-local cache which may contain MAP/REDUCE_PLAN
         Utilities.clearWork(jobConf);       // clear thread-local gWorkMap which may contain MAP/REDUCE_PLAN
 
         if (originalThrowable instanceof InterruptedException) {
           throw (InterruptedException) originalThrowable;
-        } else {
-          throw new RuntimeException(originalThrowable);
         }
+        throw new RuntimeException(originalThrowable);
       }
     }
+  }
+
+  private static void closeOutputTasks(
+      Map<String, LogicalOutput> outputs, IOConsumer<MROutput> committer) throws IOException {
+    for (LogicalOutput output : outputs.values()) {
+      if (output instanceof MROutput) {
+        MROutput mrOutput = (MROutput) output;
+        if (mrOutput.isCommitRequired()) {
+          committer.accept(mrOutput);
+         }
+       }
+     }
   }
 
   // abort() can be called after run() has returned without throwing Exception.
