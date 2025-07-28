@@ -25,10 +25,10 @@ import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.DriverContext;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
+import org.apache.hadoop.hive.ql.exec.OperatorUtils;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.Edge;
@@ -43,6 +43,7 @@ import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.MergeJoinWork;
+import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.TezEdgeProperty;
 import org.apache.hadoop.hive.ql.plan.TezWork;
 import org.apache.hadoop.hive.ql.plan.UnionWork;
@@ -56,9 +57,9 @@ import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.tez.common.counters.CounterGroup;
 import org.apache.tez.common.counters.TezCounter;
 import org.apache.tez.common.counters.TezCounters;
-import org.apache.tez.dag.library.vertexmanager.ShuffleVertexManager;
 import org.apache.tez.dag.app.dag.impl.RootInputVertexManager;
 import org.apache.tez.runtime.library.api.TezRuntimeConfiguration;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -425,7 +426,10 @@ public class MR3Task {
 
     // the name of the dag is what is displayed in the AM/Job UI
     String dagName = tezWork.getName();
-    JSONObject json = new JSONObject().put("context", "Hive").put("description", context.getCmd());
+    JSONObject json = new JSONObject()
+      .put("context", "Hive")
+      .put("description", context.getCmd())
+      .put("operatorGraph", buildOperatorGraph(tezWork));
     String dagInfo = json.toString();
     Credentials dagCredentials = jobConf.getCredentials();
     String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_QUERY_ID);
@@ -685,5 +689,43 @@ public class MR3Task {
       }
     }
     return returnCode;
+  }
+
+  JSONObject buildOperatorGraph(TezWork tezWork) {
+    JSONObject vertexMap = new JSONObject();
+
+    for (BaseWork work : tezWork.getAllWorkUnsorted()) {
+      JSONObject vertex = new JSONObject();
+
+      JSONObject operatorMap = new JSONObject();
+      Set<Operator<?>> ops = OperatorUtils.getOp(work, Operator.class);
+      for (Operator<?> op : ops) {
+        JSONObject opJson = new JSONObject()
+          .put("operatorType", op.getName())
+          .put("className", op.getClass().getSimpleName());
+        if (op.getConf() instanceof ReduceSinkDesc) {
+          opJson.put("outputVertex", ((ReduceSinkDesc)op.getConf()).getOutputName());
+        }
+        operatorMap.put(op.getOperatorId(), opJson);
+      }
+      vertex.put("operatorMap", operatorMap);
+
+      JSONArray operatorEdges = new JSONArray();
+      for (Operator<?> op : ops) {
+        if (op.getChildOperators() != null) {
+          for (Operator<?> child : op.getChildOperators()) {
+            JSONObject edge = new JSONObject()
+              .put("fromOperatorId", op.getOperatorId())
+              .put("toOperatorId", child.getOperatorId());
+            operatorEdges.put(edge);
+          }
+        }
+      }
+      vertex.put("operatorEdges", operatorEdges);
+
+      vertexMap.put(work.getName(), vertex);
+    }
+
+    return new JSONObject().put("vertexMap", vertexMap);
   }
 }
