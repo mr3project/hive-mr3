@@ -426,11 +426,8 @@ public class MR3Task {
 
     // the name of the dag is what is displayed in the AM/Job UI
     String dagName = tezWork.getName();
-    JSONObject json = new JSONObject()
-      .put("context", "Hive")
-      .put("description", context.getCmd())
-      .put("operatorGraph", buildOperatorGraph(tezWork));
-    String dagInfo = json.toString();
+    String dagInfo = context.getCmd();
+    JSONObject operatorGraph = buildOperatorGraph(tezWork);   // "vertexMap" --> [vertex Name -> vertex operator graph]
     Credentials dagCredentials = jobConf.getCredentials();
     String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_QUERY_ID);
 
@@ -441,7 +438,7 @@ public class MR3Task {
     //   UserGroupInformation.getCurrentUser() == the user from HiveServer2 (auth:KERBEROS)
     //   UserGroupInformation.getCurrentUser() does not hold HIVE_DELEGATION_TOKEN (which is unnecessary)
 
-    DAG dag = DAG.create(dagName, dagInfo, dagCredentials, queryId);
+    DAG dag = DAG.create(dagName, dagInfo, operatorGraph.toString(), dagCredentials, queryId);
     if (LOG.isDebugEnabled()) {
       LOG.debug("DagInfo: " + dagInfo);
     }
@@ -691,7 +688,7 @@ public class MR3Task {
     return returnCode;
   }
 
-  JSONObject buildOperatorGraph(TezWork tezWork) {
+  private JSONObject buildOperatorGraph(TezWork tezWork) {
     JSONObject vertexMap = new JSONObject();
 
     for (BaseWork work : tezWork.getAllWorkUnsorted()) {
