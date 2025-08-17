@@ -35,6 +35,8 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.orc.impl.OrcTail;
+import org.apache.hadoop.hive.llap.io.session.LlapIoSession;
+import org.apache.hadoop.hive.llap.io.session.SessionConfig;
 
 import javax.annotation.Nullable;
 
@@ -117,5 +119,16 @@ public interface LlapIo<T> {
   void loadDataIntoCache(LlapDaemonProtocolProtos.CacheEntryList metadata);
 
   boolean usingLowLevelCache();
+
+  /**
+   * Open a per-(DAG, table) on-heap cache session.
+   * Implementations must:
+   *  - allocate isolated data+metadata caches obeying cfg limits
+   *  - install an InflightTracker
+   *  - return a session whose close() clears both caches
+   */
+  default LlapIoSession openSession(SessionConfig cfg, long dagId, long tableId) {
+    throw new UnsupportedOperationException("openSession not implemented");
+  }
 
 }

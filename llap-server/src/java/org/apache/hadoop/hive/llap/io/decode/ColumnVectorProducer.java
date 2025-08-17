@@ -35,6 +35,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.impl.SchemaEvolution;
+import org.apache.hadoop.hive.llap.io.session.CacheContext;
 
 /**
  * Entry point used by LlapInputFormat to create read pipeline to get data.
@@ -63,4 +64,14 @@ public interface ColumnVectorProducer {
       Includes includes, SearchArgument sarg, QueryFragmentCounters counters,
       SchemaEvolutionFactory sef, InputFormat<?, ?> sourceInputFormat, Deserializer sourceSerDe,
       Reporter reporter, JobConf job, Map<Path, PartitionDesc> parts) throws IOException;
+
+  default ReadPipeline createReadPipeline(Consumer<ColumnVectorBatch> consumer, FileSplit split,
+      Includes includes, SearchArgument sarg, QueryFragmentCounters counters,
+      SchemaEvolutionFactory sef, InputFormat<?, ?> sourceInputFormat, Deserializer sourceSerDe,
+      Reporter reporter, JobConf job, Map<Path, PartitionDesc> parts, CacheContext ctx) throws IOException {
+    ReadPipeline p = createReadPipeline(consumer, split, includes, sarg, counters, sef,
+        sourceInputFormat, sourceSerDe, reporter, job, parts);
+    if (p != null) p.setCacheContext(ctx);
+    return p;
+  }
 }

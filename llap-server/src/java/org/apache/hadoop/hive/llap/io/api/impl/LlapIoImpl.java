@@ -104,6 +104,9 @@ import org.apache.parquet.hadoop.ParquetFileWriter;
 import org.apache.parquet.hadoop.util.HadoopStreams;
 import org.apache.parquet.io.SeekableInputStream;
 
+import org.apache.hadoop.hive.llap.io.session.*;
+import org.apache.hadoop.hive.llap.io.session.heap.HeapCacheFactory;
+
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -542,6 +545,30 @@ public class LlapIoImpl implements LlapIo<VectorizedRowBatch>, LlapIoDebugDump {
   @Override
   public boolean usingLowLevelCache() {
     return useLowLevelCache;
+  }
+
+  @Override
+  public LlapIoSession openSession(SessionConfig cfg, long dagId, long tableId) {
+    final CacheAdmissionPolicy ap = (key, range, est, stats, tag) ->
+        ((double)stats.usedBytes() / Math.max(1.0, stats.capacityBytes())) < cfg.admissionWatermark;
+
+    final CacheContext ctx = new CacheContext(
+        HeapCacheFactory.createDataCache(cfg.dataCacheBytes),
+        HeapCacheFactory.createMetadataCache(cfg.metadataCacheBytes),
+        ap,
+        new CacheTag(dagId, tableId),
+        new InflightTracker()
+    );
+
+    return new LlapIoSession() {
+      private volatile boolean closed;
+      @Override public CacheContext context() { return ctx; }
+      @Override public void close() {
+        if (closed) return; closed = true;
+        try { ctx.metadataCache.clear(); } catch (Throwable t) {}
+        try { ctx.dataCache.clear(); } catch (Throwable t) {}
+      }
+    };
   }
 
 }

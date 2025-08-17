@@ -23,8 +23,12 @@ import org.apache.hadoop.hive.llap.ConsumerFeedback;
 import org.apache.hadoop.hive.llap.io.api.impl.ColumnVectorBatch;
 import org.apache.orc.TypeDescription;
 import org.apache.orc.impl.SchemaEvolution;
+import org.apache.hadoop.hive.llap.io.session.CacheContext;
 
 public interface ReadPipeline extends ConsumerFeedback<ColumnVectorBatch> {
   public Callable<Void> getReadCallable();
   SchemaEvolution getSchemaEvolution();
+
+  default void setCacheContext(CacheContext ctx) {}
+  default CacheContext getCacheContext() { return null; }
 }
