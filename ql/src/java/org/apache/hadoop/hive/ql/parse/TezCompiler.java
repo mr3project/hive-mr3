@@ -1879,6 +1879,37 @@ public class TezCompiler extends TaskCompiler {
 
     // Scale down stats for tables with DPP
     Map<FilterOperator, Statistics> adjustedStatsMap = new HashMap<>();
+    for (Operator<?> op: procCtx.parseContext.getAllOps()) {
+      if (op.getConf() instanceof DynamicPruningEventDesc) {
+        DynamicPruningEventDesc dped = (DynamicPruningEventDesc) op.getConf();
+        AppMasterEventOperator eventOp = (AppMasterEventOperator) op;
+        if (eventOp.getStatistics() == null) {
+          continue;
+        }
+
+        TableScanOperator ts = dped.getTableScan();
+        if (ts.getChildOperators().get(0) instanceof FilterOperator) {
+          FilterOperator fil = (FilterOperator) ts.getChildOperators().get(0);
+          if (fil.getStatistics() == null) {
+            continue;
+          }
+
+          long numEstimatedPart = eventOp.getStatistics().getNumRows();
+          long numPart = procCtx.parseContext.getPrunedPartitions(ts).getPartitions().size();
+
+          if (numEstimatedPart < numPart) {
+            Statistics filterStats = fil.getStatistics().clone();
+            double reduceFactor = (double) numEstimatedPart / numPart;
+            long newNumRows = (long) (reduceFactor * filterStats.getNumRows());
+
+            // TODO: affected columns?
+            StatsUtils.updateStats(filterStats, newNumRows, true, fil);
+            adjustedStatsMap.put(fil, filterStats);
+          }
+        }
+      }
+    }
+
     List<ReduceSinkOperator> semijoinRsToRemove = new ArrayList<>();
     double semijoinReductionThreshold = procCtx.conf.getFloatVar(
         HiveConf.ConfVars.TEZ_DYNAMIC_SEMIJOIN_REDUCTION_THRESHOLD);
