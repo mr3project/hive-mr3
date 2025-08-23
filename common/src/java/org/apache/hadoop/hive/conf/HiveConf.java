@@ -5938,7 +5938,7 @@ public class HiveConf extends Configuration {
     MR3_REDUCE_CONTAINERGROUP_VCORES("hive.mr3.reduce.containergroup.vcores", 1,
         "CPU cores allocated to each ContainerGroup for reducers"),
     // use LLAP IO for All-in-One and Per-Map-Reduce schemes when LLAP_IO_ENABLED = true
-    MR3_LLAP_HEADROOM_MB("hive.mr3.llap.headroom.mb", 1024,
+    MR3_LLAP_HEADROOM_MB("hive.mr3.llap.headroom.mb", 0,
         "Memory allocated to JVM headroom when LLAP/IO is enabled"),
     MR3_LLAP_DAEMON_TASK_MEMORY_MB("hive.mr3.llap.daemon.task.memory.mb", 0,
         "Memory allocated to a DaemonTaskAttempt for LLAP/IO, in MB"),
@@ -5946,6 +5946,11 @@ public class HiveConf extends Configuration {
         "CPU cores allocated to a DaemonTaskAttempt for LLAP I/O"),
     MR3_LLAP_ORC_MEMORY_PER_THREAD_MB("hive.mr3.llap.orc.memory.per.thread.mb", 1024,
         "Memory allocated to each ORC manager in low-level LLAP I/O threads, in MB"),
+    // LLAP/IO using Java heap
+    MR3_LLAP_USE_HEAP_MEMORY("hive.mr3.llap.use.heap.memory", false,
+      "Use Java heap memory for LLAP/IO"),
+    MR3_LLAP_HEAP_MEMORY_MAX_SIZE_MB("hive.mr3.llap.heap.memory.max.size.mb", 8192,
+      "Max memory for allocating new buffers for LLAP/IO, in MB"),
     // EXEC
     MR3_EXEC_SUMMARY("hive.mr3.exec.print.summary", false,
         "Display breakdown of execution steps, for every query executed by the shell"),
