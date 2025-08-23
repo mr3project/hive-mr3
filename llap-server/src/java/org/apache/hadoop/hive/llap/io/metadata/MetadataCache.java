@@ -37,7 +37,7 @@ import org.apache.hadoop.hive.common.io.DiskRangeList;
 import org.apache.hadoop.hive.common.io.DataCache.BooleanRef;
 import org.apache.hadoop.hive.common.io.encoded.MemoryBuffer;
 import org.apache.hadoop.hive.common.io.CacheTag;
-import org.apache.hadoop.hive.llap.cache.BuddyAllocator;
+import org.apache.hadoop.hive.llap.cache.EvictionAwareStoppableAllocator;
 import org.apache.hadoop.hive.llap.cache.EvictionDispatcher;
 import org.apache.hadoop.hive.llap.cache.LlapAllocatorBuffer;
 import org.apache.hadoop.hive.llap.cache.LlapIoDebugDump;
@@ -55,10 +55,10 @@ public class MetadataCache implements LlapIoDebugDump, FileMetadataCache {
   private final ConcurrentHashMap<Object, OrcFileEstimateErrors> estimateErrors;
   private final MemoryManager memoryManager;
   private final LowLevelCachePolicy policy;
-  private final BuddyAllocator allocator;
+  private final EvictionAwareStoppableAllocator allocator;
   private final LlapDaemonCacheMetrics metrics;
 
-  public MetadataCache(BuddyAllocator allocator, MemoryManager memoryManager,
+  public MetadataCache(EvictionAwareStoppableAllocator allocator, MemoryManager memoryManager,
       LowLevelCachePolicy policy, boolean useEstimateCache, LlapDaemonCacheMetrics metrics) {
     this.memoryManager = memoryManager;
     this.allocator = allocator;
