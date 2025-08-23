@@ -51,7 +51,6 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.llap.io.api.impl.LlapIoImpl;
 import org.apache.hadoop.hive.llap.metrics.LlapDaemonCacheMetrics;
-import org.apache.hadoop.hive.ql.io.orc.encoded.StoppableAllocator;
 
 /**
  *
@@ -72,7 +71,7 @@ import org.apache.hadoop.hive.ql.io.orc.encoded.StoppableAllocator;
  *       Each Buddy Allocator tree can be split up to chunks of size {@link ConfVars#LLAP_ALLOCATOR_MIN_ALLOC} 4KB
  */
 public final class BuddyAllocator
-    implements EvictionAwareAllocator, StoppableAllocator, BuddyAllocatorMXBean, LlapIoDebugDump {
+    implements EvictionAwareStoppableAllocator, BuddyAllocatorMXBean {
   private static final String FAILED_TO_ALLOCATE_MSG =
       "Failed to allocate [{}]X[{}] bytes after [{}] attempt, evicted [{}] bytes and partially allocated [{}] bytes";
   private final Arena[] arenas;
