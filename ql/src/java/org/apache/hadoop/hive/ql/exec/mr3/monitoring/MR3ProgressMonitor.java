@@ -227,13 +227,7 @@ public class MR3ProgressMonitor implements ProgressMonitor {
       this.succeededTaskCount = progress.numSucceededTasks();
       this.failedTaskAttemptCount = progress.numFailedTaskAttempts();
       this.killedTaskAttemptCount = progress.numKilledTaskAttempts();
-      this.runningTaskCount =
-        progress.numScheduledTasks() - progress.numSucceededTasks() - progress.numFailedTasks();
-    }
-
-    boolean isRunning() {
-      return succeededTaskCount < totalTaskCount && (succeededTaskCount > 0 || runningTaskCount > 0
-          || failedTaskAttemptCount > 0);
+      this.runningTaskCount = progress.numRunningTasks();
     }
 
     String vertexState() { return vertexState.toString(); }
