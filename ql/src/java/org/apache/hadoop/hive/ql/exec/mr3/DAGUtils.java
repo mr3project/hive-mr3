@@ -238,7 +238,7 @@ public class DAGUtils {
   }
 
   private Set<Path> getPathsForCredentialsMap(MapWork mapWork) {
-    Set<Path> paths = mapWork.getPathToAliases().keySet();
+    Set<Path> paths = new HashSet<>(mapWork.getPathToAliases().keySet());
     if (LOG.isDebugEnabled() && !paths.isEmpty()) {
       for (Path path: paths) {
         LOG.debug("Marking MapWorker input Path as needing credentials: " + path);
