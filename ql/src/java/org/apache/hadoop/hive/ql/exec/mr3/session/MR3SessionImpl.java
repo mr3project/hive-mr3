@@ -362,9 +362,13 @@ public class MR3SessionImpl implements MR3Session {
     MR3Conf dagConf = createDagConf(mr3TaskConf, dagUser, dag.getQueryId());
 
     // sessionConf is not passed to MR3; only dagConf is passed to MR3 as a component of DAGProto.dagConf.
-    DAGAPI.DAGProto dagProto = dag.createDagProto(mr3TaskConf, dagConf);
+    String submitter = SessionState.get().getUserName();
+    if (submitter == null) {
+      submitter = "(unknown)";
+    }
+    DAGAPI.DAGProto dagProto = dag.createDagProto(mr3TaskConf, dagConf, submitter);
 
-    LOG.info("Submitting DAG");
+    LOG.info("Submitting DAG (submitter={})", submitter);
     // close() may have been called, in which case currentHiveMr3Client.submitDag() raises Exception
     MR3JobRef mr3JobRef = currentHiveMr3Client.submitDag(
         dagProto, addtlAmCredentials, addtlAmLocalResources, workMap, dag, ctx, isShutdown);
