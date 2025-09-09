@@ -158,7 +158,7 @@ public class DAG {
     edges.add(edge);
   }
 
-  public DAGAPI.DAGProto createDagProto(Configuration mr3TaskConf, MR3Conf dagConf) throws IOException {
+  public DAGAPI.DAGProto createDagProto(Configuration mr3TaskConf, MR3Conf dagConf, String submitter) throws IOException {
     this.vcoresDivisor = HiveConf.getIntVar(mr3TaskConf, HiveConf.ConfVars.MR3_RESOURCE_VCORES_DIVISOR);
     ContainerGroupScheme scheme = getContainerGroupScheme(mr3TaskConf);
 
@@ -234,6 +234,7 @@ public class DAG {
     // We should call setDagConf(). Otherwise we would end up using DAGAppMaster.MR3Conf in MR3.
     DAGAPI.DAGProto dagProto = DAGAPI.DAGProto.newBuilder()
         .setName(name)
+        .setSubmitter(submitter)
         .setCredentials(CommonUtils.convertCredentialsToByteString(dagCredentials))
         .setDagInfo(dagInfo)
         .setOperatorGraphJsonInfo(operatorGraphJsonInfo)
