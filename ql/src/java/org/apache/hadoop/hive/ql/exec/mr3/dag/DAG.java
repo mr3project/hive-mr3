@@ -58,6 +58,7 @@ public class DAG {
 
   final private String name;
   final private String dagInfo;
+  final private String operatorGraphJsonInfo;   // JSONObject.toString: "vertexMap" --> [vertex Name -> vertex operator graph]
   final private Credentials dagCredentials;
 
   final private Collection<LocalResource> localResources = new HashSet<LocalResource>();
@@ -83,17 +84,20 @@ public class DAG {
   private DAG(
       String name,
       String dagInfo,
+      String operatorGraphJsonInfo,
       @Nullable Credentials dagCredentials) {
     this.name = name;
     this.dagInfo = dagInfo;
+    this.operatorGraphJsonInfo = operatorGraphJsonInfo;
     this.dagCredentials = dagCredentials != null ? dagCredentials : new Credentials();
   }
 
   public static DAG create(
       String name,
       String dagInfo,
+      String operatorGraphInfo,
       Credentials dagCredentials) {
-    return new DAG(name, dagInfo, dagCredentials);
+    return new DAG(name, dagInfo, operatorGraphInfo, dagCredentials);
   }
 
   /**
@@ -224,6 +228,7 @@ public class DAG {
         .setName(name)
         .setCredentials(CommonUtils.convertCredentialsToByteString(dagCredentials))
         .setDagInfo(dagInfo)
+        .setOperatorGraphJsonInfo(operatorGraphJsonInfo)
         .addAllVertices(vertexProtos)
         .addAllEdges(edgeProtos)
         .addAllVertexGroups(vertexGroupProtos)
