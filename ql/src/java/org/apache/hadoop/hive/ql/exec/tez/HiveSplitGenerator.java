@@ -255,7 +255,7 @@ public class HiveSplitGenerator extends InputInitializer {
         String vertexName = null;
         if (inputInitializerContext != null) {
           tezCounters = new TezCounters();
-          groupName = HiveInputCounters.class.getName();
+          groupName = HiveInputCounters.class.getSimpleName();
           vertexName = jobConf.get(Operator.CONTEXT_NAME_KEY, "");
           counterName = Utilities.getVertexCounterName(HiveInputCounters.RAW_INPUT_SPLITS.name(), vertexName);
           tezCounters.findCounter(groupName, counterName).increment(splits.length);
