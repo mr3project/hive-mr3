@@ -536,7 +536,9 @@ public class HiveServer2 extends CompositeService {
 
     if (serviceDiscovery && activePassiveHA) {
       try {
-        // Cf. do not call setUpZooKeeperAuth(), unlike in Hive 3
+        // In Hive 4.0.1 and 4.1.0, setUpZooKeeperAuth() is not called here.
+        // This seems to be a bug which is fixed in HIVE-29138.
+        setUpZooKeeperAuth(hiveConf);
         zooKeeperClient = hiveConf.getZKConfig().startZookeeperClient(zooKeeperAclProvider, false);
       } catch (Exception e) {
         LOG.error("Error in creating ZooKeeper Client", e);
