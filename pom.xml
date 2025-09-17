@@ -926,6 +926,11 @@
         <artifactId>re2j</artifactId>
         <version>${re2j.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.directory.client.ldap</groupId>
+        <artifactId>ldap-client-api</artifactId>
+        <version>${apache-directory-clientapi.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
