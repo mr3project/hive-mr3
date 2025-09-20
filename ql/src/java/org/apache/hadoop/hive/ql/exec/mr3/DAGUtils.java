@@ -1175,15 +1175,19 @@ public class DAGUtils {
       URI execJar = getExecJarPathLocal();
       String auxJars = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_MR3_AUX_JARS);
 
-      final java.nio.file.Path parentPath = Paths.get(execJar).getParent();
-      String[] auxJarsPaths = Arrays.stream(auxJars.split(","))
-        .map(path -> parentPath.resolve(path).toString())
-        .toArray(String[]::new);
+      if (auxJars != null && !auxJars.isEmpty()) {
+        final java.nio.file.Path parentPath = Paths.get(execJar).getParent();
+        String[] auxJarsPaths = Arrays.stream(auxJars.split(","))
+          .map(path -> parentPath.resolve(path).toString())
+          .toArray(String[]::new);
 
-      String[] allPaths = Arrays.copyOf(auxJarsPaths, auxJarsPaths.length + 1);
-      allPaths[auxJarsPaths.length] = execJar.toString();
+        String[] allPaths = Arrays.copyOf(auxJarsPaths, auxJarsPaths.length + 1);
+        allPaths[auxJarsPaths.length] = execJar.toString();
 
-      return allPaths;
+        return allPaths;
+      } else {
+        return new String[] { execJar.toString() };
+      }
     } else {
       LOG.info("Skipping localizing initial session jars");
       return new String[0];
@@ -1381,7 +1385,7 @@ public class DAGUtils {
       // copy the src to the destination and create local resource.
       // do not overwrite.
       String srcStr = src.toString();
-      LOG.info("Localizing resource because it does not exist: " + srcStr + " to dest: " + dest);
+      LOG.info("Localizing resource because it does not exist: {} to dest: {}", srcStr, dest);
       Object notifierNew = new Object(),
           notifierOld = copyNotifiers.putIfAbsent(srcStr, notifierNew),
           notifier = (notifierOld == null) ? notifierNew : notifierOld;
@@ -1431,8 +1435,7 @@ public class DAGUtils {
     for (int i = 0; i < waitAttempts; i++) {
       if (checkPreExisting(srcFs, src, dest, conf)) return true;
       if (doLog && i == 0) {
-        LOG.info("Waiting for the file " + dest + " (" + waitAttempts + " attempts, with "
-            + sleepInterval + "ms interval)");
+        LOG.info("Waiting for the file {} ({} attempts, with {} ms interval)", dest, waitAttempts, sleepInterval);
       }
       try {
         if (notifier != null) {
@@ -1551,7 +1554,7 @@ public class DAGUtils {
     // However, we may still need mr3ScratchDir if TezWork.configureJobConfAndExtractJars() returns
     // a non-empty list in MR3Task.
     Path mr3ScratchDir = getMr3ScratchDir(new Path(scratchDir, userName));
-    LOG.info("mr3ScratchDir path " + mr3ScratchDir + " for user " + userName);
+    LOG.info("mr3ScratchDir path {} for users {}", mr3ScratchDir, userName);
     if (createDir) {
       FileSystem fs = mr3ScratchDir.getFileSystem(conf);
       fs.mkdirs(mr3ScratchDir, new FsPermission(SessionState.TASK_SCRATCH_DIR_PERMISSION));
