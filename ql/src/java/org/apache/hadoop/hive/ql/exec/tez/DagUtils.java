@@ -302,8 +302,10 @@ public class DagUtils {
   private static List<DagCredentialSupplier> defaultCredentialSuppliers() {
     // Class names of credential providers that should be used when adding credentials to the dag.
     // Use plain strings instead of {@link Class#getName()} to avoid compile scope dependencies to other modules.
-    List<String> supplierClassNames =
-        Collections.singletonList("org.apache.hadoop.hive.kafka.KafkaDagCredentialSupplier");
+    // do not use "org.apache.hadoop.hive.kafka.KafkaDagCredentialSupplier" in supplierClassNames because:
+    //   1) DagUtils.credentialSuppliers is not used in Hive-MR3;
+    //   2) the class file is not available during testing, thus calling LOG.error() below.
+    List<String> supplierClassNames = Collections.emptyList();
     List<DagCredentialSupplier> dagSuppliers = new ArrayList<>();
     for (String s : supplierClassNames) {
       try {
