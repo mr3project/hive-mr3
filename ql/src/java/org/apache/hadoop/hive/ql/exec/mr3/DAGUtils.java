@@ -254,7 +254,9 @@ public class DAGUtils {
 
   public void addPathsToCredentials(
           Credentials creds, Collection<Path> paths, Configuration conf) throws IOException {
-    TokenCache.obtainTokensForFileSystems(creds, paths.toArray(new Path[paths.size()]), conf);
+    if (!paths.isEmpty()) {
+      TokenCache.obtainTokensForFileSystems(creds, paths.toArray(new Path[paths.size()]), conf);
+    }
   }
 
   /**
