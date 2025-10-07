@@ -284,6 +284,7 @@
             <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>com.amazonaws.secretsmanager</groupId>
