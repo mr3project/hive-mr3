@@ -106,12 +106,14 @@ public class StatsRecordingThreadPool extends ThreadPoolExecutor {
 
       // clone thread local file system statistics
       LlapThreadLocalStatistics statsBefore = new LlapThreadLocalStatistics(mxBean);
-      setupMDCFromNDC(actualCallable);
+      // RunnableWithNdc in tez-mr3 does not use NDC (with ndcStack), so do not call setupMDCFromNDC().
+      // do not call MDC.clear() because setupMDCFromNDC() is not called
+      // setupMDCFromNDC(actualCallable);
       try {
         return actualCallable.call();
       } finally {
         updateCounters(statsBefore, actualCallable);
-        MDC.clear();
+        // MDC.clear();
       }
     }
 
