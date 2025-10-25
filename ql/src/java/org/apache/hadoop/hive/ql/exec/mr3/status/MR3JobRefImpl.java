@@ -18,6 +18,10 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.status;
 
+import com.datamonad.mr3.api.client.DAGStatus;
+import com.datamonad.mr3.api.client.VertexStatus;
+import com.datamonad.mr3.api.common.MR3Exception;
+
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.mr3.monitoring.MR3JobMonitor;
@@ -67,5 +71,19 @@ public class MR3JobRefImpl implements MR3JobRef {
   // Invariant: must be called after monitorJob() returns
   public TezCounters getDagCounters() {
     return monitor.getDagCounters();
+  }
+
+  // Invariant: must be called after monitorJob() returns with returnCode == 0
+  public DAGStatus getDagStatus() {
+    return monitor.getDagStatus();
+  }
+
+  public String getDagIdStr() throws MR3Exception {
+    scala.Option<String> dagIdStr = dagClient.dagIdStr();
+    if (dagIdStr.isDefined()) {
+      return dagIdStr.get();
+    } else {
+      throw new MR3Exception("DAG ID not found");
+    }
   }
 }
