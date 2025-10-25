@@ -157,8 +157,6 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
   private float hashTableMemoryPercentage;
 
-  private boolean isLlap = false;
-
   // tracks overall access count in map agg buffer any given time.
   private long totalAccessCount;
   private boolean batchNeedsClone;
@@ -624,8 +622,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
           keyWrappersBatch.getKeysFixedSize() +
           aggregationBatchInfo.getAggregatorsFixedSize();
 
-      MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
-      maxMemory = isLlap ? getConf().getMaxMemoryAvailable() : memoryMXBean.getHeapMemoryUsage().getMax();
+      maxMemory = getConf().getMaxMemoryAvailable();    // assume MR3, so do not use MemoryMXBean. Cf. HIVE-20648
       hashTableMemoryPercentage = conf.getGroupByMemoryUsage();
       // Tests may leave this unitialized, so better set it to 1
       if (hashTableMemoryPercentage == 0.0f) {
@@ -635,8 +632,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       maxHashTblMemory = (int)(maxMemory * hashTableMemoryPercentage);
 
       if (LOG.isDebugEnabled()) {
-        LOG.debug("GBY memory limits - isLlap: {} maxMemory: {} ({} * {}) fixSize:{} (key:{} agg:{})",
-          isLlap,
+        LOG.debug("GBY memory limits: {} maxMemory: {} ({} * {}) fixSize:{} (key:{} agg:{})",
           LlapUtil.humanReadableByteCount(maxHashTblMemory),
           LlapUtil.humanReadableByteCount(maxMemory),
           hashTableMemoryPercentage,
@@ -1127,7 +1123,6 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
   @Override
   protected void initializeOp(Configuration hconf) throws HiveException {
     super.initializeOp(hconf);
-    isLlap = LlapProxy.isDaemon();
     VectorExpression.doTransientInit(keyExpressions, hconf);
 
     List<ObjectInspector> objectInspectors = new ArrayList<>();
