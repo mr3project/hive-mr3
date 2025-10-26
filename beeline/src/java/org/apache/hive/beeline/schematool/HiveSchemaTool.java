@@ -125,11 +125,11 @@ public class HiveSchemaTool extends MetastoreSchemaTool {
   }
 
   void replaceLocationForProtoLogTables(String sqlScriptFile) throws IOException {
-    TezConfiguration tezConf = new TezConfiguration(true);
+    TezConfiguration tezConf = null;
     boolean hiveProtoLoggingEnabled = true;
     boolean tezProtoLoggingEnabled = true;
     String hiveProtoBaseDir = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_PROTO_EVENTS_BASE_PATH);
-    String tezProtoBaseDir = tezConf.get(TezConfiguration.TEZ_HISTORY_LOGGING_PROTO_BASE_DIR);
+    String tezProtoBaseDir = "";  // tezConf.get("tez.history.logging.proto-base-dir");
     String hiveLocation = "/tmp/query_data"; // if Hive protologging is not enabled, use dummy location for Hive protolog tables
     String tezLocation = "/tmp"; // if Tez protologging is not enabled, use dummy location for Tez protolog tables
     String line;
