@@ -206,7 +206,7 @@ public class TestQueryHistoryService {
 
     TezCounters counters = new TezCounters();
     runtimeContext.setCounters(counters);
-    counters.findCounter(DAGCounter.class.getName(), DAGCounter.TOTAL_LAUNCHED_TASKS.name())
+    /* counters.findCounter(DAGCounter.class.getName(), DAGCounter.TOTAL_LAUNCHED_TASKS.name())
         .setValue(DummyRecord.TOTAL_LAUNCHED_TASKS);
     counters.findCounter(DAGCounter.class.getName(), DAGCounter.NUM_SUCCEEDED_TASKS.name())
         .setValue(DummyRecord.NUM_SUCCEEDED_TASKS);
@@ -247,7 +247,7 @@ public class TestQueryHistoryService {
     counters.findCounter(TaskCounter.class.getName(), TaskCounter.SHUFFLE_PHASE_TIME.name())
         .setValue(DummyRecord.SHUFFLE_PHASE_TIME);
     counters.findCounter(TaskCounter.class.getName(), TaskCounter.MERGE_PHASE_TIME.name())
-        .setValue(DummyRecord.MERGE_PHASE_TIME);
+        .setValue(DummyRecord.MERGE_PHASE_TIME); */
 
     return tezTask;
   }

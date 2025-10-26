@@ -152,7 +152,7 @@ public class RecordEnricher {
     record.setTezSessionId(runtimeContext.getSessionId());
     record.setTezAmAddress(runtimeContext.getAmAddress());
     record.setExecSummary(runtimeContext.getMonitor().logger().getQuerySummary());
-    record.setTotalNumberOfTasks((int) runtimeContext.getCounter(DAGCounter.class.getName(),
+    /* record.setTotalNumberOfTasks((int) runtimeContext.getCounter(DAGCounter.class.getName(),
         DAGCounter.TOTAL_LAUNCHED_TASKS.name()));
     record.setNumberOfSucceededTasks((int) runtimeContext.getCounter(DAGCounter.class.getName(),
         DAGCounter.NUM_SUCCEEDED_TASKS.name()));
@@ -193,7 +193,7 @@ public class RecordEnricher {
     record.setShufflePhaseTime(runtimeContext.getCounter(TaskCounter.class.getName(),
         TaskCounter.SHUFFLE_PHASE_TIME.name()));
     record.setMergePhaseTime(runtimeContext.getCounter(TaskCounter.class.getName(),
-        TaskCounter.MERGE_PHASE_TIME.name()));
+        TaskCounter.MERGE_PHASE_TIME.name())); */
   }
 
   private void enrichFromQueryProperties(QueryProperties queryProperties, Record record) {
