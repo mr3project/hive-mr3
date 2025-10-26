@@ -932,7 +932,7 @@ public class TezSessionState {
 
   public String getAppMasterUri() {
     return Optional.of(getSession()).map(
-            tezClient -> tezClient.getAmHost() + ":" + tezClient.getAmPort())
+            tezClient -> "")
         .get();
   }
 
