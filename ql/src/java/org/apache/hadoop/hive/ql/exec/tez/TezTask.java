@@ -113,6 +113,8 @@ public class TezTask extends Task<TezWork> {
   private final PerfLogger perfLogger = SessionState.getPerfLogger();
   private static final String TEZ_MEMORY_RESERVE_FRACTION = "tez.task.scale.memory.reserve-fraction";
 
+  private TezCounters counters;
+
   private final TezRuntimeContext runtimeContext = new TezRuntimeContext();
   private final DagUtils utils;
 
@@ -134,11 +136,11 @@ public class TezTask extends Task<TezWork> {
   }
 
   public TezCounters getTezCounters() {
-    return runtimeContext.getCounters();
+    return counters;
   }
 
   public void setTezCounters(final TezCounters counters) {
-    runtimeContext.setCounters(counters);
+    this.counters = counters;
   }
 
   public TezRuntimeContext getRuntimeContext() {
@@ -292,7 +294,7 @@ public class TezTask extends Task<TezWork> {
         String dagId = this.dagClient.getDagIdentifierString();
         String appId = this.dagClient.getSessionIdentifierString();
         LOG.info("HS2 Host: [{}], Query ID: [{}], Dag ID: [{}], DAG App ID: [{}], DAG App address: [{}]",
-            ServerUtils.hostname(), queryId, dagId, appId, session.getSession().getAmHost());
+            ServerUtils.hostname(), queryId, dagId, appId, "");
         LogUtils.putToMDC(LogUtils.DAGID_KEY, dagId);
         this.jobID = dagId;
         runtimeContext.setDagId(dagId);
