@@ -389,7 +389,7 @@ public class MR3SessionImpl implements MR3Session {
         HiveConf.ConfVars.MR3_DAG_INCLUDE_INDETERMINATE_VERTEX);
     int taskMaxFailedAttempts = HiveConf.getIntVar(mr3TaskConf,
         HiveConf.ConfVars.MR3_AM_TASK_MAX_FAILED_ATTEMPTS);
-    int concurrentRunThreshold = HiveConf.getIntVar(mr3TaskConf,
+    float concurrentRunThreshold = HiveConf.getFloatVar(mr3TaskConf,
         HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
     boolean deleteVertexLocalDirectory = HiveConf.getBoolVar(mr3TaskConf,
         HiveConf.ConfVars.MR3_DAG_DELETE_VERTEX_LOCAL_DIRECTORY);
@@ -413,7 +413,7 @@ public class MR3SessionImpl implements MR3Session {
     }
     return confBuilder
         .setInt(MR3Conf$.MODULE$.MR3_AM_TASK_MAX_FAILED_ATTEMPTS(), taskMaxFailedAttempts)
-        .setInt(MR3Conf$.MODULE$.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT(), concurrentRunThreshold)
+        .setDouble(MR3Conf$.MODULE$.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT(), concurrentRunThreshold)
         .setBoolean(MR3Conf$.MODULE$.MR3_AM_NOTIFY_DESTINATION_VERTEX_COMPLETE(), deleteVertexLocalDirectory)
         .set(MR3Conf$.MODULE$.MR3_DAG_QUEUE_NAME(), queueName)
         .setBoolean(MR3Conf$.MODULE$.MR3_DAG_INCLUDE_INDETERMINATE_VERTEX(), includeIndeterminateVertex)

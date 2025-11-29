@@ -1005,10 +1005,10 @@ public class DDLTask extends Task<DDLWork> implements Serializable {
 
     // Disable speculative execution
     HiveConf hiveConf = queryState.getConf();
-    int concurrentRunThreshold = hiveConf.getIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
-    if (concurrentRunThreshold != 100) {
+    float concurrentRunThreshold = hiveConf.getFloatVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
+    if (concurrentRunThreshold < 100.0f) {
       LOG.info("Disable speculative execution for File Merge DDLTask: {}", concurrentRunThreshold);
-      hiveConf.setIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100);
+      hiveConf.setFloatVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100.0f);
     }
 
     // initialize the task and execute
