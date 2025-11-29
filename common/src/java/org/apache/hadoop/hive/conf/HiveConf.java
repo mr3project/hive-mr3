@@ -5967,7 +5967,10 @@ public class HiveConf extends Configuration {
     HIVE_MR3_DAG_CONFIG_REMOVE_PREFIXES("hive.mr3.dag.config.remove.prefixes", "",
       "Comma-separated list of key prefixes to remove from JobConf for DAG"),
     HIVE_MR3_SESSION_CONFIG_REMOVE_PREFIXES("hive.mr3.session.config.remove.prefixes", "",
-      "Comma-separated list of key prefixes to remove from JobConf for MR3 session");
+      "Comma-separated list of key prefixes to remove from JobConf for MR3 session"),
+
+    HIVE_MR3_UI_INCLUDE_OPERATOR_EXTRA("hive.mr3.ui.include.operator.extra", false,
+      "Include the details of each operator in JSON ojbect for DAG");
 
     public final String varname;
     public final String altName;

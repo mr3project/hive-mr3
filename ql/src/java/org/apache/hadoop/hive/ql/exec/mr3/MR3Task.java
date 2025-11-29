@@ -41,11 +41,26 @@ import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRef;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.plan.AbstractOperatorDesc;
+import org.apache.hadoop.hive.ql.plan.AppMasterEventDesc;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
+import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
+import org.apache.hadoop.hive.ql.plan.FileSinkDesc;
+import org.apache.hadoop.hive.ql.plan.FilterDesc;
+import org.apache.hadoop.hive.ql.plan.GroupByDesc;
+import org.apache.hadoop.hive.ql.plan.JoinCondDesc;
+import org.apache.hadoop.hive.ql.plan.JoinDesc;
+import org.apache.hadoop.hive.ql.plan.LimitDesc;
+import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
 import org.apache.hadoop.hive.ql.plan.MergeJoinWork;
+import org.apache.hadoop.hive.ql.plan.PTFDesc;
+import org.apache.hadoop.hive.ql.plan.PlanUtils;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
+import org.apache.hadoop.hive.ql.plan.SelectDesc;
+import org.apache.hadoop.hive.ql.plan.TableScanDesc;
 import org.apache.hadoop.hive.ql.plan.TezEdgeProperty;
 import org.apache.hadoop.hive.ql.plan.TezWork;
+import org.apache.hadoop.hive.ql.plan.TopNKeyDesc;
 import org.apache.hadoop.hive.ql.plan.UnionWork;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.ql.session.SessionStateUtil;
@@ -77,6 +92,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 import static org.apache.hadoop.hive.ql.exec.tez.TezTask.JOB_ID_TEMPLATE;
 import static org.apache.hadoop.hive.ql.exec.tez.TezTask.ICEBERG_PROPERTY_PREFIX;
@@ -206,9 +222,9 @@ public class MR3Task {
           && (HiveConf.getBoolVar(conf, HiveConf.ConfVars.MR3_EXEC_SUMMARY) ||
           Utilities.isPerfOrAboveLogging(conf))) {
         for (CounterGroup group: counters) {
-          LOG.info(group.getDisplayName() + ":");
+          LOG.info("{}:", group.getDisplayName());
           for (TezCounter counter: group) {
-            LOG.info("   " + counter.getDisplayName() + ": " + counter.getValue());
+            LOG.info("   {}: {}", counter.getDisplayName(), counter.getValue());
           }
         }
       }
@@ -375,11 +391,11 @@ public class MR3Task {
   private void checkInputOutputLocalResources(
       Map<String, LocalResource> inputOutputLocalResources) {
     if (LOG.isDebugEnabled()) {
-      if (inputOutputLocalResources == null || inputOutputLocalResources.size() == 0) {
+      if (inputOutputLocalResources == null || inputOutputLocalResources.isEmpty()) {
         LOG.debug("No local resources for this MR3Task I/O");
       } else {
         for (LocalResource lr: inputOutputLocalResources.values()) {
-          LOG.debug("Adding local resource: " + lr.getResource());
+          LOG.debug("Adding local resource: {}", lr.getResource());
         }
       }
     }
@@ -410,7 +426,7 @@ public class MR3Task {
       List<String> keysToRemove = new ArrayList();
       for (String lrName : inputOutputLocalResources.keySet()) {
         if (amDagCommonLocalResources.containsKey(lrName)) {
-          LOG.info("Skipping LocalResource which is already included: " + lrName);
+          LOG.info("Skipping LocalResource which is already included: {}", lrName);
           keysToRemove.add(lrName);
         }
       }
@@ -427,7 +443,11 @@ public class MR3Task {
     // the name of the dag is what is displayed in the AM/Job UI
     String dagName = tezWork.getName();
     String dagInfo = context.getCmd();
-    JSONObject operatorGraph = buildOperatorGraph(tezWork);   // "vertexMap" --> [vertex Name -> vertex operator graph]
+
+    // vertex name -> JSONObject OperatorGraph: ["vertexMap" --> [vertex name -> VertexOperatorGraph]]
+    // Invariant: OperatorGraph.vertexMap[] is defined only on 'vertex name'.
+    Map<String, JSONObject> operatorGraphMap = buildOperatorGraphMap(tezWork);
+
     Credentials dagCredentials = jobConf.getCredentials();
     String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_QUERY_ID);
 
@@ -438,9 +458,9 @@ public class MR3Task {
     //   UserGroupInformation.getCurrentUser() == the user from HiveServer2 (auth:KERBEROS)
     //   UserGroupInformation.getCurrentUser() does not hold HIVE_DELEGATION_TOKEN (which is unnecessary)
 
-    DAG dag = DAG.create(dagName, dagInfo, operatorGraph.toString(), dagCredentials, queryId);
+    DAG dag = DAG.create(dagName, dagInfo, operatorGraphMap, dagCredentials, queryId);
     if (LOG.isDebugEnabled()) {
-      LOG.debug("DagInfo: " + dagInfo);
+      LOG.debug("DagInfo: {}", dagInfo);
     }
 
     for (BaseWork w: ws) {
@@ -465,7 +485,7 @@ public class MR3Task {
     dag.addLocalResources(amDagCommonLocalResources.values());
 
     if (dagUtils.shouldAddPathsToCredentials(jobConf)) {
-      LOG.info("Adding credentials for DAG: " + dagName);
+      LOG.info("Adding credentials for DAG: {}", dagName);
       Set<Path> allPaths = new HashSet<Path>();
       for (LocalResource lr: inputOutputLocalResources.values()) {
         allPaths.add(ConverterUtils.getPathFromYarnURL(lr.getResource()));
@@ -474,21 +494,21 @@ public class MR3Task {
         allPaths.add(ConverterUtils.getPathFromYarnURL(lr.getResource()));
       }
       for (Path path: allPaths) {
-        LOG.info("Marking Path as needing credentials for DAG: " + path);
+        LOG.info("Marking Path as needing credentials for DAG: {}", path);
       }
       final String[] additionalCredentialsSource = HiveConf.getTrimmedStringsVar(jobConf,
           HiveConf.ConfVars.MR3_DAG_ADDITIONAL_CREDENTIALS_SOURCE);
       for (String addPath: additionalCredentialsSource) {
         try {
           allPaths.add(new Path(addPath));
-          LOG.info("Additional source for DAG credentials: " + addPath);
+          LOG.info("Additional source for DAG credentials: {}", addPath);
         } catch (IllegalArgumentException ex) {
-          LOG.error("Ignoring a wrong path for DAG credentials: " + addPath);
+          LOG.error("Ignoring a wrong path for DAG credentials: {}", addPath);
         }
       }
       dag.addPathsToCredentials(dagUtils, allPaths, jobConf);
     } else {
-      LOG.info("Skip adding credentials for DAG: " + dagName);
+      LOG.info("Skip adding credentials for DAG: {}", dagName);
     }
 
     this.workToVertex = workToVertex;
@@ -559,28 +579,28 @@ public class MR3Task {
     int numChildren = tezWork.getChildren(baseWork).size();
     if (numChildren > 1) {  // added from HIVE-22744
       String value = vertexJobConf.get(TezRuntimeConfiguration.TEZ_RUNTIME_IO_SORT_MB);
-      int originalValue = 0;
+      int originalValue;
       if(value == null) {
         originalValue = TezRuntimeConfiguration.TEZ_RUNTIME_IO_SORT_MB_DEFAULT;
       } else {
-        originalValue = Integer.valueOf(value);
+        originalValue = Integer.parseInt(value);
       }
       int newValue = (int) (originalValue / numChildren);
       vertexJobConf.set(TezRuntimeConfiguration.TEZ_RUNTIME_IO_SORT_MB, Integer.toString(newValue));
-      LOG.info("Modified " + TezRuntimeConfiguration.TEZ_RUNTIME_IO_SORT_MB + " to " + newValue);
+      LOG.info("Modified {} to {}", TezRuntimeConfiguration.TEZ_RUNTIME_IO_SORT_MB, newValue);
     }
 
     Vertex vertex = dagUtils.createVertex(vertexJobConf, baseWork, mr3ScratchDir, isFinal, vertexType, tezWork);
     dag.addVertex(vertex);
 
     if (dagUtils.shouldAddPathsToCredentials(jobConf)) {
-      LOG.info("Adding credentials for paths: " + baseWork.getName());
+      LOG.info("Adding credentials for paths: {}", baseWork.getName());
       Set<Path> paths = dagUtils.getPathsForCredentials(baseWork);
       if (!paths.isEmpty()) {
         dag.addPathsToCredentials(dagUtils, paths, jobConf);
       }
     } else {
-      LOG.info("Skip adding credentials for paths: " + baseWork.getName());
+      LOG.info("Skip adding credentials for paths: {}", baseWork.getName());
     }
 
     workToVertex.put(baseWork, vertex);
@@ -680,19 +700,18 @@ public class MR3Task {
       // jobClose needs to execute successfully otherwise fail task
       if (returnCode == 0) {
         returnCode = 3;
-        String mesg = "Job Commit failed with exception '"
-                + Utilities.getNameMessage(e) + "'";
+        String mesg = "Job Commit failed with exception '" + Utilities.getNameMessage(e) + "'";
         console.printError(mesg, "\n" + StringUtils.stringifyException(e));
       }
     }
     return returnCode;
   }
 
-  private JSONObject buildOperatorGraph(TezWork tezWork) {
-    JSONObject vertexMap = new JSONObject();
+  private Map<String, JSONObject> buildOperatorGraphMap(TezWork tezWork) {
+    Map<String, JSONObject> result = new HashMap<>();
 
     for (BaseWork work : tezWork.getAllWorkUnsorted()) {
-      JSONObject vertex = new JSONObject();
+      JSONObject vertexOperatorGraph = new JSONObject();   // VertexOperatorGraph
 
       JSONObject operatorMap = new JSONObject();
       Set<Operator<?>> ops = OperatorUtils.getOp(work, Operator.class);
@@ -703,9 +722,17 @@ public class MR3Task {
         if (op.getConf() instanceof ReduceSinkDesc) {
           opJson.put("outputVertex", ((ReduceSinkDesc)op.getConf()).getOutputName());
         }
+
+        if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_MR3_UI_INCLUDE_OPERATOR_EXTRA)) {
+          Map<String, String> extraInfo = extractOperatorExtraInfo(op);
+          if (!extraInfo.isEmpty()) {
+            opJson.put("extraInfo", new JSONObject(extraInfo));
+          }
+        }
+
         operatorMap.put(op.getOperatorId(), opJson);
       }
-      vertex.put("operatorMap", operatorMap);
+      vertexOperatorGraph.put("operatorMap", operatorMap);
 
       JSONArray operatorEdges = new JSONArray();
       for (Operator<?> op : ops) {
@@ -718,11 +745,165 @@ public class MR3Task {
           }
         }
       }
-      vertex.put("operatorEdges", operatorEdges);
+      vertexOperatorGraph.put("operatorEdges", operatorEdges);
 
-      vertexMap.put(work.getName(), vertex);
+      // OperatorGraph: ["vertexMap" --> [vertex name -> VertexOperatorGraph]]
+      JSONObject vertexMap = new JSONObject();
+      vertexMap.put(work.getName(), vertexOperatorGraph);
+      JSONObject operatorGraph = new JSONObject().put("vertexMap", vertexMap);
+
+      result.put(work.getName(), operatorGraph);
     }
 
-    return new JSONObject().put("vertexMap", vertexMap);
+    return result;
+  }
+
+  private <K> String mapToString(Map<K, String> map) {
+    if (map == null || map.isEmpty()) {
+      return "";
+    }
+    return map.entrySet().stream()
+      .map(e -> e.getKey() + ": " + e.getValue())
+      .collect(Collectors.joining("; "));
+  }
+
+  private <T> String listToString(List<T> list, java.util.function.Function<T, String> transformer) {
+    if (list == null || list.isEmpty()) {
+      return "";
+    }
+    return list.stream()
+      .map(transformer)
+      .collect(Collectors.joining(", "));
+  }
+
+  private Map<String, String> extractOperatorExtraInfo(Operator<?> op) {
+    Map<String, String> extraInfo = new HashMap<>();
+    String opName = op.getName();
+
+    try {
+      switch (opName) {
+        case "TS":
+          TableScanDesc tsDesc = (TableScanDesc) op.getConf();
+          extraInfo.put("qualifiedTable", String.valueOf(tsDesc.getQualifiedTable()));
+          if (tsDesc.getFilterExprString() != null) {
+            extraInfo.put("filterExpr", tsDesc.getFilterExprString());
+          }
+          break;
+
+        case "GBY":
+          GroupByDesc gbyDesc = (GroupByDesc) op.getConf();
+          extraInfo.put("mode", gbyDesc.getModeString());
+          extraInfo.put("keys", gbyDesc.getKeyString());
+          extraInfo.put("aggregators", String.join(", ", gbyDesc.getAggregatorStrings()));
+          extraInfo.put("outputColumns", String.join(", ", (gbyDesc.getOutputColumnNames())));
+          if (gbyDesc.getListGroupingSets() != null) {
+            extraInfo.put("groupingSets", listToString(gbyDesc.getListGroupingSets(), String::valueOf));
+          }
+          extraInfo.put("pruneGroupingSetId", String.valueOf(gbyDesc.pruneGroupingSetId()));
+          extraInfo.put("bucketGroup", String.valueOf(gbyDesc.getBucketGroup()));
+          break;
+
+        case "FIL":
+          FilterDesc filDesc = (FilterDesc) op.getConf();
+          extraInfo.put("predicate", filDesc.getPredicateString());
+          extraInfo.put("isSampling", String.valueOf(filDesc.getIsSamplingPred()));
+          extraInfo.put("isGenerated", String.valueOf(filDesc.isGenerated()));
+          break;
+
+        case "SEL":
+          SelectDesc selDesc = (SelectDesc) op.getConf();
+          extraInfo.put("columnList", selDesc.getColListString());
+          extraInfo.put("outputColumns", String.join(", ", selDesc.getOutputColumnNames()));
+          extraInfo.put("isSelectStar", String.valueOf(selDesc.isSelectStar()));
+          extraInfo.put("isSelStarNoCompute", String.valueOf(selDesc.isSelStarNoCompute()));
+          break;
+
+        case "MAPJOIN":
+        case "MERGEJOIN":
+          MapJoinDesc mjDesc = (MapJoinDesc) op.getConf();
+          extraInfo.put("conditions", listToString(mjDesc.getCondsList(), JoinCondDesc::getJoinCondString));
+          extraInfo.put("keys", mapToString(mjDesc.getKeysString()));
+          for (Map.Entry<Byte, List<ExprNodeDesc>> entry : mjDesc.getExprs().entrySet()) {
+            extraInfo.put("value[" + entry.getKey() + "]", PlanUtils.getExprListString(entry.getValue()));
+          }
+          extraInfo.put("parentToInput", mapToString(mjDesc.getParentToInput()));
+          extraInfo.put("keyCounts", mjDesc.getKeyCountsExplainDesc());
+          extraInfo.put("posBigTable", String.valueOf(mjDesc.getPosBigTable()));
+          extraInfo.put("isBucketMapJoin", String.valueOf(mjDesc.isBucketMapJoin()));
+          extraInfo.put("isDynamicPartitionHashJoin", String.valueOf(mjDesc.isDynamicPartitionHashJoin()));
+          break;
+
+        case "RS":
+          ReduceSinkDesc rsDesc = (ReduceSinkDesc) op.getConf();
+          extraInfo.put("outputName", rsDesc.getOutputName());
+          extraInfo.put("keyColumns", rsDesc.getKeyColString());
+          extraInfo.put("valueColumns", rsDesc.getValueColsString());
+          extraInfo.put("partitionColumns", rsDesc.getParitionColsString());
+          extraInfo.put("order", rsDesc.getOrder());
+          extraInfo.put("numReducers", String.valueOf(rsDesc.getNumReducers()));
+          extraInfo.put("tag", String.valueOf(rsDesc.getTag()));
+          extraInfo.put("topN", String.valueOf(rsDesc.getTopN()));
+          extraInfo.put("isAutoParallel", String.valueOf(rsDesc.isAutoParallel()));
+          extraInfo.put("isPTFReduceSink", String.valueOf(rsDesc.isPTFReduceSink()));
+          break;
+
+        case "EVENT":
+          AppMasterEventDesc eventDesc = (AppMasterEventDesc) op.getConf();
+          extraInfo.put("table", eventDesc.getTable().toString());
+          extraInfo.put("vertexName", String.valueOf(eventDesc.getVertexName()));
+          extraInfo.put("inputName", String.valueOf(eventDesc.getInputName()));
+          break;
+
+        case "PTF":
+          PTFDesc ptfDesc = (PTFDesc) op.getConf();
+          if (ptfDesc.getFuncDef() != null) {
+            extraInfo.put("partition", ptfDesc.getFuncDef().getPartitionExplain());
+            extraInfo.put("order", ptfDesc.getFuncDef().getOrderExplain());
+            extraInfo.put("args", ptfDesc.getFuncDef().getArgsExplain());
+          }
+          extraInfo.put("llInfo", ptfDesc.getLlInfoExplain());
+          break;
+
+        case "TNK":
+          TopNKeyDesc tnkDesc = (TopNKeyDesc) op.getConf();
+          extraInfo.put("topN", String.valueOf(tnkDesc.getTopN()));
+          extraInfo.put("keys", tnkDesc.getKeyString());
+          extraInfo.put("columnSortOrder", tnkDesc.getColumnSortOrder());
+          extraInfo.put("nullOrder", tnkDesc.getNullOrder());
+          break;
+
+        case "JOIN":
+          JoinDesc joinDesc = (JoinDesc) op.getConf();
+          extraInfo.put("keys", mapToString(joinDesc.getKeysString()));
+          extraInfo.put("filters", String.valueOf(joinDesc.getFiltersStringMap()));
+          extraInfo.put("outputColumns", String.join(", ", joinDesc.getOutputColumnNames()));
+          extraInfo.put("conditions", listToString(joinDesc.getCondsList(), JoinCondDesc::getJoinCondString));
+          break;
+
+        case "LIM":
+          LimitDesc limitDesc = (LimitDesc) op.getConf();
+          extraInfo.put("limit", String.valueOf(limitDesc.getLimit()));
+          break;
+
+        case "FS":
+          FileSinkDesc fileSinkDesc = (FileSinkDesc) op.getConf();
+          extraInfo.put("dirName", fileSinkDesc.getDirNameString());
+          extraInfo.put("compressed", String.valueOf(fileSinkDesc.getCompressed()));
+          break;
+      }
+
+      // Add column expression map for all operators
+      if (op.getConf() instanceof AbstractOperatorDesc) {
+        AbstractOperatorDesc desc = (AbstractOperatorDesc) op.getConf();
+        if (desc.getColumnExprMap() != null && !desc.getColumnExprMap().isEmpty()) {
+          extraInfo.put("columnExprMap", mapToString(desc.getColumnExprMapForExplain()));
+        }
+      }
+    } catch (Exception e) {
+      // Log error but don't fail the entire operation
+      extraInfo.put("extractionError", e.getMessage());
+    }
+
+    return extraInfo;
   }
 }
