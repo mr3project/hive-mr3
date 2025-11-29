@@ -42,6 +42,7 @@ import org.apache.tez.runtime.library.common.shuffle.ShuffleServerDaemonProcesso
 import org.apache.tez.runtime.library.common.shuffle.ShuffleServerDaemonVertexManagerPlugin;
 import org.apache.tez.runtime.library.common.shuffle.ShuffleUtils;
 import org.apache.tez.dag.api.TezConfiguration;
+import org.json.JSONObject;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
@@ -58,7 +59,9 @@ public class DAG {
 
   final private String name;
   final private String dagInfo;
-  final private String operatorGraphJsonInfo;   // JSONObject.toString: "vertexMap" --> [vertex Name -> vertex operator graph]
+  // vertex name -> JSONObject OperatorGraph: ["vertexMap" --> [vertex name -> VertexOperatorGraph]]
+  // Invariant: OperatorGraph.vertexMap[] is defined only on 'vertex name'.
+  final private Map<String, JSONObject> operatorGraphMap;
   final private Credentials dagCredentials;
   final private String queryId;
 
@@ -85,12 +88,12 @@ public class DAG {
   private DAG(
       String name,
       String dagInfo,
-      String operatorGraphJsonInfo,
+      Map<String, JSONObject> operatorGraphMap,
       @Nullable Credentials dagCredentials,
       String queryId) {
     this.name = name;
     this.dagInfo = dagInfo;
-    this.operatorGraphJsonInfo = operatorGraphJsonInfo;
+    this.operatorGraphMap = operatorGraphMap;
     this.dagCredentials = dagCredentials != null ? dagCredentials : new Credentials();
     this.queryId = queryId;
   }
@@ -98,10 +101,10 @@ public class DAG {
   public static DAG create(
       String name,
       String dagInfo,
-      String operatorGraphInfo,
+      Map<String, JSONObject> operatorGraphMap,
       Credentials dagCredentials,
       String queryId) {
-    return new DAG(name, dagInfo, operatorGraphInfo, dagCredentials, queryId);
+    return new DAG(name, dagInfo, operatorGraphMap, dagCredentials, queryId);
   }
 
   public String getQueryId() {
@@ -231,13 +234,22 @@ public class DAG {
 
     DAGAPI.ConfigurationProto dagConfProto = Utils$.MODULE$.createMr3ConfProto(dagConf);
 
+    List<DAGAPI.OperatorGraphJsonProto> operatorGraphJsonProtos = new ArrayList<>();
+    for (Map.Entry<String, JSONObject> entry: operatorGraphMap.entrySet()) {
+      DAGAPI.OperatorGraphJsonProto jsonProto = DAGAPI.OperatorGraphJsonProto.newBuilder()
+        .setVertexName(entry.getKey())
+        .setOperatorGraphJson(entry.getValue().toString())
+        .build();
+      operatorGraphJsonProtos.add(jsonProto);
+    }
+
     // We should call setDagConf(). Otherwise we would end up using DAGAppMaster.MR3Conf in MR3.
     DAGAPI.DAGProto dagProto = DAGAPI.DAGProto.newBuilder()
         .setName(name)
         .setSubmitter(submitter)
         .setCredentials(CommonUtils.convertCredentialsToByteString(dagCredentials))
         .setDagInfo(dagInfo)
-        .setOperatorGraphJsonInfo(operatorGraphJsonInfo)
+        .addAllOperatorGraphJsons(operatorGraphJsonProtos)
         .addAllVertices(vertexProtos)
         .addAllEdges(edgeProtos)
         .addAllVertexGroups(vertexGroupProtos)
