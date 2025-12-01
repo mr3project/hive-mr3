@@ -397,10 +397,10 @@ public class MRCompactor implements Compactor {
         }
         // Disable speculative execution
         // hiveConf originates from CompactorThread.conf, so it is okay to update it permanently.
-        int concurrentRunThreshold = hiveConf.getIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
-        if (concurrentRunThreshold != 100) {
+        float concurrentRunThreshold = hiveConf.getFloatVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
+        if (concurrentRunThreshold < 100.0f) {
           LOG.info("Disable speculative execution for compaction: {}", concurrentRunThreshold);
-          hiveConf.setIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100);
+          hiveConf.setFloatVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100.0f);
         }
         // Each compaction job creates its own MR3CompactionHelper and discards it because:
         //  1. the retry logic is already implemented inside the compaction thread itself.

@@ -5934,9 +5934,9 @@ public class HiveConf extends Configuration {
         "Max number of attempts for each Task"),
 
     // speculative execution
-    MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT("hive.mr3.am.task.concurrent.run.threshold.percent", 100,
+    MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT("hive.mr3.am.task.concurrent.run.threshold.percent", 100.0f,
         "Percentage of TaskAttempts that complete before starting speculative execution. " +
-        "Can be set to an integer between 1 and 100. " +
+        "Can be set to a floating pointer number between 0 and 100." +
         "If set to 100, speculative execution of TaskAttempts is disabled."),
 
     // deleting Vertex-local directory
