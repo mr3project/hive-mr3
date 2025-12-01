@@ -211,10 +211,10 @@ public class MR3DistCp extends Configured implements Tool {
       TezWork tezWork = createTezWork(jobConf);
 
       // Disable speculative execution
-      int concurrentRunThreshold = hiveConf.getIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
-      if (concurrentRunThreshold != 100) {
+      float concurrentRunThreshold = hiveConf.getFloatVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
+      if (concurrentRunThreshold < 100.0f) {
         LOG.info("Disable speculative execution for MR3DistCp: {}", concurrentRunThreshold);
-        hiveConf.setIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100);
+        hiveConf.setFloatVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100.0f);
       }
 
       MR3Task mr3Task = new MR3Task(hiveConf, new SessionState.LogHelper(LOG), new AtomicBoolean(false));
