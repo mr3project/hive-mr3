@@ -212,10 +212,10 @@ public class ColumnTruncateTask extends Task<ColumnTruncateWork> implements Seri
     jobConf.setCredentials(UserGroupInformation.getCurrentUser().getCredentials());
     TezWork tezWork = createTezWork(jobConf);
 
-    int concurrentRunThreshold = conf.getIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
-    if (concurrentRunThreshold != 100) {
+    float concurrentRunThreshold = conf.getFloatVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
+    if (concurrentRunThreshold < 100.0f) {
       LOG.info("Disable speculative execution for ColumnTruncateTask: {}", concurrentRunThreshold);
-      conf.setIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100);
+      conf.setFloatVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100.0f);
     }
 
     MR3Task mr3Task = new MR3Task(conf, new SessionState.LogHelper(LOG), new AtomicBoolean(false));

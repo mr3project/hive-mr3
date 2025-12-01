@@ -131,10 +131,10 @@ public class AlterTableConcatenateOperation extends DDLOperation<AlterTableConca
 
     // Disable speculative execution
     HiveConf hiveConf = context.getQueryState().getConf();
-    int concurrentRunThreshold = hiveConf.getIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
-    if (concurrentRunThreshold != 100) {
+    float concurrentRunThreshold = hiveConf.getFloatVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
+    if (concurrentRunThreshold < 100.0f) {
       LOG.info("Disable speculative execution for MergeFileTask: {}", concurrentRunThreshold);
-      hiveConf.setIntVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100);
+      hiveConf.setFloatVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100.0f);
     }
 
     task.initialize(context.getQueryState(), context.getQueryPlan(), taskQueue, generalContext);
