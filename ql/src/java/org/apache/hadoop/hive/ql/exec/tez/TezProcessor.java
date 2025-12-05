@@ -342,11 +342,6 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     String fragmentId = null;
     if (setLlapCacheCounters) {
       ProcessorContext processorContext = getContext();
-      TezDAGID tezDAGID = TezDAGID.getInstance(processorContext.getApplicationId(), processorContext.getDagIdentifier());
-      TezVertexID tezVertexID = TezVertexID.getInstance(tezDAGID, processorContext.getTaskVertexIndex());
-      TezTaskID tezTaskID = TezTaskID.getInstance(tezVertexID, processorContext.getTaskIndex());
-      TezTaskAttemptID tezTaskAttemptID = TezTaskAttemptID.getInstance(tezTaskID, processorContext.getTaskAttemptNumber());
-      this.jobConf.set(MRInput.TEZ_MAPREDUCE_TASK_ATTEMPT_ID, tezTaskAttemptID.toString());
       // should be consistent with setting in MRInputBase.initialize()
       jobConf.set(MRInput.TEZ_MAPREDUCE_TASK_ATTEMPT_ID, processorContext.getTaskAttemptIdStr());
       fragmentId = LlapTezUtils.getFragmentId(this.jobConf);
