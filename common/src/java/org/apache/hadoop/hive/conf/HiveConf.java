@@ -4779,7 +4779,7 @@ public class HiveConf extends Configuration {
         "Class to use for calculating available slots during split generation"),
     HIVE_TEZ_GENERATE_CONSISTENT_SPLITS("hive.tez.input.generate.consistent.splits", true,
         "Whether to generate consistent split locations when generating splits in the AM"),
-    HIVE_TEZ_INPUT_FS_SERIALIZATION_THRESHOLD("hive.tez.input.fs.serialization.threshold", 268435456,
+    HIVE_TEZ_INPUT_FS_SERIALIZATION_THRESHOLD("hive.tez.input.fs.serialization.threshold", -1,
         "When the cummulative size of the splits is larger than this (in bytes), HiveSplitGenerator"
             + " will start to serialize splits to tez scratchdir instead of being sent as RPC payloads directly."
             + " Default is 256MB."
