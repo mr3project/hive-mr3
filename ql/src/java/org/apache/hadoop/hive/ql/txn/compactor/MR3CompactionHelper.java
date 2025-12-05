@@ -29,7 +29,6 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.MapReduceMapWork;
 import org.apache.hadoop.hive.ql.plan.TezWork;
 import org.apache.hadoop.hive.ql.session.SessionState;
-import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.common.util.ShutdownHookManager;
@@ -87,9 +86,7 @@ public class MR3CompactionHelper {
   public void submitJobToMr3(JobConf jobConf)
           throws IOException, HiveException {
     if (highAvailabilityEnabled) {
-      // If this Metastore does not run inside HiveServer2 process, we should explicitly set appId.
-      // If it runs inside HiveServer2 process (hive.metastore.runworker.in=hiveserver2), appId is set
-      // by HiveServer2, so the following block is skipped.
+      // We assume the compaction worker runs inside HiveServer2 process, so the following block is skipped.
       if (!HiveConf.isLoadHiveServer2Config()) {
         String appId = getAppIdFromZooKeeper(hiveConf);
         MR3SessionManagerImpl.getInstance().setActiveApplication(appId);
@@ -136,28 +133,13 @@ public class MR3CompactionHelper {
 
   private CuratorFramework startZooKeeperClient(HiveConf hiveConf) throws IOException, HiveException {
     try {
-      // TODO: Why metastore/hiveserver2 of Hive4 does not call setUpZooKeeperAuth()?
-      // Cf. do not call setUpZooKeeperAuth(), unlike in Hive 3
+      // We assume that this compaction worker runs inside HiveServer2, so no need to call setUpZooKeeperAuth()
+      // Cf. HIVE-29138 which calls setUpZooKeeperAuth() in the beginning of init()
       return hiveConf.getZKConfig().startZookeeperClient(zooKeeperAclProvider, false);
     } catch (HiveException e) {
       throw e;
     } catch (Exception e) {   // because Curator throws Exception instead of IOException
       throw new IOException("Failed to start ZooKeeperClient", e);
-    }
-  }
-
-  private void setUpZooKeeperAuth(HiveConf hiveConf) throws IOException, HiveException {
-    if (UserGroupInformation.isSecurityEnabled()) {
-      String principal = hiveConf.getVar(HiveConf.ConfVars.METASTORE_KERBEROS_PRINCIPAL);
-      if (principal.isEmpty()) {
-        throw new HiveException("Metastore Kerberos principal is empty");
-      }
-      String keyTabFile = hiveConf.getVar(HiveConf.ConfVars.METASTORE_KERBEROS_KEYTAB_FILE);
-      if (keyTabFile.isEmpty()) {
-        throw new HiveException("Metastore Kerberos keytab is empty");
-      }
-      // Install the JAAS Configuration for the runtime
-      Utils.setZookeeperClientKerberosJaasConfig(principal, keyTabFile);
     }
   }
 
