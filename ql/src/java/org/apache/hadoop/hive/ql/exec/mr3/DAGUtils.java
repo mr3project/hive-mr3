@@ -1544,21 +1544,15 @@ public class DAGUtils {
    */
   public Path createMr3ScratchDir(Path scratchDir, Configuration conf, boolean createDir)
       throws IOException {
-    UserGroupInformation ugi;
-    String userName;
-    try {
-      ugi = Utils.getUGI();
-      userName = ugi.getShortUserName();
-    } catch (LoginException e) {
-      throw new IOException(e);
-    }
+    UserGroupInformation ugi = Utils.getUGI();
+    String userName = ugi.getShortUserName();
 
     // Cf. HIVE-21171
     // ConfVars.HIVE_RPC_QUERY_PLAN == true, so we do not need mr3ScratchDir to store DAG Plans.
     // However, we may still need mr3ScratchDir if TezWork.configureJobConfAndExtractJars() returns
     // a non-empty list in MR3Task.
     Path mr3ScratchDir = getMr3ScratchDir(new Path(scratchDir, userName));
-    LOG.info("mr3ScratchDir path {} for users {}", mr3ScratchDir, userName);
+    LOG.info("mr3ScratchDir path {} for users {}, createDir={}", mr3ScratchDir, userName, createDir);
     if (createDir) {
       FileSystem fs = mr3ScratchDir.getFileSystem(conf);
       fs.mkdirs(mr3ScratchDir, new FsPermission(SessionState.TASK_SCRATCH_DIR_PERMISSION));
