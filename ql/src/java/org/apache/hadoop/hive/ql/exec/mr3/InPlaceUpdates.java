@@ -22,13 +22,15 @@ import static org.fusesource.jansi.internal.CLibrary.STDERR_FILENO;
 import static org.fusesource.jansi.internal.CLibrary.STDOUT_FILENO;
 import static org.fusesource.jansi.internal.CLibrary.isatty;
 
+import java.io.IOException;
 import java.io.PrintStream;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.fusesource.jansi.Ansi;
 
-import jline.TerminalFactory;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
 
 public class InPlaceUpdates {
 
@@ -65,9 +67,16 @@ public class InPlaceUpdates {
   public static boolean inPlaceEligible(HiveConf conf) {
     boolean inPlaceUpdates = HiveConf.getBoolVar(conf, HiveConf.ConfVars.MR3_EXEC_INPLACE_PROGRESS);
 
-    // we need at least 80 chars wide terminal to display in-place updates properly
-    return inPlaceUpdates && !SessionState.getConsole().getIsSilent() && isUnixTerminal()
-      && TerminalFactory.get().getWidth() >= MIN_TERMINAL_WIDTH;
+    try {
+      Terminal terminal = TerminalBuilder.terminal();
+      // we need at least 80 chars wide terminal to display in-place updates properly
+      boolean result = inPlaceUpdates && !SessionState.getConsole().getIsSilent() && isUnixTerminal()
+        && terminal.getWidth() >= MIN_TERMINAL_WIDTH;
+      terminal.close();
+      return result;
+    } catch (IOException e) {
+      return false;
+    }
   }
 
   public static void reprintLine(PrintStream out, String line) {
