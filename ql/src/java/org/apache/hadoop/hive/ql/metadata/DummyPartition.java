@@ -58,6 +58,10 @@ public class DummyPartition extends Partition {
     tPart.setParameters(Maps.newHashMap());
 
     List<String> values = new ArrayList<>(Math.max(tbl.getPartCols().size(), partSpec.size()));
+    // Iceberg tables may report zero partition columns to Hive even though the
+    // partition spec is present in the partSpec map. When partition columns are
+    // available use them to order values by column name; otherwise fall back to
+    // the provided map ordering to keep partition key/value pairs intact.
     if (!tbl.getPartCols().isEmpty()) {
       for (FieldSchema field : tbl.getPartCols()) {
         values.add(partSpec.get(field.getName()));
