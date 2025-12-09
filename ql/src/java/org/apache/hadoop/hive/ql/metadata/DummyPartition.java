@@ -57,9 +57,13 @@ public class DummyPartition extends Partition {
     tPart.setSd(tbl.getSd().deepCopy());
     tPart.setParameters(Maps.newHashMap());
 
-    List<String> values = new ArrayList<>(tbl.getPartCols().size());
-    for (FieldSchema field : tbl.getPartCols()) {
-      values.add(partSpec.get(field.getName()));
+    List<String> values = new ArrayList<>(Math.max(tbl.getPartCols().size(), partSpec.size()));
+    if (!tbl.getPartCols().isEmpty()) {
+      for (FieldSchema field : tbl.getPartCols()) {
+        values.add(partSpec.get(field.getName()));
+      }
+    } else {
+      values.addAll(partSpec.values());
     }
     tPart.setDbName(tbl.getDbName());
     tPart.setTableName(tbl.getTableName());
