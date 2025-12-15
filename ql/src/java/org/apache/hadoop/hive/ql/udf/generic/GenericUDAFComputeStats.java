@@ -454,6 +454,7 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       protected Object serialize(Object[] result) {
         serializeCommon(result);
         long dv = numDV != null ? numDV.estimateNumDistinctValues() : 0;
+        LOG.info("Computed distinct_count={} for column type {} in NumericStatsAgg", dv, columnType);
         ((LongWritable) result[4]).set(dv);
         if (numDV != null) {
           byte[] buf = numDV.serialize();
@@ -982,6 +983,7 @@ public class GenericUDAFComputeStats extends AbstractGenericUDAFResolver {
       StringStatsAgg myagg = (StringStatsAgg) agg;
 
       long numDV = myagg.numDV == null ? 0 : myagg.numDV.estimateNumDistinctValues();
+      LOG.info("Computed distinct_count={} for column type {} in StringStatsAgg", numDV, myagg.columnType);
       double avgLength = 0.0;
       long total = myagg.count + myagg.countNulls;
 
