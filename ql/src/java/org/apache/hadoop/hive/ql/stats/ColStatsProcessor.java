@@ -20,6 +20,8 @@ package org.apache.hadoop.hive.ql.stats;
 
 import com.google.common.collect.ImmutableList;
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -72,7 +74,6 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.mapred.JobConf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.hadoop.hive.metastore.api.utils.DecimalUtils;
 
 
 public class ColStatsProcessor implements IStatsProcessor {
@@ -317,7 +318,7 @@ public class ColStatsProcessor implements IStatsProcessor {
     if (data.isSetDecimalStats()) {
       DecimalColumnStatsData stats = data.getDecimalStats();
       Decimal lowValue = stats.isSetLowValue() ? stats.getLowValue() : null;
-      return lowValue == null ? "null" : DecimalUtils.createBigDecimal(lowValue).toString();
+      return lowValue == null ? "null" : createBigDecimal(lowValue).toString();
     }
     if (data.isSetDateStats()) {
       DateColumnStatsData stats = data.getDateStats();
@@ -332,6 +333,13 @@ public class ColStatsProcessor implements IStatsProcessor {
     return "N/A";
   }
 
+  private BigDecimal createBigDecimal(Decimal decimal) {
+    if (decimal == null) {
+      return null;
+    }
+    return new BigDecimal(new BigInteger(decimal.getUnscaled()), decimal.getScale());
+  }
+
   private String getHighValue(ColumnStatisticsData data) {
     if (data.isSetLongStats()) {
       LongColumnStatsData stats = data.getLongStats();
@@ -344,7 +352,7 @@ public class ColStatsProcessor implements IStatsProcessor {
     if (data.isSetDecimalStats()) {
       DecimalColumnStatsData stats = data.getDecimalStats();
       Decimal highValue = stats.isSetHighValue() ? stats.getHighValue() : null;
-      return highValue == null ? "null" : DecimalUtils.createBigDecimal(highValue).toString();
+      return highValue == null ? "null" : createBigDecimal(highValue).toString();
     }
     if (data.isSetDateStats()) {
       DateColumnStatsData stats = data.getDateStats();
