@@ -330,7 +330,7 @@ public class ColStatsProcessor implements IStatsProcessor {
   }
 
   private String getNdvBitVectorMetadata(ColumnStatisticsData data) {
-    ByteBuffer bitVector = null;
+    byte[] bitVector = null;
     if (data.isSetLongStats()) {
       LongColumnStatsData stats = data.getLongStats();
       bitVector = stats.isSetBitVectors() ? stats.getBitVectors() : null;
@@ -353,9 +353,7 @@ public class ColStatsProcessor implements IStatsProcessor {
     if (bitVector == null) {
       return "none";
     }
-    ByteBuffer duplicate = bitVector.asReadOnlyBuffer();
-    int length = duplicate.remaining();
-    return "length=" + length;
+    return "length=" + bitVector.length;
   }
 
   private String getLowValue(ColumnStatisticsData data) {
