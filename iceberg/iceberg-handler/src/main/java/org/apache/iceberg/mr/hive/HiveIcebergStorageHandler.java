@@ -735,6 +735,9 @@ public class HiveIcebergStorageHandler extends DefaultStorageHandler implements 
     partStats.forEach(colStats ->
         colStats.getStatsObj().removeIf(statsObj -> !colNames.contains(statsObj.getColName())));
 
+    LOG.error("xxxx calling MetaStoreServerUtils.aggrPartitionStats: partStats.size={}, partNames.size()={}",
+        partStats.size(), partNames.size(),
+        new Exception());
     List<ColumnStatisticsObj> colStatsList = MetaStoreServerUtils.aggrPartitionStats(partStats,
         MetaStoreUtils.getDefaultCatalog(conf), hmsTable.getDbName(), hmsTable.getTableName(),
         partNames, colNames,

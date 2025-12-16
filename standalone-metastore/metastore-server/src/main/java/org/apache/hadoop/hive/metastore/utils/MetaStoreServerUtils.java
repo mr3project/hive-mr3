@@ -171,6 +171,7 @@ public class MetaStoreServerUtils {
     // Group stats by colName for each partition
     Map<String, ColumnStatsAggregator> aliasToAggregator =
         new HashMap<String, ColumnStatsAggregator>();
+    LOG.info("xxxxx1 aggrPartitionStats: partStats.size={}", partStats.size());
     for (ColumnStatistics css : partStats) {
       List<ColumnStatisticsObj> objs = css.getStatsObj();
       for (ColumnStatisticsObj obj : objs) {
@@ -187,7 +188,7 @@ public class MetaStoreServerUtils {
       }
     }
     if (colStatsMap.size() < 1) {
-      LOG.debug("No stats data found for: tblName= {}, partNames= {}, colNames= {}",
+      LOG.info("No stats data found for: tblName= {}, partNames= {}, colNames= {}",
           TableName.getQualified(catName, dbName, tableName), partNames, colNames);
       return Collections.emptyList();
     }
@@ -206,11 +207,12 @@ public class MetaStoreServerUtils {
         Executors.newFixedThreadPool(Math.min(colStatsMap.size(), numProcessors),
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("aggr-col-stats-%d").build());
     final List<Future<ColumnStatisticsObj>> futures = Lists.newLinkedList();
-    LOG.debug("Aggregating column stats. Threads used: {}",
+    LOG.info("xxx Aggregating column stats. Threads used: {}",
         Math.min(colStatsMap.size(), numProcessors));
     long start = System.currentTimeMillis();
     for (final Map.Entry<ColumnStatsAggregator, List<ColStatsObjWithSourceInfo>> entry : colStatsMap
         .entrySet()) {
+      LOG.info("xxx inside loop {}, ColStatsObjWithSourceInfo list size={}", entry.getKey(), entry.getValue().size());
       futures.add(pool.submit(new Callable<ColumnStatisticsObj>() {
         @Override
         public ColumnStatisticsObj call() throws MetaException {
@@ -242,7 +244,7 @@ public class MetaStoreServerUtils {
 
       }
     }
-    LOG.debug("Time for aggr col stats in seconds: {} Threads used: {}",
+    LOG.info("xxx Time for aggr col stats in seconds: {} Threads used: {}",
         ((System.currentTimeMillis() - (double) start)) / 1000,
         Math.min(colStatsMap.size(), numProcessors));
     return aggrColStatObjs;

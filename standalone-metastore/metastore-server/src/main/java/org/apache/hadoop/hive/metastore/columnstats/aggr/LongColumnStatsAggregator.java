@@ -393,6 +393,6 @@ public class LongColumnStatsAggregator extends ColumnStatsAggregator implements
       return;
     }
     LOG.info("Aggregated long stats for column {}: NDV={}, low={}, high={}, ndvSource={}", colName,
-        statsData.getNumDVs(), statsData.getLowValue(), statsData.getHighValue(), ndvSource);
+        statsData.getNumDVs(), statsData.getLowValue(), statsData.getHighValue(), ndvSource, new Exception());
   }
 }
