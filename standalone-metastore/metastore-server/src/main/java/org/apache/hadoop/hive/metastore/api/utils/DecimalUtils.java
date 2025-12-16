@@ -43,6 +43,13 @@ public class DecimalUtils {
     return new Decimal((short) d.scale(), ByteBuffer.wrap(d.unscaledValue().toByteArray()));
   }
 
+  /**
+   * Create a {@link BigDecimal} from a thrift {@link Decimal} instance.
+   */
+  public static BigDecimal createBigDecimal(Decimal decimal) {
+    return new BigDecimal(new BigInteger(decimal.getUnscaled()), decimal.getScale());
+  }
+
   public static String createJdoDecimalString(Decimal d) {
     return new BigDecimal(new BigInteger(d.getUnscaled()), d.getScale()).toString();
   }
