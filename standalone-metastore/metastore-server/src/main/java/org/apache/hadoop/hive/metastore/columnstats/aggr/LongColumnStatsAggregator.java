@@ -50,31 +50,30 @@ public class LongColumnStatsAggregator extends ColumnStatsAggregator implements
       List<String> partNames, boolean areAllPartsFound) throws MetaException {
     checkStatisticsList(colStatsWithSourceInfo);
 
-    ColumnStatisticsObj statsObj = null;
-    String colType;
-    String colName = null;
+    ColumnStatisticsObj firstStatsObj = colStatsWithSourceInfo.get(0).getColStatsObj();
+    String colName = firstStatsObj.getColName();
+    String colType = firstStatsObj.getColType();
+    ColumnStatisticsObj statsObj = ColumnStatsAggregatorFactory.newColumnStaticsObj(colName, colType,
+        firstStatsObj.getStatsData().getSetField());
     // check if all the ColumnStatisticsObjs contain stats and all the ndv are
     // bitvectors
     boolean doAllPartitionContainStats = partNames.size() == colStatsWithSourceInfo.size();
+    LOG.trace("doAllPartitionContainStats for column: {} is: {}", colName, doAllPartitionContainStats);
     NumDistinctValueEstimator ndvEstimator = null;
     boolean areAllNDVEstimatorsMergeable = true;
     for (ColStatsObjWithSourceInfo csp : colStatsWithSourceInfo) {
       ColumnStatisticsObj cso = csp.getColStatsObj();
-      if (statsObj == null) {
-        colName = cso.getColName();
-        colType = cso.getColType();
-        statsObj = ColumnStatsAggregatorFactory.newColumnStaticsObj(colName, colType,
-            cso.getStatsData().getSetField());
-        LOG.trace("doAllPartitionContainStats for column: {} is: {}", colName, doAllPartitionContainStats);
-      }
       LongColumnStatsDataInspector columnStatsData = longInspectorFromStats(cso);
+      byte[] bitVectors = columnStatsData.isSetBitVectors() ? columnStatsData.getBitVectors() : null;
+      NumDistinctValueEstimator estimator = columnStatsData.getNdvEstimator();
+      logIncomingPartitionStats(colName, csp.getPartName(), columnStatsData, estimator != null,
+          bitVectors == null ? 0 : bitVectors.length);
 
       // check if we can merge NDV estimators
-      if (columnStatsData.getNdvEstimator() == null) {
+      if (estimator == null) {
         areAllNDVEstimatorsMergeable = false;
         break;
       } else {
-        NumDistinctValueEstimator estimator = columnStatsData.getNdvEstimator();
         if (ndvEstimator == null) {
           ndvEstimator = estimator;
         } else {
@@ -91,6 +90,7 @@ public class LongColumnStatsAggregator extends ColumnStatsAggregator implements
     LOG.debug("all of the bit vectors can merge for {} is {}", colName, areAllNDVEstimatorsMergeable);
 
     ColumnStatisticsData columnStatisticsData = initColumnStatisticsData();
+    String ndvSource = "ndvTuner bounds";
     if (doAllPartitionContainStats || colStatsWithSourceInfo.size() < 2) {
       LongColumnStatsDataInspector aggregateData = null;
       long lowerBound = 0;
@@ -123,6 +123,7 @@ public class LongColumnStatsAggregator extends ColumnStatsAggregator implements
         // use uniform distribution assumption because we can merge bitvectors
         // to get a good estimation.
         aggregateData.setNumDVs(ndvEstimator.estimateNumDistinctValues());
+        ndvSource = "merged estimator";
       } else {
         long estimation;
         if (useDensityFunctionForNDVEstimation) {
@@ -144,6 +145,7 @@ public class LongColumnStatsAggregator extends ColumnStatsAggregator implements
           } else if (estimation > higherBound) {
             estimation = higherBound;
           }
+          ndvSource = "density function";
         } else {
           estimation = (long) (lowerBound + (higherBound - lowerBound) * ndvTuner);
         }
@@ -239,6 +241,8 @@ public class LongColumnStatsAggregator extends ColumnStatsAggregator implements
       }
       extrapolate(columnStatisticsData, partNames.size(), colStatsWithSourceInfo.size(),
           adjustedIndexMap, adjustedStatsMap, densityAvgSum / adjustedStatsMap.size());
+      ndvSource = areAllNDVEstimatorsMergeable ? "merged estimator with extrapolation" :
+          (useDensityFunctionForNDVEstimation ? "density extrapolation" : "ndvTuner extrapolation");
     }
     LOG.debug(
         "Ndv estimation for {} is {}. # of partitions requested: {}. # of partitions found: {}",
@@ -252,6 +256,8 @@ public class LongColumnStatsAggregator extends ColumnStatsAggregator implements
 
     // mutate columnStatisticsData to ensure NDV <= the number of integers in the given range.
     adjustNDV(columnStatisticsData.getLongStats());
+
+    logAggregatedColumnStats(colName, columnStatisticsData.getLongStats(), ndvSource);
 
     statsObj.setStatsData(columnStatisticsData);
 
@@ -370,5 +376,23 @@ public class LongColumnStatsAggregator extends ColumnStatsAggregator implements
           columnStats.getNumDVs(), estimation, columnStats.getLowValue(), columnStats.getHighValue());
       columnStats.setNumDVs(estimation);
     }
+  }
+
+  private void logIncomingPartitionStats(String colName, String partName, LongColumnStatsDataInspector statsData,
+      boolean hasEstimator, int bitVectorBytes) {
+    if (!LOG.isInfoEnabled()) {
+      return;
+    }
+    LOG.info("Aggregating long stats for column {}, partition {}: NDV={}, low={}, high={}, {}", colName,
+        partName, statsData.getNumDVs(), statsData.getLowValue(), statsData.getHighValue(),
+        formatNdvMetadata(hasEstimator, bitVectorBytes));
+  }
+
+  private void logAggregatedColumnStats(String colName, LongColumnStatsData statsData, String ndvSource) {
+    if (!LOG.isInfoEnabled()) {
+      return;
+    }
+    LOG.info("Aggregated long stats for column {}: NDV={}, low={}, high={}, ndvSource={}", colName,
+        statsData.getNumDVs(), statsData.getLowValue(), statsData.getHighValue(), ndvSource);
   }
 }

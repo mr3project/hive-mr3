@@ -134,4 +134,8 @@ public abstract class ColumnStatsAggregator {
 
     throw new IllegalArgumentException(currColStatsObj.getColType() + " is not supported for merging column stats histograms");
   }
+
+  protected String formatNdvMetadata(boolean hasEstimator, int bitVectorBytes) {
+    return String.format("estimatorPresent=%s, bitVectorBytes=%d", hasEstimator, bitVectorBytes);
+  }
 }
