@@ -58,7 +58,7 @@ public class LongColumnStatsAggregator extends ColumnStatsAggregator implements
     // check if all the ColumnStatisticsObjs contain stats and all the ndv are
     // bitvectors
     boolean doAllPartitionContainStats = partNames.size() == colStatsWithSourceInfo.size();
-    LOG.trace("doAllPartitionContainStats for column: {} is: {}", colName, doAllPartitionContainStats);
+    LOG.info("doAllPartitionContainStats for column: {} is: {}", colName, doAllPartitionContainStats);
     NumDistinctValueEstimator ndvEstimator = null;
     boolean areAllNDVEstimatorsMergeable = true;
     for (ColStatsObjWithSourceInfo csp : colStatsWithSourceInfo) {
@@ -87,7 +87,7 @@ public class LongColumnStatsAggregator extends ColumnStatsAggregator implements
     if (areAllNDVEstimatorsMergeable && ndvEstimator != null) {
       ndvEstimator = NumDistinctValueEstimatorFactory.getEmptyNumDistinctValueEstimator(ndvEstimator);
     }
-    LOG.debug("all of the bit vectors can merge for {} is {}", colName, areAllNDVEstimatorsMergeable);
+    LOG.info("all of the bit vectors can merge for {} is {}", colName, areAllNDVEstimatorsMergeable);
 
     ColumnStatisticsData columnStatisticsData = initColumnStatisticsData();
     String ndvSource = "ndvTuner bounds";
@@ -156,7 +156,7 @@ public class LongColumnStatsAggregator extends ColumnStatsAggregator implements
     } else {
       // TODO: bail out if missing stats are over a certain threshold
       // we need extrapolation
-      LOG.debug("start extrapolation for {}", colName);
+      LOG.info("start extrapolation for {}", colName);
       Map<String, Integer> indexMap = new HashMap<>();
       for (int index = 0; index < partNames.size(); index++) {
         indexMap.put(partNames.get(index), index);
@@ -244,7 +244,7 @@ public class LongColumnStatsAggregator extends ColumnStatsAggregator implements
       ndvSource = areAllNDVEstimatorsMergeable ? "merged estimator with extrapolation" :
           (useDensityFunctionForNDVEstimation ? "density extrapolation" : "ndvTuner extrapolation");
     }
-    LOG.debug(
+    LOG.info(
         "Ndv estimation for {} is {}. # of partitions requested: {}. # of partitions found: {}",
         colName, columnStatisticsData.getLongStats().getNumDVs(), partNames.size(),
         colStatsWithSourceInfo.size());
@@ -370,7 +370,7 @@ public class LongColumnStatsAggregator extends ColumnStatsAggregator implements
       estimation++;
     }
     if (estimation < columnStats.getNumDVs()) {
-      LOG.debug(
+      LOG.info(
           "Adjust the estimated NDV from {} to {} as it exceeds the number of integers "
               + "within the range of colStats: [{}, {}].",
           columnStats.getNumDVs(), estimation, columnStats.getLowValue(), columnStats.getHighValue());
