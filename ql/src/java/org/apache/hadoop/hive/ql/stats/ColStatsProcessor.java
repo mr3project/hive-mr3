@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableList;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -69,6 +70,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.mapred.JobConf;
@@ -136,11 +138,13 @@ public class ColStatsProcessor implements IStatsProcessor {
         PrimitiveTypeInfo typeInfo = (PrimitiveTypeInfo) TypeInfoUtils.getTypeInfoFromTypeString(columnType);
         List<ColumnStatsField> columnStatsFields = ColumnStatsType.getColumnStats(typeInfo);
         columnStatsFields = ColumnStatsType.removeDisabledStatistics(conf, columnStatsFields);
+        logRawColumnFields(columnName, columnStatsFields, pos, fields, values);
         try {
           ColumnStatisticsObj statObj = ColumnStatisticsObjTranslator.readHiveColumnStatistics(
               columnName, columnType, columnStatsFields, pos, fields, values);
           statsObjs.add(statObj);
           numStats++;
+          logTranslatedColumnStats(statObj);
         } catch (Exception e) {
           if (isStatsReliable) {
             throw new HiveException("Statistics collection failed while (hive.stats.reliable)", e);
@@ -211,6 +215,18 @@ public class ColStatsProcessor implements IStatsProcessor {
     return statsDesc;
   }
 
+  private void logRawColumnFields(String columnName, List<ColumnStatsField> columnStatsFields, int startPos,
+      List<? extends StructField> fields, List<Object> values) {
+    List<String> rawFieldStrings = new ArrayList<>();
+    for (int j = 0; j < columnStatsFields.size(); j++) {
+      StructField field = fields.get(startPos + j);
+      Object rawValue = values.get(startPos + j);
+      Object standardized = ObjectInspectorUtils.copyToStandardJavaObject(rawValue, field.getFieldObjectInspector());
+      rawFieldStrings.add(columnStatsFields.get(j).getFieldName() + "=" + String.valueOf(standardized));
+    }
+    LOG.info("Raw packed row fields for column {}: {}", columnName, String.join(", ", rawFieldStrings));
+  }
+
   public int persistColumnStats(Hive db, Table tbl) throws HiveException, MetaException, IOException {
     // Construct a column statistics object from the result
 
@@ -263,6 +279,13 @@ public class ColStatsProcessor implements IStatsProcessor {
     return 0;
   }
 
+  private void logTranslatedColumnStats(ColumnStatisticsObj obj) {
+    ColumnStatisticsData data = obj.getStatsData();
+    LOG.info("Translated column statistics for column {}: ndv={}, lowValue={}, highValue={}, ndvBitVector={}",
+        obj.getColName(), getNumDistinctValues(data), getLowValue(data), getHighValue(data),
+        getNdvBitVectorMetadata(data));
+  }
+
   private void logColumnStats(List<ColumnStatistics> columnStatisticsList) {
     for (ColumnStatistics columnStatistics : columnStatisticsList) {
       ColumnStatisticsDesc desc = columnStatistics.getStatsDesc();
@@ -271,9 +294,9 @@ public class ColStatsProcessor implements IStatsProcessor {
       String partitionName = desc.isIsTblLevel() ? "N/A" : desc.getPartName();
       for (ColumnStatisticsObj obj : columnStatistics.getStatsObj()) {
         ColumnStatisticsData data = obj.getStatsData();
-        LOG.info("Column statistics ({}) for table {} partition {} column {}: ndv={}, lowValue={}, highValue={}",
+        LOG.info("Column statistics ({}) for table {} partition {} column {}: ndv={}, lowValue={}, highValue={}, ndvBitVector={}",
             level, tableName, partitionName, obj.getColName(),
-            getNumDistinctValues(data), getLowValue(data), getHighValue(data));
+            getNumDistinctValues(data), getLowValue(data), getHighValue(data), getNdvBitVectorMetadata(data));
       }
     }
   }
@@ -304,6 +327,35 @@ public class ColStatsProcessor implements IStatsProcessor {
       return stats.isSetNumDVs() ? String.valueOf(stats.getNumDVs()) : "null";
     }
     return "N/A";
+  }
+
+  private String getNdvBitVectorMetadata(ColumnStatisticsData data) {
+    ByteBuffer bitVector = null;
+    if (data.isSetLongStats()) {
+      LongColumnStatsData stats = data.getLongStats();
+      bitVector = stats.isSetBitVectors() ? stats.getBitVectors() : null;
+    } else if (data.isSetDoubleStats()) {
+      DoubleColumnStatsData stats = data.getDoubleStats();
+      bitVector = stats.isSetBitVectors() ? stats.getBitVectors() : null;
+    } else if (data.isSetStringStats()) {
+      StringColumnStatsData stats = data.getStringStats();
+      bitVector = stats.isSetBitVectors() ? stats.getBitVectors() : null;
+    } else if (data.isSetDecimalStats()) {
+      DecimalColumnStatsData stats = data.getDecimalStats();
+      bitVector = stats.isSetBitVectors() ? stats.getBitVectors() : null;
+    } else if (data.isSetDateStats()) {
+      DateColumnStatsData stats = data.getDateStats();
+      bitVector = stats.isSetBitVectors() ? stats.getBitVectors() : null;
+    } else if (data.isSetTimestampStats()) {
+      TimestampColumnStatsData stats = data.getTimestampStats();
+      bitVector = stats.isSetBitVectors() ? stats.getBitVectors() : null;
+    }
+    if (bitVector == null) {
+      return "none";
+    }
+    ByteBuffer duplicate = bitVector.asReadOnlyBuffer();
+    int length = duplicate.remaining();
+    return "length=" + length;
   }
 
   private String getLowValue(ColumnStatisticsData data) {
