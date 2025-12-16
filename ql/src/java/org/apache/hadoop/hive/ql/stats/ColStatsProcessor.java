@@ -36,8 +36,18 @@ import org.apache.hadoop.hive.metastore.Warehouse;
 import org.apache.hadoop.hive.metastore.api.ColumnStatistics;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsDesc;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
+import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
+import org.apache.hadoop.hive.metastore.api.DateColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.Date;
+import org.apache.hadoop.hive.metastore.api.Decimal;
+import org.apache.hadoop.hive.metastore.api.DecimalColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.EnvironmentContext;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.LongColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.DoubleColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.StringColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.TimestampColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.Timestamp;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.SetPartitionsStatsRequest;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
@@ -62,6 +72,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.mapred.JobConf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.hadoop.hive.metastore.api.utils.DecimalUtils;
 
 
 public class ColStatsProcessor implements IStatsProcessor {
@@ -226,6 +237,7 @@ public class ColStatsProcessor implements IStatsProcessor {
       if (colStats.isEmpty()) {
         continue;
       }
+      logColumnStats(colStats);
       SetPartitionsStatsRequest request = new SetPartitionsStatsRequest(colStats);
       request.setNeedMerge(colStatDesc.isNeedMerge());
       if (txnMgr != null) {
@@ -248,6 +260,103 @@ public class ColStatsProcessor implements IStatsProcessor {
       LOG.info("Time taken to update " + colStats.size() + " stats : " + ((end - start)/1000F) + " seconds.");
     }
     return 0;
+  }
+
+  private void logColumnStats(List<ColumnStatistics> columnStatisticsList) {
+    for (ColumnStatistics columnStatistics : columnStatisticsList) {
+      ColumnStatisticsDesc desc = columnStatistics.getStatsDesc();
+      String tableName = desc.getDbName() + "." + desc.getTableName();
+      String level = desc.isIsTblLevel() ? "table-level" : "partition-level";
+      String partitionName = desc.isIsTblLevel() ? "N/A" : desc.getPartName();
+      for (ColumnStatisticsObj obj : columnStatistics.getStatsObj()) {
+        ColumnStatisticsData data = obj.getStatsData();
+        LOG.info("Column statistics ({}) for table {} partition {} column {}: ndv={}, lowValue={}, highValue={}",
+            level, tableName, partitionName, obj.getColName(),
+            getNumDistinctValues(data), getLowValue(data), getHighValue(data));
+      }
+    }
+  }
+
+  private String getNumDistinctValues(ColumnStatisticsData data) {
+    if (data.isSetLongStats()) {
+      LongColumnStatsData stats = data.getLongStats();
+      return stats.isSetNumDVs() ? String.valueOf(stats.getNumDVs()) : "null";
+    }
+    if (data.isSetDoubleStats()) {
+      DoubleColumnStatsData stats = data.getDoubleStats();
+      return stats.isSetNumDVs() ? String.valueOf(stats.getNumDVs()) : "null";
+    }
+    if (data.isSetStringStats()) {
+      StringColumnStatsData stats = data.getStringStats();
+      return stats.isSetNumDVs() ? String.valueOf(stats.getNumDVs()) : "null";
+    }
+    if (data.isSetDecimalStats()) {
+      DecimalColumnStatsData stats = data.getDecimalStats();
+      return stats.isSetNumDVs() ? String.valueOf(stats.getNumDVs()) : "null";
+    }
+    if (data.isSetDateStats()) {
+      DateColumnStatsData stats = data.getDateStats();
+      return stats.isSetNumDVs() ? String.valueOf(stats.getNumDVs()) : "null";
+    }
+    if (data.isSetTimestampStats()) {
+      TimestampColumnStatsData stats = data.getTimestampStats();
+      return stats.isSetNumDVs() ? String.valueOf(stats.getNumDVs()) : "null";
+    }
+    return "N/A";
+  }
+
+  private String getLowValue(ColumnStatisticsData data) {
+    if (data.isSetLongStats()) {
+      LongColumnStatsData stats = data.getLongStats();
+      return stats.isSetLowValue() ? String.valueOf(stats.getLowValue()) : "null";
+    }
+    if (data.isSetDoubleStats()) {
+      DoubleColumnStatsData stats = data.getDoubleStats();
+      return stats.isSetLowValue() ? String.valueOf(stats.getLowValue()) : "null";
+    }
+    if (data.isSetDecimalStats()) {
+      DecimalColumnStatsData stats = data.getDecimalStats();
+      Decimal lowValue = stats.isSetLowValue() ? stats.getLowValue() : null;
+      return lowValue == null ? "null" : DecimalUtils.createBigDecimal(lowValue).toString();
+    }
+    if (data.isSetDateStats()) {
+      DateColumnStatsData stats = data.getDateStats();
+      Date lowValue = stats.isSetLowValue() ? stats.getLowValue() : null;
+      return lowValue == null ? "null" : lowValue.toString();
+    }
+    if (data.isSetTimestampStats()) {
+      TimestampColumnStatsData stats = data.getTimestampStats();
+      Timestamp lowValue = stats.isSetLowValue() ? stats.getLowValue() : null;
+      return lowValue == null ? "null" : lowValue.toString();
+    }
+    return "N/A";
+  }
+
+  private String getHighValue(ColumnStatisticsData data) {
+    if (data.isSetLongStats()) {
+      LongColumnStatsData stats = data.getLongStats();
+      return stats.isSetHighValue() ? String.valueOf(stats.getHighValue()) : "null";
+    }
+    if (data.isSetDoubleStats()) {
+      DoubleColumnStatsData stats = data.getDoubleStats();
+      return stats.isSetHighValue() ? String.valueOf(stats.getHighValue()) : "null";
+    }
+    if (data.isSetDecimalStats()) {
+      DecimalColumnStatsData stats = data.getDecimalStats();
+      Decimal highValue = stats.isSetHighValue() ? stats.getHighValue() : null;
+      return highValue == null ? "null" : DecimalUtils.createBigDecimal(highValue).toString();
+    }
+    if (data.isSetDateStats()) {
+      DateColumnStatsData stats = data.getDateStats();
+      Date highValue = stats.isSetHighValue() ? stats.getHighValue() : null;
+      return highValue == null ? "null" : highValue.toString();
+    }
+    if (data.isSetTimestampStats()) {
+      TimestampColumnStatsData stats = data.getTimestampStats();
+      Timestamp highValue = stats.isSetHighValue() ? stats.getHighValue() : null;
+      return highValue == null ? "null" : highValue.toString();
+    }
+    return "N/A";
   }
 
   @Override
