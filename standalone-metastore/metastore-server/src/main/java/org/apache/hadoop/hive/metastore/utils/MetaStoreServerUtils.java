@@ -119,6 +119,9 @@ import org.slf4j.LoggerFactory;
 public class MetaStoreServerUtils {
   private static final Charset ENCODING = StandardCharsets.UTF_8;
   private static final Logger LOG = LoggerFactory.getLogger(MetaStoreServerUtils.class);
+  private static final int LOG_SAMPLE_PARTITIONS_MAX_SIZE = 4;
+  private static final int LOG_SAMPLE_PARTITIONS_HALF_SIZE = 2;
+  private static final String LOG_SAMPLE_PARTITIONS_SEPARATOR = ",";
 
   public static final String JUNIT_DATABASE_PREFIX = "junit_metastore_db";
 
@@ -136,6 +139,24 @@ public class MetaStoreServerUtils {
   private static final String DELEGATION_TOKEN_STORE_CLS = "hive.cluster.delegation.token.store.class";
 
   private static final char DOT = '.';
+
+  private static String samplePartitionNames(List<String> partNames) {
+    if (CollectionUtils.isEmpty(partNames)) {
+      return "[]";
+    }
+    StringBuilder sb = new StringBuilder("[");
+    if (partNames.size() > LOG_SAMPLE_PARTITIONS_MAX_SIZE) {
+      sb.append(String.join(LOG_SAMPLE_PARTITIONS_SEPARATOR,
+          partNames.subList(0, LOG_SAMPLE_PARTITIONS_HALF_SIZE)));
+      sb.append(" .... ");
+      sb.append(String.join(LOG_SAMPLE_PARTITIONS_SEPARATOR,
+          partNames.subList(partNames.size() - LOG_SAMPLE_PARTITIONS_HALF_SIZE, partNames.size())));
+    } else {
+      sb.append(String.join(LOG_SAMPLE_PARTITIONS_SEPARATOR, partNames));
+    }
+    sb.append("]");
+    return sb.toString();
+  }
 
   /**
    * We have a need to sanity-check the map before conversion from persisted objects to
@@ -171,7 +192,12 @@ public class MetaStoreServerUtils {
     // Group stats by colName for each partition
     Map<String, ColumnStatsAggregator> aliasToAggregator =
         new HashMap<String, ColumnStatsAggregator>();
-    LOG.info("xxxxx1 aggrPartitionStats: partStats.size={}", partStats.size());
+    if (LOG.isInfoEnabled()) {
+      LOG.info("Preparing aggregate partition stats for {}: partStats.size={}, partNames.size={}, colNames.size={}, "
+              + "partitionSample={}", TableName.getQualified(catName, dbName, tableName), partStats.size(),
+          partNames == null ? 0 : partNames.size(), colNames == null ? 0 : colNames.size(),
+          samplePartitionNames(partNames));
+    }
     for (ColumnStatistics css : partStats) {
       List<ColumnStatisticsObj> objs = css.getStatsObj();
       for (ColumnStatisticsObj obj : objs) {
@@ -186,6 +212,12 @@ public class MetaStoreServerUtils {
         colStatsMap.get(aliasToAggregator.get(obj.getColName()))
             .add(new ColStatsObjWithSourceInfo(obj, catName, dbName, tableName, partName));
       }
+    }
+    if (LOG.isInfoEnabled()) {
+      int totalColStatsEntries = colStatsMap.values().stream().mapToInt(List::size).sum();
+      LOG.info("Column stats map prepared for aggregation: columns={}, colStatsEntries={}, requestedPartitions={}, "
+              + "partitionSample={}", colStatsMap.size(), totalColStatsEntries,
+          partNames == null ? 0 : partNames.size(), samplePartitionNames(partNames));
     }
     if (colStatsMap.size() < 1) {
       LOG.info("No stats data found for: tblName= {}, partNames= {}, colNames= {}",
@@ -212,12 +244,33 @@ public class MetaStoreServerUtils {
     long start = System.currentTimeMillis();
     for (final Map.Entry<ColumnStatsAggregator, List<ColStatsObjWithSourceInfo>> entry : colStatsMap
         .entrySet()) {
-      LOG.info("xxx inside loop {}, ColStatsObjWithSourceInfo list size={}", entry.getKey(), entry.getValue().size());
+      if (LOG.isInfoEnabled()) {
+        String columnName = entry.getValue().isEmpty() ? "unknown"
+            : entry.getValue().get(0).getColStatsObj().getColName();
+        int partitionsWithStats = (int) entry.getValue().stream()
+            .map(ColStatsObjWithSourceInfo::getPartName).distinct().count();
+        LOG.info("Submitting aggregation task for column {}: colStatsWithSourceInfo.size={}, partitionsWithStats={}, "
+                + "totalRequestedPartitions={}, partitionSample={}, resultsAppended=true",
+            columnName, entry.getValue().size(), partitionsWithStats, partNames.size(),
+            samplePartitionNames(entry.getValue().stream().map(ColStatsObjWithSourceInfo::getPartName)
+                .collect(Collectors.toList())));
+      }
       futures.add(pool.submit(new Callable<ColumnStatisticsObj>() {
         @Override
         public ColumnStatisticsObj call() throws MetaException {
           List<ColStatsObjWithSourceInfo> colStatWithSourceInfo = entry.getValue();
           ColumnStatsAggregator aggregator = entry.getKey();
+          if (LOG.isInfoEnabled()) {
+            List<String> partitionsForColumn = colStatWithSourceInfo.stream()
+                .map(ColStatsObjWithSourceInfo::getPartName).collect(Collectors.toList());
+            int partitionsWithStats = (int) partitionsForColumn.stream().distinct().count();
+            LOG.info("Aggregating column stats for {}: colStatsWithSourceInfo.size={}, partitionsWithStats={}, "
+                    + "totalRequestedPartitions={}, partitionSample={}",
+                colStatWithSourceInfo.isEmpty() ? "unknown"
+                    : colStatWithSourceInfo.get(0).getColStatsObj().getColName(),
+                colStatWithSourceInfo.size(), partitionsWithStats, partNames.size(),
+                samplePartitionNames(partitionsForColumn.isEmpty() ? partNames : partitionsForColumn));
+          }
           try {
             ColumnStatisticsObj statsObj =
                 aggregator.aggregate(colStatWithSourceInfo, partNames, areAllPartsFound);

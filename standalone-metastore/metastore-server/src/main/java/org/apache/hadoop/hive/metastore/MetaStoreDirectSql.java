@@ -136,6 +136,9 @@ class MetaStoreDirectSql {
   private static final Set<String> ALLOWED_TABLES_TO_LOCK = Set.of("NOTIFICATION_SEQUENCE");
 
   private static final Logger LOG = LoggerFactory.getLogger(MetaStoreDirectSql.class);
+  private static final int LOG_SAMPLE_PARTITIONS_MAX_SIZE = 4;
+  private static final int LOG_SAMPLE_PARTITIONS_HALF_SIZE = 2;
+  private static final String LOG_SAMPLE_PARTITIONS_SEPARATOR = ",";
   private final PersistenceManager pm;
   private final Configuration conf;
   private final String schema;
@@ -176,6 +179,24 @@ class MetaStoreDirectSql {
     return objectIds.stream()
                .map(i -> i.toString())
                .collect(Collectors.joining(","));
+  }
+
+  private static String samplePartitionNames(List<String> partNames) {
+    if (partNames == null || partNames.isEmpty()) {
+      return "[]";
+    }
+    StringBuilder sb = new StringBuilder("[");
+    if (partNames.size() > LOG_SAMPLE_PARTITIONS_MAX_SIZE) {
+      sb.append(String.join(LOG_SAMPLE_PARTITIONS_SEPARATOR,
+          partNames.subList(0, LOG_SAMPLE_PARTITIONS_HALF_SIZE)));
+      sb.append(" .... ");
+      sb.append(String.join(LOG_SAMPLE_PARTITIONS_SEPARATOR,
+          partNames.subList(partNames.size() - LOG_SAMPLE_PARTITIONS_HALF_SIZE, partNames.size())));
+    } else {
+      sb.append(String.join(LOG_SAMPLE_PARTITIONS_SEPARATOR, partNames));
+    }
+    sb.append("]");
+    return sb.toString();
   }
 
   @java.lang.annotation.Target(java.lang.annotation.ElementType.FIELD)
@@ -1767,6 +1788,13 @@ class MetaStoreDirectSql {
     }
     long partsFound = 0;
     List<ColumnStatisticsObj> colStatsList;
+    if (LOG.isInfoEnabled()) {
+      LOG.info("Direct SQL aggregate stats for {}.{}.{}: partitionsRequested={}, columnsRequested={}, "
+              + "partitionSample={}, batchSize={}, useDensityFunctionForNDVEstimation={}, "
+              + "enableBitVector={}, enableKll={}", catName, dbName, tableName, partNames.size(),
+          colNames.size(), samplePartitionNames(partNames), batchSize, useDensityFunctionForNDVEstimation,
+          enableBitVector, enableKll);
+    }
     // Try to read from the cache first
     if (isAggregateStatsCacheEnabled
         && (partNames.size() < aggrStatsCache.getMaxPartsPerCacheNode())) {
@@ -1808,6 +1836,11 @@ class MetaStoreDirectSql {
       colStatsList =
           columnStatisticsObjForPartitions(catName, dbName, tableName, partNames, colNames, engine, partsFound,
               useDensityFunctionForNDVEstimation, ndvTuner, enableBitVector, enableKll);
+    }
+    if (LOG.isInfoEnabled()) {
+      LOG.info("Direct SQL aggregate stats completed for {}.{}.{}: partitionsWithStats={}, totalPartitionsRequested={}, "
+              + "partitionSample={}", catName, dbName, tableName, partsFound, partNames.size(),
+          samplePartitionNames(partNames));
     }
     LOG.debug("useDensityFunctionForNDVEstimation = " + useDensityFunctionForNDVEstimation
         + "\npartsFound = " + partsFound + "\nColumnStatisticsObj = "
@@ -1878,12 +1911,26 @@ class MetaStoreDirectSql {
       List<String> colNames, String engine, long partsFound, final boolean useDensityFunctionForNDVEstimation,
       final double ndvTuner, final boolean enableBitVector, boolean enableKll) throws MetaException {
     final boolean areAllPartsFound = (partsFound == partNames.size());
+    if (LOG.isInfoEnabled()) {
+      LOG.info("Direct SQL fetching column statistics objects: partitionsRequested={}, columnsRequested={}, "
+              + "areAllPartsFound={}, partitionSample={}, batchSize={}", partNames.size(), colNames.size(),
+          areAllPartsFound, samplePartitionNames(partNames), batchSize);
+    }
     return Batchable.runBatched(batchSize, colNames, new Batchable<String, ColumnStatisticsObj>() {
       @Override
       public List<ColumnStatisticsObj> run(final List<String> inputColNames) throws MetaException {
+        if (LOG.isInfoEnabled()) {
+          LOG.info("Processing column batch for aggregation: batchSize={}, columns={}", inputColNames.size(),
+              inputColNames);
+        }
         return Batchable.runBatched(batchSize, partNames, new Batchable<String, ColumnStatisticsObj>() {
           @Override
           public List<ColumnStatisticsObj> run(List<String> inputPartNames) throws MetaException {
+            if (LOG.isInfoEnabled()) {
+              LOG.info("Processing partition batch for columns {}: batchSize={}, partitionSample={}, "
+                      + "resultsAccumulated=true", inputColNames, inputPartNames.size(),
+                  samplePartitionNames(inputPartNames));
+            }
             return columnStatisticsObjForPartitionsBatch(catName, dbName, tableName, inputPartNames,
                 inputColNames, engine, areAllPartsFound, useDensityFunctionForNDVEstimation, ndvTuner,
                 enableBitVector, enableKll);
@@ -1933,6 +1980,11 @@ class MetaStoreDirectSql {
       boolean areAllPartsFound, boolean useDensityFunctionForNDVEstimation, double ndvTuner,
       boolean enableBitVector, boolean enableKll)
       throws MetaException {
+    if (LOG.isInfoEnabled()) {
+      LOG.info("Executing columnStatisticsObjForPartitionsBatch: table={}.{}.{} partitionsInBatch={}, columnsInBatch={}, "
+              + "areAllPartsFound={}, partitionSample={}", catName, dbName, tableName, partNames.size(),
+          colNames.size(), areAllPartsFound, samplePartitionNames(partNames));
+    }
     if (enableBitVector || enableKll) {
       return aggrStatsUseJava(catName, dbName, tableName, partNames, colNames, engine, areAllPartsFound,
           useDensityFunctionForNDVEstimation, ndvTuner, enableBitVector, enableKll);

@@ -9327,6 +9327,21 @@ public class HMSHandler extends FacebookBase implements IHMSHandler {
         TableName.getQualified(catName, dbName, tblName));
 
     List<String> lowerCaseColNames = new ArrayList<>(request.getColNames().size());
+    if (LOG.isInfoEnabled()) {
+      List<String> partNames = request.getPartNames();
+      String partitionSample = samplePartitionValues(partNames);
+      boolean tryDirectSql = MetastoreConf.getBoolVar(conf, ConfVars.TRY_DIRECT_SQL);
+      LOG.info("Aggregated stats request received: partNamesSize={}, colNamesSize={}, requestedPartsMetadata={}, "
+              + "partitionSample={}, engine={}, validWriteIdListSet={}, tryDirectSql={}, rawStoreClass={}",
+          request.getPartNamesSize(), request.getColNamesSize(), request.getPartNamesSize(),
+          partitionSample, request.getEngine(), request.isSetValidWriteIdList(),
+          tryDirectSql, getMS().getClass().getName());
+      if (partNames != null && partNames.size() > LOG_SAMPLE_PARTITIONS_MAX_SIZE) {
+        LOG.info("First and last partitions in request: first={}, last={}",
+            partNames.subList(0, LOG_SAMPLE_PARTITIONS_HALF_SIZE),
+            partNames.subList(partNames.size() - LOG_SAMPLE_PARTITIONS_HALF_SIZE, partNames.size()));
+      }
+    }
     for (String colName : request.getColNames()) {
       lowerCaseColNames.add(colName.toLowerCase());
     }
