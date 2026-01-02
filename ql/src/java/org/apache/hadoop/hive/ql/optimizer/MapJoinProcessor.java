@@ -554,7 +554,7 @@ public class MapJoinProcessor extends Transform {
         HiveConf.getVar(
             hiveConf,
             HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
-    final boolean isTezEngine = engine.equalsIgnoreCase("tez");
+    final boolean isTezEngine = engine.equalsIgnoreCase("mr3") || engine.equalsIgnoreCase("tez");
     if (!isTezEngine) {
 
       // Only Tez for now.
