@@ -815,9 +815,6 @@ public class CliDriver {
       System.err.println("Could not open input file for reading. (" + e.getMessage() + ")");
       return 3;
     }
-    if ("mr".equals(HiveConf.getVar(conf, ConfVars.HIVE_EXECUTION_ENGINE))) {
-      console.printInfo(HiveConf.generateMrDeprecationWarning());
-    }
 
     setupConsoleReader();
 

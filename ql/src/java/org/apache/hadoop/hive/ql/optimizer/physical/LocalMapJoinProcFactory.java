@@ -146,12 +146,6 @@ public final class LocalMapJoinProcFactory {
       // get the last operator for processing big tables
       int bigTable = mapJoinDesc.getPosBigTable();
 
-      // todo: support tez/vectorization
-      boolean useNontaged = conf.getBoolVar(
-          HiveConf.ConfVars.HIVECONVERTJOINUSENONSTAGED) &&
-          conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("mr") &&
-          !conf.getBoolVar(HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED);
-
       // the parent ops for hashTableSinkOp
       List<Operator<? extends OperatorDesc>> smallTablesParentOp =
         new ArrayList<Operator<? extends OperatorDesc>>();
@@ -168,8 +162,7 @@ public final class LocalMapJoinProcFactory {
           continue;
         }
         Operator<? extends OperatorDesc> parent = parentsOp.get(i);
-        boolean directFetchable = useNontaged &&
-            (parent instanceof TableScanOperator || parent instanceof MapJoinOperator);
+        boolean directFetchable = false;
         if (directFetchable) {
           // no filter, no projection. no need to stage
           smallTablesParentOp.add(null);

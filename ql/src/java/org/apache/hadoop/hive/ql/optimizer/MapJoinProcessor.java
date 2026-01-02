@@ -550,20 +550,6 @@ public class MapJoinProcessor extends Transform {
           mapJoinFullOuterOverride);
     }
 
-    final String engine =
-        HiveConf.getVar(
-            hiveConf,
-            HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
-    final boolean isTezEngine = engine.equalsIgnoreCase("mr3") || engine.equalsIgnoreCase("tez");
-    if (!isTezEngine) {
-
-      // Only Tez for now.
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("FULL OUTER MapJoin not enabled: Only Tez engine supported");
-      }
-      return false;
-    }
-
     /*
      * Optimized Hash Table (i.e. not old-style MR HashMap).
      */

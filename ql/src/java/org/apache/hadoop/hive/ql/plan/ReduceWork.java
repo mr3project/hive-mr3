@@ -329,7 +329,7 @@ public class ReduceWork extends BaseWork {
       String engineInSupportedCondName =
           HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname + " " + engine + " IN " + reduceVectorizableEngines;
 
-      boolean engineInSupported = reduceVectorizableEngines.contains(engine);
+      boolean engineInSupported = true;
 
       VectorizationCondition[] conditions = new VectorizationCondition[] {
           new VectorizationCondition(

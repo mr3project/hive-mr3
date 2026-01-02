@@ -187,20 +187,6 @@ public class HiveConfUtil {
       LOG.debug("Setting job conf credstore location to " + jobKeyStoreLocation
           + " previous location was " + oldKeyStoreLocation);
     }
-
-    String credStorepassword = getJobCredentialProviderPassword(jobConf);
-    if (credStorepassword != null) {
-      // if the execution engine is MR set the map/reduce env with the credential store password
-      String execEngine = jobConf.get(ConfVars.HIVE_EXECUTION_ENGINE.varname);
-      if ("mr".equalsIgnoreCase(execEngine)) {
-        addKeyValuePair(jobConf, JobConf.MAPRED_MAP_TASK_ENV,
-            Constants.HADOOP_CREDENTIAL_PASSWORD_ENVVAR, credStorepassword);
-        addKeyValuePair(jobConf, JobConf.MAPRED_REDUCE_TASK_ENV,
-            Constants.HADOOP_CREDENTIAL_PASSWORD_ENVVAR, credStorepassword);
-        addKeyValuePair(jobConf, "yarn.app.mapreduce.am.admin.user.env",
-            Constants.HADOOP_CREDENTIAL_PASSWORD_ENVVAR, credStorepassword);
-      }
-    }
   }
 
   /*

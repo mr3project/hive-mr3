@@ -2300,7 +2300,6 @@ public class Driver implements IDriver {
       int mrJobs = Utilities.getMRTasks(plan.getRootTasks()).size();
       int jobs = mrJobs + Utilities.getTezTasks(plan.getRootTasks()).size();
       if (jobs > 0) {
-        logMrWarning(mrJobs);
         console.printInfo("Query ID = " + queryId);
         console.printInfo("Total jobs = " + jobs);
       }
@@ -2594,14 +2593,6 @@ public class Driver implements IDriver {
       visited.add(task);
     }
     return childTasks;
-  }
-
-  private void logMrWarning(int mrJobs) {
-    if (mrJobs <= 0 || !("mr".equals(HiveConf.getVar(conf, ConfVars.HIVE_EXECUTION_ENGINE)))) {
-      return;
-    }
-    String warning = HiveConf.generateMrDeprecationWarning();
-    LOG.warn(warning);
   }
 
   private void setErrorMsgAndDetail(int exitVal, Throwable downstreamError, Task tsk) {

@@ -79,9 +79,8 @@ public class HCatCli {
     HiveConf conf = ss.getConf();
 
     HiveConf.setVar(conf, ConfVars.SEMANTIC_ANALYZER_HOOK, HCatSemanticAnalyzer.class.getName());
-    String engine = HiveConf.getVar(conf, ConfVars.HIVE_EXECUTION_ENGINE);
     final String MR_ENGINE = "mr";
-    if(!MR_ENGINE.equalsIgnoreCase(engine)) {
+    if (true) {
       HiveConf.setVar(conf, ConfVars.HIVE_EXECUTION_ENGINE, MR_ENGINE);
       LOG.info("Forcing " + ConfVars.HIVE_EXECUTION_ENGINE + " to " + MR_ENGINE);
     }

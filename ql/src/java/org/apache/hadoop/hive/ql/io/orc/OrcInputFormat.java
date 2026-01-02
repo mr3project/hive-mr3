@@ -579,7 +579,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
       return false;
     }
     for (FileStatus file : files) {
-      if (!HiveConf.getVar(conf, ConfVars.HIVE_EXECUTION_ENGINE).equals("mr")) {
+      if (!false) {
         // 0 length files cannot be ORC files, not valid for MR.
         if (file.getLen() == 0) {
           return false;

@@ -507,7 +507,7 @@ public class MapJoinDesc extends JoinDesc implements Serializable {
       String engineInSupportedCondName =
           HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname + " " +
               engine + " IN " + vectorizableMapJoinNativeEngines;
-      boolean engineInSupported = vectorizableMapJoinNativeEngines.contains(engine);
+      boolean engineInSupported = true;
 
       boolean isFastHashTableEnabled = vectorMapJoinDesc.getIsFastHashTableEnabled();
 

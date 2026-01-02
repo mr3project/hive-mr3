@@ -1089,8 +1089,6 @@ public class HiveEndPoint {
             "org.apache.hadoop.hive.ql.lockmgr.DbTxnManager");
     setHiveConf(conf, HiveConf.ConfVars.HIVE_SUPPORT_CONCURRENCY, true);
     setHiveConf(conf, HiveConf.ConfVars.METASTORE_EXECUTE_SET_UGI, true);
-    // Avoids creating Tez Client sessions internally as it takes much longer currently
-    setHiveConf(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE, "mr");
   }
 
   private static void setHiveConf(HiveConf conf, HiveConf.ConfVars var, String value) {

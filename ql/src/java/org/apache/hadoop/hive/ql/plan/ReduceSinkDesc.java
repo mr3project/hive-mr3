@@ -634,7 +634,7 @@ public class ReduceSinkDesc extends AbstractOperatorDesc {
       String engineInSupportedCondName =
           HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname + " " + engine + " IN " +
               vectorizableReduceSinkNativeEngines;
-      boolean engineInSupported = vectorizableReduceSinkNativeEngines.contains(engine);
+      boolean engineInSupported = true;
 
       VectorizationCondition[] conditions = new VectorizationCondition[] {
           new VectorizationCondition(
