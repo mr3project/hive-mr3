@@ -67,6 +67,8 @@ public class Vertex {
   private int distanceFromRoot = -1;  // not calculated yet
   private int hasReducerFromRoot = -1;  // -1 == unknown, 0 == false, 1 == true
 
+  private boolean hasPerVertexCache = false;
+
   private Vertex(
       String name,
       EntityDescriptor processorDescriptor,
@@ -249,6 +251,7 @@ public class Vertex {
         .setResource(createResourceProto(vcoresDivisor))
         // do not set UniquePerNode
         .setPriority(getDistanceFromRoot() * 3)
+        .setHasPerVertexCache(hasPerVertexCache)
         .addAllInEdgeIds(Lists.transform(inputEdges, transformEdgeToIdFunc))
         .addAllOutEdgeIds(Lists.transform(outputEdges, transformEdgeToIdFunc))
         .addAllRootInputs(createRootInputProtos())
@@ -322,5 +325,13 @@ public class Vertex {
 
   public ByteString getProcessorDescriptorPayload() {
     return processorDescriptor.getUserPayload();
+  }
+
+  public Map<String, Pair<EntityDescriptor, EntityDescriptor>> getDataSinks() {
+    return dataSinks;
+  }
+
+  public void setHasPerVertexCache() {
+    hasPerVertexCache = true;
   }
 }
