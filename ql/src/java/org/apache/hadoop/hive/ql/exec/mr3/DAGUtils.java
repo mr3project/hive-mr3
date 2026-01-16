@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.ErrorMsg;
+import org.apache.hadoop.hive.ql.exec.MapJoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.TaskRunner;
 import org.apache.hadoop.hive.ql.exec.Utilities;
@@ -67,6 +68,7 @@ import org.apache.hadoop.hive.ql.io.merge.MergeFileWork;
 import org.apache.hadoop.hive.ql.lib.Node;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
+import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
 import org.apache.hadoop.hive.ql.plan.MapReduceMapWork;
 import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.MergeJoinWork;
@@ -565,6 +567,10 @@ public class DAGUtils {
     DataSource mr3DataSource = MR3Utils.convertTezDataSourceDescriptor(dataSource);
     map.addDataSource(alias, mr3DataSource);
 
+    if (containsPerVertexCache(mapWork)) {
+      map.setHasPerVertexCache();
+    }
+
     return map;
   }
 
@@ -595,6 +601,10 @@ public class DAGUtils {
         reduceWork.getName(), processorDescriptor,
         reduceWork.isAutoReduceParallelism() ? reduceWork.getMaxReduceTasks() : reduceWork.getNumReduceTasks(),
         taskResource, containerEnvironment, containerJavaOpts, false, executionContext);
+
+    if (containsPerVertexCache(reduceWork)) {
+      reducer.setHasPerVertexCache();
+    }
 
     return reducer;
   }
@@ -635,6 +645,18 @@ public class DAGUtils {
     vertex.addDataSink("out_" + mapReduceMapWork.getName(), logicalOutputDescriptor, outputCommitterDescriptor);
 
     return vertex;
+  }
+
+  private boolean containsPerVertexCache(BaseWork baseWork) {
+    for (Operator<?> op : baseWork.getAllOperators()) {
+      if (op instanceof MapJoinOperator) {
+        MapJoinDesc conf = ((MapJoinOperator) op).getConf();
+        if (!conf.isBucketMapJoin() && !conf.isDynamicPartitionHashJoin()) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**
