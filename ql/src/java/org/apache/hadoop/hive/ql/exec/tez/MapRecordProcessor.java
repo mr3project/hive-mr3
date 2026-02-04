@@ -344,6 +344,7 @@ public class MapRecordProcessor extends RecordProcessor {
       mapOp.setReporter(reporter);
       MapredContext.get().setReporter(reporter);
 
+      processorContext.notifyPerVertexCacheLoaded();
     } catch (Throwable e) {
       setAborted(true);
       if (e instanceof OutOfMemoryError) {

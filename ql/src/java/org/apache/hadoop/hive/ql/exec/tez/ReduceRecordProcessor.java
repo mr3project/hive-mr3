@@ -235,6 +235,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
       reducer.setReporter(reporter);
       MapredContext.get().setReporter(reporter);
 
+      processorContext.notifyPerVertexCacheLoaded();
     } catch (Throwable e) {
       super.setAborted(true);
       if (e instanceof OutOfMemoryError) {
