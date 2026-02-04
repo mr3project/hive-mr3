@@ -130,6 +130,8 @@ public class MergeFileRecordProcessor extends RecordProcessor {
       OperatorUtils.setChildrenCollector(mergeOp.getChildOperators(), outMap);
       mergeOp.setReporter(reporter);
       MapredContext.get().setReporter(reporter);
+
+      processorContext.notifyPerVertexCacheLoaded();  // TODO: perhaps unnecessary
     } catch (Throwable e) {
       if (e instanceof OutOfMemoryError) {
         // will this be true here?
