@@ -90,6 +90,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
   private final PerfLogger perfLogger = SessionState.getPerfLogger();
 
   // TODO: Replace with direct call to ProgressHelper, when reliably available.
+  // do not create org.apache.tez.common.ProgressHelper which is unnecessary in MR3
   private static class ReflectiveProgressHelper {
 
     Configuration conf;
@@ -168,9 +169,6 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     // we have to close in the processor's run method, because tez closes inputs
     // before calling close (TEZ-955) and we might need to read inputs
     // when we flush the pipeline.
-      if (progressHelper != null) {
-        progressHelper.shutDownProgressTaskService();
-      }
 
     IOContextMap.clearThreadAttempt(getContext().getUniqueIdentifier());
   }
@@ -287,9 +285,6 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
         return null;
       }
 
-      // leverage TEZ-3437: Improve synchronization and the progress report behavior.
-      progressHelper = new ReflectiveProgressHelper(jobConf, inputs, getContext(), this.getClass().getSimpleName());
-
       // There should be no blocking operation in RecordProcessor creation,
       // otherwise the abort operation will not register since they are synchronized on the same
       // lock.
@@ -300,7 +295,6 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       }
     }
 
-    progressHelper.scheduleProgressTaskService(0, 100);
     if (!aborted.get()) {
       initializeAndRunProcessor(inputs, outputs);
     }
