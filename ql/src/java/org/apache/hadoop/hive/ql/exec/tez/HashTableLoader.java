@@ -26,6 +26,7 @@ import java.util.Map;
 
 import org.apache.hadoop.hive.ql.exec.MemoryMonitorInfo;
 import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionError;
+import org.apache.tez.common.counters.TaskCounter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -212,11 +213,9 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
 
         long inputRecords = -1;
         try {
-          //TODO : Need to use class instead of string.
-          // https://issues.apache.org/jira/browse/HIVE-23981
-          inputRecords = ((AbstractLogicalInput) input).getContext().getCounters().
-                  findCounter("org.apache.tez.common.counters.TaskCounter",
-                          "APPROXIMATE_INPUT_RECORDS").getValue();
+          inputRecords = ((AbstractLogicalInput) input).getContext().getCounters()
+            .findCounter(TaskCounter.APPROXIMATE_INPUT_RECORDS)
+            .getValue();
         } catch (Exception e) {
           LOG.debug("Failed to get value for counter APPROXIMATE_INPUT_RECORDS", e);
         }
