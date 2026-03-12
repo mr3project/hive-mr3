@@ -118,7 +118,7 @@ class IndexCache {
     LOG.debug("IndexCache MISS: MapId " + mapId + " not found") ;
     TezSpillRecord tmp = null;
     try {
-      tmp = new TezSpillRecord(indexFileName, null, expectedIndexOwner);  // use null for FileSystem (Cf. TEZ-4145) and because we do not use LLAP ShuffleHandler
+      tmp = new TezSpillRecord(indexFileName, null); // use null for FileSystem (Cf. TEZ-4145) and because we do not use LLAP ShuffleHandler
     } catch (Throwable e) {
       tmp = new TezSpillRecord(0);
       cache.remove(mapId);
