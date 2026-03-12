@@ -35,13 +35,13 @@ import com.datamonad.mr3.common.CommonUtils;
 import com.datamonad.mr3.api.common.MR3Conf;
 import com.datamonad.mr3.api.util.ProtoConverters;
 import com.datamonad.mr3.api.common.Utils$;
-import com.datamonad.mr3.tez.shufflehandler.ShuffleHandler;
 import com.datamonad.mr3.tez.shufflehandler.ShuffleHandlerDaemonProcessor;
 import com.datamonad.mr3.tez.shufflehandler.ShuffleHandlerDaemonVertexManagerPlugin;
+import org.apache.tez.dag.api.TezConfiguration;
 import org.apache.tez.runtime.library.common.shuffle.ShuffleServerDaemonProcessor;
 import org.apache.tez.runtime.library.common.shuffle.ShuffleServerDaemonVertexManagerPlugin;
 import org.apache.tez.runtime.library.common.shuffle.ShuffleUtils;
-import org.apache.tez.dag.api.TezConfiguration;
+import org.apache.tez.shufflehandler.ShuffleHandler;
 import org.json.JSONObject;
 
 import javax.annotation.Nullable;
