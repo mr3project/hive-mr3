@@ -130,7 +130,7 @@ class IndexCache {
     LOG.debug("IndexCache MISS: MapId " + mapId + " not found") ;
     TezSpillRecord tmp = null;
     try {
-      tmp = new TezSpillRecord(indexFileName, fs, expectedIndexOwner);
+      tmp = new TezSpillRecord(indexFileName, fs);
     } catch (Throwable e) {
       tmp = new TezSpillRecord(0);
       cache.remove(mapId);
