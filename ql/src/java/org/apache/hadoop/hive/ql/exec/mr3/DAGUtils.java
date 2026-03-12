@@ -1653,15 +1653,9 @@ public class DAGUtils {
     boolean useStatsAutoParallelism = jobConf.getBoolean(
         ShuffleVertexManager.TEZ_SHUFFLE_VERTEX_MANAGER_USE_STATS_AUTO_PARALLELISM,
         ShuffleVertexManager.TEZ_SHUFFLE_VERTEX_MANAGER_USE_STATS_AUTO_PARALLELISM_DEFAULT);
-    int autoParallelismMinPercent = jobConf.getInt(
-        ShuffleVertexManager.TEZ_SHUFFLE_VERTEX_MANAGER_AUTO_PARALLELISM_MIN_PERCENT,
-        ShuffleVertexManager.TEZ_SHUFFLE_VERTEX_MANAGER_AUTO_PARALLELISM_MIN_PERCENT_DEFAULT);
     pluginConf.setBoolean(
         ShuffleVertexManager.TEZ_SHUFFLE_VERTEX_MANAGER_USE_STATS_AUTO_PARALLELISM,
         useStatsAutoParallelism);
-    pluginConf.setInt(
-        ShuffleVertexManager.TEZ_SHUFFLE_VERTEX_MANAGER_AUTO_PARALLELISM_MIN_PERCENT,
-        autoParallelismMinPercent);
   }
 
   private void setupQuickStart(TezEdgeProperty edgeProp, Vertex v, JobConf jobConf)
