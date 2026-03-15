@@ -19,7 +19,6 @@
 package org.apache.hadoop.hive.ql.exec.mr3.dag;
 
 import com.datamonad.mr3.DAGAPI;
-import com.datamonad.mr3.api.common.MR3Conf;
 
 import javax.annotation.Nullable;
 
