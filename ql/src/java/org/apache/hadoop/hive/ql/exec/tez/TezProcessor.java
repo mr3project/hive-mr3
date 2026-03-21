@@ -90,65 +90,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
   private static final String CLASS_NAME = TezProcessor.class.getName();
   private final PerfLogger perfLogger = SessionState.getPerfLogger();
 
-  // TODO: Replace with direct call to ProgressHelper, when reliably available.
-  // do not create org.apache.tez.common.ProgressHelper which is unnecessary in MR3
-  private static class ReflectiveProgressHelper {
-
-    Configuration conf;
-    Class<?> progressHelperClass = null;
-    Object progressHelper = null;
-
-    ReflectiveProgressHelper(Configuration conf,
-                             Map<String, LogicalInput> inputs,
-                             ProcessorContext processorContext,
-                             String processorName) {
-      this.conf = conf;
-      try {
-        progressHelperClass = this.conf.getClassByName("org.apache.tez.common.ProgressHelper");
-        progressHelper = progressHelperClass.getDeclaredConstructor(Map.class, ProcessorContext.class, String.class)
-                            .newInstance(inputs, processorContext, processorName);
-        LOG.debug("ProgressHelper initialized!");
-      }
-      catch(Exception ex) {
-        LOG.warn("Could not find ProgressHelper. " + ex);
-      }
-    }
-
-    private boolean isValid() {
-      return progressHelperClass != null && progressHelper != null;
-    }
-
-    void scheduleProgressTaskService(long delay, long period) {
-      if (!isValid()) {
-        LOG.warn("ProgressHelper uninitialized. Bailing on scheduleProgressTaskService()");
-        return;
-      }
-      try {
-        progressHelperClass.getDeclaredMethod("scheduleProgressTaskService", long.class, long.class)
-            .invoke(progressHelper, delay, period);
-        LOG.debug("scheduleProgressTaskService() called!");
-      } catch (Exception exception) {
-        LOG.warn("Could not scheduleProgressTaskService.", exception);
-      }
-    }
-
-    void shutDownProgressTaskService() {
-      if (!isValid()) {
-        LOG.warn("ProgressHelper uninitialized. Bailing on scheduleProgressTaskService()");
-        return;
-      }
-      try {
-        progressHelperClass.getDeclaredMethod("shutDownProgressTaskService").invoke(progressHelper);
-        LOG.debug("shutDownProgressTaskService() called!");
-      }
-      catch (Exception exception) {
-        LOG.warn("Could not shutDownProgressTaskService.", exception);
-      }
-    }
-  }
-
   protected ProcessorContext processorContext;
-  private ReflectiveProgressHelper progressHelper;
 
   protected static final NumberFormat taskIdFormat = NumberFormat.getInstance();
   protected static final NumberFormat jobIdFormat = NumberFormat.getInstance();
