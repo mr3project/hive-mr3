@@ -37,7 +37,7 @@ public class KeyValuesFromKeyValues implements KeyValuesAdapter {
   }
 
   @Override
-  public Iterable<Object> getCurrentValues() throws IOException {
+  public Iterable<? extends Object> getCurrentValues() throws IOException {
     return reader.getCurrentValues();
   }
 

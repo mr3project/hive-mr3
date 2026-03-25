@@ -59,7 +59,7 @@ public class KeyValuesInputMerger extends KeyValuesReader {
 
   private class KeyValuesIterator implements Iterator<Object> {
     KeyValuesReader[] readerArray = null;
-    Iterator<Object> currentIterator = null;
+    Iterator<? extends Object> currentIterator = null;
     int currentIndex = 0;
     int loadedSize = 0;
 
