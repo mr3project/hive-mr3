@@ -27,9 +27,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.io.function.IOConsumer;
 import org.apache.hadoop.hive.conf.Constants;
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.tez.mapreduce.output.MROutput;
 import org.apache.tez.runtime.api.TaskFailureType;
 import org.apache.tez.runtime.api.events.CustomProcessorEvent;
+import org.apache.tez.runtime.library.api.KeyValueWriterEdge;
+import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -402,21 +405,20 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
    * Must be initialized before it is used.
    *
    */
-  @SuppressWarnings("rawtypes")
-  static class TezKVOutputCollector implements OutputCollector {
-    private KeyValueWriter writer;
-    private final LogicalOutput output;
+  static class TezKVOutputCollector implements OutputCollector<BytesWritable, BytesWritable> {
+    private KeyValueWriterEdge writer;
+    private final LogicalOutputEdge output;
 
-    TezKVOutputCollector(LogicalOutput logicalOutput) {
+    TezKVOutputCollector(LogicalOutputEdge logicalOutput) {
       this.output = logicalOutput;
     }
 
     void initialize() throws Exception {
-      this.writer = (KeyValueWriter) output.getWriter();
+      this.writer = output.getWriter();
     }
 
     @Override
-    public void collect(Object key, Object value) throws IOException {
+    public void collect(BytesWritable key, BytesWritable value) throws IOException {
       writer.write(key, value);
     }
   }
