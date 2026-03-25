@@ -31,6 +31,7 @@ import org.apache.hadoop.hive.llap.LlapUtil;
 import org.apache.hadoop.hive.ql.plan.PartitionDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.txn.compactor.CompactorUtil;
+import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -190,7 +191,9 @@ public class MapRecordProcessor extends RecordProcessor {
     for (Entry<String, LogicalOutput> outputEntry : outputs.entrySet()) {
       LOG.debug("Starting Output: " + outputEntry.getKey());
       outputEntry.getValue().start();
-      ((TezKVOutputCollector) outMap.get(outputEntry.getKey())).initialize();
+      if (outputEntry.getValue() instanceof LogicalOutputEdge) {
+        ((TezKVOutputCollector) outMap.get(outputEntry.getKey())).initialize();
+      }
     }
     checkAbortCondition();
 
