@@ -114,7 +114,7 @@ public class ReduceRecordSource implements RecordSource {
 
   private final PerfLogger perfLogger = SessionState.getPerfLogger();
 
-  private Iterable<Object> valueWritables;
+  private Iterable<? extends Object> valueWritables;
 
   private final GroupIterator groupIterator = new GroupIterator();
 
@@ -333,11 +333,11 @@ public class ReduceRecordSource implements RecordSource {
   private class GroupIterator {
     private final List<Object> row = new ArrayList<Object>(Utilities.reduceFieldNameList.size());
     private List<Object> passDownKey = null;
-    private Iterator<Object> values;
+    private Iterator<? extends Object> values;
     private byte tag;
     private Object keyObject;
 
-    public void initialize(Iterable<Object> values, Object keyObject, byte tag) {
+    public void initialize(Iterable<? extends Object> values, Object keyObject, byte tag) {
       this.passDownKey = null;
       this.values = values.iterator();
       this.tag = tag;
@@ -421,7 +421,7 @@ public class ReduceRecordSource implements RecordSource {
    * @throws IOException
    */
   private void processVectorGroup(BytesWritable keyWritable,
-          Iterable<Object> values, byte tag) throws HiveException, IOException {
+          Iterable<? extends Object> values, byte tag) throws HiveException, IOException {
 
     if (reducer.batchNeedsClone()) {
       batch = batchContext.createVectorizedRowBatch();

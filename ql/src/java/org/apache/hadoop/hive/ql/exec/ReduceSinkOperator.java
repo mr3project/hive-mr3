@@ -495,7 +495,7 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
     collect(keyWritable, valueWritable);
   }
 
-  protected void collect(BytesWritable keyWritable, Writable valueWritable) throws IOException {
+  protected void collect(BytesWritable keyWritable, BytesWritable valueWritable) throws IOException {
     // Since this is a terminal operator, update counters explicitly -
     // forward is not called
     if (null != out) {

@@ -29,12 +29,14 @@ import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.tez.mapreduce.processor.MRTaskReporter;
 import org.apache.tez.runtime.api.LogicalInput;
 import org.apache.tez.runtime.api.LogicalOutput;
 import org.apache.tez.runtime.api.ProcessorContext;
+import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +50,7 @@ public abstract class RecordProcessor extends InterruptibleProcessing {
   protected final JobConf jconf;
   protected Map<String, LogicalInput> inputs;
   protected Map<String, LogicalOutput> outputs;
-  protected Map<String, OutputCollector> outMap;
+  protected Map<String, OutputCollector<? extends BytesWritable, BytesWritable>> outMap;
   protected final ProcessorContext processorContext;
 
   private static final Logger LOG = LoggerFactory.getLogger(RecordProcessor.class);
@@ -92,8 +94,10 @@ public abstract class RecordProcessor extends InterruptibleProcessing {
     Preconditions.checkState(outMap == null, "Outputs should only be setup once");
     outMap = new HashMap<>();
     for (Entry<String, LogicalOutput> entry : outputs.entrySet()) {
-      TezKVOutputCollector collector = new TezKVOutputCollector(entry.getValue());
-      outMap.put(entry.getKey(), collector);
+      if (entry.getValue() instanceof LogicalOutputEdge) {
+        TezKVOutputCollector collector = new TezKVOutputCollector((LogicalOutputEdge)entry.getValue());
+        outMap.put(entry.getKey(), collector);
+      }
     }
   }
 

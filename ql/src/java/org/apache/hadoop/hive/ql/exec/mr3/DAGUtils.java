@@ -56,7 +56,6 @@ import org.apache.hadoop.hive.ql.exec.tez.MergeFileTezProcessor;
 import org.apache.hadoop.hive.ql.exec.tez.NullMROutput;
 import org.apache.hadoop.hive.ql.exec.tez.ReduceTezProcessor;
 import org.apache.hadoop.hive.ql.exec.tez.TezConfigurationFactory;
-import org.apache.hadoop.hive.ql.exec.tez.tools.TezMergedLogicalInput;
 import org.apache.hadoop.hive.ql.io.BucketizedHiveInputFormat;
 import org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils.NullOutputCommitter;
@@ -128,6 +127,7 @@ import org.apache.tez.runtime.library.conf.OrderedPartitionedKVEdgeConfig;
 import org.apache.tez.runtime.library.conf.UnorderedKVEdgeConfig;
 import org.apache.tez.runtime.library.conf.UnorderedPartitionedKVEdgeConfig;
 import org.apache.tez.runtime.library.input.ConcatenatedMergedKeyValueInput;
+import org.apache.tez.runtime.library.input.OrderedGroupedMergedKVInput;
 import org.apache.tez.runtime.library.api.Partitioner;
 import org.apache.tez.runtime.library.cartesianproduct.CartesianProductConfig;
 import org.apache.tez.runtime.library.cartesianproduct.CartesianProductEdgeManager;
@@ -790,44 +790,35 @@ public class DAGUtils {
     Class mergeInputClass;
     EdgeType edgeType = edgeProp.getEdgeType();
     switch (edgeType) {
-    case BROADCAST_EDGE:
-      mergeInputClass = ConcatenatedMergedKeyValueInput.class;
-      break;
-    case CUSTOM_EDGE: {
-      mergeInputClass = ConcatenatedMergedKeyValueInput.class;
+      case BROADCAST_EDGE:
+      case CUSTOM_SIMPLE_EDGE:
+      case ONE_TO_ONE_EDGE:
+      case XPROD_EDGE:
+        mergeInputClass = ConcatenatedMergedKeyValueInput.class;
+        break;
 
-      // update VertexManagerPlugin of destVertex
-      String vertexManagerClassName = CustomPartitionVertex.class.getName();
-      int numBuckets = edgeProp.getNumBuckets();
-      VertexType vertexType = tezWork.getVertexType(work);
-      CustomVertexConfiguration vertexConf = new CustomVertexConfiguration(numBuckets, vertexType);
-      ByteString userPayload = MR3Utils.createUserPayloadFromVertexConf(vertexConf);
-      EntityDescriptor vertexManagerPluginDescriptor = new EntityDescriptor(
-          vertexManagerClassName, userPayload);
-      destVertex.setVertexManagerPlugin(vertexManagerPluginDescriptor);
-      LOG.info("Set VertexManager: CustomPartitionVertex(GroupInputEdge, CUSTOM_EDGE) {}", destVertex.getName());
-      break;
-    }
+      case CUSTOM_EDGE: {
+        mergeInputClass = ConcatenatedMergedKeyValueInput.class;
 
-    case CUSTOM_SIMPLE_EDGE:
-      mergeInputClass = ConcatenatedMergedKeyValueInput.class;
-      break;
+        // update VertexManagerPlugin of destVertex
+        String vertexManagerClassName = CustomPartitionVertex.class.getName();
+        int numBuckets = edgeProp.getNumBuckets();
+        VertexType vertexType = tezWork.getVertexType(work);
+        CustomVertexConfiguration vertexConf = new CustomVertexConfiguration(numBuckets, vertexType);
+        ByteString userPayload = MR3Utils.createUserPayloadFromVertexConf(vertexConf);
+        EntityDescriptor vertexManagerPluginDescriptor = new EntityDescriptor(
+            vertexManagerClassName, userPayload);
+        destVertex.setVertexManagerPlugin(vertexManagerPluginDescriptor);
+        LOG.info("Set VertexManager: CustomPartitionVertex(GroupInputEdge, CUSTOM_EDGE) {}", destVertex.getName());
+        break;
+      }
 
-    case ONE_TO_ONE_EDGE:
-      mergeInputClass = ConcatenatedMergedKeyValueInput.class;
-      break;
-
-    case XPROD_EDGE:
-      mergeInputClass = ConcatenatedMergedKeyValueInput.class;
-      break;
-
-    case SIMPLE_EDGE:
-      setupAutoReducerParallelism(edgeProp, destVertex, parentJobConf);
-      // fall through
-
-    default:
-      mergeInputClass = TezMergedLogicalInput.class;
-      break;
+      case SIMPLE_EDGE:
+        setupAutoReducerParallelism(edgeProp, destVertex, parentJobConf);
+        // fall through
+      default:
+        mergeInputClass = OrderedGroupedMergedKVInput.class;
+        break;
     }
 
     org.apache.tez.dag.api.EdgeProperty ep = createTezEdgeProperty(edgeProp, parentJobConf, work, tezWork);
