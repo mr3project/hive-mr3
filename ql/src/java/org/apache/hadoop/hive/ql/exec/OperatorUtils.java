@@ -41,6 +41,7 @@ import org.apache.hadoop.hive.ql.plan.ExprNodeDescUtils;
 import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
 import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -219,7 +220,8 @@ public class OperatorUtils {
     return limit < 0;
   }
 
-  public static void setChildrenCollector(List<Operator<? extends OperatorDesc>> childOperators, OutputCollector out) {
+  public static void setChildrenCollector(List<Operator<? extends OperatorDesc>> childOperators,
+                                          OutputCollector<? extends BytesWritable, BytesWritable> out) {
     if (childOperators == null) {
       return;
     }
@@ -232,7 +234,8 @@ public class OperatorUtils {
     }
   }
 
-  public static void setChildrenCollector(List<Operator<? extends OperatorDesc>> childOperators, Map<String, OutputCollector> outMap) {
+  public static void setChildrenCollector(List<Operator<? extends OperatorDesc>> childOperators,
+                                          Map<String, OutputCollector<? extends BytesWritable, BytesWritable>> outMap) {
     if (childOperators == null) {
       return;
     }

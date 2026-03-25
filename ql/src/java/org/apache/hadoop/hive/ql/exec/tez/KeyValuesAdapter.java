@@ -36,7 +36,7 @@ public interface KeyValuesAdapter {
    * @return
    * @throws IOException
    */
-  Iterable<Object> getCurrentValues() throws IOException;
+  Iterable<? extends Object> getCurrentValues() throws IOException;
 
   /**
    * Move to the next record
