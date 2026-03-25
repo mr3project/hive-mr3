@@ -27,6 +27,7 @@ import java.util.Set;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hive.llap.LlapUtil;
+import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -290,7 +291,9 @@ public class ReduceRecordProcessor extends RecordProcessor {
       LOG.info("Starting Output: " + outputEntry.getKey());
       if (!isAborted()) {
         outputEntry.getValue().start();
-        ((TezKVOutputCollector) outMap.get(outputEntry.getKey())).initialize();
+        if (outputEntry.getValue() instanceof LogicalOutputEdge) {
+          ((TezKVOutputCollector) outMap.get(outputEntry.getKey())).initialize();
+        }
       }
     }
 
