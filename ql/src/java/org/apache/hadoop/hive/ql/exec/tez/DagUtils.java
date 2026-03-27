@@ -549,8 +549,8 @@ public class DagUtils {
       UnorderedKVEdgeConfig et1Conf = UnorderedKVEdgeConfig
           .newBuilder(keyClass, valClass)
           .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName(), null)
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName(), null)
+          .setKeySerializationClass(TezBytesWritableSerialization.class.getName())
+          .setValueSerializationClass(TezBytesWritableSerialization.class.getName())
           .build();
       return et1Conf.createDefaultBroadcastEdgeProperty();
     case CUSTOM_EDGE:
@@ -559,8 +559,8 @@ public class DagUtils {
       UnorderedPartitionedKVEdgeConfig et2Conf = UnorderedPartitionedKVEdgeConfig
           .newBuilder(keyClass, valClass, MRPartitioner.class.getName(), partitionerConf)
           .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName(), null)
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName(), null)
+          .setKeySerializationClass(TezBytesWritableSerialization.class.getName())
+          .setValueSerializationClass(TezBytesWritableSerialization.class.getName())
           .build();
       EdgeManagerPluginDescriptor edgeDesc =
           EdgeManagerPluginDescriptor.create(CustomPartitionEdge.class.getName());
@@ -577,8 +577,8 @@ public class DagUtils {
       UnorderedPartitionedKVEdgeConfig.Builder et3Conf = UnorderedPartitionedKVEdgeConfig
           .newBuilder(keyClass, valClass, MRPartitioner.class.getName(), partitionerConf)
           .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName(), null)
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName(), null);
+          .setKeySerializationClass(TezBytesWritableSerialization.class.getName())
+          .setValueSerializationClass(TezBytesWritableSerialization.class.getName());
       if (edgeProp.getBufferSize() != null) {
         et3Conf.setAdditionalConfiguration(
             TezRuntimeConfiguration.TEZ_RUNTIME_UNORDERED_OUTPUT_BUFFER_SIZE_MB,
@@ -589,8 +589,8 @@ public class DagUtils {
       UnorderedKVEdgeConfig et4Conf = UnorderedKVEdgeConfig
           .newBuilder(keyClass, valClass)
           .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName(), null)
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName(), null)
+          .setKeySerializationClass(TezBytesWritableSerialization.class.getName())
+          .setValueSerializationClass(TezBytesWritableSerialization.class.getName())
           .build();
       return et4Conf.createDefaultOneToOneEdgeProperty();
     case XPROD_EDGE:
@@ -604,13 +604,12 @@ public class DagUtils {
       }
       CartesianProductConfig cpConfig = new CartesianProductConfig(crossProductSources);
       edgeManagerDescriptor.setUserPayload(cpConfig.toUserPayload(new TezConfiguration(conf)));
-      UnorderedPartitionedKVEdgeConfig cpEdgeConf =
-        UnorderedPartitionedKVEdgeConfig.newBuilder(keyClass, valClass,
-          ValueHashPartitioner.class.getName())
-            .setFromConfiguration(conf)
-            .setKeySerializationClass(TezBytesWritableSerialization.class.getName(), null)
-            .setValueSerializationClass(TezBytesWritableSerialization.class.getName(), null)
-            .build();
+      UnorderedPartitionedKVEdgeConfig cpEdgeConf = UnorderedPartitionedKVEdgeConfig
+          .newBuilder(keyClass, valClass, ValueHashPartitioner.class.getName())
+          .setFromConfiguration(conf)
+          .setKeySerializationClass(TezBytesWritableSerialization.class.getName())
+          .setValueSerializationClass(TezBytesWritableSerialization.class.getName())
+          .build();
       return cpEdgeConf.createDefaultCustomEdgeProperty(edgeManagerDescriptor);
     case SIMPLE_EDGE:
       // fallthrough
@@ -621,8 +620,8 @@ public class DagUtils {
           .newBuilder(keyClass, valClass, MRPartitioner.class.getName(), partitionerConf)
           .setFromConfiguration(conf)
           .setKeySerializationClass(TezBytesWritableSerialization.class.getName(),
-              TezBytesComparator.class.getName(), null)
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName(), null)
+              TezBytesComparator.class.getName())
+          .setValueSerializationClass(TezBytesWritableSerialization.class.getName())
           .build();
       return et5Conf.createDefaultEdgeProperty();
     }
