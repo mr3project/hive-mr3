@@ -408,7 +408,7 @@ public class MR3Task {
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_BUILD_DAG);
     Map<BaseWork, Vertex> workToVertex = new HashMap<BaseWork, Vertex>();
 
-    // getAllWork returns a topologically sorted list, which we use to make
+    // getAllWork() returns a topologically sorted list, which we use to make
     // sure that vertices are created before they are used in edges.
     List<BaseWork> ws = tezWork.getAllWork();
     Collections.reverse(ws);
@@ -548,13 +548,13 @@ public class MR3Task {
     // VertexGroup.edges
     // All destVertexes use the same Key-class, Val-class and partitioner.
     // Pick any member vertex to figure out the Edge configuration.
-    JobConf parentConf = workToConf.get(unionWorkItems.get(0));
-    checkOutputSpec(unionWork, parentConf);
+    JobConf parentJobConf = workToConf.get(unionWorkItems.get(0));
+    checkOutputSpec(unionWork, parentJobConf);
 
     List<GroupInputEdge> edges = new ArrayList<GroupInputEdge>();
     for (BaseWork v: children) {
       GroupInputEdge edge = dagUtils.createGroupInputEdge(
-          parentConf, workToVertex.get(v),
+          parentJobConf, workToVertex.get(v),
           tezWork.getEdgeProperty(unionWork, v), v, tezWork);
       edges.add(edge);
     }
