@@ -160,8 +160,6 @@ import org.apache.tez.mapreduce.input.MRInputLegacy;
 import org.apache.tez.mapreduce.input.MultiMRInput;
 import org.apache.tez.mapreduce.partition.MRPartitioner;
 import org.apache.tez.runtime.library.api.TezRuntimeConfiguration;
-import org.apache.tez.runtime.library.common.comparator.TezBytesComparator;
-import org.apache.tez.runtime.library.common.serializer.TezBytesWritableSerialization;
 import org.apache.tez.runtime.library.conf.OrderedPartitionedKVEdgeConfig;
 import org.apache.tez.runtime.library.conf.UnorderedKVEdgeConfig;
 import org.apache.tez.runtime.library.conf.UnorderedPartitionedKVEdgeConfig;
@@ -549,8 +547,6 @@ public class DagUtils {
       UnorderedKVEdgeConfig et1Conf = UnorderedKVEdgeConfig
           .newBuilder(keyClass, valClass)
           .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName())
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName())
           .build();
       return et1Conf.createDefaultBroadcastEdgeProperty();
     case CUSTOM_EDGE:
@@ -559,8 +555,6 @@ public class DagUtils {
       UnorderedPartitionedKVEdgeConfig et2Conf = UnorderedPartitionedKVEdgeConfig
           .newBuilder(keyClass, valClass, MRPartitioner.class.getName(), partitionerConf)
           .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName())
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName())
           .build();
       EdgeManagerPluginDescriptor edgeDesc =
           EdgeManagerPluginDescriptor.create(CustomPartitionEdge.class.getName());
@@ -576,9 +570,7 @@ public class DagUtils {
       partitionerConf = createPartitionerConf(partitionerClassName, conf);
       UnorderedPartitionedKVEdgeConfig.Builder et3Conf = UnorderedPartitionedKVEdgeConfig
           .newBuilder(keyClass, valClass, MRPartitioner.class.getName(), partitionerConf)
-          .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName())
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName());
+          .setFromConfiguration(conf);
       if (edgeProp.getBufferSize() != null) {
         et3Conf.setAdditionalConfiguration(
             TezRuntimeConfiguration.TEZ_RUNTIME_UNORDERED_OUTPUT_BUFFER_SIZE_MB,
@@ -589,8 +581,6 @@ public class DagUtils {
       UnorderedKVEdgeConfig et4Conf = UnorderedKVEdgeConfig
           .newBuilder(keyClass, valClass)
           .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName())
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName())
           .build();
       return et4Conf.createDefaultOneToOneEdgeProperty();
     case XPROD_EDGE:
@@ -607,8 +597,6 @@ public class DagUtils {
       UnorderedPartitionedKVEdgeConfig cpEdgeConf = UnorderedPartitionedKVEdgeConfig
           .newBuilder(keyClass, valClass, ValueHashPartitioner.class.getName())
           .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName())
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName())
           .build();
       return cpEdgeConf.createDefaultCustomEdgeProperty(edgeManagerDescriptor);
     case SIMPLE_EDGE:
@@ -619,9 +607,6 @@ public class DagUtils {
       OrderedPartitionedKVEdgeConfig et5Conf = OrderedPartitionedKVEdgeConfig
           .newBuilder(keyClass, valClass, MRPartitioner.class.getName(), partitionerConf)
           .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName(),
-              TezBytesComparator.class.getName())
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName())
           .build();
       return et5Conf.createDefaultEdgeProperty();
     }
