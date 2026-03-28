@@ -714,9 +714,6 @@ public class DAGUtils {
 
     jobConf.set(Operator.CONTEXT_NAME_KEY, mapWork.getName());
 
-    // do not set NUM_MAPS which is never read
-    // jobConf.setInt(MRJobConfig.NUM_MAPS, mapWork.getNumMapTasks().intValue());
-
     if (mapWork.getMaxSplitSize() != null) {
       HiveConf.setLongVar(jobConf, HiveConf.ConfVars.MAPRED_MAX_SPLIT_SIZE,
           mapWork.getMaxSplitSize().longValue());
@@ -746,8 +743,7 @@ public class DAGUtils {
     }
 
     if (mapWork.getDummyTableScan()) {
-      // hive input format doesn't handle the special condition of no paths + 1
-      // split correctly.
+      // hive input format doesn't handle the special condition of no paths + 1 split correctly.
       inpFormat = CombineHiveInputFormat.class.getName();
     }
 
@@ -835,12 +831,12 @@ public class DAGUtils {
    * Given two vertices and the configuration for the source vertex, createEdge
    * will create an Edge object that connects the two.
    *
-   * @param vConf JobConf of the first (source) vertex
+   * @param vJobConf JobConf of the first (source) vertex
    * @param v The first vertex (source)
    * @param w The second vertex (sink)
    * @return
    */
-  public Edge createEdge(JobConf vConf, Vertex v, Vertex w, TezEdgeProperty edgeProp,
+  public Edge createEdge(JobConf vJobConf, Vertex v, Vertex w, TezEdgeProperty edgeProp,
       BaseWork work, TezWork tezWork)
     throws IOException {
 
@@ -863,11 +859,11 @@ public class DAGUtils {
       break;
 
     case SIMPLE_EDGE: {
-      setupAutoReducerParallelism(edgeProp, w, vConf);
+      setupAutoReducerParallelism(edgeProp, w, vJobConf);
       break;
     }
     case CUSTOM_SIMPLE_EDGE: {
-      setupQuickStart(edgeProp, w, vConf);
+      setupQuickStart(edgeProp, w, vJobConf);
       break;
     }
 
@@ -875,7 +871,7 @@ public class DAGUtils {
       // nothing
     }
 
-    org.apache.tez.dag.api.EdgeProperty ep = createTezEdgeProperty(edgeProp, vConf, work, tezWork);
+    org.apache.tez.dag.api.EdgeProperty ep = createTezEdgeProperty(edgeProp, vJobConf, work, tezWork);
     EdgeProperty edgeProperty = MR3Utils.convertTezEdgeProperty(ep);
     if (edgeProp.isFixed()) {   // access edgeProp directly
       LOG.info("Set VertexManager setting FIXED: Edge from {} to {}, {}",
@@ -1479,9 +1475,9 @@ public class DAGUtils {
 
     // additional removal by Hive-MR3
     String[] configRemoveKeys = HiveConf.getTrimmedStringsVar(hiveConf,
-      ConfVars.HIVE_MR3_CONFIG_REMOVE_KEYS);
+        ConfVars.HIVE_MR3_CONFIG_REMOVE_KEYS);
     String[] configRemovePrefixes = HiveConf.getTrimmedStringsVar(hiveConf,
-      ConfVars.HIVE_MR3_DAG_CONFIG_REMOVE_PREFIXES);
+        ConfVars.HIVE_MR3_DAG_CONFIG_REMOVE_PREFIXES);
     for (String key : configRemoveKeys) {
       conf.unset(key);
     }
@@ -1497,6 +1493,7 @@ public class DAGUtils {
     // MROutput reads "mapred.output.format.class", so required
     conf.setClass("mapred.output.format.class", HiveOutputFormatImpl.class, OutputFormat.class);
 
+    // TEZ_RUNTIME_KEY_CLASS and TEZ_RUNTIME_VALUE_CLASS are not read by Tez-MR3, but set them for record
     conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_KEY_CLASS, HiveKey.class.getName());
     conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_VALUE_CLASS, BytesWritable.class.getName());
 
