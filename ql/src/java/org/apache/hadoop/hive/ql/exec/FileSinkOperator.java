@@ -56,6 +56,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities.MissingBucketsContext;
 import org.apache.hadoop.hive.ql.io.AcidOutputFormat;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.io.BucketCodec;
+import org.apache.hadoop.hive.ql.io.DefaultHivePartitioner;
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils;
 import org.apache.hadoop.hive.ql.io.HiveKey;
 import org.apache.hadoop.hive.ql.io.HiveOutputFormat;
@@ -683,8 +684,8 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
         }
 
         partitionObjectInspectors = initEvaluators(partitionEval, outputObjInspector);
-        prtner = (HivePartitioner<HiveKey, Object>) ReflectionUtils.newInstance(
-            jc.getPartitionerClass(), null);
+        // With MR3, we do not use jc.getPartitionerClass() and directly instantiate HivePartitioner of Tez-MR3
+        prtner = new DefaultHivePartitioner<HiveKey, Object>();
       }
 
       if (dpCtx != null && !inspectPartitionValues()) {
