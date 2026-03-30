@@ -59,10 +59,11 @@ import org.apache.tez.mapreduce.common.MRInputSplitDistributor;
 import org.apache.tez.mapreduce.hadoop.InputSplitInfo;
 import org.apache.tez.mapreduce.output.MROutput;
 import org.apache.tez.mapreduce.protos.MRRuntimeProtos;
-import org.apache.tez.runtime.library.api.Partitioner;
 import org.apache.tez.runtime.library.cartesianproduct.CartesianProductConfig;
 import org.apache.tez.runtime.library.cartesianproduct.CartesianProductEdgeManager;
 import org.apache.tez.runtime.library.input.OrderedGroupedMergedKVInput;
+import org.apache.tez.runtime.library.partitioner.HashPartitioner;
+import org.apache.tez.runtime.library.partitioner.ValueHashPartitioner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -538,7 +539,6 @@ public class DagUtils {
     // do not call MRHelpers because we do not use Tez
     String keyClass = conf.get(TezRuntimeConfiguration.TEZ_RUNTIME_KEY_CLASS);
     String valClass = conf.get(TezRuntimeConfiguration.TEZ_RUNTIME_VALUE_CLASS);
-    String partitionerClassName = conf.get("mapred.partitioner.class");
     Map<String, String> partitionerConf;
 
     EdgeType edgeType = edgeProp.getEdgeType();
@@ -550,10 +550,8 @@ public class DagUtils {
           .build();
       return et1Conf.createDefaultBroadcastEdgeProperty();
     case CUSTOM_EDGE:
-      assert partitionerClassName != null;
-      partitionerConf = createPartitionerConf(partitionerClassName, conf);
       UnorderedPartitionedKVEdgeConfig et2Conf = UnorderedPartitionedKVEdgeConfig
-          .newBuilder(keyClass, valClass, MRPartitioner.class.getName(), partitionerConf)
+          .newBuilder(keyClass, valClass, MRPartitioner.class.getName())
           .setFromConfiguration(conf)
           .build();
       EdgeManagerPluginDescriptor edgeDesc =
@@ -566,10 +564,8 @@ public class DagUtils {
       edgeDesc.setUserPayload(UserPayload.create(ByteBuffer.wrap(userPayload)));
       return et2Conf.createDefaultCustomEdgeProperty(edgeDesc);
     case CUSTOM_SIMPLE_EDGE:
-      assert partitionerClassName != null;
-      partitionerConf = createPartitionerConf(partitionerClassName, conf);
       UnorderedPartitionedKVEdgeConfig.Builder et3Conf = UnorderedPartitionedKVEdgeConfig
-          .newBuilder(keyClass, valClass, MRPartitioner.class.getName(), partitionerConf)
+          .newBuilder(keyClass, valClass, MRPartitioner.class.getName())
           .setFromConfiguration(conf);
       if (edgeProp.getBufferSize() != null) {
         et3Conf.setAdditionalConfiguration(
@@ -602,42 +598,12 @@ public class DagUtils {
     case SIMPLE_EDGE:
       // fallthrough
     default:
-      assert partitionerClassName != null;
-      partitionerConf = createPartitionerConf(partitionerClassName, conf);
       OrderedPartitionedKVEdgeConfig et5Conf = OrderedPartitionedKVEdgeConfig
-          .newBuilder(keyClass, valClass, MRPartitioner.class.getName(), partitionerConf)
+          .newBuilder(keyClass, valClass, MRPartitioner.class.getName())
           .setFromConfiguration(conf)
           .build();
       return et5Conf.createDefaultEdgeProperty();
     }
-  }
-
-  public static class ValueHashPartitioner implements Partitioner {
-
-    @Override
-    public int getPartition(Object key, Object value, int numPartitions) {
-      return (value.hashCode() & 2147483647) % numPartitions;
-    }
-  }
-
-  /**
-   * Utility method to create a stripped down configuration for the MR partitioner.
-   *
-   * @param partitionerClassName
-   *          the real MR partitioner class name
-   * @param baseConf
-   *          a base configuration to extract relevant properties
-   * @return
-   */
-  private Map<String, String> createPartitionerConf(String partitionerClassName,
-      Configuration baseConf) {
-    Map<String, String> partitionerConf = new HashMap<String, String>();
-    partitionerConf.put("mapred.partitioner.class", partitionerClassName);
-    if (baseConf.get("mapreduce.totalorderpartitioner.path") != null) {
-      partitionerConf.put("mapreduce.totalorderpartitioner.path",
-      baseConf.get("mapreduce.totalorderpartitioner.path"));
-    }
-    return partitionerConf;
   }
 
   /*
@@ -1424,9 +1390,7 @@ public class DagUtils {
 
     conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_KEY_CLASS, HiveKey.class.getName());
     conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_VALUE_CLASS, BytesWritable.class.getName());
-
-    conf.set("mapred.partitioner.class", HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_PARTITIONER));
-    conf.set("tez.runtime.partitioner.class", MRPartitioner.class.getName());
+    conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_PARTITIONER_CLASS, HashPartitioner.class.getName());
 
     // Removing job credential entry/ cannot be set on the tasks
     conf.unset("mapreduce.job.credentials.binary");
