@@ -29,7 +29,7 @@ import org.apache.hadoop.io.Writable;
 import com.google.common.collect.LinkedListMultimap;
 import com.google.common.collect.Multimap;
 
-class CustomEdgeConfiguration implements Writable {
+public class CustomEdgeConfiguration implements Writable {
   boolean vertexInited = false;
   int numBuckets = -1;
   Multimap<Integer, Integer> bucketToTaskMap = null;
