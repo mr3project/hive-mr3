@@ -115,7 +115,6 @@ import org.apache.tez.mapreduce.hadoop.InputSplitInfo;
 import org.apache.tez.mapreduce.output.MROutputLegacy;
 import org.apache.tez.mapreduce.protos.MRRuntimeProtos;
 import org.apache.tez.mapreduce.hadoop.MRInputHelpers;
-import org.apache.tez.mapreduce.hadoop.MRJobConfig;
 import org.apache.tez.mapreduce.input.MRInputLegacy;
 import org.apache.tez.mapreduce.input.MultiMRInput;
 import org.apache.tez.mapreduce.output.MROutput;
@@ -960,25 +959,19 @@ public class DAGUtils {
   public static Resource getMapTaskResource(Configuration conf) {
     return getResource(conf,
         HiveConf.ConfVars.MR3_MAP_TASK_MEMORY_MB,
-        MRJobConfig.MAP_MEMORY_MB, MRJobConfig.DEFAULT_MAP_MEMORY_MB,
-        HiveConf.ConfVars.MR3_MAP_TASK_VCORES,
-        MRJobConfig.MAP_CPU_VCORES, MRJobConfig.DEFAULT_MAP_CPU_VCORES);
+        HiveConf.ConfVars.MR3_MAP_TASK_VCORES);
   }
 
   public static Resource getReduceTaskResource(Configuration conf) {
     return getResource(conf,
         HiveConf.ConfVars.MR3_REDUCE_TASK_MEMORY_MB,
-        MRJobConfig.REDUCE_MEMORY_MB, MRJobConfig.DEFAULT_REDUCE_MEMORY_MB,
-        HiveConf.ConfVars.MR3_REDUCE_TASK_VCORES,
-        MRJobConfig.REDUCE_CPU_VCORES, MRJobConfig.DEFAULT_REDUCE_CPU_VCORES);
+        HiveConf.ConfVars.MR3_REDUCE_TASK_VCORES);
   }
 
   public static Resource getMapContainerGroupResource(Configuration conf, int llapMemory, int llapCpus) {
     Resource resource = getResource(conf,
         ConfVars.MR3_MAP_CONTAINERGROUP_MEMORY_MB,
-        MRJobConfig.MAP_MEMORY_MB, MRJobConfig.DEFAULT_MAP_MEMORY_MB,
-        ConfVars.MR3_MAP_CONTAINERGROUP_VCORES,
-        MRJobConfig.MAP_CPU_VCORES, MRJobConfig.DEFAULT_MAP_CPU_VCORES);
+        ConfVars.MR3_MAP_CONTAINERGROUP_VCORES);
 
     return Resource.newInstance(
       resource.getMemory() + llapMemory, resource.getVirtualCores() + llapCpus);
@@ -987,9 +980,7 @@ public class DAGUtils {
   public static Resource getReduceContainerGroupResource(Configuration conf) {
     return getResource(conf,
         HiveConf.ConfVars.MR3_REDUCE_CONTAINERGROUP_MEMORY_MB,
-        MRJobConfig.REDUCE_MEMORY_MB, MRJobConfig.DEFAULT_REDUCE_MEMORY_MB,
-        HiveConf.ConfVars.MR3_REDUCE_CONTAINERGROUP_VCORES,
-        MRJobConfig.REDUCE_CPU_VCORES, MRJobConfig.DEFAULT_REDUCE_CPU_VCORES);
+        HiveConf.ConfVars.MR3_REDUCE_CONTAINERGROUP_VCORES);
   }
 
   public static Resource getAllInOneContainerGroupResource(Configuration conf, int allLlapMemory, int llapCpus) {
@@ -1006,18 +997,16 @@ public class DAGUtils {
 
   private static Resource getResource(
       Configuration conf,
-      HiveConf.ConfVars sizeKey, String mrSizeKey, int mrSizeDefault,
-      HiveConf.ConfVars coresKey, String mrCoresKey, int mrCoresDefault) {
+      HiveConf.ConfVars sizeKey,
+      HiveConf.ConfVars coresKey) {
     int memory = HiveConf.getIntVar(conf, sizeKey);
     if (memory < 0) {   // Task memory of 0 is allowed in hive-site.xml
-      memory = conf.getInt(mrSizeKey, mrSizeDefault);
+      memory = Integer.max(sizeKey.defaultIntVal, 0);
     }
-    // TODO: memory can still be < 0, e.g., if both sizeKey and mrSizeKey are set to -1
     int cpus = HiveConf.getIntVar(conf, coresKey);
     if (cpus < 0) {     // Task cpus of 0 is allowed in hive-site.xml
-      cpus = conf.getInt(mrCoresKey, mrCoresDefault);
+      cpus = Integer.max(coresKey.defaultIntVal, 0);
     }
-    // TODO: cpus can still be < 0, e.g., if both coresKey and mrCoresKey are set to -1
     return Resource.newInstance(memory, cpus);
   }
 
