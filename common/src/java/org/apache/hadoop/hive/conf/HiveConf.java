@@ -2524,7 +2524,7 @@ public class HiveConf extends Configuration {
         "bucketing/sorting for queries of the form: \n" +
         "insert overwrite table T2 select * from T1;\n" +
         "where T1 and T2 are bucketed/sorted by the same keys into the same number of buckets."),
-    HIVE_PARTITIONER("hive.mapred.partitioner", "org.apache.hadoop.hive.ql.io.DefaultHivePartitioner", ""),
+    HIVE_PARTITIONER("hive.mapred.partitioner", "org.apache.hadoop.hive.ql.io.DefaultHivePartitioner", ""),   // unused in Hive-MR3
     HIVE_ENFORCE_SORT_MERGE_BUCKET_MAPJOIN("hive.enforce.sortmergebucketmapjoin", false,
         "If the user asked for sort-merge bucketed map-side join, and it cannot be performed, should the query fail or not ?"),
     HIVE_ENFORCE_BUCKET_MAPJOIN("hive.enforce.bucketmapjoin", false,
