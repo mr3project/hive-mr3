@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.metastore.utils.TestTxnDbUtil;
 import org.apache.hadoop.hive.ql.exec.errors.DataConstraintViolationError;
 import org.apache.hadoop.hive.ql.io.HiveInputFormat;
 import org.apache.hadoop.hive.ql.session.SessionState;
-import org.apache.tez.mapreduce.hadoop.MRJobConfig;
+import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
