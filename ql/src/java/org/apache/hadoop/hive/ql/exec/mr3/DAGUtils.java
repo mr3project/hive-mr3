@@ -47,6 +47,7 @@ import org.apache.hadoop.hive.ql.exec.mr3.dag.EntityDescriptor;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.GroupInputEdge;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.Vertex;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
+import org.apache.hadoop.hive.ql.exec.tez.CustomEdgeConfiguration;
 import org.apache.hadoop.hive.ql.exec.tez.CustomPartitionEdge;
 import org.apache.hadoop.hive.ql.exec.tez.CustomPartitionVertex;
 import org.apache.hadoop.hive.ql.exec.tez.DagUtils;
