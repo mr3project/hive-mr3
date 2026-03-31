@@ -590,7 +590,8 @@ public class MR3Task {
       LOG.info("Modified {} to {}", TezRuntimeConfiguration.TEZ_RUNTIME_IO_SORT_MB, newValue);
     }
 
-    Vertex vertex = dagUtils.createVertex(vertexJobConf, baseWork, mr3ScratchDir, isFinal, vertexType, tezWork);
+    Vertex vertex = dagUtils.createVertex(
+        vertexJobConf, jobConf, baseWork, mr3ScratchDir, isFinal, vertexType, tezWork);
     dag.addVertex(vertex);
 
     if (dagUtils.shouldAddPathsToCredentials(jobConf)) {
