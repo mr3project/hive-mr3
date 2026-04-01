@@ -127,6 +127,8 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
       return false;
     }
 
+    com.datamonad.mr3.common.Utils.printBuildInfo();
+
     LOG.info("Setting up MR3SessionManager");
     this.hiveConf = hiveConf;
 
