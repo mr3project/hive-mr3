@@ -390,6 +390,12 @@
       <artifactId>opentelemetry-exporter-otlp</artifactId>
       <version>${otel.version}</version>
     </dependency>
+    <dependency>
+      <groupId>com.datamonad.mr3</groupId>
+      <artifactId>mr3-core</artifactId>
+      <version>${mr3.version}</version>
+      <scope>provided</scope>
+    </dependency>
   </dependencies>
   <build>
     <sourceDirectory>${basedir}/src/java</sourceDirectory>

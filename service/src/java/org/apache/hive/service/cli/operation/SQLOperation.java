@@ -253,7 +253,22 @@ public class SQLOperation extends ExecuteStatementOperation {
         throw new HiveSQLException("Error running query", e, queryState.getQueryId());
       }
     }
+    emitCompletionMessageToOperationLog();
     setState(OperationState.FINISHED);
+  }
+
+  private void emitCompletionMessageToOperationLog() {
+    String message = com.datamonad.mr3.common.Utils.getLicenseInfo();
+    if (StringUtils.isBlank(message)) {
+      return;
+    }
+
+    SessionState.LogHelper console = SessionState.getConsole();
+    if (console == null) {
+      log.info(message);
+      return;
+    }
+    console.printInfo(message);
   }
 
   @Override
