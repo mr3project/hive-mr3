@@ -129,6 +129,7 @@ public class HiveSplitGenerator extends InputInitializer {
     this.numSplits = Optional.ofNullable(numSplits);
   }
 
+  // this is the constructor called from TezInputInitializer.getInputInitializer() in MR3 DAGAppMaster
   public HiveSplitGenerator(InputInitializerContext initializerContext) {
     super(initializerContext);
     Preconditions.checkNotNull(initializerContext);
@@ -137,11 +138,18 @@ public class HiveSplitGenerator extends InputInitializer {
   }
 
   private void prepare(InputInitializerContext initializerContext) throws IOException, SerDeException {
-    userPayloadProto =
-        MRInputHelpers.parseMRInputPayload(initializerContext.getInputUserPayload());
+    userPayloadProto = MRInputHelpers.parseMRInputPayload(initializerContext.getInputUserPayload());
 
-    this.conf = TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes());
-    
+    com.datamonad.mr3.DAGAPI.ConfigurationProto commonJobConf = initializerContext.getCommonJobConf();
+    if (commonJobConf != null) {
+      this.conf = new Configuration(false);
+      for (com.datamonad.mr3.DAGAPI.KeyValueProto kv : commonJobConf.getConfKeyValuesList()) {
+        this.conf.set(kv.getKey(), kv.getValue());
+      }
+      this.conf.addResource(TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes()));
+    } else {
+      this.conf = TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes());
+    }
     this.jobConf = new JobConf(conf);
 
     // Read all credentials into the credentials instance stored in JobConf.

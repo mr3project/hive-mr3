@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils;
 import org.apache.hadoop.hive.ql.exec.mr3.llap.LLAPDaemonProcessor;
 import org.apache.hadoop.hive.ql.exec.mr3.llap.LLAPDaemonVertexManagerPlugin;
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.yarn.api.records.LocalResource;
 import org.apache.hadoop.yarn.api.records.Resource;
@@ -37,6 +38,7 @@ import com.datamonad.mr3.api.util.ProtoConverters;
 import com.datamonad.mr3.api.common.Utils$;
 import com.datamonad.mr3.tez.shufflehandler.ShuffleHandlerDaemonProcessor;
 import com.datamonad.mr3.tez.shufflehandler.ShuffleHandlerDaemonVertexManagerPlugin;
+import org.apache.tez.common.TezUtils;
 import org.apache.tez.dag.api.TezConfiguration;
 import org.apache.tez.runtime.library.common.shuffle.ShuffleServerDaemonProcessor;
 import org.apache.tez.runtime.library.common.shuffle.ShuffleServerDaemonVertexManagerPlugin;
@@ -85,17 +87,21 @@ public class DAG {
 
   private int vcoresDivisor = 1;  // set in createDagProto()
 
+  private final JobConf commonJobConf;
+
   private DAG(
       String name,
       String dagInfo,
       Map<String, JSONObject> operatorGraphMap,
       @Nullable Credentials dagCredentials,
-      String queryId) {
+      String queryId,
+      JobConf commonJobConf) {
     this.name = name;
     this.dagInfo = dagInfo;
     this.operatorGraphMap = operatorGraphMap;
     this.dagCredentials = dagCredentials != null ? dagCredentials : new Credentials();
     this.queryId = queryId;
+    this.commonJobConf = commonJobConf;
   }
 
   public static DAG create(
@@ -103,8 +109,9 @@ public class DAG {
       String dagInfo,
       Map<String, JSONObject> operatorGraphMap,
       Credentials dagCredentials,
-      String queryId) {
-    return new DAG(name, dagInfo, operatorGraphMap, dagCredentials, queryId);
+      String queryId,
+      JobConf commonJobConf) {
+    return new DAG(name, dagInfo, operatorGraphMap, dagCredentials, queryId, commonJobConf);
   }
 
   public String getQueryId() {
@@ -243,6 +250,8 @@ public class DAG {
       operatorGraphJsonProtos.add(jsonProto);
     }
 
+    DAGAPI.ConfigurationProto commonJobConfProto = Utils$.MODULE$.createConfProto(commonJobConf);
+
     // We should call setDagConf(). Otherwise we would end up using DAGAppMaster.MR3Conf in MR3.
     DAGAPI.DAGProto dagProto = DAGAPI.DAGProto.newBuilder()
         .setName(name)
@@ -256,6 +265,7 @@ public class DAG {
         .addAllLocalResources(lrProtos)
         .addAllContainerGroups(containerGroupProtos)
         .setDagConf(dagConfProto)
+        .setCommonJobConf(commonJobConfProto)
         .build();
 
     return dagProto;
@@ -392,7 +402,7 @@ public class DAG {
       containerGroupProtos.add(perReduceContainerGroupProto);
 
     } else {
-      for(Vertex vertex: vertices) {
+      for (Vertex vertex: vertices) {
         DAGAPI.ContainerGroupProto perVertexContainerGroupProto =
           createPerVertexContainerGroupProto(mr3TaskConf, vertex, shuffleServerProto);
         containerGroupProtos.add(perVertexContainerGroupProto);
