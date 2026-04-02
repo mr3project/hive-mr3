@@ -50,7 +50,7 @@ public interface MR3Session {
   /**
    * @param dag
    * @param amLocalResources
-   * @param conf
+   * @param mr3TaskConf
    * @param workMap
    * @return MR3JobRef
    * @throws Exception
@@ -58,7 +58,7 @@ public interface MR3Session {
   MR3JobRef submit(
       DAG dag,
       Map<String, LocalResource> amLocalResources,
-      Configuration conf,
+      Configuration mr3TaskConf,
       Map<String, BaseWork> workMap,
       Context ctx,
       AtomicBoolean isShutdown,
@@ -84,4 +84,6 @@ public interface MR3Session {
   int getEstimateNumTasksOrNodes(int taskMemoryInMb) throws Exception;
 
   void sendDaemonMessage(String daemonId, ByteString payload) throws Exception;
+
+  void setAlreadyExecutedAnyDag();
 }
