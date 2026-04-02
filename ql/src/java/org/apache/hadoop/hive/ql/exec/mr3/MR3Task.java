@@ -237,6 +237,7 @@ public class MR3Task {
         }
         String dagIdStr = mr3JobRef.getDagIdStr();    // may throw MR3Exception
         collectCommitInformation(tezWork, dagStatus, dagIdStr);
+        mr3Session.setAlreadyExecutedAnyDag();
       }
 
       LOG.info("MR3Task completed");

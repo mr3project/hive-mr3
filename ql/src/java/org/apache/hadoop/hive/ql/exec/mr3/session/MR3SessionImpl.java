@@ -100,6 +100,12 @@ public class MR3SessionImpl implements MR3Session {
 
   DAGUtils dagUtils = DAGUtils.getInstance();
 
+  private volatile boolean alreadyExecutedAnyDag = false;
+
+  public void setAlreadyExecutedAnyDag() {
+    alreadyExecutedAnyDag = true;
+  }
+
   // Cf. MR3SessionImpl.sessionId != HiveConf.HIVESESSIONID
   private String makeSessionId() {
     if (shareMr3Session) {
@@ -366,7 +372,7 @@ public class MR3SessionImpl implements MR3Session {
     if (submitter == null) {
       submitter = "(unknown)";
     }
-    DAGAPI.DAGProto dagProto = dag.createDagProto(mr3TaskConf, dagConf, submitter);
+    DAGAPI.DAGProto dagProto = dag.createDagProto(mr3TaskConf, dagConf, submitter, alreadyExecutedAnyDag);
 
     LOG.info("Submitting DAG (submitter={})", submitter);
     // close() may have been called, in which case currentHiveMr3Client.submitDag() raises Exception

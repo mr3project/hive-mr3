@@ -38,7 +38,6 @@ import com.datamonad.mr3.api.util.ProtoConverters;
 import com.datamonad.mr3.api.common.Utils$;
 import com.datamonad.mr3.tez.shufflehandler.ShuffleHandlerDaemonProcessor;
 import com.datamonad.mr3.tez.shufflehandler.ShuffleHandlerDaemonVertexManagerPlugin;
-import org.apache.tez.common.TezUtils;
 import org.apache.tez.dag.api.TezConfiguration;
 import org.apache.tez.runtime.library.common.shuffle.ShuffleServerDaemonProcessor;
 import org.apache.tez.runtime.library.common.shuffle.ShuffleServerDaemonVertexManagerPlugin;
@@ -168,9 +167,12 @@ public class DAG {
     edges.add(edge);
   }
 
-  public DAGAPI.DAGProto createDagProto(Configuration mr3TaskConf, MR3Conf dagConf, String submitter) throws IOException {
+  public DAGAPI.DAGProto createDagProto(
+      Configuration mr3TaskConf, MR3Conf dagConf, String submitter,
+      boolean alreadyExecutedAnyDag) throws IOException {
     this.vcoresDivisor = HiveConf.getIntVar(mr3TaskConf, HiveConf.ConfVars.MR3_RESOURCE_VCORES_DIVISOR);
     ContainerGroupScheme scheme = getContainerGroupScheme(mr3TaskConf);
+    boolean skipDaemonVertexProto = (scheme == DAG.ContainerGroupScheme.ALL_IN_ONE) && alreadyExecutedAnyDag;
 
     List<DAGAPI.VertexProto> vertexProtos = createVertexProtos(scheme);
 
@@ -190,54 +192,62 @@ public class DAG {
       lrProtos.add(ProtoConverters.convertToLocalResourceProto(dagUtils.getBaseName(lr), lr));
     }
 
-    boolean useLlapIo = HiveConf.getBoolVar(mr3TaskConf, HiveConf.ConfVars.LLAP_IO_ENABLED, false);
-    int llapMemory = 0;
-    int llapCpus = 0;
-    DAGAPI.DaemonVertexProto llapDaemonVertexProto = null;
-    if (useLlapIo) {
-      // llapMemory = 0 and llapCpus = 0 are valid.
-      llapMemory = HiveConf.getIntVar(mr3TaskConf, HiveConf.ConfVars.MR3_LLAP_DAEMON_TASK_MEMORY_MB);
-      if (llapMemory < 0) {
-        llapMemory = defaultLlapDaemonTaskMemoryMb;
+    List<DAGAPI.ContainerGroupProto> containerGroupProtos;
+    if (!skipDaemonVertexProto) {
+      boolean useLlapIo = HiveConf.getBoolVar(mr3TaskConf, HiveConf.ConfVars.LLAP_IO_ENABLED, false);
+      int llapMemory = 0;
+      int llapCpus = 0;
+      DAGAPI.DaemonVertexProto llapDaemonVertexProto = null;
+      if (useLlapIo) {
+        // llapMemory = 0 and llapCpus = 0 are valid.
+        llapMemory = HiveConf.getIntVar(mr3TaskConf, HiveConf.ConfVars.MR3_LLAP_DAEMON_TASK_MEMORY_MB);
+        if (llapMemory < 0) {
+          llapMemory = defaultLlapDaemonTaskMemoryMb;
+        }
+        llapCpus = HiveConf.getIntVar(mr3TaskConf, HiveConf.ConfVars.MR3_LLAP_DAEMON_TASK_VCORES);
+        if (llapCpus < 0) {
+          llapCpus = defaultLlapDaemonTaskVcores;
+        }
+        // LLAP daemon never needs tez-site.xml, so we do not create JobConf.
+        ByteString userPayload = org.apache.tez.common.TezUtils.createByteStringFromConf(mr3TaskConf);
+        llapDaemonVertexProto = createLlapDaemonVertexProto(userPayload, llapMemory, llapCpus);
       }
-      llapCpus = HiveConf.getIntVar(mr3TaskConf, HiveConf.ConfVars.MR3_LLAP_DAEMON_TASK_VCORES);
-      if (llapCpus < 0) {
-        llapCpus = defaultLlapDaemonTaskVcores;
+
+      List<DAGAPI.DaemonVertexProto> shuffleHandlerDaemonVertexProtos = null;
+      // ShuffleHandler and ShuffleServer are in the Tez library, and thus do not need hive-site.xml
+      TezConfiguration tezConf = new TezConfiguration(true);
+
+      ByteString defaultUserPayload = org.apache.tez.common.TezUtils.createByteStringFromConf(tezConf);
+      ByteString userPayload;
+      if (scheme == DAG.ContainerGroupScheme.ALL_IN_ONE) {
+        userPayload = null;   // we will use defaultUserPayload for ShuffleHandler and ShuffleServer
+      } else {
+        userPayload = defaultUserPayload;
       }
-      // LLAP daemon never needs tez-site.xml, so we do not create JobConf.
-      ByteString userPayload = org.apache.tez.common.TezUtils.createByteStringFromConf(mr3TaskConf);
-      llapDaemonVertexProto = createLlapDaemonVertexProto(userPayload, llapMemory, llapCpus);
-    }
+      // use defaultUserPayload only in ALL_IN_ONE
 
-    List<DAGAPI.DaemonVertexProto> shuffleHandlerDaemonVertexProtos = null;
-    // ShuffleHandler and ShuffleServer are in the Tez library, and thus do not need hive-site.xml
-    TezConfiguration tezConf = new TezConfiguration(true);
+      if (scheme == DAG.ContainerGroupScheme.ALL_IN_ONE) {
+        // ShuffleHandler DaemonVertex is created only for tez_shuffle
+        if (ShuffleUtils.isTezShuffleHandler(tezConf)) {
+          int useDaemonShuffleHandler = Math.max(
+              HiveConf.getIntVar(mr3TaskConf, HiveConf.ConfVars.MR3_USE_DAEMON_SHUFFLEHANDLER), 1);
+          shuffleHandlerDaemonVertexProtos = createShuffleHandlerDaemonVertexProto(useDaemonShuffleHandler, userPayload);
+        }
+      }
+      DAGAPI.DaemonVertexProto shuffleServerProto = createShuffleServerDaemonVertexProto(userPayload);
 
-    ByteString defaultUserPayload = org.apache.tez.common.TezUtils.createByteStringFromConf(tezConf);
-    ByteString userPayload;
-    if (scheme == DAG.ContainerGroupScheme.ALL_IN_ONE) {
-      userPayload = null;   // we will use defaultUserPayload for ShuffleHandler and ShuffleServer
+      // we do not create containerGroupConf
+      // if ALL_IN_ONE, then tezConf != null
+      containerGroupProtos = createContainerGroupProtos(
+          mr3TaskConf, scheme, vertices.values(),
+          llapMemory, llapCpus, llapDaemonVertexProto,
+          shuffleHandlerDaemonVertexProtos, shuffleServerProto, tezConf, defaultUserPayload);
     } else {
-      userPayload = defaultUserPayload;
-    }
-    // use defaultUserPayload only in ALL_IN_ONE
-
-    if (scheme == DAG.ContainerGroupScheme.ALL_IN_ONE) {
-      // ShuffleHandler DaemonVertex is created only for tez_shuffle
-      if (ShuffleUtils.isTezShuffleHandler(tezConf)) {
-        int useDaemonShuffleHandler = Math.max(
-            HiveConf.getIntVar(mr3TaskConf, HiveConf.ConfVars.MR3_USE_DAEMON_SHUFFLEHANDLER), 1);
-        shuffleHandlerDaemonVertexProtos = createShuffleHandlerDaemonVertexProto(useDaemonShuffleHandler, userPayload);
-      }
-    }
-    DAGAPI.DaemonVertexProto shuffleServerProto = createShuffleServerDaemonVertexProto(userPayload);
-
-    // we do not create containerGroupConf
-    // if ALL_IN_ONE, then tezConf != null
-    List<DAGAPI.ContainerGroupProto> containerGroupProtos = createContainerGroupProtos(
+      containerGroupProtos = createContainerGroupProtos(
         mr3TaskConf, scheme, vertices.values(),
-        llapMemory, llapCpus, llapDaemonVertexProto,
-        shuffleHandlerDaemonVertexProtos, shuffleServerProto, tezConf, defaultUserPayload);
+        0, 0, null,
+        null, null, null, null);
+    }
 
     DAGAPI.ConfigurationProto dagConfProto = Utils$.MODULE$.createMr3ConfProto(dagConf);
 
@@ -457,11 +467,15 @@ public class DAG {
     if (shuffleHandlerDaemonVertexProtos != null) {
       daemonVertexProtos.addAll(shuffleHandlerDaemonVertexProtos);
     }
-    daemonVertexProtos.add(shuffleServerProto);
+    if (shuffleServerProto != null) {
+      daemonVertexProtos.add(shuffleServerProto);
+    }
     allInOneContainerGroup.addAllDaemonVertices(daemonVertexProtos);
 
-    allInOneContainerGroup.setDefaultUserPayload(
-        DAGAPI.UserPayloadProto.newBuilder().setPayload(defaultUserPayload).build());
+    if (defaultUserPayload != null) {
+      allInOneContainerGroup.setDefaultUserPayload(
+          DAGAPI.UserPayloadProto.newBuilder().setPayload(defaultUserPayload).build());
+    }
 
     return allInOneContainerGroup.build();
   }
