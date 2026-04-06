@@ -559,7 +559,12 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
       keyLength += 1 + payloadLength; // Null marker + payload for non-null field value.
     }
 
-    if (tag != -1 && !skipTag) {
+    if (!skipTag) {
+      // Runtime collect path uses process(...) tag argument; when conf tag is -1, whether
+      // a tag byte is appended is ambiguous at initialization time, so do not claim fixed.
+      if (tag == -1) {
+        return -1;
+      }
       keyLength += 1;
     }
     return keyLength;

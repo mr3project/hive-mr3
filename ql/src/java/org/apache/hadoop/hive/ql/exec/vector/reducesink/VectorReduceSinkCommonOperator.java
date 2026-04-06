@@ -345,7 +345,15 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private int computeFixedBinarySortableKeyLength() {
     // Empty key is always fixed-length (0 or 1 if tag byte is appended).
     if (isEmptyKey) {
-      return (conf.getTag() == -1 || reduceSkipTag) ? 0 : 1;
+      if (reduceSkipTag) {
+        return 0;
+      }
+      // Runtime collect path uses process(...) tag argument; when conf tag is -1, whether
+      // a tag byte is appended is ambiguous at initialization time, so do not claim fixed.
+      if (conf.getTag() == -1) {
+        return -1;
+      }
+      return 1;
     }
 
     if (reduceSinkKeyTypeInfos == null || reduceSinkKeyTypeInfos.length == 0) {
@@ -364,7 +372,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       keyLength += 1 + payloadLength; // Null marker + payload for non-null field value.
     }
 
-    if (conf.getTag() != -1 && !reduceSkipTag) {
+    if (!reduceSkipTag) {
+      // Runtime collect path uses process(...) tag argument; when conf tag is -1, whether
+      // a tag byte is appended is ambiguous at initialization time, so do not claim fixed.
+      if (conf.getTag() == -1) {
+        return -1;
+      }
       keyLength += 1;
     }
     return keyLength;
