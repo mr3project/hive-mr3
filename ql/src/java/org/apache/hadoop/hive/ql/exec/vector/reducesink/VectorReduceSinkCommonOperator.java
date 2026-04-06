@@ -43,6 +43,7 @@ import org.apache.hadoop.hive.ql.plan.VectorDesc;
 import org.apache.hadoop.hive.ql.plan.VectorReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.VectorReduceSinkInfo;
 import org.apache.hadoop.hive.ql.plan.api.OperatorType;
+import org.apache.hadoop.hive.ql.exec.tez.TezProcessor;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.ByteStream.Output;
 import org.apache.hadoop.hive.serde2.binarysortable.BinarySortableSerDe;
@@ -276,6 +277,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     reduceTagByte = (byte) conf.getTag();
     fixedKeyLength = computeFixedBinarySortableKeyLength();
     fixedValueLength = computeFixedLazyBinaryValueLength();
+    updateCollectorFixedLengths();
 
     if (LOG.isDebugEnabled()) { LOG.debug("Using tag = " + reduceTagByte); }
     numRows = 0;
@@ -433,6 +435,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
   }
 
+  private void updateCollectorFixedLengths() {
+    if (out instanceof TezProcessor.TezKVOutputCollector) {
+      ((TezProcessor.TezKVOutputCollector) out).setFixedLengths(fixedKeyLength, fixedValueLength);
+    }
+  }
+
   protected void initializeEmptyKey(int tag) {
 
     // Use the same logic as ReduceSinkOperator.toHiveKey.
@@ -549,6 +557,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   @Override
   public void setOutputCollector(OutputCollector _out) {
     this.out = _out;
+    updateCollectorFixedLengths();
   }
 
   @Override

@@ -405,9 +405,11 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
    * Must be initialized before it is used.
    *
    */
-  static class TezKVOutputCollector implements OutputCollector<BytesWritable, BytesWritable> {
+  public static class TezKVOutputCollector implements OutputCollector<BytesWritable, BytesWritable> {
     private KeyValueWriterEdge writer;
     private final LogicalOutputEdge output;
+    private int fixedKeyLength = -1;
+    private int fixedValueLength = -1;
 
     TezKVOutputCollector(LogicalOutputEdge logicalOutput) {
       this.output = logicalOutput;
@@ -415,6 +417,19 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
     void initialize() throws Exception {
       this.writer = output.getWriter();
+    }
+
+    public void setFixedLengths(int fixedKeyLength, int fixedValueLength) {
+      this.fixedKeyLength = fixedKeyLength;
+      this.fixedValueLength = fixedValueLength;
+    }
+
+    public int getFixedKeyLength() {
+      return fixedKeyLength;
+    }
+
+    public int getFixedValueLength() {
+      return fixedValueLength;
     }
 
     @Override

@@ -40,6 +40,7 @@ import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.plan.api.OperatorType;
+import org.apache.hadoop.hive.ql.exec.tez.TezProcessor;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFBucketNumber;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
@@ -234,6 +235,7 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
 
       valueSerializer = valueSerDe;
       fixedValueLength = computeFixedLazyBinaryValueLength();
+      updateCollectorFixedLengths();
 
       int limit = conf.getTopN();
       float memUsage = conf.getTopNMemoryUsage();
@@ -633,6 +635,12 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
     }
   }
 
+  private void updateCollectorFixedLengths() {
+    if (out instanceof TezProcessor.TezKVOutputCollector) {
+      ((TezProcessor.TezKVOutputCollector) out).setFixedLengths(fixedKeyLength, fixedValueLength);
+    }
+  }
+
   @Override
   public void collect(byte[] key, byte[] value, int hash) throws IOException {
     HiveKey keyWritable = new HiveKey(key, hash);
@@ -738,6 +746,7 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
   @Override
   public void setOutputCollector(OutputCollector _out) {
     this.out = _out;
+    updateCollectorFixedLengths();
   }
 
   @Override
