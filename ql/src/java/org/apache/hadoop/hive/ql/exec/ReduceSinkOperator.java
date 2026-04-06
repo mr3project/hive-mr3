@@ -235,7 +235,6 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
 
       valueSerializer = valueSerDe;
       fixedValueLength = computeFixedLazyBinaryValueLength();
-      updateCollectorFixedLengths();
 
       int limit = conf.getTopN();
       float memUsage = conf.getTopNMemoryUsage();
@@ -746,6 +745,8 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
   @Override
   public void setOutputCollector(OutputCollector _out) {
     this.out = _out;
+    // In Tez paths, setOutputCollector is invoked after initialization/wiring, so we
+    // propagate fixed lengths here once.
     updateCollectorFixedLengths();
   }
 

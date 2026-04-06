@@ -277,7 +277,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     reduceTagByte = (byte) conf.getTag();
     fixedKeyLength = computeFixedBinarySortableKeyLength();
     fixedValueLength = computeFixedLazyBinaryValueLength();
-    updateCollectorFixedLengths();
 
     if (LOG.isDebugEnabled()) { LOG.debug("Using tag = " + reduceTagByte); }
     numRows = 0;
@@ -557,6 +556,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   @Override
   public void setOutputCollector(OutputCollector _out) {
     this.out = _out;
+    // In Tez paths, setOutputCollector is invoked after initialization/wiring, so we
+    // propagate fixed lengths here once.
     updateCollectorFixedLengths();
   }
 
