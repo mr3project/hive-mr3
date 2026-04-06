@@ -48,6 +48,7 @@ import org.apache.hadoop.hive.serde2.ByteStream.Output;
 import org.apache.hadoop.hive.serde2.binarysortable.BinarySortableSerDe;
 import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableSerializeWrite;
 import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
+import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -134,6 +135,13 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   // For debug tracing: the name of the map or reduce task.
   protected transient String taskName;
+
+  // Serialized key length when key columns are fixed-width primitive types.
+  // -1 means variable width or unknown.
+  protected transient int fixedKeyLength = -1;
+  // Serialized value length when value columns are fixed-width primitive types.
+  // -1 means variable width or unknown.
+  protected transient int fixedValueLength = -1;
 
   // Debug display.
   protected transient long batchCounter;
@@ -266,6 +274,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
     reduceSkipTag = conf.getSkipTag();
     reduceTagByte = (byte) conf.getTag();
+    fixedKeyLength = computeFixedBinarySortableKeyLength();
+    fixedValueLength = computeFixedLazyBinaryValueLength();
 
     if (LOG.isDebugEnabled()) { LOG.debug("Using tag = " + reduceTagByte); }
     numRows = 0;
@@ -301,6 +311,126 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
 
     batchCounter = 0;
+  }
+
+  /**
+   * Returns the serialized key length if the key schema is fixed-width primitive under vector
+   * reduce sink key serialization. The computed length includes one null/not-null marker byte per
+   * key field, fixed primitive payload bytes, and optional reduce tag byte.
+   * Compare this value against {@code keyWritable.getLength()} (logical bytes), not backing
+   * array capacity from {@code keyWritable.getBytes().length}.
+   *
+   * NOTE: BinarySortable serializes null values using only the null marker byte (without payload),
+   * so actual serialized length can still vary at runtime if key columns contain nulls.
+   */
+  protected int getFixedKeyLength() {
+    return fixedKeyLength;
+  }
+
+  /**
+   * Returns the serialized value length if the value schema is fixed-width primitive under vector
+   * LazyBinary value serialization. The computed length includes top-level null-byte overhead
+   * ({@code ceil(numFields/8)}) and fixed primitive payload bytes.
+   * Compare this value against {@code valueWritable.getLength()} (logical bytes), not backing
+   * array capacity from {@code valueWritable.getBytes().length}.
+   *
+   * NOTE: LazyBinary omits payload bytes for null field values, so actual serialized length can
+   * still vary at runtime if value columns contain nulls.
+   */
+  protected int getFixedValueLength() {
+    return fixedValueLength;
+  }
+
+  private int computeFixedBinarySortableKeyLength() {
+    // Empty key is always fixed-length (0 or 1 if tag byte is appended).
+    if (isEmptyKey) {
+      return (conf.getTag() == -1 || reduceSkipTag) ? 0 : 1;
+    }
+
+    if (reduceSinkKeyTypeInfos == null || reduceSinkKeyTypeInfos.length == 0) {
+      return -1;
+    }
+
+    int keyLength = 0;
+    for (TypeInfo typeInfo : reduceSinkKeyTypeInfos) {
+      if (typeInfo.getCategory() != org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category.PRIMITIVE) {
+        return -1;
+      }
+      int payloadLength = getFixedPrimitiveBinarySortableLength((PrimitiveTypeInfo) typeInfo);
+      if (payloadLength < 0) {
+        return -1;
+      }
+      keyLength += 1 + payloadLength; // Null marker + payload for non-null field value.
+    }
+
+    if (conf.getTag() != -1 && !reduceSkipTag) {
+      keyLength += 1;
+    }
+    return keyLength;
+  }
+
+  private int getFixedPrimitiveBinarySortableLength(PrimitiveTypeInfo primitiveTypeInfo) {
+    switch (primitiveTypeInfo.getPrimitiveCategory()) {
+    case BOOLEAN:
+    case BYTE:
+      return 1;
+    case SHORT:
+      return 2;
+    case INT:
+    case FLOAT:
+    case DATE:
+    case INTERVAL_YEAR_MONTH:
+      return 4;
+    case LONG:
+    case DOUBLE:
+      return 8;
+    case TIMESTAMP:
+    case TIMESTAMPLOCALTZ:
+      return 11;
+    case INTERVAL_DAY_TIME:
+      return 12;
+    default:
+      return -1;
+    }
+  }
+
+  private int computeFixedLazyBinaryValueLength() {
+    if (isEmptyValue) {
+      return 0;
+    }
+
+    if (reduceSinkValueTypeInfos == null || reduceSinkValueTypeInfos.length == 0) {
+      return -1;
+    }
+
+    int valueLength = (reduceSinkValueTypeInfos.length + 7) / 8; // top-level null-byte words.
+    for (TypeInfo typeInfo : reduceSinkValueTypeInfos) {
+      if (typeInfo.getCategory() != org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category.PRIMITIVE) {
+        return -1;
+      }
+      int payloadLength = getFixedPrimitiveLazyBinaryLength((PrimitiveTypeInfo) typeInfo);
+      if (payloadLength < 0) {
+        return -1;
+      }
+      valueLength += payloadLength;
+    }
+    return valueLength;
+  }
+
+  private int getFixedPrimitiveLazyBinaryLength(PrimitiveTypeInfo primitiveTypeInfo) {
+    switch (primitiveTypeInfo.getPrimitiveCategory()) {
+    case BOOLEAN:
+    case BYTE:
+      return 1;
+    case SHORT:
+      return 2;
+    case FLOAT:
+      return 4;
+    case DOUBLE:
+      return 8;
+    default:
+      return -1;
+    }
   }
 
   protected void initializeEmptyKey(int tag) {
