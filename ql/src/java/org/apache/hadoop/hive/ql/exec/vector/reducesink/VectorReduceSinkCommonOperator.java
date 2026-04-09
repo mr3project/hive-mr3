@@ -50,6 +50,7 @@ import org.apache.hadoop.hive.serde2.binarysortable.BinarySortableSerDe;
 import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableSerializeWrite;
 import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -362,14 +363,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
     int keyLength = 0;
     for (TypeInfo typeInfo : reduceSinkKeyTypeInfos) {
-      if (typeInfo.getCategory() != org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category.PRIMITIVE) {
+      int fieldLength = getFixedBinarySortableFieldLength(typeInfo);
+      if (fieldLength < 0) {
         return -1;
       }
-      int payloadLength = getFixedPrimitiveBinarySortableLength((PrimitiveTypeInfo) typeInfo);
-      if (payloadLength < 0) {
-        return -1;
-      }
-      keyLength += 1 + payloadLength; // Null marker + payload for non-null field value.
+      keyLength += fieldLength;
     }
 
     if (!reduceSkipTag) {
@@ -408,6 +406,28 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
   }
 
+  private int getFixedBinarySortableFieldLength(TypeInfo typeInfo) {
+    switch (typeInfo.getCategory()) {
+    case PRIMITIVE: {
+      int payloadLength = getFixedPrimitiveBinarySortableLength((PrimitiveTypeInfo) typeInfo);
+      return payloadLength < 0 ? -1 : 1 + payloadLength; // marker + payload
+    }
+    case STRUCT: {
+      int length = 1; // marker for non-null struct field
+      for (TypeInfo childTypeInfo : ((StructTypeInfo) typeInfo).getAllStructFieldTypeInfos()) {
+        int childLength = getFixedBinarySortableFieldLength(childTypeInfo);
+        if (childLength < 0) {
+          return -1;
+        }
+        length += childLength;
+      }
+      return length;
+    }
+    default:
+      return -1;
+    }
+  }
+
   private int computeFixedLazyBinaryValueLength() {
     if (isEmptyValue) {
       return 0;
@@ -419,14 +439,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
     int valueLength = (reduceSinkValueTypeInfos.length + 7) / 8; // top-level null-byte words.
     for (TypeInfo typeInfo : reduceSinkValueTypeInfos) {
-      if (typeInfo.getCategory() != org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category.PRIMITIVE) {
+      int fieldLength = getFixedLazyBinaryFieldLength(typeInfo);
+      if (fieldLength < 0) {
         return -1;
       }
-      int payloadLength = getFixedPrimitiveLazyBinaryLength((PrimitiveTypeInfo) typeInfo);
-      if (payloadLength < 0) {
-        return -1;
-      }
-      valueLength += payloadLength;
+      valueLength += fieldLength;
     }
     return valueLength;
   }
@@ -442,6 +459,27 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       return 4;
     case DOUBLE:
       return 8;
+    default:
+      return -1;
+    }
+  }
+
+  private int getFixedLazyBinaryFieldLength(TypeInfo typeInfo) {
+    switch (typeInfo.getCategory()) {
+    case PRIMITIVE:
+      return getFixedPrimitiveLazyBinaryLength((PrimitiveTypeInfo) typeInfo);
+    case STRUCT: {
+      final java.util.List<TypeInfo> childTypeInfos = ((StructTypeInfo) typeInfo).getAllStructFieldTypeInfos();
+      int length = 4 + (childTypeInfos.size() + 7) / 8; // struct length prefix + struct null-byte words
+      for (TypeInfo childTypeInfo : childTypeInfos) {
+        int childLength = getFixedLazyBinaryFieldLength(childTypeInfo);
+        if (childLength < 0) {
+          return -1;
+        }
+        length += childLength;
+      }
+      return length;
+    }
     default:
       return -1;
     }

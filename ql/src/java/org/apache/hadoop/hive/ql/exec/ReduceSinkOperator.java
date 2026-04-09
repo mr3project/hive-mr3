@@ -55,6 +55,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.StandardUnionObjectInspecto
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.UnionObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.io.*;
@@ -549,14 +550,11 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
     final List<TypeInfo> typeInfos = TypeInfoUtils.getTypeInfosFromTypeString(columnTypes);
     int keyLength = 0;
     for (TypeInfo typeInfo : typeInfos) {
-      if (typeInfo.getCategory() != org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category.PRIMITIVE) {
+      final int fieldLength = getFixedBinarySortableFieldLength(typeInfo);
+      if (fieldLength < 0) {
         return -1;
       }
-      final int payloadLength = getFixedPrimitiveBinarySortableLength((PrimitiveTypeInfo) typeInfo);
-      if (payloadLength < 0) {
-        return -1;
-      }
-      keyLength += 1 + payloadLength; // Null marker + payload for non-null field value.
+      keyLength += fieldLength;
     }
 
     if (!skipTag) {
@@ -596,6 +594,28 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
     }
   }
 
+  private int getFixedBinarySortableFieldLength(TypeInfo typeInfo) {
+    switch (typeInfo.getCategory()) {
+    case PRIMITIVE: {
+      final int payloadLength = getFixedPrimitiveBinarySortableLength((PrimitiveTypeInfo) typeInfo);
+      return payloadLength < 0 ? -1 : 1 + payloadLength; // marker + payload
+    }
+    case STRUCT: {
+      int length = 1; // marker for non-null struct field
+      for (TypeInfo childTypeInfo : ((StructTypeInfo) typeInfo).getAllStructFieldTypeInfos()) {
+        final int childLength = getFixedBinarySortableFieldLength(childTypeInfo);
+        if (childLength < 0) {
+          return -1;
+        }
+        length += childLength;
+      }
+      return length;
+    }
+    default:
+      return -1;
+    }
+  }
+
   private int computeFixedLazyBinaryValueLength() {
     if (!(valueSerializer instanceof LazyBinarySerDe) && !(valueSerializer instanceof LazyBinarySerDe2)) {
       return -1;
@@ -610,14 +630,11 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
     final List<TypeInfo> typeInfos = TypeInfoUtils.getTypeInfosFromTypeString(columnTypes);
     int valueLength = (typeInfos.size() + 7) / 8; // top-level null-byte words.
     for (TypeInfo typeInfo : typeInfos) {
-      if (typeInfo.getCategory() != org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category.PRIMITIVE) {
+      final int fieldLength = getFixedLazyBinaryFieldLength(typeInfo);
+      if (fieldLength < 0) {
         return -1;
       }
-      final int payloadLength = getFixedPrimitiveLazyBinaryLength((PrimitiveTypeInfo) typeInfo);
-      if (payloadLength < 0) {
-        return -1;
-      }
-      valueLength += payloadLength;
+      valueLength += fieldLength;
     }
     return valueLength;
   }
@@ -635,6 +652,27 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
       return 8;
     default:
       // INT/LONG/DATE and many others are variable in LazyBinary encoding.
+      return -1;
+    }
+  }
+
+  private int getFixedLazyBinaryFieldLength(TypeInfo typeInfo) {
+    switch (typeInfo.getCategory()) {
+    case PRIMITIVE:
+      return getFixedPrimitiveLazyBinaryLength((PrimitiveTypeInfo) typeInfo);
+    case STRUCT: {
+      final List<TypeInfo> childTypeInfos = ((StructTypeInfo) typeInfo).getAllStructFieldTypeInfos();
+      int length = 4 + (childTypeInfos.size() + 7) / 8; // struct length prefix + struct null-byte words
+      for (TypeInfo childTypeInfo : childTypeInfos) {
+        final int childLength = getFixedLazyBinaryFieldLength(childTypeInfo);
+        if (childLength < 0) {
+          return -1;
+        }
+        length += childLength;
+      }
+      return length;
+    }
+    default:
       return -1;
     }
   }
