@@ -31,7 +31,7 @@ import org.apache.hadoop.io.BytesWritable;
 import org.apache.tez.mapreduce.output.MROutput;
 import org.apache.tez.runtime.api.TaskFailureType;
 import org.apache.tez.runtime.api.events.CustomProcessorEvent;
-import org.apache.tez.runtime.library.api.KeyValueWriterEdge;
+import org.apache.tez.runtime.library.api.KeyValuesWriterEdge;
 import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,7 +49,6 @@ import org.apache.tez.runtime.api.ExecutionContext;
 import org.apache.tez.runtime.api.LogicalInput;
 import org.apache.tez.runtime.api.LogicalOutput;
 import org.apache.tez.runtime.api.ProcessorContext;
-import org.apache.tez.runtime.library.api.KeyValueWriter;
 
 import com.google.common.base.Throwables;
 
@@ -405,8 +404,8 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
    * Must be initialized before it is used.
    *
    */
-  static class TezKVOutputCollector implements OutputCollector<BytesWritable, BytesWritable> {
-    private KeyValueWriterEdge writer;
+  public static class TezKVOutputCollector implements OutputCollector<BytesWritable, BytesWritable> {
+    private KeyValuesWriterEdge writer;
     private final LogicalOutputEdge output;
 
     TezKVOutputCollector(LogicalOutputEdge logicalOutput) {
@@ -417,9 +416,19 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       this.writer = output.getWriter();
     }
 
+    // Invariant:
+    //   1. close() must be called and is called only after the last call of collect().
+    //   2. collect()/close() are called from the same thread (thus never concurrently).
+
+    // TODO: provide and exploit collect(key, values)
+
     @Override
     public void collect(BytesWritable key, BytesWritable value) throws IOException {
       writer.write(key, value);
+    }
+
+    public void close() {
+      writer.closeWriter();
     }
   }
 
