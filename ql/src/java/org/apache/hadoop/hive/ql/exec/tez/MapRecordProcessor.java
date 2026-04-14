@@ -496,6 +496,12 @@ public class MapRecordProcessor extends RecordProcessor {
     } finally {
       Utilities.clearWorkMap(jconf);
       MapredContext.close();
+
+      for (Entry<String, LogicalOutput> outputEntry : outputs.entrySet()) {
+        if (outputEntry.getValue() instanceof LogicalOutputEdge) {
+          ((TezKVOutputCollector) outMap.get(outputEntry.getKey())).close();
+        }
+      }
     }
   }
 
