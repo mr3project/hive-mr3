@@ -27,6 +27,8 @@ import java.util.Set;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hive.llap.LlapUtil;
+import org.apache.tez.runtime.api.ReaderEdge;
+import org.apache.tez.runtime.library.api.LogicalInputEdge;
 import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -110,7 +112,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
     super.init(mrReporter, inputs, outputs);
 
     MapredContext.init(false, new JobConf(jconf));
-    List<LogicalInput> shuffleInputs = getShuffleInputs(inputs);
+    List<LogicalInputEdge> shuffleInputs = getShuffleInputs(inputs);
     // TODO HIVE-14042. Move to using a loop and a timed wait once TEZ-3302 is fixed.
     checkAbortCondition();
     if (shuffleInputs != null) {
@@ -272,7 +274,8 @@ public class ReduceRecordProcessor extends RecordProcessor {
     reducer.setParentOperators(null); // clear out any parents as reducer is the root
 
     TableDesc keyTableDesc = redWork.getKeyDesc();
-    Reader reader = inputs.get(inputName).getReader();
+    LogicalInputEdge input = (LogicalInputEdge)inputs.get(inputName);
+    ReaderEdge reader = input.getReader();
 
     sources[tag] = new ReduceRecordSource();
     // Only the big table input source should be vectorized (if applicable)
@@ -333,27 +336,27 @@ public class ReduceRecordProcessor extends RecordProcessor {
    * @return
    * @throws Exception
    */
-  private List<LogicalInput> getShuffleInputs(Map<String, LogicalInput> inputs) throws Exception {
+  private List<LogicalInputEdge> getShuffleInputs(Map<String, LogicalInput> inputs) throws Exception {
     // the reduce plan inputs have tags, add all inputs that have tags
-    ArrayList<LogicalInput> shuffleInputs = new ArrayList<LogicalInput>();
+    ArrayList<LogicalInputEdge> shuffleInputs = new ArrayList<LogicalInputEdge>();
 
     for (String inputName : reduceWork.getTagToInput().values()) {
-      if (inputs.get(inputName) == null) {
+      LogicalInputEdge input = (LogicalInputEdge)inputs.get(inputName);
+      if (input == null) {
         throw new AssertionError("Could not find input: " + inputName);
       }
-      inputs.get(inputName).start();
-      shuffleInputs.add(inputs.get(inputName));
+      input.start();
+      shuffleInputs.add(input);
     }
 
     if (mergeWorkList != null) {
       for (BaseWork mergedWork: mergeWorkList) {
         ReduceWork mergedReduceWork = (ReduceWork) mergedWork;
         for (String inputName: mergedReduceWork.getTagToInput().values()) {
-          if (inputs.get(inputName) == null) {
+          LogicalInputEdge input = (LogicalInputEdge)inputs.get(inputName);
+          if (input == null) {
             throw new AssertionError("Could not find input: " + inputName);
           }
-
-          LogicalInput input = inputs.get(inputName);
           if (shuffleInputs.contains(input)) {
             throw new AssertionError("Input " + inputName + " is contained in more than one work");
           }
