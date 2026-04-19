@@ -305,28 +305,31 @@ public class DAGUtils {
 
     initializeStatsPublisher(vertexJobConf, work);
 
-    final Class outputKlass;
-    if (HiveOutputFormatImpl.class.getName().equals(vertexJobConf.get("mapred.output.format.class"))) {
-      // Hive uses this output format, when it is going to write all its data through FS operator
-      outputKlass = NullMROutput.class;
-    } else {
-      outputKlass = MROutput.class;
-    }
-
-    // If there is a fileSink add a DataSink to the vertex
+    // If there is a fileSink, add a DataSink to the vertex
     boolean hasFileSink = work.getAllOperators().stream().anyMatch(o -> o instanceof FileSinkOperator);
     // final vertices need to have at least one output
     if ((isFinal || hasFileSink) && !(work instanceof MapReduceMapWork)) {
+      final Class outputKlass;
+      final ByteString userPayload;
+      if (HiveOutputFormatImpl.class.getName().equals(vertexJobConf.get("mapred.output.format.class"))) {
+        // Hive uses this output format, when it is going to write all its data through FS operator
+        outputKlass = NullMROutput.class;
+        userPayload = null;
+      } else {
+        outputKlass = MROutput.class;
+        userPayload = vertex.getProcessorDescriptorPayload();
+      }
+      EntityDescriptor logicalOutputDescriptor = new EntityDescriptor(
+          outputKlass.getName(), userPayload);
+
+      // In the original implementation, no need to set OutputCommitter as Hive will handle moving temporary files to permanent locations.
+      // We set OutputCommitter here in order to support Iceberg.
       EntityDescriptor outputCommitterDescriptor = null;
       String committer = HiveConf.getVar(vertexJobConf, ConfVars.TEZ_MAPREDUCE_OUTPUT_COMMITTER);
       if (committer != null && !committer.isEmpty()) {
         outputCommitterDescriptor = new EntityDescriptor(committer, null);
       }
-      EntityDescriptor logicalOutputDescriptor = new EntityDescriptor(
-          outputKlass.getName(),
-          vertex.getProcessorDescriptorPayload());
-      // In the original implementation, no need to set OutputCommitter as Hive will handle moving temporary files to permanent locations.
-      // We set OutputCommitter here in order to support Iceberg.
+
       vertex.addDataSink("out_" + work.getName(), logicalOutputDescriptor, outputCommitterDescriptor);
     }
 
