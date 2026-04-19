@@ -116,7 +116,7 @@ public class ReduceRecordSource implements RecordSource {
 
   private final PerfLogger perfLogger = SessionState.getPerfLogger();
 
-  private Iterable<? extends Object> valueWritables;
+  private Iterable<? extends BytesWritable> valueWritables;
 
   private final GroupIterator groupIterator = new GroupIterator();
 
@@ -274,20 +274,21 @@ public class ReduceRecordSource implements RecordSource {
         return false;
       }
 
-      BytesWritable keyWritable = (BytesWritable) reader.getCurrentKey();
+      BytesWritable keyWritable = reader.getCurrentKey();
       valueWritables = reader.getCurrentValues();
 
       //Set the key, check if this is a new group or same group
       try {
-        keyObject = inputKeySerDe.deserialize(keyWritable);
+        keyObject = inputKeySerDe.deserializeBytesWritable(keyWritable);
       } catch (Exception e) {
         throw new HiveException("Hive Runtime Error: Unable to deserialize reduce input key from "
-            + Utilities.formatBinaryString(keyWritable.getBytes(), 0, keyWritable.getLength())
+            + Utilities.formatBinaryString(
+                keyWritable.getBytesRaw(), keyWritable.getOffset(), keyWritable.getLength())
             + " with properties " + keyTableDesc.getProperties(), e);
       }
 
       if (handleGroupKey && !keyWritable.equals(this.groupKey)) {
-        // If a operator wants to do some work at the beginning of a group
+        // If an operator wants to do some work at the beginning of a group
         if (groupKey == null) { // the first group
           this.groupKey = new BytesWritable();
         } else {
@@ -295,7 +296,8 @@ public class ReduceRecordSource implements RecordSource {
           reducer.endGroup();
         }
 
-        groupKey.set(keyWritable.getBytes(), 0, keyWritable.getLength());
+        // setDirect() is okay because keyWritable's backing byte array is immutable
+        groupKey.setDirect(keyWritable.getBytesRaw(), keyWritable.getOffset(), keyWritable.getLength());
         reducer.startGroup();
         reducer.setGroupKeyObject(keyObject);
       }
@@ -321,13 +323,14 @@ public class ReduceRecordSource implements RecordSource {
       throws HiveException {
 
     try {
-      return inputValueSerDe.deserialize(valueWritable);
+      return inputValueSerDe.deserializeBytesWritable(valueWritable);
     } catch (SerDeException e) {
       throw new HiveException(
           "Hive Runtime Error: Unable to deserialize reduce input value (tag="
               + tag
               + ") from "
-          + Utilities.formatBinaryString(valueWritable.getBytes(), 0, valueWritable.getLength())
+          + Utilities.formatBinaryString(
+              valueWritable.getBytesRaw(), valueWritable.getOffset(), valueWritable.getLength())
           + " with properties " + valueTableDesc.getProperties(), e);
     }
   }
@@ -335,11 +338,11 @@ public class ReduceRecordSource implements RecordSource {
   private class GroupIterator {
     private final List<Object> row = new ArrayList<Object>(Utilities.reduceFieldNameList.size());
     private List<Object> passDownKey = null;
-    private Iterator<? extends Object> values;
+    private Iterator<? extends BytesWritable> values;
     private byte tag;
     private Object keyObject;
 
-    public void initialize(Iterable<? extends Object> values, Object keyObject, byte tag) {
+    public void initialize(Iterable<? extends BytesWritable> values, Object keyObject, byte tag) {
       this.passDownKey = null;
       this.values = values.iterator();
       this.tag = tag;
@@ -352,8 +355,7 @@ public class ReduceRecordSource implements RecordSource {
 
     public void next() throws HiveException {
       row.clear();
-      Object value = values.next();
-      BytesWritable valueWritable = (BytesWritable) value;
+      BytesWritable valueWritable = values.next();
 
       if (passDownKey == null) {
         row.add(this.keyObject);
@@ -397,7 +399,7 @@ public class ReduceRecordSource implements RecordSource {
         return false;
       }
 
-      BytesWritable keyWritable = (BytesWritable) reader.getCurrentKey();
+      BytesWritable keyWritable = reader.getCurrentKey();
       valueWritables = reader.getCurrentValues();
 
       processVectorGroup(keyWritable, valueWritables, tag);
@@ -423,7 +425,7 @@ public class ReduceRecordSource implements RecordSource {
    * @throws IOException
    */
   private void processVectorGroup(BytesWritable keyWritable,
-          Iterable<? extends Object> values, byte tag) throws HiveException, IOException {
+          Iterable<? extends BytesWritable> values, byte tag) throws HiveException, IOException {
 
     if (reducer.batchNeedsClone()) {
       batch = batchContext.createVectorizedRowBatch();
@@ -432,13 +434,14 @@ public class ReduceRecordSource implements RecordSource {
 
     // Deserialize key into vector row columns.
     //
-    byte[] keyBytes = keyWritable.getBytes();
+    byte[] keyBytes = keyWritable.getBytesRaw();
+    int keyOffset = keyWritable.getOffset();
     int keyLength = keyWritable.getLength();
 
     // l4j.info("ReduceRecordSource processVectorGroup keyBytes " + keyLength + " " +
     //     VectorizedBatchUtil.displayBytes(keyBytes, 0, keyLength));
 
-    keyBinarySortableDeserializeToRow.setBytes(keyBytes, 0, keyLength);
+    keyBinarySortableDeserializeToRow.setBytes(keyBytes, keyOffset, keyLength);
     try {
       keyBinarySortableDeserializeToRow.deserialize(batch, 0);
     } catch (Exception e) {
@@ -457,9 +460,9 @@ public class ReduceRecordSource implements RecordSource {
             batch.getMaxSize());
     Preconditions.checkState(maxSize > 0);
     int rowIdx = 0;
-    int batchBytes = keyBytes.length;
+    int batchBytes = keyLength;
     try {
-      for (Object value : values) {
+      for (BytesWritable value : values) {
         if (rowIdx >= maxSize ||
             (rowIdx > 0 && batchBytes >= BATCH_BYTES)) {
 
@@ -481,16 +484,16 @@ public class ReduceRecordSource implements RecordSource {
             batch.cols[i].reset();
           }
           rowIdx = 0;
-          batchBytes = keyBytes.length;
+          batchBytes = keyLength;
         }
         if (valueLazyBinaryDeserializeToRow != null) {
           // Deserialize value into vector row columns.
-          BytesWritable valueWritable = (BytesWritable) value;
-          byte[] valueBytes = valueWritable.getBytes();
-          int valueLength = valueWritable.getLength();
+          byte[] valueBytes = value.getBytesRaw();
+          int valueOffset = value.getOffset();
+          int valueLength = value.getLength();
           batchBytes += valueLength;
 
-          valueLazyBinaryDeserializeToRow.setBytes(valueBytes, 0, valueLength);
+          valueLazyBinaryDeserializeToRow.setBytes(valueBytes, valueOffset, valueLength);
           valueLazyBinaryDeserializeToRow.deserialize(batch, rowIdx);
         }
         rowIdx++;
