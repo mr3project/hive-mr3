@@ -127,7 +127,7 @@ public class TestShuffleHandler {
               int reduce, HttpResponse response, boolean keepAliveParam,
               Map<String, MapOutputInfo> mapOutputInfoMap) throws IOException {
             // Send some dummy data (populate content length details)
-            ShuffleHeader header = new ShuffleHeader("attempt_12345_1_m_1_0", 5678, 5678, 1);
+            ShuffleHeader header = new ShuffleHeader("attempt_12345_1_m_1_0", 5678, 5678, 1, null);
             DataOutputBuffer dob = new DataOutputBuffer();
             header.write(dob);
             dob = new DataOutputBuffer();
@@ -146,7 +146,7 @@ public class TestShuffleHandler {
 
             // send a shuffle header and a lot of data down the channel
             // to trigger a broken pipe
-            ShuffleHeader header = new ShuffleHeader("attempt_12345_1_m_1_0", 5678, 5678, 1);
+            ShuffleHeader header = new ShuffleHeader("attempt_12345_1_m_1_0", 5678, 5678, 1, null);
             DataOutputBuffer dob = new DataOutputBuffer();
             header.write(dob);
             ch.writeAndFlush(wrappedBuffer(dob.getData(), 0, dob.getLength()));
