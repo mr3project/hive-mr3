@@ -23,7 +23,7 @@ import java.lang.reflect.Field;
 import java.util.Arrays;
 
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
-import org.apache.tez.runtime.library.utils.FastByteComparisons;
+import org.apache.tez.util.FastByteComparisons;
 
 /**
  * String expression evaluation helper functions.
