@@ -31,6 +31,8 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionError;
 import org.apache.tez.common.counters.TaskCounter;
 import org.apache.tez.common.counters.TezCounter;
+import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
+import org.apache.tez.runtime.library.api.LogicalInputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -186,7 +188,7 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
 
       long numEntries = 0;
       String inputName = parentToInput.get(pos);
-      LogicalInput input = tezContext.getInput(inputName);
+      LogicalInputEdge input = (LogicalInputEdge)tezContext.getInput(inputName);
 
       try {
         input.start();
@@ -197,7 +199,7 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
       }
 
       try {
-        KeyValueReader kvReader = (KeyValueReader) input.getReader();
+        KeyValueReaderEdge kvReader = (KeyValueReaderEdge) input.getReader();
         MapJoinObjectSerDeContext keyCtx = mapJoinTableSerdes[pos].getKeyContext(),
           valCtx = mapJoinTableSerdes[pos].getValueContext();
         if (useOptimizedTables) {
@@ -255,7 +257,7 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
         tableContainer.setSerde(keyCtx, valCtx);
         long startTime = System.currentTimeMillis();
         while (kvReader.next()) {
-          tableContainer.putRow((Writable) kvReader.getCurrentKey(), (Writable) kvReader.getCurrentValue());
+          tableContainer.putRow(kvReader.getCurrentKey(), kvReader.getCurrentValue());
           numEntries++;
           if ((numEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
             throw new InterruptedException("Hash table loading interrupted");
