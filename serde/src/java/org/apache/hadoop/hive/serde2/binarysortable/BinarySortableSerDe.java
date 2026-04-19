@@ -189,6 +189,22 @@ public class BinarySortableSerDe extends AbstractSerDe {
     return row;
   }
 
+  @Override
+  public Object deserializeBytesWritable(BytesWritable data) throws SerDeException {
+    inputByteBuffer.reset(data.getBytesRaw(), data.getOffset(), data.getLength());
+
+    try {
+      for (int i = 0; i < getColumnNames().size(); i++) {
+        row.set(i, deserialize(inputByteBuffer, getColumnTypes().get(i),
+          columnSortOrderIsDesc[i], columnNullMarker[i], columnNotNullMarker[i], row.get(i)));
+      }
+    } catch (IOException e) {
+      throw new SerDeException(e);
+    }
+
+    return row;
+  }
+
   static Object deserialize(InputByteBuffer buffer, TypeInfo type,
       boolean invert, byte nullMarker, byte notNullMarker, Object reuse) throws IOException {
 
