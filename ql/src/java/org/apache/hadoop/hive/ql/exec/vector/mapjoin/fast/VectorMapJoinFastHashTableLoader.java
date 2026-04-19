@@ -38,6 +38,8 @@ import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionError;
 import org.apache.hive.common.util.FixedSizedObjectPool;
 import org.apache.tez.common.counters.TaskCounter;
 import org.apache.tez.common.counters.TezCounter;
+import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
+import org.apache.tez.runtime.library.api.LogicalInputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -232,7 +234,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       }
 
       String inputName = parentToInput.get(pos);
-      LogicalInput input = tezContext.getInput(inputName);
+      LogicalInputEdge input = (LogicalInputEdge)tezContext.getInput(inputName);
 
       try {
         input.start();
@@ -243,7 +245,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       }
 
       try {
-        KeyValueReader kvReader = (KeyValueReader) input.getReader();
+        KeyValueReaderEdge kvReader = (KeyValueReaderEdge) input.getReader();
 
         Long keyCountObj = parentKeyCounts.get(pos);
         long estKeyCount = (keyCountObj == null) ? -1 : keyCountObj;
@@ -273,8 +275,8 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
         long receivedEntries = 0;
         long startTime = System.currentTimeMillis();
         while (kvReader.next()) {
-          BytesWritable currentKey = (BytesWritable) kvReader.getCurrentKey();
-          BytesWritable currentValue = (BytesWritable) kvReader.getCurrentValue();
+          BytesWritable currentKey = kvReader.getCurrentKey();
+          BytesWritable currentValue = kvReader.getCurrentValue();
           long hashCode = tableContainer.getHashCode(currentKey);
           int partitionId = (int) ((numLoadThreads - 1) & hashCode); // numLoadThreads divisor must be a power of 2!
           // call getBytes as copy is called later
