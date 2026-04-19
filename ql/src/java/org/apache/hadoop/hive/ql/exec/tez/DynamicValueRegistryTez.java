@@ -34,6 +34,8 @@ import org.apache.tez.runtime.api.Input;
 import org.apache.tez.runtime.api.LogicalInput;
 import org.apache.tez.runtime.api.ProcessorContext;
 import org.apache.tez.runtime.library.api.KeyValueReader;
+import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
+import org.apache.tez.runtime.library.api.LogicalInputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -100,7 +102,7 @@ public class DynamicValueRegistryTez implements DynamicValueRegistry {
     for (String inputSourceName : rct.baseWork.getInputSourceToRuntimeValuesInfo().keySet()) {
       LOG.info("Runtime value source: " + inputSourceName);
 
-      LogicalInput runtimeValueInput = rct.inputs.get(inputSourceName);
+      LogicalInputEdge runtimeValueInput = (LogicalInputEdge) rct.inputs.get(inputSourceName);
       RuntimeValuesInfo runtimeValuesInfo = rct.baseWork.getInputSourceToRuntimeValuesInfo().get(inputSourceName);
 
       // Setup deserializer/obj inspectors for the incoming data source
@@ -121,10 +123,10 @@ public class DynamicValueRegistryTez implements DynamicValueRegistry {
       inputList.add(runtimeValueInput);
       rct.processorContext.waitForAllInputsReady(inputList);
 
-      KeyValueReader kvReader = (KeyValueReader) runtimeValueInput.getReader();
+      KeyValueReaderEdge kvReader = (KeyValueReaderEdge) runtimeValueInput.getReader();
       long rowCount = 0;
       while (kvReader.next()) {
-        Object row = serDe.deserialize((Writable) kvReader.getCurrentValue());
+        Object row = serDe.deserialize(kvReader.getCurrentValue());
         rowCount++;
         for (int colIdx = 0; colIdx < colExprEvaluators.size(); ++colIdx) {
           // Read each expression and save it to the value registry

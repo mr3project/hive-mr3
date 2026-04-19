@@ -23,6 +23,8 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
+import org.apache.tez.runtime.library.api.KeyValuesReaderEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.exec.CommonMergeJoinOperator;
@@ -53,7 +55,7 @@ import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
-import org.apache.tez.runtime.api.Reader;
+import org.apache.tez.runtime.api.ReaderEdge;
 import org.apache.tez.runtime.library.api.KeyValueReader;
 import org.apache.tez.runtime.library.api.KeyValuesReader;
 
@@ -125,7 +127,7 @@ public class ReduceRecordSource implements RecordSource {
   private boolean flushLastRecord = false;
 
   void init(JobConf jconf, Operator<?> reducer, boolean vectorized, TableDesc keyTableDesc,
-      TableDesc valueTableDesc, Reader reader, boolean handleGroupKey, byte tag,
+      TableDesc valueTableDesc, ReaderEdge reader, boolean handleGroupKey, byte tag,
       VectorizedRowBatchCtx batchContext, long vectorizedVertexNum,
       int vectorizedTestingReducerBatchSize)
       throws Exception {
@@ -143,10 +145,10 @@ public class ReduceRecordSource implements RecordSource {
     this.reducer = reducer;
     this.vectorized = vectorized;
     this.keyTableDesc = keyTableDesc;
-    if (reader instanceof KeyValueReader) {
-      this.reader = new KeyValuesFromKeyValue((KeyValueReader) reader);
+    if (reader instanceof KeyValueReaderEdge) {
+      this.reader = new KeyValuesFromKeyValue((KeyValueReaderEdge) reader);
     } else {
-      this.reader = new KeyValuesFromKeyValues((KeyValuesReader) reader);
+      this.reader = new KeyValuesFromKeyValues((KeyValuesReaderEdge) reader);
     }
     this.handleGroupKey = handleGroupKey;
     this.tag = tag;

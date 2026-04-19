@@ -21,16 +21,17 @@ package org.apache.hadoop.hive.ql.exec.tez;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
-import org.apache.tez.runtime.library.api.KeyValueReader;
+
+import org.apache.hadoop.io.BytesWritable;
+import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
 
 /**
  * Provides a key/values (note the plural values) interface out of a KeyValueReader,
  * needed by ReduceRecordSource when reading input from a key/value source.
  */
 public class KeyValuesFromKeyValue implements KeyValuesAdapter {
-  protected KeyValueReader reader;
-  protected ValueIterator<Object> valueIterator =
-      new ValueIterator<Object>();
+  protected KeyValueReaderEdge reader;
+  private final ValueIterator<BytesWritable> valueIterator = new ValueIterator<BytesWritable>();
 
   private static class ValueIterator<T> implements Iterator<T>, Iterable<T> {
 
@@ -67,18 +68,18 @@ public class KeyValuesFromKeyValue implements KeyValuesAdapter {
     }
   }
 
-  public KeyValuesFromKeyValue(KeyValueReader reader) {
+  public KeyValuesFromKeyValue(KeyValueReaderEdge reader) {
     this.reader = reader;
   }
 
   @Override
-  public Object getCurrentKey() throws IOException {
+  public BytesWritable getCurrentKey() throws IOException {
     return reader.getCurrentKey();
   }
 
   @Override
-  public Iterable<Object> getCurrentValues() throws IOException {
-    Object obj = reader.getCurrentValue();
+  public Iterable<BytesWritable> getCurrentValues() throws IOException {
+    BytesWritable obj = reader.getCurrentValue();
     valueIterator.reset(obj);
     return valueIterator;
   }
