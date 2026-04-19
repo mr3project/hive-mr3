@@ -19,25 +19,27 @@
 package org.apache.hadoop.hive.ql.exec.tez;
 
 import java.io.IOException;
-import org.apache.tez.runtime.library.api.KeyValuesReader;
+
+import org.apache.hadoop.io.BytesWritable;
+import org.apache.tez.runtime.library.api.KeyValuesReaderEdge;
 
 /**
  * Provides a key/values interface out of a KeyValuesReader for use by ReduceRecordSource.
  */
 public class KeyValuesFromKeyValues implements KeyValuesAdapter {
-  protected KeyValuesReader reader;
+  protected KeyValuesReaderEdge reader;
 
-  public KeyValuesFromKeyValues(KeyValuesReader reader) {
+  public KeyValuesFromKeyValues(KeyValuesReaderEdge reader) {
     this.reader = reader;
   }
 
   @Override
-  public Object getCurrentKey() throws IOException {
+  public BytesWritable getCurrentKey() throws IOException {
     return reader.getCurrentKey();
   }
 
   @Override
-  public Iterable<? extends Object> getCurrentValues() throws IOException {
+  public Iterable<? extends BytesWritable> getCurrentValues() throws IOException {
     return reader.getCurrentValues();
   }
 
