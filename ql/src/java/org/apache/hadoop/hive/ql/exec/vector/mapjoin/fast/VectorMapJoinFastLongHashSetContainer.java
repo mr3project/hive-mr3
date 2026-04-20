@@ -75,9 +75,10 @@ public class VectorMapJoinFastLongHashSetContainer extends VectorMapJoinFastHash
 
   @Override
   public long getHashCode(BytesWritable currentKey) throws HiveException, IOException {
-    byte[] keyBytes = currentKey.getBytes();
+    byte[] keyBytes = currentKey.getBytesRaw();
+    int keyOffset = currentKey.getOffset();
     int keyLength = currentKey.getLength();
-    keyBinarySortableDeserializeRead.set(keyBytes, 0, keyLength);
+    keyBinarySortableDeserializeRead.set(keyBytes, keyOffset, keyLength);
     try {
       if (!keyBinarySortableDeserializeRead.readNextField()) {
         return 0;
