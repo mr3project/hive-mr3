@@ -131,6 +131,7 @@ public class VectorMapJoinFastStringHashMapContainer extends VectorMapJoinFastHa
   @Override
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
+    // glad
     vectorMapJoinFastStringHashMaps[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey, currentValue);
   }
 

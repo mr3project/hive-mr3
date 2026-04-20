@@ -53,7 +53,7 @@ public class VectorMapJoinFastLongHashMultiSet
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
 
-    if (!adaptPutRow(hashCode, currentKey, currentValue)) {
+    if (!adaptPutRow(hashCode, currentKey, currentValue)) {   // glad
 
       // Ignore NULL keys, except for FULL OUTER.
       if (isFullOuter) {
@@ -81,7 +81,7 @@ public class VectorMapJoinFastLongHashMultiSet
   @Override
   public void assignSlot(int slot, long key, boolean isNewKey, BytesWritable currentValue) {
 
-    int pairIndex = 2 * slot;
+    int pairIndex = 2 * slot;   // glad
     if (isNewKey) {
       // First entry.
       slotPairs[pairIndex] = 1;    // Count.

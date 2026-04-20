@@ -30,7 +30,6 @@ import java.util.concurrent.atomic.LongAccumulator;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.hive.common.Pool;
-import org.apache.hadoop.hive.llap.LlapDaemonInfo;
 import org.apache.hadoop.hive.ql.exec.MemoryMonitorInfo;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
@@ -275,12 +274,18 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
         long receivedEntries = 0;
         long startTime = System.currentTimeMillis();
         while (kvReader.next()) {
+          // currentKey, currentValue: backing byte[] arrays of BytesWritable are immutable.
           BytesWritable currentKey = kvReader.getCurrentKey();
           BytesWritable currentValue = kvReader.getCurrentValue();
+
           long hashCode = tableContainer.getHashCode(currentKey);
+
           int partitionId = (int) ((numLoadThreads - 1) & hashCode); // numLoadThreads divisor must be a power of 2!
-          // call getBytes as copy is called later
-          HashTableElement h = new HashTableElement(hashCode, currentValue.copyBytes(), currentKey.copyBytes());
+
+          HashTableElement h = new HashTableElement(hashCode,
+              currentKey.getBytesRaw(), currentKey.getOffset(), currentKey.getLength(),
+              currentValue.getBytesRaw(), currentValue.getOffset(), currentValue.getLength());
+
           if (elementBatches[partitionId].addElement(h)) {
             loadBatchQueues[partitionId].add(elementBatches[partitionId]);
             elementBatches[partitionId] = batchPool.take();
@@ -347,20 +352,30 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
   private static class HashTableElement {
     private final long hashCode;
     private final byte[] keyBytes;
+    private final int keyOffset, keyLength;
     private final byte[] valueBytes;
+    private final int valueOffset, valueLength;
 
-    public HashTableElement(long hashCode, byte[] valueBytes, byte[] keyBytes) {
+    public HashTableElement(long hashCode,
+                            byte[] keyBytes, int keyOffset, int keyLength,
+                            byte[] valueBytes, int valueOffset, int valueLength) {
       this.hashCode = hashCode;
+
       this.keyBytes = keyBytes;
+      this.keyOffset = keyOffset;
+      this.keyLength = keyLength;
+
       this.valueBytes = valueBytes;
+      this.valueOffset = valueOffset;
+      this.valueLength = valueLength;
     }
 
     public BytesWritable getKey() {
-      return new BytesWritable(this.keyBytes, this.keyBytes.length);
+      return new BytesWritable(keyBytes, keyOffset, keyLength);
     }
 
     public BytesWritable getValue() {
-      return new BytesWritable(this.valueBytes, this.valueBytes.length);
+      return new BytesWritable(valueBytes, valueOffset, valueLength);
     }
 
     public long getHashCode() {
