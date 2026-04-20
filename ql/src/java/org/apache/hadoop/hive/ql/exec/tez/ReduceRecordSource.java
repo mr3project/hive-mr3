@@ -56,8 +56,6 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.tez.runtime.api.ReaderEdge;
-import org.apache.tez.runtime.library.api.KeyValueReader;
-import org.apache.tez.runtime.library.api.KeyValuesReader;
 
 import com.google.common.base.Preconditions;
 
