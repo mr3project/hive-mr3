@@ -176,6 +176,7 @@ public class VectorMapJoinFastLongHashMapContainer extends VectorMapJoinFastHash
   @Override
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
+    // glad
     vectorMapJoinFastLongHashMaps[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey, currentValue);
   }
 
