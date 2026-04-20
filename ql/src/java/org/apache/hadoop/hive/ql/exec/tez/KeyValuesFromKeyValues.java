@@ -33,11 +33,13 @@ public class KeyValuesFromKeyValues implements KeyValuesAdapter {
     this.reader = reader;
   }
 
+  // The backing byte[] array of BytesWritable is immutable, so the consumer may keep pointers to it.
   @Override
   public BytesWritable getCurrentKey() throws IOException {
     return reader.getCurrentKey();
   }
 
+  // The backing byte[] array of BytesWritable is immutable, so the consumer may keep pointers to it.
   @Override
   public Iterable<? extends BytesWritable> getCurrentValues() throws IOException {
     return reader.getCurrentValues();

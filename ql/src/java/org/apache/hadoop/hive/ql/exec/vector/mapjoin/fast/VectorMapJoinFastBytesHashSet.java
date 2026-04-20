@@ -46,7 +46,7 @@ public abstract class VectorMapJoinFastBytesHashSet
 
   public void add(byte[] keyBytes, int keyStart, int keyLength, BytesWritable currentValue, long hashCode) {
 
-    if (checkResize()) {
+    if (checkResize()) {  // glad
       expandAndRehash();
     }
 

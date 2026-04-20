@@ -38,7 +38,7 @@ public class VectorMapJoinFastStringHashSet extends VectorMapJoinFastBytesHashSe
       throws HiveException, IOException {
 
     // Ignore NULL keys (HashSet not used for FULL OUTER).
-    stringCommon.adaptPutRow(this, currentKey, currentValue, hashCode);
+    stringCommon.adaptPutRow(this, currentKey, currentValue, hashCode);   // glad
   }
 
   public VectorMapJoinFastStringHashSet(
