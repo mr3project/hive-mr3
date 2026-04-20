@@ -53,7 +53,7 @@ public class VectorMapJoinFastLongHashSet
       throws HiveException, IOException {
 
     // Ignore NULL keys (HashSet not used for FULL OUTER).
-    adaptPutRow(hashCode, currentKey, currentValue);
+    adaptPutRow(hashCode, currentKey, currentValue);  // glad
   }
 
   @Override
@@ -74,7 +74,7 @@ public class VectorMapJoinFastLongHashSet
   @Override
   public void assignSlot(int slot, long key, boolean isNewKey, BytesWritable currentValue) {
 
-    int pairIndex = 2 * slot;
+    int pairIndex = 2 * slot;   // glad
     if (isNewKey) {
       // First entry.
       slotPairs[pairIndex] = 1;    // Existence.
