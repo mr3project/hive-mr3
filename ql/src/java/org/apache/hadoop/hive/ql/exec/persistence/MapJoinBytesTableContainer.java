@@ -382,16 +382,16 @@ public class MapJoinBytesTableContainer
 
     @Override
     public void writeKey(RandomAccessOutput dest) throws SerDeException {
-      byte[] keyBytes = key.getBytes();
+      byte[] keyBytes = key.getBytesRaw();
       int keyLength = key.getLength();
-      dest.write(keyBytes, 0, keyLength);
+      dest.write(keyBytes, key.getOffset(), keyLength);
     }
 
     @Override
     public void writeValue(RandomAccessOutput dest) throws SerDeException {
-      byte[] valueBytes = val.getBytes();
+      byte[] valueBytes = val.getBytesRaw();
       int valueLength = val.getLength();
-      dest.write(valueBytes, 0 , valueLength);
+      dest.write(valueBytes, val.getOffset(), valueLength);
     }
 
     @Override
@@ -402,9 +402,9 @@ public class MapJoinBytesTableContainer
 
     @Override
     public int getHashFromKey() throws SerDeException {
-      byte[] keyBytes = key.getBytes();
+      byte[] keyBytes = key.getBytesRaw();
       int keyLength = key.getLength();
-      return HashCodeUtil.murmurHash(keyBytes, 0, keyLength);
+      return HashCodeUtil.murmurHash(keyBytes, key.getOffset(), keyLength);
     }
 
     @Override
