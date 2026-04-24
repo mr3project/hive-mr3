@@ -192,7 +192,7 @@ public abstract class VectorMapJoinFastBytesHashMap
       // debugDumpKeyProbe(keyOffset, keyLength, hashCode, slot);
     }
 
-    byte[] valueBytes = currentValue.getBytes();
+    byte[] valueBytes = currentValue.getBytesRaw();
     int valueOffset = currentValue.getOffset();
     int valueLength = currentValue.getLength();
 
