@@ -175,7 +175,7 @@ public class BinarySortableSerDe extends AbstractSerDe {
   @Override
   public Object deserialize(Writable blob) throws SerDeException {
     BytesWritable data = (BytesWritable) blob;
-    inputByteBuffer.reset(data.getBytes(), 0, data.getLength());
+    inputByteBuffer.reset(data.getBytesRaw(), data.getOffset(), data.getOffset() + data.getLength());
 
     try {
       for (int i = 0; i < getColumnNames().size(); i++) {
