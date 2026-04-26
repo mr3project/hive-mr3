@@ -20,7 +20,6 @@ package org.apache.hadoop.hive.ql.exec.tez;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -437,7 +436,7 @@ public class ReduceRecordSource implements RecordSource {
   }
 
   boolean canConsumeAll() {
-    return keyValueReader != null;
+    return vectorized && keyValueReader != null;
   }
 
   long consumeAll(RecordProgress progress) throws HiveException, InterruptedException {
@@ -446,7 +445,7 @@ public class ReduceRecordSource implements RecordSource {
         @Override
         public void accept(BytesWritable keyWritable, BytesWritable valueWritable) {
           try {
-            processRecordFromKeyValueReader(keyWritable, valueWritable);
+            processVectorRecord(keyWritable, valueWritable, tag);
             progress.onRecord();
           } catch (OutOfMemoryError e) {
             throw e;
@@ -457,9 +456,6 @@ public class ReduceRecordSource implements RecordSource {
           }
         }
       });
-      if (!vectorized && flushLastRecord) {
-        reducer.flushRecursive();
-      }
       return records;
     } catch (OutOfMemoryError e) {
       abort = true;
@@ -476,42 +472,6 @@ public class ReduceRecordSource implements RecordSource {
     } catch (Exception e) {
       abort = true;
       throw new HiveException(e);
-    }
-  }
-
-  private void processRecordFromKeyValueReader(BytesWritable keyWritable, BytesWritable valueWritable)
-      throws HiveException, IOException {
-    if (vectorized) {
-      processVectorRecord(keyWritable, valueWritable, tag);
-      return;
-    }
-
-    // Set the key, check if this is a new group or same group.
-    try {
-      keyObject = inputKeySerDe.deserializeBytesWritable(keyWritable);
-    } catch (Exception e) {
-      throw new HiveException("Hive Runtime Error: Unable to deserialize reduce input key from "
-          + Utilities.formatBinaryString(
-              keyWritable.getBytesRaw(), keyWritable.getOffset(), keyWritable.getLength())
-          + " with properties " + keyTableDesc.getProperties(), e);
-    }
-
-    if (handleGroupKey && !keyWritable.equals(this.groupKey)) {
-      if (groupKey == null) { // the first group
-        this.groupKey = new BytesWritable();
-      } else {
-        reducer.endGroup();
-      }
-
-      // setDirect() is okay because keyWritable's backing byte array is immutable
-      groupKey.setDirect(keyWritable.getBytesRaw(), keyWritable.getOffset(), keyWritable.getLength());
-      reducer.startGroup();
-      reducer.setGroupKeyObject(keyObject);
-    }
-
-    groupIterator.initialize(Collections.singletonList(valueWritable), keyObject, tag);
-    if (groupIterator.hasNext()) {
-      groupIterator.next();
     }
   }
 
