@@ -433,20 +433,14 @@ public class ReduceRecordSource implements RecordSource {
 
   @FunctionalInterface
   interface RecordProgress {
-    void onRecord() throws Exception;
-  }
-
-  private static final class WrappedConsumeAllException extends RuntimeException {
-    WrappedConsumeAllException(Throwable cause) {
-      super(cause);
-    }
+    void onRecord() throws HiveException;
   }
 
   boolean canConsumeAll() {
     return keyValueReader != null;
   }
 
-  long consumeAll(RecordProgress progress) throws Exception {
+  long consumeAll(RecordProgress progress) throws HiveException {
     try {
       long records = keyValueReader.consumeAll(new BiConsumer<BytesWritable, BytesWritable>() {
         @Override
@@ -454,8 +448,12 @@ public class ReduceRecordSource implements RecordSource {
           try {
             processRecordFromKeyValueReader(keyWritable, valueWritable);
             progress.onRecord();
+          } catch (OutOfMemoryError e) {
+            throw e;
+          } catch (HiveException e) {
+            throw new RuntimeException(e);
           } catch (Throwable t) {
-            throw new WrappedConsumeAllException(t);
+            throw new RuntimeException(new HiveException(t));
           }
         }
       });
@@ -463,16 +461,19 @@ public class ReduceRecordSource implements RecordSource {
         reducer.flushRecursive();
       }
       return records;
-    } catch (WrappedConsumeAllException e) {
-      Throwable cause = e.getCause();
+    } catch (OutOfMemoryError e) {
       abort = true;
-      if (cause instanceof OutOfMemoryError) {
-        throw (OutOfMemoryError) cause;
-      } else if (cause instanceof Exception) {
-        throw (Exception) cause;
-      } else {
-        throw new RuntimeException(cause);
+      throw e;
+    } catch (RuntimeException e) {
+      abort = true;
+      Throwable cause = e.getCause();
+      if (cause instanceof HiveException) {
+        throw (HiveException) cause;
       }
+      throw new HiveException(e);
+    } catch (Exception e) {
+      abort = true;
+      throw new HiveException(e);
     }
   }
 
