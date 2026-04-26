@@ -151,11 +151,15 @@ public class ReduceRecordSource implements RecordSource {
     if (reader instanceof KeyValueReaderEdge) {
       this.isKeyValueReader = true;
       this.keyValueReader = (KeyValueReaderEdge) reader;
-      this.reader = new KeyValuesFromKeyValue((KeyValueReaderEdge) reader);
+      if (!vectorized) {
+        this.reader = new KeyValuesFromKeyValue((KeyValueReaderEdge) reader);
+      }
     } else {
       this.isKeyValueReader = false;
       this.keyValuesReader = (KeyValuesReaderEdge) reader;
-      this.reader = new KeyValuesFromKeyValues((KeyValuesReaderEdge) reader);
+      if (!vectorized) {
+        this.reader = new KeyValuesFromKeyValues((KeyValuesReaderEdge) reader);
+      }
     }
     this.handleGroupKey = handleGroupKey;
     this.tag = tag;
