@@ -405,33 +405,10 @@ public class ReduceRecordSource implements RecordSource {
 
   private boolean pushRecordVector() {
     if (isKeyValueReader) {
-      return pushRecordVectorFromKeyValue();
-    } else {
-      return pushRecordVectorFromKeyValues();
+      throw new IllegalStateException(
+          "KeyValueReaderEdge in vectorized reduce path must be consumed through consumeAll");
     }
-  }
-
-  private boolean pushRecordVectorFromKeyValue() {
-    try {
-      if (!keyValueReader.next()) {
-        return false;
-      }
-
-      BytesWritable keyWritable = keyValueReader.getCurrentKey();
-      BytesWritable valueWritable = keyValueReader.getCurrentValue();
-
-      processVectorRecord(keyWritable, valueWritable, tag);
-      return true;
-    } catch (Throwable e) {
-      abort = true;
-      if (e instanceof OutOfMemoryError) {
-        // Don't create a new object if we are already out of memory
-        throw (OutOfMemoryError) e;
-      } else {
-        l4j.error(StringUtils.stringifyException(e));
-        throw new RuntimeException(e);
-      }
-    }
+    return pushRecordVectorFromKeyValues();
   }
 
   private boolean pushRecordVectorFromKeyValues() {
