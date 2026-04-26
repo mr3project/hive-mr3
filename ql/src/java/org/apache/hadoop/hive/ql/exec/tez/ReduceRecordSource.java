@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.function.BiConsumer;
 
 import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
 import org.apache.tez.runtime.library.api.KeyValuesReaderEdge;
@@ -107,6 +108,9 @@ public class ReduceRecordSource implements RecordSource {
   private StructObjectInspector valueStructInspectors;
 
   private KeyValuesAdapter reader;
+  private KeyValueReaderEdge keyValueReader;
+  private KeyValuesReaderEdge keyValuesReader;
+  private boolean isKeyValueReader;
 
   private boolean handleGroupKey;
 
@@ -117,12 +121,15 @@ public class ReduceRecordSource implements RecordSource {
   private Iterable<? extends BytesWritable> valueWritables;
 
   private final GroupIterator groupIterator = new GroupIterator();
+  private final SingleValueIterable singleValueIterable = new SingleValueIterable();
 
   private long vectorizedVertexNum;
   private int vectorizedTestingReducerBatchSize;
 
   // Flush the last record when reader is out of records
   private boolean flushLastRecord = false;
+  private boolean usedPushRecord = false;
+  private boolean usedConsumeAll = false;
 
   void init(JobConf jconf, Operator<?> reducer, boolean vectorized, TableDesc keyTableDesc,
       TableDesc valueTableDesc, ReaderEdge reader, boolean handleGroupKey, byte tag,
@@ -144,8 +151,12 @@ public class ReduceRecordSource implements RecordSource {
     this.vectorized = vectorized;
     this.keyTableDesc = keyTableDesc;
     if (reader instanceof KeyValueReaderEdge) {
+      this.isKeyValueReader = true;
+      this.keyValueReader = (KeyValueReaderEdge) reader;
       this.reader = new KeyValuesFromKeyValue((KeyValueReaderEdge) reader);
     } else {
+      this.isKeyValueReader = false;
+      this.keyValuesReader = (KeyValuesReaderEdge) reader;
       this.reader = new KeyValuesFromKeyValues((KeyValuesReaderEdge) reader);
     }
     this.handleGroupKey = handleGroupKey;
@@ -253,6 +264,9 @@ public class ReduceRecordSource implements RecordSource {
 
   @Override
   public boolean pushRecord() throws HiveException {
+    usedPushRecord = true;
+    Preconditions.checkState(!usedConsumeAll,
+        "Cannot call pushRecord after consumeAll has been used");
 
     if (vectorized) {
       return pushRecordVector();
@@ -392,13 +406,44 @@ public class ReduceRecordSource implements RecordSource {
   }
 
   private boolean pushRecordVector() {
+    if (isKeyValueReader) {
+      return pushRecordVectorFromKeyValue();
+    } else {
+      return pushRecordVectorFromKeyValues();
+    }
+  }
+
+  private boolean pushRecordVectorFromKeyValue() {
     try {
-      if (!reader.next()) {
+      if (!keyValueReader.next()) {
         return false;
       }
 
-      BytesWritable keyWritable = reader.getCurrentKey();
-      valueWritables = reader.getCurrentValues();
+      BytesWritable keyWritable = keyValueReader.getCurrentKey();
+      BytesWritable valueWritable = keyValueReader.getCurrentValue();
+
+      processVectorRecord(keyWritable, valueWritable, tag);
+      return true;
+    } catch (Throwable e) {
+      abort = true;
+      if (e instanceof OutOfMemoryError) {
+        // Don't create a new object if we are already out of memory
+        throw (OutOfMemoryError) e;
+      } else {
+        l4j.error(StringUtils.stringifyException(e));
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
+  private boolean pushRecordVectorFromKeyValues() {
+    try {
+      if (!keyValuesReader.next()) {
+        return false;
+      }
+
+      BytesWritable keyWritable = keyValuesReader.getCurrentKey();
+      valueWritables = keyValuesReader.getCurrentValues();
 
       processVectorGroup(keyWritable, valueWritables, tag);
       return true;
@@ -414,6 +459,179 @@ public class ReduceRecordSource implements RecordSource {
     }
   }
 
+  @FunctionalInterface
+  interface RecordProgress {
+    void onRecord() throws Exception;
+  }
+
+  private static final class WrappedConsumeAllException extends RuntimeException {
+    WrappedConsumeAllException(Throwable cause) {
+      super(cause);
+    }
+  }
+
+  private static final class SingleValueIterable implements Iterable<BytesWritable>, Iterator<BytesWritable> {
+    private BytesWritable value;
+    private boolean hasValue;
+
+    void reset(BytesWritable value) {
+      this.value = value;
+      hasValue = true;
+    }
+
+    @Override
+    public boolean hasNext() {
+      return hasValue;
+    }
+
+    @Override
+    public BytesWritable next() {
+      hasValue = false;
+      return value;
+    }
+
+    @Override
+    public Iterator<BytesWritable> iterator() {
+      return this;
+    }
+  }
+
+  boolean canConsumeAll() {
+    return keyValueReader != null;
+  }
+
+  long consumeAll(RecordProgress progress) throws Exception {
+    usedConsumeAll = true;
+    Preconditions.checkState(!usedPushRecord,
+        "Cannot call consumeAll after pushRecord has been used");
+    Preconditions.checkState(keyValueReader != null,
+        "consumeAll can only be used with KeyValueReaderEdge");
+    try {
+      long records = keyValueReader.consumeAll(new BiConsumer<BytesWritable, BytesWritable>() {
+        @Override
+        public void accept(BytesWritable keyWritable, BytesWritable valueWritable) {
+          try {
+            processRecordFromKeyValueReader(keyWritable, valueWritable);
+            progress.onRecord();
+          } catch (Throwable t) {
+            throw new WrappedConsumeAllException(t);
+          }
+        }
+      });
+      if (!vectorized && flushLastRecord) {
+        reducer.flushRecursive();
+      }
+      return records;
+    } catch (WrappedConsumeAllException e) {
+      Throwable cause = e.getCause();
+      abort = true;
+      if (cause instanceof OutOfMemoryError) {
+        throw (OutOfMemoryError) cause;
+      } else if (cause instanceof Exception) {
+        throw (Exception) cause;
+      } else {
+        throw new RuntimeException(cause);
+      }
+    }
+  }
+
+  private void processRecordFromKeyValueReader(BytesWritable keyWritable, BytesWritable valueWritable)
+      throws HiveException, IOException {
+    if (vectorized) {
+      processVectorRecord(keyWritable, valueWritable, tag);
+      return;
+    }
+
+    // Set the key, check if this is a new group or same group.
+    try {
+      keyObject = inputKeySerDe.deserializeBytesWritable(keyWritable);
+    } catch (Exception e) {
+      throw new HiveException("Hive Runtime Error: Unable to deserialize reduce input key from "
+          + Utilities.formatBinaryString(
+              keyWritable.getBytesRaw(), keyWritable.getOffset(), keyWritable.getLength())
+          + " with properties " + keyTableDesc.getProperties(), e);
+    }
+
+    if (handleGroupKey && !keyWritable.equals(this.groupKey)) {
+      if (groupKey == null) { // the first group
+        this.groupKey = new BytesWritable();
+      } else {
+        reducer.endGroup();
+      }
+
+      // setDirect() is okay because keyWritable's backing byte array is immutable
+      groupKey.setDirect(keyWritable.getBytesRaw(), keyWritable.getOffset(), keyWritable.getLength());
+      reducer.startGroup();
+      reducer.setGroupKeyObject(keyObject);
+    }
+
+    singleValueIterable.reset(valueWritable);
+    groupIterator.initialize(singleValueIterable, keyObject, tag);
+    if (groupIterator.hasNext()) {
+      groupIterator.next();
+    }
+  }
+
+  private void processVectorRecord(BytesWritable keyWritable, BytesWritable valueWritable, byte tag)
+      throws HiveException, IOException {
+    if (reducer.batchNeedsClone()) {
+      batch = batchContext.createVectorizedRowBatch();
+    }
+    Preconditions.checkState(batch.size == 0);
+
+    // Deserialize key into vector row columns.
+    byte[] keyBytes = keyWritable.getBytesRaw();
+    int keyOffset = keyWritable.getOffset();
+    int keyLength = keyWritable.getLength();
+
+    keyBinarySortableDeserializeToRow.setBytes(keyBytes, keyOffset, keyLength);
+    try {
+      keyBinarySortableDeserializeToRow.deserialize(batch, 0);
+    } catch (Exception e) {
+      throw new HiveException(
+          "\nDeserializeRead details: " +
+              keyBinarySortableDeserializeToRow.getDetailedReadPositionString(),
+          e);
+    }
+    for (int i = 0; i < firstValueColumnOffset; i++) {
+      VectorizedBatchUtil.setRepeatingColumn(batch, i);
+    }
+
+    try {
+      if (valueLazyBinaryDeserializeToRow != null) {
+        // Deserialize value into vector row columns.
+        byte[] valueBytes = valueWritable.getBytesRaw();
+        int valueOffset = valueWritable.getOffset();
+        int valueLength = valueWritable.getLength();
+
+        valueLazyBinaryDeserializeToRow.setBytes(valueBytes, valueOffset, valueLength);
+        valueLazyBinaryDeserializeToRow.deserialize(batch, 0);
+      }
+      batch.size = 1;
+      if (handleGroupKey) {
+        reducer.setNextVectorBatchGroupStatus(/* isLastGroupBatch */ true);
+      }
+      reducer.process(batch, tag);
+
+      // reset only when we reuse the batch
+      if (!reducer.batchNeedsClone()) {
+        batch.reset();
+      }
+    } catch (Exception e) {
+      String rowString = null;
+      try {
+        rowString = batch.toString();
+      } catch (Exception e2) {
+        rowString = "[Error getting row data with exception "
+            + StringUtils.stringifyException(e2) + " ]";
+      }
+      l4j.error("Hive Runtime Error while processing vector batch (tag=" + tag
+          + ") (vectorizedVertexNum " + vectorizedVertexNum + ") " + rowString, e);
+      throw new HiveException("Hive Runtime Error while processing vector batch (tag="
+          + tag + ") (vectorizedVertexNum " + vectorizedVertexNum + ")", e);
+    }
+  }
+
   /**
    *
    * @param keyWritable
@@ -424,6 +642,11 @@ public class ReduceRecordSource implements RecordSource {
    */
   private void processVectorGroup(BytesWritable keyWritable,
           Iterable<? extends BytesWritable> values, byte tag) throws HiveException, IOException {
+    // NOTE: This method must consume the full value iterable for one reduce key in a single call.
+    // Some downstream operators (e.g. vector group by / PTF) rely on
+    // setNextVectorBatchGroupStatus(true) being sent only for the real final batch of that key.
+    // Splitting values into multiple disjoint iterables and invoking this method multiple times for
+    // the same key can make an intermediate batch look like the last group batch and break semantics.
 
     if (reducer.batchNeedsClone()) {
       batch = batchContext.createVectorizedRowBatch();
