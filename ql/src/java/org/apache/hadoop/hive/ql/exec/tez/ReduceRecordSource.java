@@ -433,7 +433,7 @@ public class ReduceRecordSource implements RecordSource {
 
   @FunctionalInterface
   interface RecordProgress {
-    void onRecord() throws HiveException, InterruptedException;
+    void onRecord() throws InterruptedException;
   }
 
   boolean canConsumeAll() {

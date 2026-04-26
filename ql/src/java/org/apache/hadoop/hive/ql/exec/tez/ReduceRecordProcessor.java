@@ -45,7 +45,6 @@ import org.apache.hadoop.hive.ql.exec.mr.ExecMapper.ReportStats;
 import org.apache.hadoop.hive.ql.exec.tez.DynamicValueRegistryTez.RegistryConfTez;
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor.TezKVOutputCollector;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.DynamicValue;
 import org.apache.hadoop.hive.ql.plan.ReduceWork;
@@ -306,7 +305,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
     if (bigTableSource.canConsumeAll()) {
       bigTableSource.consumeAll(new ReduceRecordSource.RecordProgress() {
         @Override
-        public void onRecord() throws HiveException, InterruptedException {
+        public void onRecord() throws InterruptedException {
           addRowAndMaybeCheckAbort();
         }
       });
