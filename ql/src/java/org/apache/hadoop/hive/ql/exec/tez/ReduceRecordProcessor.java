@@ -306,13 +306,8 @@ public class ReduceRecordProcessor extends RecordProcessor {
     if (bigTableSource.canConsumeAll()) {
       bigTableSource.consumeAll(new ReduceRecordSource.RecordProgress() {
         @Override
-        public void onRecord() throws HiveException {
-          try {
-            addRowAndMaybeCheckAbort();
-          } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new HiveException(e);
-          }
+        public void onRecord() throws HiveException, InterruptedException {
+          addRowAndMaybeCheckAbort();
         }
       });
     } else {
