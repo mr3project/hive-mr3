@@ -403,8 +403,33 @@ public class ReduceRecordSource implements RecordSource {
   }
 
   private boolean pushRecordVector() {
-    assert !isKeyValueReader;
+    if (isKeyValueReader) {
+      return pushRecordVectorFromKeyValue();
+    }
     return pushRecordVectorFromKeyValues();
+  }
+
+  private boolean pushRecordVectorFromKeyValue() {
+    try {
+      if (!keyValueReader.next()) {
+        return false;
+      }
+
+      BytesWritable keyWritable = keyValueReader.getCurrentKey();
+      BytesWritable valueWritable = keyValueReader.getCurrentValue();
+
+      processVectorRecord(keyWritable, valueWritable, tag);
+      return true;
+    } catch (Throwable e) {
+      abort = true;
+      if (e instanceof OutOfMemoryError) {
+        // Don't create a new object if we are already out of memory
+        throw (OutOfMemoryError) e;
+      } else {
+        l4j.error(StringUtils.stringifyException(e));
+        throw new RuntimeException(e);
+      }
+    }
   }
 
   private boolean pushRecordVectorFromKeyValues() {
