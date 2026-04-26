@@ -404,10 +404,7 @@ public class ReduceRecordSource implements RecordSource {
   }
 
   private boolean pushRecordVector() {
-    if (isKeyValueReader) {
-      throw new IllegalStateException(
-          "KeyValueReaderEdge in vectorized reduce path must be consumed through consumeAll");
-    }
+    assert !isKeyValueReader;
     return pushRecordVectorFromKeyValues();
   }
 
