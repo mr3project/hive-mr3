@@ -477,7 +477,12 @@ public class ReduceRecordSource implements RecordSource {
               pendingKey[0] = copyBytesWritable(keyWritable);
               pendingValue[0] = copyBytesWritable(valueWritable);
               return;
-            }
+    processVectorRecord(keyWritable, valueWritable, tag, true);
+  }
+
+  private void processVectorRecord(BytesWritable keyWritable, BytesWritable valueWritable, byte tag,
+      boolean isLastGroupBatch) throws HiveException, IOException {
+        reducer.setNextVectorBatchGroupStatus(isLastGroupBatch);
 
             final boolean isLastGroupBatch = !pendingKey[0].equals(keyWritable);
             processVectorRecord(pendingKey[0], pendingValue[0], tag, isLastGroupBatch);
