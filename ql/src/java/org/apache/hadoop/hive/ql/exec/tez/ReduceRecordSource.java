@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.tez;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -121,7 +122,6 @@ public class ReduceRecordSource implements RecordSource {
   private Iterable<? extends BytesWritable> valueWritables;
 
   private final GroupIterator groupIterator = new GroupIterator();
-  private final SingleValueIterable singleValueIterable = new SingleValueIterable();
 
   private long vectorizedVertexNum;
   private int vectorizedTestingReducerBatchSize;
@@ -442,32 +442,6 @@ public class ReduceRecordSource implements RecordSource {
     }
   }
 
-  private static final class SingleValueIterable implements Iterable<BytesWritable>, Iterator<BytesWritable> {
-    private BytesWritable value;
-    private boolean hasValue;
-
-    void reset(BytesWritable value) {
-      this.value = value;
-      hasValue = true;
-    }
-
-    @Override
-    public boolean hasNext() {
-      return hasValue;
-    }
-
-    @Override
-    public BytesWritable next() {
-      hasValue = false;
-      return value;
-    }
-
-    @Override
-    public Iterator<BytesWritable> iterator() {
-      return this;
-    }
-  }
-
   boolean canConsumeAll() {
     return keyValueReader != null;
   }
@@ -532,8 +506,7 @@ public class ReduceRecordSource implements RecordSource {
       reducer.setGroupKeyObject(keyObject);
     }
 
-    singleValueIterable.reset(valueWritable);
-    groupIterator.initialize(singleValueIterable, keyObject, tag);
+    groupIterator.initialize(Collections.singletonList(valueWritable), keyObject, tag);
     if (groupIterator.hasNext()) {
       groupIterator.next();
     }
