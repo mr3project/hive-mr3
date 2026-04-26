@@ -441,12 +441,25 @@ public class ReduceRecordSource implements RecordSource {
 
   long consumeAll(RecordProgress progress) throws HiveException, InterruptedException {
     try {
+      final BytesWritable[] pendingKey = new BytesWritable[1];
+      final BytesWritable[] pendingValue = new BytesWritable[1];
+
       long records = keyValueReader.consumeAll(new BiConsumer<BytesWritable, BytesWritable>() {
         @Override
         public void accept(BytesWritable keyWritable, BytesWritable valueWritable) {
           try {
-            processVectorRecord(keyWritable, valueWritable, tag);
+            if (pendingKey[0] == null) {
+              pendingKey[0] = copyBytesWritable(keyWritable);
+              pendingValue[0] = copyBytesWritable(valueWritable);
+              return;
+            }
+
+            final boolean isLastGroupBatch = !pendingKey[0].equals(keyWritable);
+            processVectorRecord(pendingKey[0], pendingValue[0], tag, isLastGroupBatch);
             progress.onRecord();
+
+            pendingKey[0] = copyBytesWritable(keyWritable);
+            pendingValue[0] = copyBytesWritable(valueWritable);
           } catch (OutOfMemoryError e) {
             throw e;
           } catch (HiveException | InterruptedException e) {
@@ -456,6 +469,11 @@ public class ReduceRecordSource implements RecordSource {
           }
         }
       });
+
+      if (pendingKey[0] != null) {
+        processVectorRecord(pendingKey[0], pendingValue[0], tag, true);
+        progress.onRecord();
+      }
       return records;
     } catch (OutOfMemoryError e) {
       abort = true;
@@ -475,8 +493,15 @@ public class ReduceRecordSource implements RecordSource {
     }
   }
 
-  private void processVectorRecord(BytesWritable keyWritable, BytesWritable valueWritable, byte tag)
-      throws HiveException, IOException {
+  private BytesWritable copyBytesWritable(BytesWritable writable) {
+    final int offset = writable.getOffset();
+    final int length = writable.getLength();
+    final byte[] rawBytes = writable.getBytesRaw();
+    return new BytesWritable(Arrays.copyOfRange(rawBytes, offset, offset + length));
+  }
+
+  private void processVectorRecord(BytesWritable keyWritable, BytesWritable valueWritable, byte tag,
+      boolean isLastGroupBatch) throws HiveException, IOException {
     if (reducer.batchNeedsClone()) {
       batch = batchContext.createVectorizedRowBatch();
     }
@@ -512,7 +537,7 @@ public class ReduceRecordSource implements RecordSource {
       }
       batch.size = 1;
       if (handleGroupKey) {
-        reducer.setNextVectorBatchGroupStatus(/* isLastGroupBatch */ true);
+        reducer.setNextVectorBatchGroupStatus(isLastGroupBatch);
       }
       reducer.process(batch, tag);
 
