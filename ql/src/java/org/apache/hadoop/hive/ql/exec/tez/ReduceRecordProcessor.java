@@ -301,8 +301,18 @@ public class ReduceRecordProcessor extends RecordProcessor {
 
     // run the operator pipeline
     startAbortChecks();
-    while (sources[bigTablePosition].pushRecord()) {
-      addRowAndMaybeCheckAbort();
+    ReduceRecordSource bigTableSource = sources[bigTablePosition];
+    if (bigTableSource.canConsumeAll()) {
+      bigTableSource.consumeAll(new ReduceRecordSource.RecordProgress() {
+        @Override
+        public void onRecord() throws InterruptedException {
+          addRowAndMaybeCheckAbort();
+        }
+      });
+    } else {
+      while (bigTableSource.pushRecord()) {
+        addRowAndMaybeCheckAbort();
+      }
     }
   }
 
