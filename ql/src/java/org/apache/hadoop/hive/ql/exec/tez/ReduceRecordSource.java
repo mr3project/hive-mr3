@@ -128,8 +128,6 @@ public class ReduceRecordSource implements RecordSource {
 
   // Flush the last record when reader is out of records
   private boolean flushLastRecord = false;
-  private boolean usedPushRecord = false;
-  private boolean usedConsumeAll = false;
 
   void init(JobConf jconf, Operator<?> reducer, boolean vectorized, TableDesc keyTableDesc,
       TableDesc valueTableDesc, ReaderEdge reader, boolean handleGroupKey, byte tag,
@@ -264,10 +262,6 @@ public class ReduceRecordSource implements RecordSource {
 
   @Override
   public boolean pushRecord() throws HiveException {
-    usedPushRecord = true;
-    Preconditions.checkState(!usedConsumeAll,
-        "Cannot call pushRecord after consumeAll has been used");
-
     if (vectorized) {
       return pushRecordVector();
     }
@@ -501,11 +495,6 @@ public class ReduceRecordSource implements RecordSource {
   }
 
   long consumeAll(RecordProgress progress) throws Exception {
-    usedConsumeAll = true;
-    Preconditions.checkState(!usedPushRecord,
-        "Cannot call consumeAll after pushRecord has been used");
-    Preconditions.checkState(keyValueReader != null,
-        "consumeAll can only be used with KeyValueReaderEdge");
     try {
       long records = keyValueReader.consumeAll(new BiConsumer<BytesWritable, BytesWritable>() {
         @Override
