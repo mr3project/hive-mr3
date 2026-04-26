@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.function.BiConsumer;
 
 import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
 import org.apache.tez.runtime.library.api.KeyValuesReaderEdge;
@@ -107,6 +108,9 @@ public class ReduceRecordSource implements RecordSource {
   private StructObjectInspector valueStructInspectors;
 
   private KeyValuesAdapter reader;
+  private KeyValueReaderEdge keyValueReader;
+  private KeyValuesReaderEdge keyValuesReader;
+  private boolean isKeyValueReader;
 
   private boolean handleGroupKey;
 
@@ -144,9 +148,19 @@ public class ReduceRecordSource implements RecordSource {
     this.vectorized = vectorized;
     this.keyTableDesc = keyTableDesc;
     if (reader instanceof KeyValueReaderEdge) {
-      this.reader = new KeyValuesFromKeyValue((KeyValueReaderEdge) reader);
+      // for unordered key/value records
+      this.isKeyValueReader = true;
+      this.keyValueReader = (KeyValueReaderEdge) reader;
+      if (!vectorized) {
+        this.reader = new KeyValuesFromKeyValue((KeyValueReaderEdge) reader);
+      }
     } else {
-      this.reader = new KeyValuesFromKeyValues((KeyValuesReaderEdge) reader);
+      // for ordered key/value records
+      this.isKeyValueReader = false;
+      this.keyValuesReader = (KeyValuesReaderEdge) reader;
+      if (!vectorized) {
+        this.reader = new KeyValuesFromKeyValues((KeyValuesReaderEdge) reader);
+      }
     }
     this.handleGroupKey = handleGroupKey;
     this.tag = tag;
@@ -253,7 +267,6 @@ public class ReduceRecordSource implements RecordSource {
 
   @Override
   public boolean pushRecord() throws HiveException {
-
     if (vectorized) {
       return pushRecordVector();
     }
@@ -392,13 +405,48 @@ public class ReduceRecordSource implements RecordSource {
   }
 
   private boolean pushRecordVector() {
+    if (isKeyValueReader) {
+      // Currently, this path 'isKeyValueReader for unordered key/value records + vectorized' is never used.
+      // For this path, consumeAll() should be called.
+      // Keep pushRecordVectorFromKeyValue() for future changes (e.g., vectorized merge join)
+      assert false;
+      return pushRecordVectorFromKeyValueUnordered();
+    } else {
+      return pushRecordVectorFromKeyValuesOrdered();
+    }
+  }
+
+  private boolean pushRecordVectorFromKeyValueUnordered() {
     try {
-      if (!reader.next()) {
+      if (!keyValueReader.next()) {
         return false;
       }
 
-      BytesWritable keyWritable = reader.getCurrentKey();
-      valueWritables = reader.getCurrentValues();
+      BytesWritable keyWritable = keyValueReader.getCurrentKey();
+      BytesWritable valueWritable = keyValueReader.getCurrentValue();
+
+      processVectorRecordUnordered(keyWritable, valueWritable, tag);
+      return true;
+    } catch (Throwable e) {
+      abort = true;
+      if (e instanceof OutOfMemoryError) {
+        // Don't create a new object if we are already out of memory
+        throw (OutOfMemoryError) e;
+      } else {
+        l4j.error(StringUtils.stringifyException(e));
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
+  private boolean pushRecordVectorFromKeyValuesOrdered() {
+    try {
+      if (!keyValuesReader.next()) {
+        return false;
+      }
+
+      BytesWritable keyWritable = keyValuesReader.getCurrentKey();
+      valueWritables = keyValuesReader.getCurrentValues();
 
       processVectorGroup(keyWritable, valueWritables, tag);
       return true;
@@ -414,6 +462,104 @@ public class ReduceRecordSource implements RecordSource {
     }
   }
 
+  @FunctionalInterface
+  interface RecordProgress {
+    void onRecord() throws InterruptedException;
+  }
+
+  boolean canConsumeAllUnordered() {
+    return vectorized && isKeyValueReader;  // for unordered key/value records
+  }
+
+  void consumeAllUnordered(RecordProgress progress) throws HiveException, InterruptedException {
+    try {
+      keyValueReader.consumeAll(new BiConsumer<BytesWritable, BytesWritable>() {
+        @Override
+        public void accept(BytesWritable keyWritable, BytesWritable valueWritable) {
+          try {
+            // KeyValueReaderEdge provides unordered key/value records. The same logical key can
+            // appear again later, so every record must be treated as an independent final batch.
+            processVectorRecordUnordered(keyWritable, valueWritable, tag);
+            progress.onRecord();
+          } catch (OutOfMemoryError e) {
+            throw e;
+          } catch (HiveException | InterruptedException e) {
+            throw new RuntimeException(e);
+          } catch (Throwable t) {
+            throw new RuntimeException(new HiveException(t));
+          }
+        }
+      });
+    } catch (OutOfMemoryError e) {
+      abort = true;
+      throw e;
+    } catch (RuntimeException e) {
+      abort = true;
+      Throwable cause = e.getCause();
+      if (cause instanceof HiveException) {
+        throw (HiveException) cause;
+      } else if (cause instanceof InterruptedException) {
+        throw (InterruptedException) cause;
+      }
+      throw new HiveException(e);
+    } catch (Exception e) {
+      abort = true;
+      throw new HiveException(e);
+    }
+  }
+
+  private void processVectorRecordUnordered(BytesWritable keyWritable, BytesWritable valueWritable, byte tag) throws HiveException {
+    if (reducer.batchNeedsClone()) {
+      batch = batchContext.createVectorizedRowBatch();
+    }
+    Preconditions.checkState(batch.size == 0);
+
+    // Deserialize key into vector row columns.
+    byte[] keyBytes = keyWritable.getBytesRaw();
+    int keyOffset = keyWritable.getOffset();
+    int keyLength = keyWritable.getLength();
+
+    keyBinarySortableDeserializeToRow.setBytes(keyBytes, keyOffset, keyLength);
+    try {
+      keyBinarySortableDeserializeToRow.deserialize(batch, 0);
+    } catch (Exception e) {
+      throw new HiveException(
+          "\nDeserializeRead details: " +
+              keyBinarySortableDeserializeToRow.getDetailedReadPositionString(),
+          e);
+    }
+    try {
+      if (valueLazyBinaryDeserializeToRow != null) {
+        // Deserialize value into vector row columns.
+        byte[] valueBytes = valueWritable.getBytesRaw();
+        int valueOffset = valueWritable.getOffset();
+        int valueLength = valueWritable.getLength();
+
+        valueLazyBinaryDeserializeToRow.setBytes(valueBytes, valueOffset, valueLength);
+        valueLazyBinaryDeserializeToRow.deserialize(batch, 0);
+      }
+      batch.size = 1;
+      reducer.process(batch, tag);
+
+      // reset only when we reuse the batch
+      if (!reducer.batchNeedsClone()) {
+        batch.reset();
+      }
+    } catch (Exception e) {
+      String rowString = null;
+      try {
+        rowString = batch.toString();
+      } catch (Exception e2) {
+        rowString = "[Error getting row data with exception "
+            + StringUtils.stringifyException(e2) + " ]";
+      }
+      l4j.error("Hive Runtime Error while processing vector batch (tag=" + tag
+          + ") (vectorizedVertexNum " + vectorizedVertexNum + ") " + rowString, e);
+      throw new HiveException("Hive Runtime Error while processing vector batch (tag="
+          + tag + ") (vectorizedVertexNum " + vectorizedVertexNum + ")", e);
+    }
+  }
+
   /**
    *
    * @param keyWritable
@@ -424,6 +570,11 @@ public class ReduceRecordSource implements RecordSource {
    */
   private void processVectorGroup(BytesWritable keyWritable,
           Iterable<? extends BytesWritable> values, byte tag) throws HiveException, IOException {
+    // NOTE: This method must consume the full value iterable for one reduce key in a single call.
+    // Some downstream operators (e.g. vector group by / PTF) rely on
+    // setNextVectorBatchGroupStatus(true) being sent only for the real final batch of that key.
+    // Splitting values into multiple disjoint iterables and invoking this method multiple times for
+    // the same key can make an intermediate batch look like the last group batch and break semantics.
 
     if (reducer.batchNeedsClone()) {
       batch = batchContext.createVectorizedRowBatch();
