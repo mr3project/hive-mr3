@@ -500,23 +500,78 @@ public class ReduceRecordSource implements RecordSource {
     try {
       edgeReader.consumeAll(new KeyValuesReaderEdge.KeyGroupConsumer() {
         private BytesWritable keyWritable;
-        private final List<BytesWritable> values = new ArrayList<>();
+        private int rowIdx;
+        private int batchBytes;
+        private int maxSize;
 
         @Override
-        public void startKey(BytesWritable key) {
-          keyWritable = new BytesWritable(key.copyBytes());
-          values.clear();
+        public void startKey(BytesWritable key) throws Exception {
+          keyWritable = key;
+          if (reducer.batchNeedsClone()) {
+            batch = batchContext.createVectorizedRowBatch();
+          }
+          Preconditions.checkState(batch.size == 0);
+          rowIdx = 0;
+
+          byte[] keyBytes = keyWritable.getBytesRaw();
+          int keyOffset = keyWritable.getOffset();
+          int keyLength = keyWritable.getLength();
+          batchBytes = keyLength;
+          maxSize =
+              (vectorizedTestingReducerBatchSize > 0 ?
+                  Math.min(vectorizedTestingReducerBatchSize, batch.getMaxSize()) :
+                  batch.getMaxSize());
+          Preconditions.checkState(maxSize > 0);
+
+          keyBinarySortableDeserializeToRow.setBytes(keyBytes, keyOffset, keyLength);
+          keyBinarySortableDeserializeToRow.deserialize(batch, 0);
+          for (int i = 0; i < firstValueColumnOffset; i++) {
+            VectorizedBatchUtil.setRepeatingColumn(batch, i);
+          }
         }
 
         @Override
         public void consumeValue(BytesWritable value) throws Exception {
-          values.add(new BytesWritable(value.copyBytes()));
+          if (rowIdx >= maxSize || (rowIdx > 0 && batchBytes >= BATCH_BYTES)) {
+            batch.size = rowIdx;
+            if (handleGroupKey) {
+              reducer.setNextVectorBatchGroupStatus(/* isLastGroupBatch */ false);
+            }
+            reducer.process(batch, tag);
+
+            batch.selectedInUse = false;
+            batch.size = 0;
+            batch.endOfFile = false;
+            for (int i = firstValueColumnOffset; i < batch.numCols; i++) {
+              batch.cols[i].reset();
+            }
+            rowIdx = 0;
+            batchBytes = keyWritable.getLength();
+          }
+          if (valueLazyBinaryDeserializeToRow != null) {
+            byte[] valueBytes = value.getBytesRaw();
+            int valueOffset = value.getOffset();
+            int valueLength = value.getLength();
+            batchBytes += valueLength;
+            valueLazyBinaryDeserializeToRow.setBytes(valueBytes, valueOffset, valueLength);
+            valueLazyBinaryDeserializeToRow.deserialize(batch, rowIdx);
+          }
+          rowIdx++;
           progress.onRecord();
         }
 
         @Override
         public void endKey() throws Exception {
-          processVectorGroup(keyWritable, values, tag);
+          if (rowIdx > 0) {
+            batch.size = rowIdx;
+            if (handleGroupKey) {
+              reducer.setNextVectorBatchGroupStatus(/* isLastGroupBatch */ true);
+            }
+            reducer.process(batch, tag);
+          }
+          if (!reducer.batchNeedsClone()) {
+            batch.reset();
+          }
         }
       });
     } catch (OutOfMemoryError e) {
