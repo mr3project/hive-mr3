@@ -22,7 +22,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-import java.util.function.BiConsumer;
 
 import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
 import org.apache.tez.runtime.library.api.KeyValuesReaderEdge;
@@ -473,35 +472,18 @@ public class ReduceRecordSource implements RecordSource {
 
   void consumeAllUnordered(RecordProgress progress) throws HiveException, InterruptedException {
     try {
-      keyValueReader.consumeAll(new BiConsumer<BytesWritable, BytesWritable>() {
-        @Override
-        public void accept(BytesWritable keyWritable, BytesWritable valueWritable) {
-          try {
-            // KeyValueReaderEdge provides unordered key/value records. The same logical key can
-            // appear again later, so every record must be treated as an independent final batch.
-            processVectorRecordUnordered(keyWritable, valueWritable, tag);
-            progress.onRecord();
-          } catch (OutOfMemoryError e) {
-            throw e;
-          } catch (HiveException | InterruptedException e) {
-            throw new RuntimeException(e);
-          } catch (Throwable t) {
-            throw new RuntimeException(new HiveException(t));
-          }
-        }
+      keyValueReader.consumeAll((keyWritable, valueWritable) -> {
+        // KeyValueReaderEdge provides unordered key/value records. The same logical key can
+        // appear again later, so every record must be treated as an independent final batch.
+        processVectorRecordUnordered(keyWritable, valueWritable, tag);
+        progress.onRecord();
       });
     } catch (OutOfMemoryError e) {
       abort = true;
       throw e;
-    } catch (RuntimeException e) {
+    } catch (InterruptedException e) {
       abort = true;
-      Throwable cause = e.getCause();
-      if (cause instanceof HiveException) {
-        throw (HiveException) cause;
-      } else if (cause instanceof InterruptedException) {
-        throw (InterruptedException) cause;
-      }
-      throw new HiveException(e);
+      throw e;
     } catch (Exception e) {
       abort = true;
       throw new HiveException(e);
