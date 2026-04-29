@@ -470,6 +470,10 @@ public class ReduceRecordSource implements RecordSource {
     return vectorized && isKeyValueReader;  // for unordered key/value records
   }
 
+  boolean canConsumeAllOrdered() {
+    return vectorized && !isKeyValueReader && (reader instanceof KeyValuesReaderEdge);
+  }
+
   void consumeAllUnordered(RecordProgress progress) throws HiveException, InterruptedException {
     try {
       keyValueReader.consumeAll((keyWritable, valueWritable) -> {
@@ -477,6 +481,43 @@ public class ReduceRecordSource implements RecordSource {
         // appear again later, so every record must be treated as an independent final batch.
         processVectorRecordUnordered(keyWritable, valueWritable, tag);
         progress.onRecord();
+      });
+    } catch (OutOfMemoryError e) {
+      abort = true;
+      throw e;
+    } catch (InterruptedException e) {
+      abort = true;
+      throw e;
+    } catch (Exception e) {
+      abort = true;
+      throw new HiveException(e);
+    }
+  }
+
+  void consumeAllOrdered(RecordProgress progress) throws HiveException, InterruptedException {
+    Preconditions.checkState(canConsumeAllOrdered());
+    final KeyValuesReaderEdge edgeReader = (KeyValuesReaderEdge) reader;
+    try {
+      edgeReader.consumeAll(new KeyValuesReaderEdge.KeyGroupConsumer() {
+        private BytesWritable keyWritable;
+        private final List<BytesWritable> values = new ArrayList<>();
+
+        @Override
+        public void startKey(BytesWritable key) {
+          keyWritable = new BytesWritable(key.copyBytes());
+          values.clear();
+        }
+
+        @Override
+        public void consumeValue(BytesWritable value) throws Exception {
+          values.add(new BytesWritable(value.copyBytes()));
+          progress.onRecord();
+        }
+
+        @Override
+        public void endKey() throws Exception {
+          processVectorGroup(keyWritable, values, tag);
+        }
       });
     } catch (OutOfMemoryError e) {
       abort = true;

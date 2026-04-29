@@ -309,6 +309,13 @@ public class ReduceRecordProcessor extends RecordProcessor {
           addRowAndMaybeCheckAbort();
         }
       });
+    } else if (bigTableSource.canConsumeAllOrdered()) {
+      bigTableSource.consumeAllOrdered(new ReduceRecordSource.RecordProgress() {
+        @Override
+        public void onRecord() throws InterruptedException {
+          addRowAndMaybeCheckAbort();
+        }
+      });
     } else {
       while (bigTableSource.pushRecord()) {
         addRowAndMaybeCheckAbort();
