@@ -116,7 +116,9 @@ public class ReduceRecordProcessor extends RecordProcessor {
     checkAbortCondition();
     if (shuffleInputs != null) {
       LOG.info("Waiting for ShuffleInputs to become ready");
+      LOG.info("TASK_INIT_WAIT {} {}", processorContext.getTaskAttemptIdStr(), System.nanoTime());
       processorContext.waitForAllInputsReady(new ArrayList<Input>(shuffleInputs));
+      LOG.info("TASK_INIT_FINISH {} {}", processorContext.getTaskAttemptIdStr(), System.nanoTime());
     }
 
     connectOps.clear();

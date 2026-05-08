@@ -224,6 +224,8 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       return null;
     }
 
+    LOG.info("TASK_START {} {}", getContext().getTaskAttemptIdStr(), System.nanoTime());
+
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.TEZ_RUN_PROCESSOR);
     // in case of broadcast-join read the broadcast edge inputs
     // (possibly asynchronously)
@@ -236,6 +238,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       // This check isn't absolutely mandatory, given the aborted check outside of the
       // Processor creation.
       if (aborted.get()) {
+        LOG.info("TASK_END {} {}", getContext().getTaskAttemptIdStr(), System.nanoTime());
         return null;
       }
 
@@ -263,8 +266,10 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     if (limitRecords != null) {
       LOG.info("Reporting query limit and # of records: {}, {}, {}",
           processorContext.getTaskAttemptIdStr(), limitRecords._1(), limitRecords._2());
+      LOG.info("TASK_END {} {}", getContext().getTaskAttemptIdStr(), System.nanoTime());
       return limitRecords;
     } else {
+      LOG.info("TASK_END {} {}", getContext().getTaskAttemptIdStr(), System.nanoTime());
       return null;
     }
   }
