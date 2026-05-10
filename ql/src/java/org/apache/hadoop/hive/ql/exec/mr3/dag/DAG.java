@@ -113,6 +113,10 @@ public class DAG {
     return new DAG(name, dagInfo, operatorGraphMap, dagCredentials, queryId, commonJobConf);
   }
 
+  public JobConf getCommonJobConf() {
+    return commonJobConf;
+  }
+
   public String getQueryId() {
     return queryId;
   }
