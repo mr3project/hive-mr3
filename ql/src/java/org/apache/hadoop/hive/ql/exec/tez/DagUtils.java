@@ -1375,9 +1375,7 @@ public class DagUtils {
     //    (s) -> ((s != null) && (s.endsWith(".xml") || (s.endsWith(".java") && !"HiveConf.java".equals(s))));
 
     // since this is an inclusion filter, negate the predicate
-    JobConf conf =
-        TezConfigurationFactory
-            .wrapWithJobConf(hiveConf, null);
+    JobConf conf = TezConfigurationFactory.wrapWithJobConfWithoutSourceTracking(hiveConf);
 
     if (conf.get("mapred.output.committer.class") == null) {
       conf.set("mapred.output.committer.class", NullOutputCommitter.class.getName());
