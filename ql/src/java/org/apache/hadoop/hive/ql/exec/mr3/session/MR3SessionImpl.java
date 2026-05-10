@@ -38,6 +38,7 @@ import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -48,6 +49,7 @@ import com.datamonad.mr3.api.common.MR3Conf;
 import com.datamonad.mr3.api.common.MR3Conf$;
 import com.datamonad.mr3.api.common.MR3ConfBuilder;
 import com.datamonad.mr3.common.fs.StagingDirUtils;
+import org.apache.tez.runtime.library.api.TezRuntimeConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -365,7 +367,7 @@ public class MR3SessionImpl implements MR3Session {
     // still close() can be called at any time (from MR3SessionManager.getNewMr3SessionIfNotAlive())
 
     String dagUser = UserGroupInformation.getCurrentUser().getShortUserName();
-    MR3Conf dagConf = createDagConf(mr3TaskConf, dagUser, dag.getQueryId());
+    MR3Conf dagConf = createDagConf(mr3TaskConf, dagUser, dag.getQueryId(), dag.getCommonJobConf());
 
     // sessionConf is not passed to MR3; only dagConf is passed to MR3 as a component of DAGProto.dagConf.
     String submitter = SessionState.get().getUserName();
@@ -390,7 +392,7 @@ public class MR3SessionImpl implements MR3Session {
   }
 
   // MR3Conf from createDagConf() is the only MR3Conf passed to MR3 as part of submitting a DAG.
-  private MR3Conf createDagConf(Configuration mr3TaskConf, String dagUser, String queryId) {
+  private MR3Conf createDagConf(Configuration mr3TaskConf, String dagUser, String queryId, JobConf commonJobConf) {
     boolean confStopCrossDagReuse = HiveConf.getBoolVar(mr3TaskConf,
         HiveConf.ConfVars.MR3_CONTAINER_STOP_CROSS_DAG_REUSE);
     String queueName = HiveConf.getVar(mr3TaskConf,
@@ -401,8 +403,18 @@ public class MR3SessionImpl implements MR3Session {
         HiveConf.ConfVars.MR3_AM_TASK_MAX_FAILED_ATTEMPTS);
     float concurrentRunThreshold = HiveConf.getFloatVar(mr3TaskConf,
         HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
-    boolean deleteVertexLocalDirectory = HiveConf.getBoolVar(mr3TaskConf,
-        HiveConf.ConfVars.MR3_DAG_DELETE_VERTEX_LOCAL_DIRECTORY);
+
+    boolean useFreeMemoryWriterOutput = commonJobConf.getBoolean(
+        TezRuntimeConfiguration.TEZ_RUNTIME_USE_FREE_MEMORY_WRITER_OUTPUT,
+        TezRuntimeConfiguration.TEZ_RUNTIME_USE_FREE_MEMORY_WRITER_OUTPUT_DEFAULT);
+    boolean deleteVertexLocalDirectory = useFreeMemoryWriterOutput ||
+        HiveConf.getBoolVar(mr3TaskConf, HiveConf.ConfVars.MR3_DAG_DELETE_VERTEX_LOCAL_DIRECTORY);
+    if (useFreeMemoryWriterOutput) {
+      LOG.info("{}: Setting {} to true because {} is set to true", queryId,
+          HiveConf.ConfVars.MR3_DAG_DELETE_VERTEX_LOCAL_DIRECTORY.varname,
+          TezRuntimeConfiguration.TEZ_RUNTIME_USE_FREE_MEMORY_WRITER_OUTPUT);
+    }
+
     int maxNumWorkers = HiveConf.getIntVar(mr3TaskConf,
         HiveConf.ConfVars.MR3_CONTAINER_MAX_NUM_WORKERS);
     MR3ConfBuilder confBuilder;
