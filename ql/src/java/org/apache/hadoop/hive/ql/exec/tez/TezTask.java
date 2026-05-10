@@ -526,7 +526,6 @@ public class TezTask extends Task<TezWork> {
 
     LOG.debug("DagInfo: {}", dagInfo);
 
-    TezConfigurationFactory.addProgrammaticallyAddedTezOptsToDagConf(dag.getDagConf(), conf);
     dag.setDAGInfo(dagInfo);
 
     dag.setCredentials(conf.getCredentials());

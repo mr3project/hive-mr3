@@ -1441,7 +1441,7 @@ public class DAGUtils {
     // mapred.mapper.new-api can be overridden in vertexJobConf created in initializeVertexConf()
     // e.g., for MapReduceMapWork created by MR3DistCp
 
-    JobConf conf = TezConfigurationFactory.wrapWithJobConf(hiveConf, null);
+    JobConf conf = TezConfigurationFactory.wrapWithJobConfWithoutSourceTracking(hiveConf);
 
     // 1. remove config keys
 
@@ -1484,7 +1484,7 @@ public class DAGUtils {
   // Based on createConfiguration(), but for MR3Client
   // Originally returns: new JobConf(new TezConfiguration(hiveConf))
   public JobConf createConfigurationForMr3Client(HiveConf hiveConf) {
-    JobConf conf = TezConfigurationFactory.wrapWithJobConf(hiveConf, null);
+    JobConf conf = TezConfigurationFactory.wrapWithJobConfWithoutSourceTracking(hiveConf);
 
     // HIVE_MR3_SESSION_CONFIG_REMOVE_PREFIXES can contain "metastore." and "hive." which are not read by MR3
     String[] configRemovePrefixes = HiveConf.getTrimmedStringsVar(hiveConf,
