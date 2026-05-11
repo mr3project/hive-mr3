@@ -200,12 +200,10 @@ public class HiveSplitGenerator extends InputInitializer {
 
         if (HiveConf.getLongVar(conf, HiveConf.ConfVars.MAPRED_MIN_SPLIT_SIZE, 1) <= 1) {
           // broken configuration from mapred-default.xml
-          final long blockSize = conf.getLongBytes(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,
-            DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT);
-          final long minGrouping = conf.getLong(
-            TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_MIN_SIZE,
-            TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_MIN_SIZE_DEFAULT);
-          final long preferredSplitSize = Math.min(blockSize / 2, minGrouping);
+          // Hive-MR3: we do not use DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT because Hive-MR3 targets S3 as well.
+          final long preferredSplitSize = conf.getLong(
+              TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_MIN_SIZE,
+              TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_MIN_SIZE_DEFAULT);
           HiveConf.setLongVar(jobConf, HiveConf.ConfVars.MAPRED_MIN_SPLIT_SIZE, preferredSplitSize);
           LOG.info("The preferred split size is " + preferredSplitSize);
         }
@@ -215,15 +213,13 @@ public class HiveSplitGenerator extends InputInitializer {
         if (numSplits.isPresent()) {
           waves = numSplits.get().floatValue() / availableSlots;
         } else {
-          waves =
-              conf.getFloat(TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_WAVES,
-                  TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_WAVES_DEFAULT);
-
+          waves = conf.getFloat(TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_WAVES,
+              TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_WAVES_DEFAULT);
         }
 
         InputSplit[] splits;
         if (generateSingleSplit &&
-          conf.get(HiveConf.ConfVars.HIVE_TEZ_INPUT_FORMAT.varname).equals(HiveInputFormat.class.getName())) {
+            conf.get(HiveConf.ConfVars.HIVE_TEZ_INPUT_FORMAT.varname).equals(HiveInputFormat.class.getName())) {
           MapWork mapWork = Utilities.getMapWork(jobConf);
           List<Path> paths = Utilities.getInputPathsTez(jobConf, mapWork);
           FileSystem fs = paths.get(0).getFileSystem(jobConf);
