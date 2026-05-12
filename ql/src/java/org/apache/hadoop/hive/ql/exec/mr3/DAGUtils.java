@@ -1497,15 +1497,32 @@ public class DAGUtils {
   private void removeConfigKeyPrefix(JobConf conf, String[] configRemovePrefixes) {
     List<String> keysToRemove = new ArrayList<>();
     for (Map.Entry<String, String> entry : conf) {
-      for (String name : configRemovePrefixes) {
-        if (entry.getKey().startsWith(name)) {
-          keysToRemove.add(entry.getKey());
+      boolean removeKey = isHiveConfDefaultValue(entry);
+      if (!removeKey) {
+        for (String name : configRemovePrefixes) {
+          if (entry.getKey().startsWith(name)) {
+            removeKey = true;
+            break;
+          }
         }
+      }
+      if (removeKey) {
+        keysToRemove.add(entry.getKey());
       }
     }
     for (String key : keysToRemove) {
       conf.unset(key);
     }
+  }
+
+  private boolean isHiveConfDefaultValue(Map.Entry<String, String> entry) {
+    ConfVars confVar = HiveConf.getConfVars(entry.getKey());
+    if (confVar == null) {
+      return false;
+    }
+
+    String defaultValue = confVar.getDefaultValue();
+    return defaultValue != null && defaultValue.equals(entry.getValue());
   }
 
   /**
