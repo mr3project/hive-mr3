@@ -57,6 +57,7 @@ import org.apache.tez.runtime.api.Input;
 import org.apache.tez.runtime.api.LogicalInput;
 import org.apache.tez.runtime.library.api.KeyValueReader;
 import org.apache.tez.runtime.api.AbstractLogicalInput;
+import org.slf4j.MDC;
 
 /**
  * HashTableLoader for Tez constructs the hashtable from records read from
@@ -155,11 +156,16 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
     for (int partitionId = 0; partitionId < numLoadThreads; partitionId++) {
       int finalPartitionId = partitionId;
       this.loadExecService.submit(() -> {
+        Map<String, String> oldMdcContext = MDC.getCopyOfContextMap();
         try {
+          org.apache.tez.runtime.library.common.shuffle.ShuffleUtils.restoreMdc(
+              tezContext.getTezProcessorContext().getMdcContext());
           LOG.info("Partition id {} with Queue size {}", finalPartitionId, loadBatchQueues[finalPartitionId].size());
           drainAndLoadForPartition(finalPartitionId, vectorMapJoinFastTableContainer);
         } catch (IOException | InterruptedException | SerDeException | HiveException e) {
           throw new RuntimeException("Failed to start HT Load threads", e);
+        } finally {
+          org.apache.tez.runtime.library.common.shuffle.ShuffleUtils.restoreMdc(oldMdcContext);
         }
       });
     }
