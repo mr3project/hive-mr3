@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Future;
 
 import org.apache.commons.lang3.tuple.ImmutablePair;
@@ -54,6 +55,7 @@ import org.apache.hadoop.hive.ql.exec.persistence.ObjectContainer;
 import org.apache.hadoop.hive.ql.exec.persistence.UnwrapRowContainer;
 import org.apache.hadoop.hive.ql.exec.tez.LlapObjectCache;
 import org.apache.hadoop.hive.ql.exec.tez.LlapObjectSubCache;
+import org.apache.hadoop.hive.ql.exec.tez.TezContext;
 import org.apache.hadoop.hive.ql.io.HiveKey;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -73,6 +75,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.Object
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hive.common.util.ReflectionUtil;
+import org.apache.tez.runtime.library.common.shuffle.ShuffleUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,6 +85,7 @@ import com.google.common.base.Preconditions;
 
 import java.security.PrivilegedExceptionAction;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.slf4j.MDC;
 
 /**
  * Map side Join operator implementation.
@@ -256,7 +260,14 @@ public class MapJoinOperator extends AbstractMapJoinOperator<MapJoinDesc> implem
             ugi.doAs(new PrivilegedExceptionAction<Pair<MapJoinTableContainer[], MapJoinTableContainerSerDe[]>>() {
               @Override
               public Pair<MapJoinTableContainer[], MapJoinTableContainerSerDe[]> run() throws Exception {
-                return loadHashTable(mapContext, mrContext);
+                Map<String, String> oldMdcContext = MDC.getCopyOfContextMap();
+                try {
+                  org.apache.tez.runtime.library.common.shuffle.ShuffleUtils.restoreMdc(
+                      ((TezContext) mrContext).getTezProcessorContext().getMdcContext());
+                  return loadHashTable(mapContext, mrContext);
+                } finally {
+                  org.apache.tez.runtime.library.common.shuffle.ShuffleUtils.restoreMdc(oldMdcContext);
+                }
               }
             })
         );
