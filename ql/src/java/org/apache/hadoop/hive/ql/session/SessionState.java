@@ -1869,7 +1869,7 @@ public class SessionState implements ISessionAuthState{
     Utilities.restoreSessionSpecifiedClassLoader(getClass().getClassLoader());
     File resourceDir =
         new File(getConf().getVar(HiveConf.ConfVars.DOWNLOADED_RESOURCES_DIR));
-    LOG.debug("Removing resource dir " + resourceDir);
+    LOG.info("Removing resource dir: {}", resourceDir);
     try {
       if (resourceDir.exists()) {
         FileUtils.deleteDirectory(resourceDir);

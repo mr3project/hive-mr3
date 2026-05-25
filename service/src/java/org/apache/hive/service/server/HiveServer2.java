@@ -1152,6 +1152,10 @@ public class HiveServer2 extends CompositeService {
       }
     }
 
+    if (cliService != null) {
+      cliService.closeStartupAuthorizationSessionState();
+    }
+
     if (zooKeeperClient != null) {
       zooKeeperClient.close();
     }
