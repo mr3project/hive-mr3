@@ -74,6 +74,7 @@ public class CLIService extends CompositeService implements ICLIService {
   private int defaultFetchRows;
   // This is necessary for tests and embedded mode, where HS2 init is not executed.
   private boolean allowSessionsInitial;
+  private SessionState startupAuthorizationSessionState;
 
   public CLIService(HiveServer2 hiveServer2, boolean allowSessions) {
     super(CLIService.class.getSimpleName());
@@ -128,6 +129,20 @@ public class CLIService extends CompositeService implements ICLIService {
     // authorization and authentication are not session specific settings
     SessionState ss = DriverUtils.setUpAndStartSessionState(newHiveConf);
     ss.applyAuthorizationPolicy();
+    startupAuthorizationSessionState = ss;
+  }
+
+  public synchronized void closeStartupAuthorizationSessionState() {
+    if (startupAuthorizationSessionState == null) {
+      return;
+    }
+    try {
+      startupAuthorizationSessionState.close();
+    } catch (IOException e) {
+      LOG.warn("Error closing startup authorization SessionState", e);
+    } finally {
+      startupAuthorizationSessionState = null;
+    }
   }
 
   private void setupBlockedUdfs() {
