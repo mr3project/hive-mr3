@@ -140,6 +140,8 @@ public class ByteStream {
 
     public void write(byte b[], int off, int len);
 
+    public void writeLong(long value);
+
     public int getLength();
   }
 }

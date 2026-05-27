@@ -25,6 +25,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Arrays;
 
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
+
 /**
  * A thread-not-safe version of ByteArrayOutputStream, which removes all
  * synchronized modifiers.
@@ -82,6 +85,12 @@ public class NonSyncByteArrayOutputStream extends ByteArrayOutputStream {
     enLargeBuffer(1);
     buf[count] = (byte) b;
     count += 1;
+  }
+
+  public void writeLong(long value) {
+    enLargeBuffer(Long.BYTES);
+    theUnsafe.putLong(buf, BYTE_ARRAY_BASE_OFFSET + count, value);
+    count += Long.BYTES;
   }
 
   private void enLargeBuffer(final int increment) {

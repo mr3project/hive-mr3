@@ -28,6 +28,8 @@ import org.apache.hadoop.hive.serde2.lazybinary.LazyBinaryUtils;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hive.common.util.HashCodeUtil;
 
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
 
 /**
  * The structure storing arbitrary amount of data as a set of fixed-size byte buffers.
@@ -236,6 +238,25 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
       if (writePos.offset == wbSize) {
         nextBufferToWrite();
       }
+    }
+  }
+
+  @Override
+  public void writeLong(long value) {
+    if (writePos.bufferIndex == -1) {
+      nextBufferToWrite();
+    }
+    if (wbSize - writePos.offset >= Long.BYTES) {
+      theUnsafe.putLong(writePos.buffer, BYTE_ARRAY_BASE_OFFSET + writePos.offset, value);
+      writePos.offset += Long.BYTES;
+      if (writePos.offset == wbSize) {
+        nextBufferToWrite();
+      }
+      return;
+    }
+
+    for (int i = 0; i < Long.BYTES; ++i) {
+      write((byte) (value >>> (56 - (i << 3))));
     }
   }
 
