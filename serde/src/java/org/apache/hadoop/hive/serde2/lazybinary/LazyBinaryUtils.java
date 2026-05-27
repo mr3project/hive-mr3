@@ -434,15 +434,7 @@ public final class LazyBinaryUtils {
   }
 
   public static void writeDouble(RandomAccessOutput byteStream, double d) {
-    long v = Double.doubleToLongBits(d);
-    byteStream.write((byte) (v >> 56));
-    byteStream.write((byte) (v >> 48));
-    byteStream.write((byte) (v >> 40));
-    byteStream.write((byte) (v >> 32));
-    byteStream.write((byte) (v >> 24));
-    byteStream.write((byte) (v >> 16));
-    byteStream.write((byte) (v >> 8));
-    byteStream.write((byte) (v));
+    byteStream.writeLong(Double.doubleToLongBits(d));
   }
 
   static ConcurrentHashMap<TypeInfo, ObjectInspector> cachedLazyBinaryObjectInspector =
