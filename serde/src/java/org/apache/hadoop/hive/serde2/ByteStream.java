@@ -88,10 +88,6 @@ public class ByteStream {
       buf[(int) offset] = value;
     }
 
-    public void writeIntEnlarge(int value) {
-      super.writeIntEnlarge(value);
-    }
-
     /**
      * Optimize for the common cases:
      * <ul>
@@ -126,6 +122,8 @@ public class ByteStream {
     public void writeByte(long offset, byte value);
 
     public void writeInt(long offset, int value);
+
+    public void writeIntEnlarge(int value);
 
     public void reserve(int byteCount);
 
