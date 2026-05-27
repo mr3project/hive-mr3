@@ -88,6 +88,10 @@ public class ByteStream {
       buf[(int) offset] = value;
     }
 
+    public void writeIntEnlarge(int value) {
+      super.writeIntEnlarge(value);
+    }
+
     /**
      * Optimize for the common cases:
      * <ul>
