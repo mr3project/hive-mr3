@@ -23,7 +23,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.ByteOrder;
 import java.util.Arrays;
+
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
 
 /**
  * A thread-not-safe version of ByteArrayOutputStream, which removes all
@@ -84,6 +88,11 @@ public class NonSyncByteArrayOutputStream extends ByteArrayOutputStream {
     count += 1;
   }
 
+  public void writeInt(long offset, int value) {
+    value = Integer.reverseBytes(value);
+    theUnsafe.putInt(buf, BYTE_ARRAY_BASE_OFFSET + offset, value);
+  }
+
   private void enLargeBuffer(final int increment) {
     final int requestCapacity = Math.addExact(count, increment);
     final int currentCapacity = buf.length;
@@ -125,5 +134,19 @@ public class NonSyncByteArrayOutputStream extends ByteArrayOutputStream {
   @Override
   public void writeTo(OutputStream out) throws IOException {
     out.write(buf, 0, count);
+  }
+
+  public void appendInt(int value) {
+    enLargeBuffer(Integer.BYTES);
+    value = Integer.reverseBytes(value);
+    theUnsafe.putInt(buf, BYTE_ARRAY_BASE_OFFSET + count, value);
+    count += Integer.BYTES;
+  }
+
+  public void appendLong(long value) {
+    enLargeBuffer(Long.BYTES);
+    value = Long.reverseBytes(value);
+    theUnsafe.putLong(buf, BYTE_ARRAY_BASE_OFFSET + count, value);
+    count += Long.BYTES;
   }
 }
