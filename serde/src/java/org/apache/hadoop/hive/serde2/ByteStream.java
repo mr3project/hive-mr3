@@ -84,15 +84,6 @@ public class ByteStream {
     }
 
     @Override
-    public void writeInt(long offset, int value) {
-      int i = (int) offset;
-      buf[i + 0] = (byte) (value >> 24);
-      buf[i + 1] = (byte) (value >> 16);
-      buf[i + 2] = (byte) (value >> 8);
-      buf[i + 3] = (byte) (value);
-    }
-
-    @Override
     public void writeByte(long offset, byte value) {
       buf[(int) offset] = value;
     }
