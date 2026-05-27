@@ -261,26 +261,6 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
   }
 
   @Override
-  public void writeIntEnlarge(int value) {
-    if (writePos.bufferIndex == -1) {
-      nextBufferToWrite();
-    }
-    if (wbSize - writePos.offset >= Integer.BYTES) {
-      theUnsafe.putInt(writePos.buffer, BYTE_ARRAY_BASE_OFFSET + writePos.offset, value);
-      writePos.offset += Integer.BYTES;
-      if (writePos.offset == wbSize) {
-        nextBufferToWrite();
-      }
-      return;
-    }
-
-    write((byte) (value >>> 24));
-    write((byte) (value >>> 16));
-    write((byte) (value >>> 8));
-    write((byte) value);
-  }
-
-  @Override
   public int getLength() {
     return (int)getWritePoint();
   }

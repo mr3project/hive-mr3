@@ -123,8 +123,6 @@ public class ByteStream {
 
     public void writeInt(long offset, int value);
 
-    public void writeIntEnlarge(int value);
-
     public void reserve(int byteCount);
 
     public void write(int b);

@@ -97,12 +97,6 @@ public class NonSyncByteArrayOutputStream extends ByteArrayOutputStream {
     theUnsafe.putInt(buf, BYTE_ARRAY_BASE_OFFSET + offset, value);
   }
 
-  public void writeIntEnlarge(int value) {
-    enLargeBuffer(Integer.BYTES);
-    theUnsafe.putInt(buf, BYTE_ARRAY_BASE_OFFSET + count, value);
-    count += Integer.BYTES;
-  }
-
   private void enLargeBuffer(final int increment) {
     final int requestCapacity = Math.addExact(count, increment);
     final int currentCapacity = buf.length;
