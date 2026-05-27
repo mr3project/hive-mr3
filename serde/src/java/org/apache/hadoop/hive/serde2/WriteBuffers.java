@@ -19,6 +19,7 @@
 package org.apache.hadoop.hive.serde2;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 
 import org.apache.hadoop.hive.common.MemoryEstimate;
@@ -28,6 +29,8 @@ import org.apache.hadoop.hive.serde2.lazybinary.LazyBinaryUtils;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hive.common.util.HashCodeUtil;
 
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
 
 /**
  * The structure storing arbitrary amount of data as a set of fixed-size byte buffers.
@@ -236,6 +239,46 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
       if (writePos.offset == wbSize) {
         nextBufferToWrite();
       }
+    }
+  }
+
+  @Override
+  public void appendInt(int value) {
+    if (writePos.bufferIndex == -1) {
+      nextBufferToWrite();
+    }
+    if (wbSize - writePos.offset >= Integer.BYTES) {
+      value = Integer.reverseBytes(value);
+      theUnsafe.putInt(writePos.buffer, BYTE_ARRAY_BASE_OFFSET + writePos.offset, value);
+      writePos.offset += Integer.BYTES;
+      if (writePos.offset == wbSize) {
+        nextBufferToWrite();
+      }
+      return;
+    }
+
+    for (int i = 0; i < Integer.BYTES; ++i) {
+      write((byte) (value >>> (24 - (i << 3))));
+    }
+  }
+
+  @Override
+  public void appendLong(long value) {
+    if (writePos.bufferIndex == -1) {
+      nextBufferToWrite();
+    }
+    if (wbSize - writePos.offset >= Long.BYTES) {
+      value = Long.reverseBytes(value);
+      theUnsafe.putLong(writePos.buffer, BYTE_ARRAY_BASE_OFFSET + writePos.offset, value);
+      writePos.offset += Long.BYTES;
+      if (writePos.offset == wbSize) {
+        nextBufferToWrite();
+      }
+      return;
+    }
+
+    for (int i = 0; i < Long.BYTES; ++i) {
+      write((byte) (value >>> (56 - (i << 3))));
     }
   }
 
@@ -640,7 +683,6 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
       writePos.buffer[writePos.offset + 1] = (byte)(v >> 16);
       writePos.buffer[writePos.offset + 2] = (byte)(v >> 8);
       writePos.buffer[writePos.offset + 3] = (byte)(v);
-      writePos.offset += 4;
     } else {
       setByte(offset++, (byte)(v >>> 24));
       setByte(offset++, (byte)(v >>> 16));
