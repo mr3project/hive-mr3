@@ -293,9 +293,7 @@ public final class BinarySortableDeserializeRead extends DeserializeRead {
           tempTimestampBytes = new byte[TimestampWritableV2.BINARY_SORTABLE_LENGTH];
         }
         final boolean invert = columnSortOrderIsDesc[fieldIndex];
-        for (int i = 0; i < tempTimestampBytes.length; i++) {
-          tempTimestampBytes[i] = inputByteBuffer.read(invert);
-        }
+        inputByteBuffer.readFully(tempTimestampBytes, 0, tempTimestampBytes.length, invert);
         currentTimestampWritable.setBinarySortable(tempTimestampBytes, 0);
       }
       return true;
@@ -458,9 +456,7 @@ public final class BinarySortableDeserializeRead extends DeserializeRead {
         }
 
         inputByteBuffer.seek(decimalStart);
-        for (int i = 0; i < length; ++i) {
-          tempDecimalBuffer[i] = inputByteBuffer.read(positive ? invert : !invert);
-        }
+        inputByteBuffer.readFully(tempDecimalBuffer, 0, length, positive ? invert : !invert);
 
         // read the null byte again
         inputByteBuffer.read(positive ? invert : !invert);
