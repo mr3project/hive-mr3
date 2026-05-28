@@ -87,6 +87,23 @@ public class InputByteBuffer {
   }
 
   /**
+   * Read bytes into the given array and optionally invert all bits.
+   */
+  public final void readFully(byte[] dest, int offset, int length, boolean invert) throws IOException {
+    if (start + length > end) {
+      throw new EOFException();
+    }
+    if (!invert) {
+      System.arraycopy(data, start, dest, offset, length);
+      start += length;
+      return;
+    }
+    for (int i = 0; i < length; i++) {
+      dest[offset + i] = (byte) (0xff ^ data[start++]);
+    }
+  }
+
+  /**
    * Return the current position. Final method to help inlining.
    */
   public final int tell() {
