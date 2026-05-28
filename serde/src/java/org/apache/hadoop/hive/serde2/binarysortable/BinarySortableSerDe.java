@@ -873,55 +873,49 @@ public class BinarySortableSerDe extends AbstractSerDe {
   }
 
   public static void serializeInt(ByteStream.Output buffer, int v, boolean invert) {
-    writeByte(buffer, (byte) ((v >> 24) ^ 0x80), invert);
-    writeByte(buffer, (byte) (v >> 16), invert);
-    writeByte(buffer, (byte) (v >> 8), invert);
-    writeByte(buffer, (byte) v, invert);
+    int sortable = v ^ 0x80000000;
+    if (invert) {
+      sortable = ~sortable;
+    }
+    buffer.appendInt(sortable);
   }
 
   public static void serializeLong(ByteStream.Output buffer, long v, boolean invert) {
-    writeByte(buffer, (byte) ((v >> 56) ^ 0x80), invert);
-    writeByte(buffer, (byte) (v >> 48), invert);
-    writeByte(buffer, (byte) (v >> 40), invert);
-    writeByte(buffer, (byte) (v >> 32), invert);
-    writeByte(buffer, (byte) (v >> 24), invert);
-    writeByte(buffer, (byte) (v >> 16), invert);
-    writeByte(buffer, (byte) (v >> 8), invert);
-    writeByte(buffer, (byte) v, invert);
+    long sortable = v ^ 0x8000000000000000L;
+    if (invert) {
+      sortable = ~sortable;
+    }
+    buffer.appendLong(sortable);
   }
 
   public static void serializeFloat(ByteStream.Output buffer, float vf, boolean invert) {
-    int v = Float.floatToIntBits(vf);
-    if ((v & (1 << 31)) != 0) {
+    int sortable = Float.floatToIntBits(vf);
+    if ((sortable & (1 << 31)) != 0) {
       // negative number, flip all bits
-      v = ~v;
+      sortable = ~sortable;
     } else {
       // positive number, flip the first bit
-      v = v ^ (1 << 31);
+      sortable = sortable ^ (1 << 31);
     }
-    writeByte(buffer, (byte) (v >> 24), invert);
-    writeByte(buffer, (byte) (v >> 16), invert);
-    writeByte(buffer, (byte) (v >> 8), invert);
-    writeByte(buffer, (byte) v, invert);
+    if (invert) {
+      sortable = ~sortable;
+    }
+    buffer.appendInt(sortable);
   }
 
   public static void serializeDouble(ByteStream.Output buffer, double vd, boolean invert) {
-    long v = Double.doubleToLongBits(vd);
-    if ((v & (1L << 63)) != 0) {
+    long sortable = Double.doubleToLongBits(vd);
+    if ((sortable & (1L << 63)) != 0) {
       // negative number, flip all bits
-      v = ~v;
+      sortable = ~sortable;
     } else {
       // positive number, flip the first bit
-      v = v ^ (1L << 63);
+      sortable = sortable ^ (1L << 63);
     }
-    writeByte(buffer, (byte) (v >> 56), invert);
-    writeByte(buffer, (byte) (v >> 48), invert);
-    writeByte(buffer, (byte) (v >> 40), invert);
-    writeByte(buffer, (byte) (v >> 32), invert);
-    writeByte(buffer, (byte) (v >> 24), invert);
-    writeByte(buffer, (byte) (v >> 16), invert);
-    writeByte(buffer, (byte) (v >> 8), invert);
-    writeByte(buffer, (byte) v, invert);
+    if (invert) {
+      sortable = ~sortable;
+    }
+    buffer.appendLong(sortable);
   }
 
   public static void serializeTimestampWritable(ByteStream.Output buffer, TimestampWritableV2 t, boolean invert) {
@@ -934,8 +928,14 @@ public class BinarySortableSerDe extends AbstractSerDe {
   public static void serializeTimestampTZWritable(
       ByteStream.Output buffer, TimestampLocalTZWritable t, boolean invert) {
     byte[] data = t.toBinarySortable();
-    for (byte b : data) {
-      writeByte(buffer, b, invert);
+    if (invert) {
+      byte[] inverted = new byte[data.length];
+      for (int i = 0; i < data.length; i++) {
+        inverted[i] = (byte) (0xff ^ data[i]);
+      }
+      buffer.write(inverted);
+    } else {
+      buffer.write(data);
     }
   }
 
@@ -1038,10 +1038,11 @@ public class BinarySortableSerDe extends AbstractSerDe {
      * Finally write out the pieces (sign, power, digits)
      */
     writeByte(buffer, (byte) ( signum + 1), invert);
-    writeByte(buffer, (byte) ((factor >> 24) ^ 0x80), invert);
-    writeByte(buffer, (byte) ( factor >> 16), invert);
-    writeByte(buffer, (byte) ( factor >> 8), invert);
-    writeByte(buffer, (byte)   factor, invert);
+    int sortableFactor = factor ^ 0x80000000;
+    if (invert) {
+      sortableFactor = ~sortableFactor;
+    }
+    buffer.appendInt(sortableFactor);
 
     // The toDigitsOnlyBytes stores digits at the end of the scratch buffer.
     serializeBytes(
@@ -1081,10 +1082,11 @@ public class BinarySortableSerDe extends AbstractSerDe {
        * Finally write out the pieces (sign, power, digits)
        */
       writeByte(buffer, (byte) ( signum + 1), invert);
-      writeByte(buffer, (byte) ((factor >> 24) ^ 0x80), invert);
-      writeByte(buffer, (byte) ( factor >> 16), invert);
-      writeByte(buffer, (byte) ( factor >> 8), invert);
-      writeByte(buffer, (byte)   factor, invert);
+      int sortableFactor = factor ^ 0x80000000;
+      if (invert) {
+        sortableFactor = ~sortableFactor;
+      }
+      buffer.appendInt(sortableFactor);
 
       // The toDigitsOnlyBytes stores digits at the end of the scratch buffer.
       serializeBytes(

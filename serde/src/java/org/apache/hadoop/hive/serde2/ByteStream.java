@@ -127,7 +127,7 @@ public class ByteStream {
 
     // append with write-position advance
     public void write(int b);
-    public void write(byte b[]) throws IOException;
+    public void write(byte b[]);
     public void write(byte b[], int off, int len);
 
     // append with write-position advance
