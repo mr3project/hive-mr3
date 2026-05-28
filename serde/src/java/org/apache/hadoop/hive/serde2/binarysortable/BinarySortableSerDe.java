@@ -693,7 +693,7 @@ public class BinarySortableSerDe extends AbstractSerDe {
       case STRING: {
         StringObjectInspector soi = (StringObjectInspector) poi;
         Text t = soi.getPrimitiveWritableObject(o);
-        serializeBytes(buffer, t.getBytes(), t.getLength(), invert);
+        serializeBytes(buffer, t.getBytes(), 0, t.getLength(), invert);
         return;
       }
 
@@ -703,7 +703,7 @@ public class BinarySortableSerDe extends AbstractSerDe {
         // Trailing space should ignored for char comparisons.
         // So write stripped values for this SerDe.
         Text t = hc.getStrippedValue();
-        serializeBytes(buffer, t.getBytes(), t.getLength(), invert);
+        serializeBytes(buffer, t.getBytes(), 0, t.getLength(), invert);
         return;
       }
       case VARCHAR: {
@@ -711,7 +711,7 @@ public class BinarySortableSerDe extends AbstractSerDe {
         HiveVarcharWritable hc = hcoi.getPrimitiveWritableObject(o);
         // use varchar's text field directly
         Text t = hc.getTextValue();
-        serializeBytes(buffer, t.getBytes(), t.getLength(), invert);
+        serializeBytes(buffer, t.getBytes(), 0, t.getLength(), invert);
         return;
       }
 
@@ -720,7 +720,7 @@ public class BinarySortableSerDe extends AbstractSerDe {
         BytesWritable ba = baoi.getPrimitiveWritableObject(o);
         byte[] toSer = new byte[ba.getLength()];
         System.arraycopy(ba.getBytes(), 0, toSer, 0, ba.getLength());
-        serializeBytes(buffer, toSer, ba.getLength(), invert);
+        serializeBytes(buffer, toSer, 0, ba.getLength(), invert);
         return;
       }
       case  DATE: {
@@ -819,19 +819,6 @@ public class BinarySortableSerDe extends AbstractSerDe {
     }
     }
 
-  }
-
-  public static void serializeBytes(
-      ByteStream.Output buffer, byte[] data, int length, boolean invert) {
-    for (int i = 0; i < length; i++) {
-      if (data[i] == 0 || data[i] == 1) {
-        writeByte(buffer, (byte) 1, invert);
-        writeByte(buffer, (byte) (data[i] + 1), invert);
-      } else {
-        writeByte(buffer, data[i], invert);
-      }
-    }
-    writeByte(buffer, (byte) 0, invert);
   }
 
   public static void serializeBytes(
