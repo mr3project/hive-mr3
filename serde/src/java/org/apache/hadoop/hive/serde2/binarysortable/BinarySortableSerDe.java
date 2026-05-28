@@ -366,18 +366,14 @@ public class BinarySortableSerDe extends AbstractSerDe {
             (TimestampWritableV2) reuse);
         byte[] bytes = new byte[TimestampWritableV2.BINARY_SORTABLE_LENGTH];
 
-        for (int i = 0; i < bytes.length; i++) {
-          bytes[i] = buffer.read(invert);
-        }
+        buffer.readFully(bytes, 0, bytes.length, invert);
         t.setBinarySortable(bytes, 0);
         return t;
       case TIMESTAMPLOCALTZ:
         TimestampLocalTZWritable tstz = (reuse == null ? new TimestampLocalTZWritable() :
             (TimestampLocalTZWritable) reuse);
         byte[] data = new byte[TimestampLocalTZWritable.BINARY_SORTABLE_LENGTH];
-        for (int i = 0; i < data.length; i++) {
-          data[i] = buffer.read(invert);
-        }
+        buffer.readFully(data, 0, data.length, invert);
         // Across MR process boundary tz is normalized and stored in type
         // and is not carried in data for each row.
         tstz.fromBinarySortable(data, 0, ((TimestampLocalTZTypeInfo) type).timeZone());
@@ -435,9 +431,7 @@ public class BinarySortableSerDe extends AbstractSerDe {
         final byte[] decimalBuffer = new byte[length];
 
         buffer.seek(start);
-        for (int i = 0; i < length; ++i) {
-          decimalBuffer[i] = buffer.read(positive ? invert : !invert);
-        }
+        buffer.readFully(decimalBuffer, 0, length, positive ? invert : !invert);
 
         // read the null byte again
         buffer.read(positive ? invert : !invert);
