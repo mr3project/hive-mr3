@@ -906,9 +906,12 @@ public class BinarySortableSerDe extends AbstractSerDe {
 
   public static void serializeTimestampWritable(ByteStream.Output buffer, TimestampWritableV2 t, boolean invert) {
     byte[] data = t.getBinarySortable();
-    for (int i = 0; i < data.length; i++) {
-      writeByte(buffer, data[i], invert);
+    if (invert) {
+      for (int i = 0; i < data.length; i++) {
+        data[i] = (byte) (0xff ^ data[i]);
+      }
     }
+    buffer.write(data);
   }
 
   public static void serializeTimestampTZWritable(
