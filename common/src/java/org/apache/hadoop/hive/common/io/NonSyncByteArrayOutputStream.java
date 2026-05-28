@@ -115,6 +115,14 @@ public class NonSyncByteArrayOutputStream extends ByteArrayOutputStream {
    * {@inheritDoc}
    */
   @Override
+  public void write(byte b[]) {
+    write(b, 0, b.length);
+  }
+
+  /**
+   * {@inheritDoc}
+   */
+  @Override
   public void write(byte b[], int off, int len) {
     if ((off < 0) || (off > b.length) || (len < 0) || ((off + len) > b.length)
         || ((off + len) < 0)) {
