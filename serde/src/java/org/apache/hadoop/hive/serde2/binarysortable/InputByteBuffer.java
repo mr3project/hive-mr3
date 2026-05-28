@@ -99,8 +99,9 @@ public class InputByteBuffer {
       return;
     }
     for (int i = 0; i < length; i++) {
-      dest[offset + i] = (byte) (0xff ^ data[start++]);
+      dest[offset + i] = (byte) (0xff ^ data[start + i]);
     }
+    start += length;
   }
 
   /**
