@@ -92,6 +92,37 @@ public class NonSyncByteArrayOutputStream extends ByteArrayOutputStream {
     theUnsafe.putInt(buf, BYTE_ARRAY_BASE_OFFSET + offset, value);
   }
 
+  public void serializeBytes(byte[] data, int offset, int length, boolean invert) {
+    enLargeBuffer(length * 2 + 1);
+
+    final int end = offset + length;
+    int position = count;
+    if (invert) {
+      for (int i = offset; i < end; i++) {
+        byte value = data[i];
+        if (value == 0 || value == 1) {
+          buf[position++] = (byte) 0xfe;
+          buf[position++] = (byte) (0xff ^ (value + 1));
+        } else {
+          buf[position++] = (byte) (0xff ^ value);
+        }
+      }
+      buf[position++] = (byte) 0xff;
+    } else {
+      for (int i = offset; i < end; i++) {
+        byte value = data[i];
+        if (value == 0 || value == 1) {
+          buf[position++] = (byte) 1;
+          buf[position++] = (byte) (value + 1);
+        } else {
+          buf[position++] = value;
+        }
+      }
+      buf[position++] = (byte) 0;
+    }
+    count = position;
+  }
+
   private void enLargeBuffer(final int increment) {
     final int requestCapacity = Math.addExact(count, increment);
     final int currentCapacity = buf.length;
