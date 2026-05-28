@@ -20,6 +20,9 @@ package org.apache.hadoop.hive.serde2.binarysortable;
 import java.io.EOFException;
 import java.io.IOException;
 
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
+
 /**
  * This class is much more efficient than ByteArrayInputStream because none of
  * the methods are synchronized.
@@ -58,6 +61,28 @@ public class InputByteBuffer {
     } else {
       return data[start++];
     }
+  }
+
+  /**
+   * Read eight bytes as a long from the buffer and advance the position.
+   *
+   * The binary sortable encoding stores longs in big-endian order.
+   */
+  public final long readLong() throws IOException {
+    if (start + Long.BYTES > end) {
+      throw new EOFException();
+    }
+    long v = theUnsafe.getLong(data, BYTE_ARRAY_BASE_OFFSET + start);
+    start += Long.BYTES;
+    return Long.reverseBytes(v);
+  }
+
+  /**
+   * Read eight bytes as a long from the buffer and optionally invert all bits.
+   */
+  public final long readLong(boolean invert) throws IOException {
+    long v = readLong();
+    return invert ? ~v : v;
   }
 
   /**

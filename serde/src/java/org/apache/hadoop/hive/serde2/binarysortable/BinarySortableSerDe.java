@@ -571,11 +571,7 @@ public class BinarySortableSerDe extends AbstractSerDe {
   }
 
   private static long deserializeLong(InputByteBuffer buffer, boolean invert) throws IOException {
-    long v = buffer.read(invert) ^ 0x80;
-    for (int i = 0; i < 7; i++) {
-      v = (v << 8) + (buffer.read(invert) & 0xff);
-    }
-    return v;
+    return buffer.readLong(invert) ^ (1L << 63);
   }
 
   static int getCharacterMaxLength(TypeInfo type) {
