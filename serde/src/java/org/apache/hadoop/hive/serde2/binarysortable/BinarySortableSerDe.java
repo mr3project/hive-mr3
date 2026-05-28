@@ -929,14 +929,11 @@ public class BinarySortableSerDe extends AbstractSerDe {
       ByteStream.Output buffer, TimestampLocalTZWritable t, boolean invert) {
     byte[] data = t.toBinarySortable();
     if (invert) {
-      byte[] inverted = new byte[data.length];
       for (int i = 0; i < data.length; i++) {
-        inverted[i] = (byte) (0xff ^ data[i]);
+        data[i] = (byte) (0xff ^ data[i]);
       }
-      buffer.write(inverted);
-    } else {
-      buffer.write(data);
     }
+    buffer.write(data);
   }
 
   public static void serializeHiveIntervalYearMonth(ByteStream.Output buffer,
