@@ -258,10 +258,7 @@ public class BinarySortableSerDe extends AbstractSerDe {
       case FLOAT: {
         FloatWritable r = reuse == null ? new FloatWritable()
             : (FloatWritable) reuse;
-        int v = 0;
-        for (int i = 0; i < 4; i++) {
-          v = (v << 8) + (buffer.read(invert) & 0xff);
-        }
+        int v = buffer.readInt(invert);
         if ((v & (1 << 31)) == 0) {
           // negative number, flip all bits
           v = ~v;
@@ -275,10 +272,7 @@ public class BinarySortableSerDe extends AbstractSerDe {
       case DOUBLE: {
         DoubleWritable r = reuse == null ? new DoubleWritable()
             : (DoubleWritable) reuse;
-        long v = 0;
-        for (int i = 0; i < 8; i++) {
-          v = (v << 8) + (buffer.read(invert) & 0xff);
-        }
+        long v = buffer.readLong(invert);
         if ((v & (1L << 63)) == 0) {
           // negative number, flip all bits
           v = ~v;
