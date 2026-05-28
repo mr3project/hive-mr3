@@ -823,15 +823,7 @@ public class BinarySortableSerDe extends AbstractSerDe {
 
   public static void serializeBytes(
       ByteStream.Output buffer, byte[] data, int offset, int length, boolean invert) {
-    for (int i = offset; i < offset + length; i++) {
-      if (data[i] == 0 || data[i] == 1) {
-        writeByte(buffer, (byte) 1, invert);
-        writeByte(buffer, (byte) (data[i] + 1), invert);
-      } else {
-        writeByte(buffer, data[i], invert);
-      }
-    }
-    writeByte(buffer, (byte) 0, invert);
+    buffer.serializeBytes(data, offset, length, invert);
   }
 
   public static void serializeShort(ByteStream.Output buffer, short v, boolean invert) {
