@@ -933,33 +933,6 @@ public class BinarySortableSerDe extends AbstractSerDe {
     serializeInt(buffer, nanos, invert);
   }
 
-  public static void serializeOldHiveDecimal(ByteStream.Output buffer, HiveDecimalV1 oldDec, boolean invert) {
-    // get the sign of the big decimal
-    int sign = oldDec.compareTo(HiveDecimalV1.ZERO);
-
-    // we'll encode the absolute value (sign is separate)
-    oldDec = oldDec.abs();
-
-    // get the scale factor to turn big decimal into a decimal < 1
-    // This relies on the BigDecimal precision value, which as of HIVE-10270
-    // is now different from HiveDecimal.precision()
-    int factor = oldDec.bigDecimalValue().precision() - oldDec.bigDecimalValue().scale();
-    factor = sign == 1 ? factor : -factor;
-
-    // convert the absolute big decimal to string
-    oldDec.scaleByPowerOfTen(Math.abs(oldDec.scale()));
-    String digits = oldDec.unscaledValue().toString();
-
-    // finally write out the pieces (sign, scale, digits)
-    writeByte(buffer, (byte) ( sign + 1), invert);
-    writeByte(buffer, (byte) ((factor >> 24) ^ 0x80), invert);
-    writeByte(buffer, (byte) ( factor >> 16), invert);
-    writeByte(buffer, (byte) ( factor >> 8), invert);
-    writeByte(buffer, (byte)   factor, invert);
-    serializeBytes(buffer, digits.getBytes(decimalCharSet),
-        digits.length(), sign == -1 ? !invert : invert);
-  }
-
   // See comments for next method.
   public static void serializeHiveDecimal(ByteStream.Output buffer, HiveDecimal dec, boolean invert) {
 
