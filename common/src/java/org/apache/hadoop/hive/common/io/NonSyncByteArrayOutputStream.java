@@ -23,7 +23,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.ByteOrder;
 import java.util.Arrays;
 
 import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
@@ -124,10 +123,7 @@ public class NonSyncByteArrayOutputStream extends ByteArrayOutputStream {
    */
   @Override
   public void write(byte b[], int off, int len) {
-    if ((off < 0) || (off > b.length) || (len < 0) || ((off + len) > b.length)
-        || ((off + len) < 0)) {
-      throw new IndexOutOfBoundsException();
-    }
+    // skip sanity check for off and len
     if (len == 0) {
       return;
     }
