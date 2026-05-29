@@ -19,14 +19,11 @@
 package org.apache.hadoop.hive.serde2;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
 
 import org.apache.hadoop.hive.common.MemoryEstimate;
 import org.apache.hadoop.hive.ql.util.JavaDataModel;
 import org.apache.hadoop.hive.serde2.ByteStream.RandomAccessOutput;
-import org.apache.hadoop.hive.serde2.lazybinary.LazyBinaryUtils;
-import org.apache.hadoop.io.WritableUtils;
 import org.apache.hive.common.util.HashCodeUtil;
 
 import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
@@ -81,11 +78,16 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
 
   /** THIS METHOD IS NOT THREAD-SAFE. Use only at load time (or be mindful of thread safety). */
   public int unsafeReadVInt() {
-    return (int) readVLong(unsafeReadPos);
+    return readVInt(unsafeReadPos);
   }
 
   public int readVInt(Position readPos) {
-    return (int) readVLong(readPos);
+    if (isAllInOneReadBuffer(Integer.BYTES, readPos)) {
+      int value = theUnsafe.getInt(readPos.buffer, BYTE_ARRAY_BASE_OFFSET + readPos.offset);
+      readPos.offset += Integer.BYTES;
+      return Integer.reverseBytes(value);
+    }
+    return (int) readNByteLong(Integer.BYTES, readPos);
   }
 
   /** THIS METHOD IS NOT THREAD-SAFE. Use only at load time (or be mindful of thread safety). */
@@ -94,24 +96,12 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
   }
 
   public long readVLong(Position readPos) {
-    ponderNextBufferToRead(readPos);
-    byte firstByte = readPos.buffer[readPos.offset++];
-    int length = (byte) WritableUtils.decodeVIntSize(firstByte) - 1;
-    if (length == 0) {
-      return firstByte;
+    if (isAllInOneReadBuffer(Long.BYTES, readPos)) {
+      long value = theUnsafe.getLong(readPos.buffer, BYTE_ARRAY_BASE_OFFSET + readPos.offset);
+      readPos.offset += Long.BYTES;
+      return Long.reverseBytes(value);
     }
-    long i = 0;
-    if (isAllInOneReadBuffer(length, readPos)) {
-      for (int idx = 0; idx < length; idx++) {
-        i = (i << 8) | (readPos.buffer[readPos.offset + idx] & 0xFF);
-      }
-      readPos.offset += length;
-    } else {
-      for (int idx = 0; idx < length; idx++) {
-        i = (i << 8) | (readNextByte(readPos) & 0xFF);
-      }
-    }
-    return (WritableUtils.isNegativeVInt(firstByte) ? (i ^ -1L) : i);
+    return readNByteLong(Long.BYTES, readPos);
   }
 
   /** THIS METHOD IS NOT THREAD-SAFE. Use only at load time (or be mindful of thread safety). */
@@ -120,19 +110,7 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
   }
 
   public void skipVLong(Position readPos) {
-    ponderNextBufferToRead(readPos);
-    byte firstByte = readPos.buffer[readPos.offset++];
-    int length = (byte) WritableUtils.decodeVIntSize(firstByte);
-    if (length > 1) {
-      readPos.offset += (length - 1);
-    }
-    int diff = readPos.offset - wbSize;
-    while (diff >= 0) {
-      ++readPos.bufferIndex;
-      readPos.buffer = writeBuffers.get(readPos.bufferIndex);
-      readPos.offset = diff;
-      diff = readPos.offset - wbSize;
-    }
+    skipBytes(Long.BYTES, readPos);
   }
 
   /** THIS METHOD IS NOT THREAD-SAFE. Use only at load time (or be mindful of thread safety). */
@@ -183,6 +161,17 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
       ++readPos.bufferIndex;
       readPos.buffer = writeBuffers.get(readPos.bufferIndex);
       readPos.offset = 0;
+    }
+  }
+
+  private void skipBytes(int byteCount, Position readPos) {
+    readPos.offset += byteCount;
+    int diff = readPos.offset - wbSize;
+    while (diff >= 0) {
+      ++readPos.bufferIndex;
+      readPos.buffer = writeBuffers.get(readPos.bufferIndex);
+      readPos.offset = diff;
+      diff = readPos.offset - wbSize;
     }
   }
 
@@ -442,11 +431,11 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
   }
 
   public void writeVInt(int value) {
-    LazyBinaryUtils.writeVInt(this, value);
+    appendInt(value);
   }
 
   public void writeVLong(long value) {
-    LazyBinaryUtils.writeVLong(this, value);
+    appendLong(value);
   }
 
   /** Reads some bytes from the buffer and writes them again at current write point. */
