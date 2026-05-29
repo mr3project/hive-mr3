@@ -35,6 +35,8 @@ import com.google.common.base.Preconditions;
 public class VectorKeySeriesLongSerialized<T extends SerializeWrite>
     extends VectorKeySeriesSerializedImpl<T> implements VectorKeySeriesSerialized {
 
+  private static final int ESTIMATED_SERIALIZED_KEY_LENGTH = 10;
+
   private final int columnNum;
   private PrimitiveCategory primitiveCategory;
 
@@ -42,7 +44,7 @@ public class VectorKeySeriesLongSerialized<T extends SerializeWrite>
 
   public VectorKeySeriesLongSerialized(int columnNum, PrimitiveTypeInfo primitiveTypeInfo,
       T serializeWrite) {
-    super(serializeWrite);
+    super(serializeWrite, ESTIMATED_SERIALIZED_KEY_LENGTH);
     this.columnNum = columnNum;
     primitiveCategory = primitiveTypeInfo.getPrimitiveCategory();
   }

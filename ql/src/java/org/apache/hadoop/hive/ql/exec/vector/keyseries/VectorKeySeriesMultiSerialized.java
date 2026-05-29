@@ -41,12 +41,14 @@ public class VectorKeySeriesMultiSerialized<T extends SerializeWrite>
   private static final Logger LOG = LoggerFactory.getLogger(
       VectorKeySeriesMultiSerialized.class.getName());
 
+  private static final int ESTIMATED_SERIALIZED_KEY_LENGTH = 32;
+
   private VectorSerializeRow<T> keySerializeRow;
 
   private boolean[] hasAnyNulls;
 
   public VectorKeySeriesMultiSerialized(T serializeWrite) {
-    super(serializeWrite);
+    super(serializeWrite, ESTIMATED_SERIALIZED_KEY_LENGTH);
   }
 
   public void init(TypeInfo[] typeInfos, int[] columnNums) throws HiveException {
