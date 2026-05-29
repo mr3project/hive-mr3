@@ -88,7 +88,7 @@ public class NonSyncByteArrayOutputStream extends ByteArrayOutputStream {
   }
 
   public void writeInt(long offset, int value) {
-    value = Integer.reverseBytes(value);
+    value = Integer.reverseBytes(value);  // required for correctness (sort order in BinarySortableSerDe)
     theUnsafe.putInt(buf, BYTE_ARRAY_BASE_OFFSET + offset, value);
   }
 
@@ -173,14 +173,14 @@ public class NonSyncByteArrayOutputStream extends ByteArrayOutputStream {
 
   public void appendInt(int value) {
     enLargeBuffer(Integer.BYTES);
-    value = Integer.reverseBytes(value);
+    value = Integer.reverseBytes(value);  // required for correctness (sort order in BinarySortableSerDe)
     theUnsafe.putInt(buf, BYTE_ARRAY_BASE_OFFSET + count, value);
     count += Integer.BYTES;
   }
 
   public void appendLong(long value) {
     enLargeBuffer(Long.BYTES);
-    value = Long.reverseBytes(value);
+    value = Long.reverseBytes(value);  // required for correctness (sort order in BinarySortableSerDe)
     theUnsafe.putLong(buf, BYTE_ARRAY_BASE_OFFSET + count, value);
     count += Long.BYTES;
   }
