@@ -33,12 +33,14 @@ import com.google.common.base.Preconditions;
 public class VectorKeySeriesBytesSerialized<T extends SerializeWrite>
     extends VectorKeySeriesSerializedImpl<T> implements VectorKeySeriesSerialized {
 
+  private static final int ESTIMATED_SERIALIZED_KEY_LENGTH = 24;
+
   private final int columnNum;
 
   private int outputStartPosition;
 
   public VectorKeySeriesBytesSerialized(int columnNum, T serializeWrite) {
-    super(serializeWrite);
+    super(serializeWrite, ESTIMATED_SERIALIZED_KEY_LENGTH);
     this.columnNum = columnNum;
   }
 
