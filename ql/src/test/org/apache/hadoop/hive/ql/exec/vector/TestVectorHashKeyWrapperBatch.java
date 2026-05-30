@@ -32,8 +32,10 @@ import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneral;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleString;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLong;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLongTwoString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperThreeLong;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperTwoLong;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperTwoLongSingleString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperTwoString;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -342,6 +344,64 @@ public class TestVectorHashKeyWrapperBatch {
     assertFalse(vhkwArray[0].equals(vhkwArray[1]));
     assertFalse(vhkwArray[0].equals(vhkwArray[2]));
     assertFalse(vhkwArray[0].equals(vhkwArray[3]));
+  }
+
+  @Test
+  public void testVectorHashKeyWrapperSingleLongCopyKey() throws HiveException {
+    VectorExpression[] keyExpressions = new VectorExpression[] { new IdentityExpression(0) };
+    TypeInfo[] typeInfos = new TypeInfo[] {TypeInfoFactory.longTypeInfo};
+    VectorHashKeyWrapperBatch vhkwb = VectorHashKeyWrapperBatch.compileKeyWrapperBatch(
+        keyExpressions,
+        typeInfos);
+
+    VectorizedRowBatch batch = new VectorizedRowBatch(1);
+    LongColumnVector longColumnVector = new LongColumnVector();
+    batch.cols[0] = longColumnVector;
+    longColumnVector.vector[0] = 10;
+    longColumnVector.vector[1] = 20;
+    batch.size = 2;
+
+    vhkwb.evaluateBatch(batch);
+    VectorHashKeyWrapperBase[] vhkwArray = vhkwb.getVectorHashKeyWrappers();
+    VectorHashKeyWrapperBase copy = (VectorHashKeyWrapperBase) vhkwArray[0].copyKey();
+    assertTrue(copy instanceof VectorHashKeyWrapperSingleLong);
+    assertEquals(vhkwArray[0], copy);
+
+    vhkwArray[1].copyKey(copy);
+    assertEquals(vhkwArray[1], copy);
+    assertEquals(20, copy.getLongValue(0));
+  }
+
+  @Test
+  public void testVectorHashKeyWrapperTwoLongCopyKey() throws HiveException {
+    VectorExpression[] keyExpressions = new VectorExpression[] { new IdentityExpression(0),
+        new IdentityExpression(1) };
+    TypeInfo[] typeInfos = new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.longTypeInfo};
+    VectorHashKeyWrapperBatch vhkwb = VectorHashKeyWrapperBatch.compileKeyWrapperBatch(
+        keyExpressions,
+        typeInfos);
+
+    VectorizedRowBatch batch = new VectorizedRowBatch(2);
+    LongColumnVector firstColumnVector = new LongColumnVector();
+    LongColumnVector secondColumnVector = new LongColumnVector();
+    batch.cols[0] = firstColumnVector;
+    batch.cols[1] = secondColumnVector;
+    firstColumnVector.vector[0] = 10;
+    secondColumnVector.vector[0] = 20;
+    firstColumnVector.vector[1] = 30;
+    secondColumnVector.vector[1] = 40;
+    batch.size = 2;
+
+    vhkwb.evaluateBatch(batch);
+    VectorHashKeyWrapperBase[] vhkwArray = vhkwb.getVectorHashKeyWrappers();
+    VectorHashKeyWrapperBase copy = (VectorHashKeyWrapperBase) vhkwArray[0].copyKey();
+    assertTrue(copy instanceof VectorHashKeyWrapperTwoLong);
+    assertEquals(vhkwArray[0], copy);
+
+    vhkwArray[1].copyKey(copy);
+    assertEquals(vhkwArray[1], copy);
+    assertEquals(30, copy.getLongValue(0));
+    assertEquals(40, copy.getLongValue(1));
   }
 
   @Test
