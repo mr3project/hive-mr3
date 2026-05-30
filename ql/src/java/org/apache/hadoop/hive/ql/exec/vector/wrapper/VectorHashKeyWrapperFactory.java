@@ -65,6 +65,7 @@ public class VectorHashKeyWrapperFactory {
           return new VectorHashKeyWrapperThreeString(ctx);
         }
       }
+      return new VectorHashKeyWrapperGeneralLongString(ctx, longValuesCount, byteValuesCount, keyCount);
     }
 
     // Fall through to use the general wrapper.
