@@ -834,12 +834,20 @@ public class TestVectorHashKeyWrapperBatch {
         assertEquals(isNull[i][keyIndex], wrappers[i].isNull(keyIndex));
       }
     }
-    assertEquals(wrappers[1], wrappers[4]);
-    assertEquals(wrappers[1].hashCode(), wrappers[4].hashCode());
-    assertFalse(wrappers[0].equals(wrappers[1]));
-    assertFalse(wrappers[0].equals(wrappers[2]));
-    assertFalse(wrappers[0].equals(wrappers[3]));
-    assertFalse(wrappers[0].equals(wrappers[5]));
+    if (twoKeyShape) {
+      assertEquals(wrappers[1], wrappers[3]);
+      assertEquals(wrappers[1].hashCode(), wrappers[3].hashCode());
+      assertFalse(wrappers[0].equals(wrappers[1]));
+      assertFalse(wrappers[0].equals(wrappers[2]));
+      assertFalse(wrappers[0].equals(wrappers[4]));
+    } else {
+      assertEquals(wrappers[1], wrappers[4]);
+      assertEquals(wrappers[1].hashCode(), wrappers[4].hashCode());
+      assertFalse(wrappers[0].equals(wrappers[1]));
+      assertFalse(wrappers[0].equals(wrappers[2]));
+      assertFalse(wrappers[0].equals(wrappers[3]));
+      assertFalse(wrappers[0].equals(wrappers[5]));
+    }
   }
 
   private VectorExpression[] identityExpressions(int count) {
