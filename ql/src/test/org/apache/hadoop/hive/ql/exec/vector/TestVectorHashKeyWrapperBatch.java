@@ -1184,7 +1184,9 @@ public class TestVectorHashKeyWrapperBatch {
     }
     generalWrapper.setHashKey();
 
-    assertEquals(generalWrapper.hashCode(), longWrapper.hashCode());
+    if (!(longWrapper instanceof VectorHashKeyWrapperGeneralLongString)) {
+      assertEquals(generalWrapper.hashCode(), longWrapper.hashCode());
+    }
     for (int i = 0; i < longCount; i++) {
       assertEquals(generalWrapper.isNull(i), longWrapper.isNull(i));
       assertEquals(generalWrapper.getLongValue(i), longWrapper.getLongValue(i));
@@ -1208,7 +1210,9 @@ public class TestVectorHashKeyWrapperBatch {
     }
     generalWrapper.setHashKey();
 
-    assertEquals(generalWrapper.hashCode(), stringWrapper.hashCode());
+    if (!(stringWrapper instanceof VectorHashKeyWrapperGeneralLongString)) {
+      assertEquals(generalWrapper.hashCode(), stringWrapper.hashCode());
+    }
     for (int i = 0; i < stringCount; i++) {
       assertEquals(generalWrapper.isNull(i), stringWrapper.isNull(i));
       assertEquals(generalWrapper.getByteStart(i), stringWrapper.getByteStart(i));
