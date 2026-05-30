@@ -343,13 +343,12 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
      * indexes because the key wrappers are valid for this method invocation,
      * but are reused by the next batch.
      */
-    private int[] batchLocalHashHead = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    private int[] batchLocalHashNext = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    private int[] batchRowToRepresentative = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    private int[] batchRepresentatives = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    private int[] batchRepresentativeRowCounts = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    private VectorAggregationBufferRow[] batchRepresentativeAggregationBuffers =
-        new VectorAggregationBufferRow[VectorizedRowBatch.DEFAULT_SIZE];
+    private int[] batchLocalHashHead;
+    private int[] batchLocalHashNext;
+    private int[] batchRowToRepresentative;
+    private int[] batchRepresentatives;
+    private int[] batchRepresentativeRowCounts;
+    private VectorAggregationBufferRow[] batchRepresentativeAggregationBuffers;
 
     private boolean useBatchLocalDedupForNextBatch;
     private boolean hasBatchLocalDedupStats;
@@ -636,6 +635,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     }
 
     private void prepareBatchAggregationBufferSetsWithBatchLocalDedup(int n) throws HiveException {
+      initializeBatchLocalDedupArrays();
       VectorHashKeyWrapperBase[] keyWrappers = keyWrappersBatch.getVectorHashKeyWrappers();
 
       // note - the row mapping is not relevant when aggregationBatchInfo::getDistinctBufferSetCount() == 1
@@ -699,6 +699,20 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         aggregationBatchInfo.mapAggregationBufferSet(
             batchRepresentativeAggregationBuffers[batchRowToRepresentative[i]], i);
       }
+    }
+
+    private void initializeBatchLocalDedupArrays() {
+      if (batchLocalHashHead != null) {
+        return;
+      }
+
+      batchLocalHashHead = new int[VectorizedRowBatch.DEFAULT_SIZE];
+      batchLocalHashNext = new int[VectorizedRowBatch.DEFAULT_SIZE];
+      batchRowToRepresentative = new int[VectorizedRowBatch.DEFAULT_SIZE];
+      batchRepresentatives = new int[VectorizedRowBatch.DEFAULT_SIZE];
+      batchRepresentativeRowCounts = new int[VectorizedRowBatch.DEFAULT_SIZE];
+      batchRepresentativeAggregationBuffers =
+          new VectorAggregationBufferRow[VectorizedRowBatch.DEFAULT_SIZE];
     }
 
     private void updateBatchLocalDedupStrategy(VectorizedRowBatch batch, int n) {
