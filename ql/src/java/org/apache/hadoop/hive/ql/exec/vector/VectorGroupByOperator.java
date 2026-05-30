@@ -330,6 +330,13 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     private Queue<VectorAggregationBufferRow> reusableAggregationBufferRows =
         new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
 
+    private static final float BATCH_DEDUP_EWMA_PREVIOUS_WEIGHT = 0.75f;
+    private static final float BATCH_DEDUP_EWMA_CURRENT_WEIGHT = 0.25f;
+    private static final float BATCH_DEDUP_ENABLE_DISTINCT_RATIO = 0.70f;
+    private static final float BATCH_DEDUP_DISABLE_DISTINCT_RATIO = 0.85f;
+    private static final int BATCH_DEDUP_ENABLE_DUPLICATES = 64;
+    private static final int BATCH_DEDUP_DISABLE_DUPLICATES = 32;
+
     /**
      * Batch-local hash table state used to deduplicate key wrappers before
      * probing the global aggregation hash map.  The table stores row-wrapper
@@ -343,6 +350,10 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     private int[] batchRepresentativeRowCounts = new int[VectorizedRowBatch.DEFAULT_SIZE];
     private VectorAggregationBufferRow[] batchRepresentativeAggregationBuffers =
         new VectorAggregationBufferRow[VectorizedRowBatch.DEFAULT_SIZE];
+
+    private boolean useBatchLocalDedupForNextBatch;
+    private boolean hasBatchLocalDedupStats;
+    private float estimatedBatchDistinctRatio;
 
     /**
      * Total per hashtable entry fixed memory (does not depend on key/agg values).
@@ -585,12 +596,48 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       aggregationBatchInfo.startBatch();
 
       if (batch.size == 0) {
+        resetBatchLocalDedupStats();
         return;
       }
 
+      final int n = keyExpressions.length == 0 ? 1 : batch.size;
+      if (useBatchLocalDedupForNextBatch) {
+        prepareBatchAggregationBufferSetsWithBatchLocalDedup(n);
+      } else {
+        prepareBatchAggregationBufferSetsOriginal(n);
+      }
+      updateBatchLocalDedupStrategy(batch, n);
+    }
+
+    private void prepareBatchAggregationBufferSetsOriginal(int n) throws HiveException {
       VectorHashKeyWrapperBase[] keyWrappers = keyWrappersBatch.getVectorHashKeyWrappers();
 
-      final int n = keyExpressions.length == 0 ? 1 : batch.size;
+      // note - the row mapping is not relevant when aggregationBatchInfo::getDistinctBufferSetCount() == 1
+      for (int i = 0; i < n; ++i) {
+        VectorHashKeyWrapperBase kw = keyWrappers[i];
+        VectorAggregationBufferRow aggregationBuffer = mapKeysAggregationBuffers.get(kw);
+        if (null == aggregationBuffer) {
+          // the probe failed, we must allocate a set of aggregation buffers
+          // and push the (keywrapper,buffers) pair into the hash.
+          // is very important to clone the keywrapper, the one we have from our
+          // keyWrappersBatch is going to be reset/reused on next batch.
+          aggregationBuffer = allocateAggregationBuffer();
+          KeyWrapper copyKeyWrapper = cloneKeyWrapper(kw);
+          mapKeysAggregationBuffers.put(copyKeyWrapper, aggregationBuffer);
+          numEntriesHashTable++;
+          numEntriesSinceCheck++;
+        } else {
+          // for access tracking
+          aggregationBuffer.incrementAccessCount();
+          totalAccessCount++;
+        }
+        aggregationBatchInfo.mapAggregationBufferSet(aggregationBuffer, i);
+      }
+    }
+
+    private void prepareBatchAggregationBufferSetsWithBatchLocalDedup(int n) throws HiveException {
+      VectorHashKeyWrapperBase[] keyWrappers = keyWrappersBatch.getVectorHashKeyWrappers();
+
       // note - the row mapping is not relevant when aggregationBatchInfo::getDistinctBufferSetCount() == 1
       int hashBucketCount = batchLocalHashHead.length;
       Arrays.fill(batchLocalHashHead, -1);
@@ -652,6 +699,39 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         aggregationBatchInfo.mapAggregationBufferSet(
             batchRepresentativeAggregationBuffers[batchRowToRepresentative[i]], i);
       }
+    }
+
+    private void updateBatchLocalDedupStrategy(VectorizedRowBatch batch, int n) {
+      if (batch.size < VectorizedRowBatch.DEFAULT_SIZE) {
+        resetBatchLocalDedupStats();
+        return;
+      }
+
+      int distinctCount = aggregationBatchInfo.getDistinctBufferSetCount();
+      int duplicates = n - distinctCount;
+      float distinctRatio = distinctCount / (float)n;
+      if (!hasBatchLocalDedupStats) {
+        estimatedBatchDistinctRatio = distinctRatio;
+        hasBatchLocalDedupStats = true;
+      } else {
+        estimatedBatchDistinctRatio =
+            BATCH_DEDUP_EWMA_PREVIOUS_WEIGHT * estimatedBatchDistinctRatio +
+            BATCH_DEDUP_EWMA_CURRENT_WEIGHT * distinctRatio;
+      }
+
+      if (estimatedBatchDistinctRatio <= BATCH_DEDUP_ENABLE_DISTINCT_RATIO &&
+          duplicates >= BATCH_DEDUP_ENABLE_DUPLICATES) {
+        useBatchLocalDedupForNextBatch = true;
+      } else if (estimatedBatchDistinctRatio >= BATCH_DEDUP_DISABLE_DISTINCT_RATIO ||
+          duplicates < BATCH_DEDUP_DISABLE_DUPLICATES) {
+        useBatchLocalDedupForNextBatch = false;
+      }
+    }
+
+    private void resetBatchLocalDedupStats() {
+      useBatchLocalDedupForNextBatch = false;
+      hasBatchLocalDedupStats = false;
+      estimatedBatchDistinctRatio = 0.0f;
     }
 
     private void incrementAccessCount(VectorAggregationBufferRow aggregationBuffer, int count) {
