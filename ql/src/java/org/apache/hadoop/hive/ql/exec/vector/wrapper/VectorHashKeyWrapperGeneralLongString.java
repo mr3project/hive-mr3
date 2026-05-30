@@ -43,8 +43,6 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
   private static final int[] EMPTY_INT_ARRAY = new int[0];
   private static final long[] EMPTY_LONG_ARRAY = new long[0];
   private static final byte[][] EMPTY_BYTES_ARRAY = new byte[0][];
-  private static final int EMPTY_DOUBLE_ARRAY_HASH_CODE = Arrays.hashCode(new double[0]);
-
   private long[] longValues;
 
   private byte[][] byteValues;
@@ -84,9 +82,7 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
 
   @Override
   public void setHashKey() {
-    int hash = Arrays.hashCode(longValues) ^
-        EMPTY_DOUBLE_ARRAY_HASH_CODE ^
-        Arrays.hashCode(isNull);
+    int hash = Arrays.hashCode(longValues) ^ Arrays.hashCode(isNull);
 
     // This code, with branches and all, is not executed if there are no string keys.
     Murmur3.IncrementalHash32 bytesHash = null;

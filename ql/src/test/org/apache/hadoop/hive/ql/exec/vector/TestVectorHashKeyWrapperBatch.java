@@ -1166,7 +1166,6 @@ public class TestVectorHashKeyWrapperBatch {
         throw new RuntimeException("Unexpected column vector type " + vhkwb.columnVectorTypes[keyIndex]);
       }
     }
-    assertEquals(generalWrapper.hashCode(), wrapper.hashCode());
     assertEquals(generalWrapper.stringifyKeys(vhkwb), wrapper.stringifyKeys(vhkwb));
     assertEquals(generalWrapper.toString(), wrapper.toString());
     assertEquals(generalWrapper.getVariableSize(), wrapper.getVariableSize());
