@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneral;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleString;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperTwoString;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
@@ -112,7 +113,7 @@ public class TestVectorHashKeyWrapperBatch {
     vhkwb.evaluateBatch(batch);
     VectorHashKeyWrapperBase[] vhkwArray = vhkwb.getVectorHashKeyWrappers();
     for (int i = 0; i < batch.size; i++) {
-      assertSingleStringWrapperConsistentWithGeneral(vhkwArray[i], vhkwb);
+      assertStringWrapperConsistentWithGeneral(vhkwArray[i], vhkwb, 1);
     }
     VectorHashKeyWrapperBase hashKey2 = vhkwArray[2];
     VectorHashKeyWrapperBase hashKey1 = vhkwArray[1];
@@ -128,7 +129,7 @@ public class TestVectorHashKeyWrapperBatch {
             contents, 0, contents.length));
     assertTrue(StringExpr.equal(hashKey2.getBytes(0), hashKey2.getByteStart(0), hashKey2.getByteLength(0),
         hashKey1.getBytes(0), hashKey1.getByteStart(0), hashKey1.getByteLength(0)));
-    assertSingleStringWrapperConsistentWithGeneral(hashKey1, vhkwb);
+    assertStringWrapperConsistentWithGeneral(hashKey1, vhkwb, 1);
   }
 
 
@@ -162,14 +163,14 @@ public class TestVectorHashKeyWrapperBatch {
     assertEquals(vhkwArray[0].hashCode(), vhkwArray[2].hashCode());
     assertFalse(vhkwArray[0].equals(vhkwArray[1]));
     for (int i = 0; i < batch.size; i++) {
-      assertSingleStringWrapperConsistentWithGeneral(vhkwArray[i], vhkwb);
+      assertStringWrapperConsistentWithGeneral(vhkwArray[i], vhkwb, 1);
     }
 
     VectorHashKeyWrapperBase copy = (VectorHashKeyWrapperBase) vhkwArray[0].copyKey();
     assertTrue(copy instanceof VectorHashKeyWrapperSingleString);
     assertEquals(vhkwArray[0], copy);
     assertEquals(vhkwArray[0].hashCode(), copy.hashCode());
-    assertSingleStringWrapperConsistentWithGeneral(copy, vhkwb);
+    assertStringWrapperConsistentWithGeneral(copy, vhkwb, 1);
 
     bytesColumnVector.vector[0][0] = 'z';
     assertTrue(StringExpr.equal(copy.getBytes(0), copy.getByteStart(0), copy.getByteLength(0),
@@ -181,7 +182,7 @@ public class TestVectorHashKeyWrapperBatch {
     assertEquals(vhkwArray[1], copy);
     assertTrue(StringExpr.equal(copy.getBytes(0), copy.getByteStart(0), copy.getByteLength(0),
         beta, 0, beta.length));
-    assertSingleStringWrapperConsistentWithGeneral(copy, vhkwb);
+    assertStringWrapperConsistentWithGeneral(copy, vhkwb, 1);
   }
 
   @Test
@@ -215,36 +216,161 @@ public class TestVectorHashKeyWrapperBatch {
     assertEquals(vhkwArray[1], vhkwArray[3]);
     assertFalse(vhkwArray[0].equals(vhkwArray[1]));
     for (int i = 0; i < batch.size; i++) {
-      assertSingleStringWrapperConsistentWithGeneral(vhkwArray[i], vhkwb);
+      assertStringWrapperConsistentWithGeneral(vhkwArray[i], vhkwb, 1);
     }
   }
 
-  private void assertSingleStringWrapperConsistentWithGeneral(
-      VectorHashKeyWrapperBase singleStringWrapper, VectorHashKeyWrapperBatch vhkwb) {
+  @Test
+  public void testVectorHashKeyWrapperTwoString() throws HiveException {
+    VectorExpression[] keyExpressions = new VectorExpression[] { new IdentityExpression(0),
+        new IdentityExpression(1) };
+    TypeInfo[] typeInfos = new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.stringTypeInfo};
+    VectorHashKeyWrapperBatch vhkwb = VectorHashKeyWrapperBatch.compileKeyWrapperBatch(
+        keyExpressions,
+        typeInfos);
+
+    VectorizedRowBatch batch = new VectorizedRowBatch(2);
+    batch.selectedInUse = false;
+    BytesColumnVector firstColumnVector = new BytesColumnVector();
+    firstColumnVector.initBuffer(1024);
+    BytesColumnVector secondColumnVector = new BytesColumnVector();
+    secondColumnVector.initBuffer(1024);
+    batch.cols[0] = firstColumnVector;
+    batch.cols[1] = secondColumnVector;
+
+    byte[] alpha = "alpha".getBytes();
+    byte[] beta = "beta".getBytes();
+    byte[] one = "one".getBytes();
+    byte[] two = "two".getBytes();
+    firstColumnVector.setVal(0, alpha);
+    secondColumnVector.setVal(0, one);
+    firstColumnVector.setVal(1, alpha);
+    secondColumnVector.setVal(1, two);
+    firstColumnVector.setVal(2, alpha);
+    secondColumnVector.setVal(2, one);
+    firstColumnVector.setVal(3, beta);
+    secondColumnVector.setVal(3, one);
+    batch.size = 4;
+
+    vhkwb.evaluateBatch(batch);
+    VectorHashKeyWrapperBase[] vhkwArray = vhkwb.getVectorHashKeyWrappers();
+    for (int i = 0; i < batch.size; i++) {
+      assertTrue(vhkwArray[i] instanceof VectorHashKeyWrapperTwoString);
+      assertStringWrapperConsistentWithGeneral(vhkwArray[i], vhkwb, 2);
+    }
+    assertEquals(vhkwArray[0], vhkwArray[2]);
+    assertEquals(vhkwArray[0].hashCode(), vhkwArray[2].hashCode());
+    assertFalse(vhkwArray[0].equals(vhkwArray[1]));
+    assertFalse(vhkwArray[0].equals(vhkwArray[3]));
+
+    VectorHashKeyWrapperBase copy = (VectorHashKeyWrapperBase) vhkwArray[0].copyKey();
+    assertTrue(copy instanceof VectorHashKeyWrapperTwoString);
+    assertEquals(vhkwArray[0], copy);
+    assertEquals(vhkwArray[0].hashCode(), copy.hashCode());
+    assertStringWrapperConsistentWithGeneral(copy, vhkwb, 2);
+
+    firstColumnVector.vector[0][0] = 'z';
+    secondColumnVector.vector[0][0] = 'z';
+    assertTrue(StringExpr.equal(copy.getBytes(0), copy.getByteStart(0), copy.getByteLength(0),
+        alpha, 0, alpha.length));
+    assertTrue(StringExpr.equal(copy.getBytes(1), copy.getByteStart(1), copy.getByteLength(1),
+        one, 0, one.length));
+    assertFalse(StringExpr.equal(vhkwArray[0].getBytes(0), vhkwArray[0].getByteStart(0),
+        vhkwArray[0].getByteLength(0), copy.getBytes(0), copy.getByteStart(0), copy.getByteLength(0)));
+    assertFalse(StringExpr.equal(vhkwArray[0].getBytes(1), vhkwArray[0].getByteStart(1),
+        vhkwArray[0].getByteLength(1), copy.getBytes(1), copy.getByteStart(1), copy.getByteLength(1)));
+
+    vhkwArray[1].copyKey(copy);
+    assertEquals(vhkwArray[1], copy);
+    assertTrue(StringExpr.equal(copy.getBytes(0), copy.getByteStart(0), copy.getByteLength(0),
+        alpha, 0, alpha.length));
+    assertTrue(StringExpr.equal(copy.getBytes(1), copy.getByteStart(1), copy.getByteLength(1),
+        two, 0, two.length));
+    assertStringWrapperConsistentWithGeneral(copy, vhkwb, 2);
+  }
+
+  @Test
+  public void testVectorHashKeyWrapperTwoStringNull() throws HiveException {
+    VectorExpression[] keyExpressions = new VectorExpression[] { new IdentityExpression(0),
+        new IdentityExpression(1) };
+    TypeInfo[] typeInfos = new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.stringTypeInfo};
+    VectorHashKeyWrapperBatch vhkwb = VectorHashKeyWrapperBatch.compileKeyWrapperBatch(
+        keyExpressions,
+        typeInfos);
+
+    VectorizedRowBatch batch = new VectorizedRowBatch(2);
+    batch.selectedInUse = false;
+    BytesColumnVector firstColumnVector = new BytesColumnVector();
+    firstColumnVector.initBuffer(1024);
+    firstColumnVector.noNulls = false;
+    BytesColumnVector secondColumnVector = new BytesColumnVector();
+    secondColumnVector.initBuffer(1024);
+    secondColumnVector.noNulls = false;
+    batch.cols[0] = firstColumnVector;
+    batch.cols[1] = secondColumnVector;
+
+    firstColumnVector.setVal(0, "left".getBytes());
+    secondColumnVector.setVal(0, "right".getBytes());
+    firstColumnVector.isNull[1] = true;
+    secondColumnVector.setVal(1, "right".getBytes());
+    firstColumnVector.setVal(2, "left".getBytes());
+    secondColumnVector.isNull[2] = true;
+    firstColumnVector.isNull[3] = true;
+    secondColumnVector.isNull[3] = true;
+    firstColumnVector.isNull[4] = true;
+    secondColumnVector.setVal(4, "right".getBytes());
+    batch.size = 5;
+
+    vhkwb.evaluateBatch(batch);
+    VectorHashKeyWrapperBase[] vhkwArray = vhkwb.getVectorHashKeyWrappers();
+    for (int i = 0; i < batch.size; i++) {
+      assertTrue(vhkwArray[i] instanceof VectorHashKeyWrapperTwoString);
+      assertStringWrapperConsistentWithGeneral(vhkwArray[i], vhkwb, 2);
+    }
+    assertFalse(vhkwArray[0].isNull(0));
+    assertFalse(vhkwArray[0].isNull(1));
+    assertTrue(vhkwArray[1].isNull(0));
+    assertFalse(vhkwArray[1].isNull(1));
+    assertFalse(vhkwArray[2].isNull(0));
+    assertTrue(vhkwArray[2].isNull(1));
+    assertTrue(vhkwArray[3].isNull(0));
+    assertTrue(vhkwArray[3].isNull(1));
+    assertEquals(vhkwArray[1], vhkwArray[4]);
+    assertFalse(vhkwArray[0].equals(vhkwArray[1]));
+    assertFalse(vhkwArray[0].equals(vhkwArray[2]));
+    assertFalse(vhkwArray[0].equals(vhkwArray[3]));
+  }
+
+  private void assertStringWrapperConsistentWithGeneral(
+      VectorHashKeyWrapperBase stringWrapper, VectorHashKeyWrapperBatch vhkwb, int stringCount) {
     VectorHashKeyWrapperGeneral generalWrapper = new VectorHashKeyWrapperGeneral(
-        new VectorHashKeyWrapperBase.HashContext(), 0, 0, 1, 0, 0, 0, 1);
-    if (singleStringWrapper.isNull(0)) {
-      generalWrapper.assignNullString(0, 0);
-    } else {
-      generalWrapper.assignString(0, singleStringWrapper.getBytes(0), singleStringWrapper.getByteStart(0),
-          singleStringWrapper.getByteLength(0));
+        new VectorHashKeyWrapperBase.HashContext(), 0, 0, stringCount, 0, 0, 0, stringCount);
+    for (int i = 0; i < stringCount; i++) {
+      if (stringWrapper.isNull(i)) {
+        generalWrapper.assignNullString(i, i);
+      } else {
+        generalWrapper.assignString(i, stringWrapper.getBytes(i), stringWrapper.getByteStart(i),
+            stringWrapper.getByteLength(i));
+      }
     }
     generalWrapper.setHashKey();
 
-    assertEquals(generalWrapper.isNull(0), singleStringWrapper.isNull(0));
-    assertEquals(generalWrapper.hashCode(), singleStringWrapper.hashCode());
-    assertEquals(generalWrapper.getByteStart(0), singleStringWrapper.getByteStart(0));
-    assertEquals(generalWrapper.getByteLength(0), singleStringWrapper.getByteLength(0));
-    if (generalWrapper.isNull(0)) {
-      assertEquals(generalWrapper.getBytes(0), singleStringWrapper.getBytes(0));
-    } else {
-      assertTrue(StringExpr.equal(generalWrapper.getBytes(0), generalWrapper.getByteStart(0),
-          generalWrapper.getByteLength(0), singleStringWrapper.getBytes(0), singleStringWrapper.getByteStart(0),
-          singleStringWrapper.getByteLength(0)));
+    assertEquals(generalWrapper.hashCode(), stringWrapper.hashCode());
+    for (int i = 0; i < stringCount; i++) {
+      assertEquals(generalWrapper.isNull(i), stringWrapper.isNull(i));
+      assertEquals(generalWrapper.getByteStart(i), stringWrapper.getByteStart(i));
+      assertEquals(generalWrapper.getByteLength(i), stringWrapper.getByteLength(i));
+      if (generalWrapper.isNull(i)) {
+        assertEquals(generalWrapper.getBytes(i), stringWrapper.getBytes(i));
+      } else {
+        assertTrue(StringExpr.equal(generalWrapper.getBytes(i), generalWrapper.getByteStart(i),
+            generalWrapper.getByteLength(i), stringWrapper.getBytes(i), stringWrapper.getByteStart(i),
+            stringWrapper.getByteLength(i)));
+      }
     }
-    assertEquals(generalWrapper.stringifyKeys(vhkwb), singleStringWrapper.stringifyKeys(vhkwb));
-    assertEquals(generalWrapper.toString(), singleStringWrapper.toString());
-    assertEquals(generalWrapper.getVariableSize(), singleStringWrapper.getVariableSize());
+    assertEquals(generalWrapper.stringifyKeys(vhkwb), stringWrapper.stringifyKeys(vhkwb));
+    assertEquals(generalWrapper.toString(), stringWrapper.toString());
+    assertEquals(generalWrapper.getVariableSize(), stringWrapper.getVariableSize());
   }
 
 }
