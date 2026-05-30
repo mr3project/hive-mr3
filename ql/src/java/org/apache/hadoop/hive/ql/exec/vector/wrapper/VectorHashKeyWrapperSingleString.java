@@ -89,6 +89,13 @@ public class VectorHashKeyWrapperSingleString extends VectorHashKeyWrapperSingle
       clone.start0 = 0;
       clone.length0 = -1;
     } else {
+      /*
+       * The batch wrapper can point at BytesColumnVector storage.  That storage may be
+       * reused or mutated after the key is inserted into the aggregation hash map, so
+       * copied keys must own a stable byte array.  When VectorGroupByOperator reuses a
+       * previously flushed key wrapper, update the owned array in place if it is large
+       * enough; otherwise allocate a new owned copy.
+       */
       if (clone.bytes0 == null || clone.bytes0.length < length0) {
         clone.bytes0 = Arrays.copyOfRange(bytes0, start0, start0 + length0);
       } else {
