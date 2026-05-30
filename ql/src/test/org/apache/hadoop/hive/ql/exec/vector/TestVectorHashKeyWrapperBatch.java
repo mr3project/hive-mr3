@@ -31,6 +31,7 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneral;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneralLongString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLong;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLongSingleString;
@@ -748,6 +749,33 @@ public class TestVectorHashKeyWrapperBatch {
   }
 
   @Test
+  public void testVectorHashKeyWrapperGeneralLongStringLongs() throws HiveException {
+    assertSpecializedWrapperSelectedInUse(new TypeInfo[] {TypeInfoFactory.longTypeInfo,
+        TypeInfoFactory.longTypeInfo, TypeInfoFactory.longTypeInfo, TypeInfoFactory.longTypeInfo},
+        VectorHashKeyWrapperGeneralLongString.class, 4, 0);
+  }
+
+  @Test
+  public void testVectorHashKeyWrapperGeneralLongStringStrings() throws HiveException {
+    assertSpecializedWrapperSelectedInUse(new TypeInfo[] {TypeInfoFactory.stringTypeInfo,
+        TypeInfoFactory.stringTypeInfo, TypeInfoFactory.stringTypeInfo, TypeInfoFactory.stringTypeInfo},
+        VectorHashKeyWrapperGeneralLongString.class, 0, 4);
+  }
+
+  @Test
+  public void testVectorHashKeyWrapperGeneralLongStringMixedPermutations() throws HiveException {
+    assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.longTypeInfo,
+        TypeInfoFactory.stringTypeInfo, TypeInfoFactory.stringTypeInfo},
+        VectorHashKeyWrapperGeneralLongString.class, 2, 2);
+    assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.stringTypeInfo,
+        TypeInfoFactory.longTypeInfo, TypeInfoFactory.stringTypeInfo},
+        VectorHashKeyWrapperGeneralLongString.class, 2, 2);
+    assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.longTypeInfo,
+        TypeInfoFactory.stringTypeInfo, TypeInfoFactory.longTypeInfo},
+        VectorHashKeyWrapperGeneralLongString.class, 2, 2);
+  }
+
+  @Test
   public void testSpecializedWrappersSelectedInUse() throws HiveException {
     assertSpecializedWrapperSelectedInUse(new TypeInfo[] {TypeInfoFactory.stringTypeInfo},
         VectorHashKeyWrapperSingleString.class, 0, 1);
@@ -1138,6 +1166,7 @@ public class TestVectorHashKeyWrapperBatch {
         throw new RuntimeException("Unexpected column vector type " + vhkwb.columnVectorTypes[keyIndex]);
       }
     }
+    assertEquals(generalWrapper.hashCode(), wrapper.hashCode());
     assertEquals(generalWrapper.stringifyKeys(vhkwb), wrapper.stringifyKeys(vhkwb));
     assertEquals(generalWrapper.toString(), wrapper.toString());
     assertEquals(generalWrapper.getVariableSize(), wrapper.getVariableSize());

@@ -52,6 +52,7 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates.VectorAggreg
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneral;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneralLongString;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.GroupByDesc;
@@ -453,7 +454,9 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       computeMemoryLimits();
       LOG.debug("using hash aggregation processing mode");
 
-      if (keyWrappersBatch.getVectorHashKeyWrappers()[0] instanceof VectorHashKeyWrapperGeneral) {
+      VectorHashKeyWrapperBase firstKeyWrapper = keyWrappersBatch.getVectorHashKeyWrappers()[0];
+      if (firstKeyWrapper instanceof VectorHashKeyWrapperGeneral ||
+          firstKeyWrapper instanceof VectorHashKeyWrapperGeneralLongString) {
         reusableKeyWrapperBuffer = new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
       }
     }

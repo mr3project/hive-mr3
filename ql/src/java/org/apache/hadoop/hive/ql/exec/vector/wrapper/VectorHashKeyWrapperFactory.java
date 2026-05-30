@@ -67,6 +67,10 @@ public class VectorHashKeyWrapperFactory {
       }
     }
 
+    if (nonLongBytesCount == 0) {
+      return new VectorHashKeyWrapperGeneralLongString(ctx, longValuesCount, byteValuesCount, keyCount);
+    }
+
     // Fall through to use the general wrapper.
     return new VectorHashKeyWrapperGeneral(ctx, longValuesCount, doubleValuesCount, byteValuesCount,
         decimalValuesCount, timestampValuesCount, intervalDayTimeValuesCount,
