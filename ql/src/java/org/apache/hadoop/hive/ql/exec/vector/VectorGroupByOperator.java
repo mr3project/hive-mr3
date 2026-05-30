@@ -331,6 +331,20 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
 
     /**
+     * Batch-local hash table state used to deduplicate key wrappers before
+     * probing the global aggregation hash map.  The table stores row-wrapper
+     * indexes because the key wrappers are valid for this method invocation,
+     * but are reused by the next batch.
+     */
+    private int[] batchLocalHashHead = new int[VectorizedRowBatch.DEFAULT_SIZE];
+    private int[] batchLocalHashNext = new int[VectorizedRowBatch.DEFAULT_SIZE];
+    private int[] batchRowToRepresentative = new int[VectorizedRowBatch.DEFAULT_SIZE];
+    private int[] batchRepresentatives = new int[VectorizedRowBatch.DEFAULT_SIZE];
+    private int[] batchRepresentativeRowCounts = new int[VectorizedRowBatch.DEFAULT_SIZE];
+    private VectorAggregationBufferRow[] batchRepresentativeAggregationBuffers =
+        new VectorAggregationBufferRow[VectorizedRowBatch.DEFAULT_SIZE];
+
+    /**
      * Total per hashtable entry fixed memory (does not depend on key/agg values).
      */
     private long fixedHashEntrySize;
@@ -574,16 +588,45 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         return;
       }
 
-      // We now have to probe the global hash and find-or-allocate
-      // the aggregation buffers to use for each key present in the batch
       VectorHashKeyWrapperBase[] keyWrappers = keyWrappersBatch.getVectorHashKeyWrappers();
 
       final int n = keyExpressions.length == 0 ? 1 : batch.size;
       // note - the row mapping is not relevant when aggregationBatchInfo::getDistinctBufferSetCount() == 1
+      int hashBucketCount = batchLocalHashHead.length;
+      Arrays.fill(batchLocalHashHead, -1);
 
-      for (int i=0; i < n; ++i) {
+      int representativeCount = 0;
+      for (int i = 0; i < n; ++i) {
         VectorHashKeyWrapperBase kw = keyWrappers[i];
+        int hashBucket = kw.hashCode() & (hashBucketCount - 1);
+        int representative = -1;
+        for (int current = batchLocalHashHead[hashBucket]; current != -1;
+            current = batchLocalHashNext[current]) {
+          if (keyWrappers[current].equals(kw)) {
+            representative = current;
+            break;
+          }
+        }
+
+        if (representative == -1) {
+          representative = i;
+          batchLocalHashNext[i] = batchLocalHashHead[hashBucket];
+          batchLocalHashHead[hashBucket] = i;
+          batchRepresentatives[representativeCount++] = i;
+        }
+
+        batchRowToRepresentative[i] = representative;
+        batchRepresentativeRowCounts[representative]++;
+      }
+
+      // Probe the global hash once for each key that is distinct within this
+      // batch, then remember the aggregation buffer on the representative row.
+      for (int representativeIndex = 0; representativeIndex < representativeCount;
+          ++representativeIndex) {
+        int row = batchRepresentatives[representativeIndex];
+        VectorHashKeyWrapperBase kw = keyWrappers[row];
         VectorAggregationBufferRow aggregationBuffer = mapKeysAggregationBuffers.get(kw);
+        int accessCount = batchRepresentativeRowCounts[row];
         if (null == aggregationBuffer) {
           // the probe failed, we must allocate a set of aggregation buffers
           // and push the (keywrapper,buffers) pair into the hash.
@@ -594,13 +637,28 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
           mapKeysAggregationBuffers.put(copyKeyWrapper, aggregationBuffer);
           numEntriesHashTable++;
           numEntriesSinceCheck++;
-        } else {
-          // for access tracking
-          aggregationBuffer.incrementAccessCount();
-          totalAccessCount++;
+          // Match the previous per-row global-probe access accounting: the
+          // first row created the entry and each remaining row found it.
+          accessCount--;
         }
-        aggregationBatchInfo.mapAggregationBufferSet(aggregationBuffer, i);
+        if (accessCount > 0) {
+          incrementAccessCount(aggregationBuffer, accessCount);
+        }
+        batchRepresentativeAggregationBuffers[row] = aggregationBuffer;
+        batchRepresentativeRowCounts[row] = 0;
       }
+
+      for (int i = 0; i < n; ++i) {
+        aggregationBatchInfo.mapAggregationBufferSet(
+            batchRepresentativeAggregationBuffers[batchRowToRepresentative[i]], i);
+      }
+    }
+
+    private void incrementAccessCount(VectorAggregationBufferRow aggregationBuffer, int count) {
+      for (int i = 0; i < count; ++i) {
+        aggregationBuffer.incrementAccessCount();
+      }
+      totalAccessCount += count;
     }
 
     private KeyWrapper cloneKeyWrapper(VectorHashKeyWrapperBase from) {
