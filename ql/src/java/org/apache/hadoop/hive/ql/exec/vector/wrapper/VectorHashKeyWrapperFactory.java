@@ -65,9 +65,6 @@ public class VectorHashKeyWrapperFactory {
           return new VectorHashKeyWrapperThreeString(ctx);
         }
       }
-    }
-
-    if (nonLongBytesCount == 0) {
       return new VectorHashKeyWrapperGeneralLongString(ctx, longValuesCount, byteValuesCount, keyCount);
     }
 
