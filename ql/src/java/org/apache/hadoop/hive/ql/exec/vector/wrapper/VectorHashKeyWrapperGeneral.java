@@ -749,8 +749,8 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
   @Override
   public int getVariableSize() {
     int variableSize = 0;
+    JavaDataModel model = JavaDataModel.get();
     for (int i=0; i<byteLengths.length; ++i) {
-      JavaDataModel model = JavaDataModel.get();
       variableSize += model.lengthForByteArrayOfSize(byteLengths[i]);
     }
     return variableSize;
