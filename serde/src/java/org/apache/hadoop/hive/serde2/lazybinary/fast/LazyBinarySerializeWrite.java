@@ -19,8 +19,7 @@
 package org.apache.hadoop.hive.serde2.lazybinary.fast;
 
 import java.io.IOException;
-import java.util.ArrayDeque;
-import java.util.Deque;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -74,8 +73,11 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   private byte[] scratchBuffer;
   private byte[] scratchLongBytes;
 
+  private static final int INITIAL_STACK_SIZE = 16;
+
   private final Field root;
-  private Deque<Field> stack = new ArrayDeque<>();
+  private Field[] stack;
+  private int stackDepth;
   private LazyBinarySerDe.BooleanRef warnedOnceNullMapKey;
 
   private static class Field {
@@ -113,6 +115,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   // Not public since we must have the field count and other information.
   private LazyBinarySerializeWrite() {
     this.root = new Field(STRUCT);
+    this.stack = new Field[INITIAL_STACK_SIZE];
   }
 
   /*
@@ -147,9 +150,32 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   private void resetWithoutOutput() {
     root.clean();
     root.fieldCount = rootFieldCount;
-    stack.clear();
-    stack.push(root);
+    resetStack();
     warnedOnceNullMapKey = null;
+  }
+
+
+  private void resetStack() {
+    stackDepth = 1;
+    stack[0] = root;
+  }
+
+  private Field peekStack() {
+    return stack[stackDepth - 1];
+  }
+
+  private void pushStack(Field field) {
+    if (stackDepth == stack.length) {
+      stack = Arrays.copyOf(stack, stack.length * 2);
+    }
+    stack[stackDepth++] = field;
+  }
+
+  private void popStack() {
+    stackDepth--;
+    if (stackDepth == 0) {
+      throw new RuntimeException();
+    }
   }
 
   /*
@@ -157,7 +183,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
    */
   @Override
   public void writeNull() throws IOException {
-    final Field current = stack.peek();
+    final Field current = peekStack();
 
     if (current.type == STRUCT) {
       // Every 8 fields we write a NULL byte.
@@ -490,7 +516,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
 
   @Override
   public void finishList() {
-    final Field current = stack.peek();
+    final Field current = peekStack();
 
     if (!skipLengthPrefix) {
       // 5/ update the list byte size
@@ -558,7 +584,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
 
   @Override
   public void finishMap() {
-    final Field current = stack.peek();
+    final Field current = peekStack();
 
     if (!skipLengthPrefix) {
       // 5/ update the byte size of the map
@@ -593,7 +619,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
 
   @Override
   public void finishStruct() {
-    final Field current = stack.peek();
+    final Field current = peekStack();
 
     if (!skipLengthPrefix) {
       // 3/ update the byte size of the struct
@@ -626,7 +652,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
 
   @Override
   public void finishUnion() {
-    final Field current = stack.peek();
+    final Field current = peekStack();
 
     if (!skipLengthPrefix) {
       // 3/ update the byte size of the struct
@@ -639,7 +665,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   }
 
   private void beginElement() {
-    final Field current = stack.peek();
+    final Field current = peekStack();
 
     if (current.type == STRUCT) {
       // Every 8 fields we write a NULL byte.
@@ -660,7 +686,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   }
 
   private void finishElement() {
-    final Field current = stack.peek();
+    final Field current = peekStack();
 
     if (current.type == STRUCT) {
       current.fieldIndex++;
@@ -674,11 +700,11 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
 
   private void beginComplex(Field field) {
     beginElement();
-    stack.push(field);
+    pushStack(field);
   }
 
   private void finishComplex() {
-    stack.pop();
+    popStack();
     finishElement();
   }
 
