@@ -191,6 +191,6 @@ public class VectorHashKeyWrapperSingleString extends VectorHashKeyWrapperSingle
 
   @Override
   public int getVariableSize() {
-    return isNull0 ? 0 : JavaDataModel.get().lengthForByteArrayOfSize(length0);
+    return isNull0 ? 0 : (int) JavaDataModel.get().lengthForByteArrayOfSize(length0);
   }
 }
