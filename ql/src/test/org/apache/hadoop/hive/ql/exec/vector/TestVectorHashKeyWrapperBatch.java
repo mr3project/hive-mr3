@@ -32,7 +32,9 @@ import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneral;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleString;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLongTwoString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperThreeLong;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperTwoLongSingleString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperTwoString;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
@@ -465,6 +467,247 @@ public class TestVectorHashKeyWrapperBatch {
     assertFalse(vhkwArray[0].equals(vhkwArray[2]));
     assertFalse(vhkwArray[0].equals(vhkwArray[3]));
     assertFalse(vhkwArray[0].equals(vhkwArray[5]));
+  }
+
+  @Test
+  public void testVectorHashKeyWrapperTwoLongSingleStringPermutations() throws HiveException {
+    assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.longTypeInfo,
+        TypeInfoFactory.stringTypeInfo}, VectorHashKeyWrapperTwoLongSingleString.class, 2, 1);
+    assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.stringTypeInfo,
+        TypeInfoFactory.longTypeInfo}, VectorHashKeyWrapperTwoLongSingleString.class, 2, 1);
+    assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.longTypeInfo,
+        TypeInfoFactory.longTypeInfo}, VectorHashKeyWrapperTwoLongSingleString.class, 2, 1);
+  }
+
+  @Test
+  public void testVectorHashKeyWrapperTwoLongSingleStringNullPermutations() throws HiveException {
+    assertMixedLongStringNullWrapper(new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.longTypeInfo,
+        TypeInfoFactory.stringTypeInfo}, VectorHashKeyWrapperTwoLongSingleString.class, 2, 1);
+    assertMixedLongStringNullWrapper(new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.stringTypeInfo,
+        TypeInfoFactory.longTypeInfo}, VectorHashKeyWrapperTwoLongSingleString.class, 2, 1);
+    assertMixedLongStringNullWrapper(new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.longTypeInfo,
+        TypeInfoFactory.longTypeInfo}, VectorHashKeyWrapperTwoLongSingleString.class, 2, 1);
+  }
+
+  @Test
+  public void testVectorHashKeyWrapperSingleLongTwoStringPermutations() throws HiveException {
+    assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.stringTypeInfo,
+        TypeInfoFactory.stringTypeInfo}, VectorHashKeyWrapperSingleLongTwoString.class, 1, 2);
+    assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.longTypeInfo,
+        TypeInfoFactory.stringTypeInfo}, VectorHashKeyWrapperSingleLongTwoString.class, 1, 2);
+    assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.stringTypeInfo,
+        TypeInfoFactory.longTypeInfo}, VectorHashKeyWrapperSingleLongTwoString.class, 1, 2);
+  }
+
+  @Test
+  public void testVectorHashKeyWrapperSingleLongTwoStringNullPermutations() throws HiveException {
+    assertMixedLongStringNullWrapper(new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.stringTypeInfo,
+        TypeInfoFactory.stringTypeInfo}, VectorHashKeyWrapperSingleLongTwoString.class, 1, 2);
+    assertMixedLongStringNullWrapper(new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.longTypeInfo,
+        TypeInfoFactory.stringTypeInfo}, VectorHashKeyWrapperSingleLongTwoString.class, 1, 2);
+    assertMixedLongStringNullWrapper(new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.stringTypeInfo,
+        TypeInfoFactory.longTypeInfo}, VectorHashKeyWrapperSingleLongTwoString.class, 1, 2);
+  }
+
+  private void assertMixedLongStringWrapper(TypeInfo[] typeInfos,
+      Class<? extends VectorHashKeyWrapperBase> expectedWrapperClass, int longCount, int stringCount)
+      throws HiveException {
+    VectorHashKeyWrapperBatch vhkwb = VectorHashKeyWrapperBatch.compileKeyWrapperBatch(
+        identityExpressions(typeInfos.length), typeInfos);
+    VectorizedRowBatch batch = createMixedLongStringBatch(typeInfos, false);
+
+    long[][] longValues = longCount == 2 ?
+        new long[][] {{10, 20}, {10, 20}, {10, 20}, {11, 20}} :
+        new long[][] {{10}, {10}, {10}, {11}};
+    String[][] stringValues = stringCount == 2 ?
+        new String[][] {{"alpha", "one"}, {"alpha", "two"}, {"alpha", "one"}, {"alpha", "one"}} :
+        new String[][] {{"alpha"}, {"beta"}, {"alpha"}, {"alpha"}};
+    fillMixedLongStringBatch(batch, typeInfos, longValues, stringValues, null);
+
+    vhkwb.evaluateBatch(batch);
+    VectorHashKeyWrapperBase[] wrappers = vhkwb.getVectorHashKeyWrappers();
+    for (int i = 0; i < batch.size; i++) {
+      assertTrue(expectedWrapperClass.isInstance(wrappers[i]));
+      assertMixedLongStringWrapperConsistentWithGeneral(wrappers[i], vhkwb, longCount, stringCount);
+    }
+    assertEquals(wrappers[0], wrappers[2]);
+    assertEquals(wrappers[0].hashCode(), wrappers[2].hashCode());
+    assertFalse(wrappers[0].equals(wrappers[1]));
+    assertFalse(wrappers[0].equals(wrappers[3]));
+
+    VectorHashKeyWrapperBase copy = (VectorHashKeyWrapperBase) wrappers[0].copyKey();
+    assertTrue(expectedWrapperClass.isInstance(copy));
+    assertEquals(wrappers[0], copy);
+    assertEquals(wrappers[0].hashCode(), copy.hashCode());
+    assertMixedLongStringWrapperConsistentWithGeneral(copy, vhkwb, longCount, stringCount);
+
+    mutateFirstStringValue(batch, typeInfos);
+    for (int i = 0; i < stringCount; i++) {
+      assertTrue(StringExpr.equal(copy.getBytes(i), copy.getByteStart(i), copy.getByteLength(i),
+          stringValues[0][i].getBytes(), 0, stringValues[0][i].getBytes().length));
+      assertFalse(StringExpr.equal(wrappers[0].getBytes(i), wrappers[0].getByteStart(i),
+          wrappers[0].getByteLength(i), copy.getBytes(i), copy.getByteStart(i), copy.getByteLength(i)));
+    }
+
+    wrappers[1].copyKey(copy);
+    assertEquals(wrappers[1], copy);
+    assertMixedLongStringWrapperConsistentWithGeneral(copy, vhkwb, longCount, stringCount);
+  }
+
+  private void assertMixedLongStringNullWrapper(TypeInfo[] typeInfos,
+      Class<? extends VectorHashKeyWrapperBase> expectedWrapperClass, int longCount, int stringCount)
+      throws HiveException {
+    VectorHashKeyWrapperBatch vhkwb = VectorHashKeyWrapperBatch.compileKeyWrapperBatch(
+        identityExpressions(typeInfos.length), typeInfos);
+    VectorizedRowBatch batch = createMixedLongStringBatch(typeInfos, true);
+
+    long[][] longValues = longCount == 2 ?
+        new long[][] {{10, 20}, {10, 20}, {10, 20}, {10, 20}, {10, 20}, {10, 20}} :
+        new long[][] {{10}, {10}, {10}, {10}, {10}, {10}};
+    String[][] stringValues = stringCount == 2 ?
+        new String[][] {{"alpha", "one"}, {"alpha", "one"}, {"alpha", "one"}, {"alpha", "one"},
+            {"alpha", "one"}, {"alpha", "one"}} :
+        new String[][] {{"alpha"}, {"alpha"}, {"alpha"}, {"alpha"}, {"alpha"}, {"alpha"}};
+    boolean[][] isNull = new boolean[][] {
+        {false, false, false},
+        {true, false, false},
+        {false, true, false},
+        {false, false, true},
+        {true, false, false},
+        {true, true, true}};
+    fillMixedLongStringBatch(batch, typeInfos, longValues, stringValues, isNull);
+
+    vhkwb.evaluateBatch(batch);
+    VectorHashKeyWrapperBase[] wrappers = vhkwb.getVectorHashKeyWrappers();
+    for (int i = 0; i < batch.size; i++) {
+      assertTrue(expectedWrapperClass.isInstance(wrappers[i]));
+      assertMixedLongStringWrapperConsistentWithGeneral(wrappers[i], vhkwb, longCount, stringCount);
+      for (int keyIndex = 0; keyIndex < typeInfos.length; keyIndex++) {
+        assertEquals(isNull[i][keyIndex], wrappers[i].isNull(keyIndex));
+      }
+    }
+    assertEquals(wrappers[1], wrappers[4]);
+    assertEquals(wrappers[1].hashCode(), wrappers[4].hashCode());
+    assertFalse(wrappers[0].equals(wrappers[1]));
+    assertFalse(wrappers[0].equals(wrappers[2]));
+    assertFalse(wrappers[0].equals(wrappers[3]));
+    assertFalse(wrappers[0].equals(wrappers[5]));
+  }
+
+  private VectorExpression[] identityExpressions(int count) {
+    VectorExpression[] keyExpressions = new VectorExpression[count];
+    for (int i = 0; i < count; i++) {
+      keyExpressions[i] = new IdentityExpression(i);
+    }
+    return keyExpressions;
+  }
+
+  private VectorizedRowBatch createMixedLongStringBatch(TypeInfo[] typeInfos, boolean mayHaveNulls) {
+    VectorizedRowBatch batch = new VectorizedRowBatch(typeInfos.length);
+    batch.selectedInUse = false;
+    for (int keyIndex = 0; keyIndex < typeInfos.length; keyIndex++) {
+      if (typeInfos[keyIndex] == TypeInfoFactory.longTypeInfo) {
+        LongColumnVector longColumnVector = new LongColumnVector();
+        longColumnVector.noNulls = !mayHaveNulls;
+        batch.cols[keyIndex] = longColumnVector;
+      } else {
+        BytesColumnVector bytesColumnVector = new BytesColumnVector();
+        bytesColumnVector.initBuffer(1024);
+        bytesColumnVector.noNulls = !mayHaveNulls;
+        batch.cols[keyIndex] = bytesColumnVector;
+      }
+    }
+    return batch;
+  }
+
+  private void fillMixedLongStringBatch(VectorizedRowBatch batch, TypeInfo[] typeInfos, long[][] longValues,
+      String[][] stringValues, boolean[][] isNull) {
+    batch.size = longValues.length;
+    for (int row = 0; row < batch.size; row++) {
+      int longIndex = 0;
+      int stringIndex = 0;
+      for (int keyIndex = 0; keyIndex < typeInfos.length; keyIndex++) {
+        if (typeInfos[keyIndex] == TypeInfoFactory.longTypeInfo) {
+          LongColumnVector longColumnVector = (LongColumnVector) batch.cols[keyIndex];
+          longColumnVector.vector[row] = longValues[row][longIndex++];
+          if (isNull != null && isNull[row][keyIndex]) {
+            longColumnVector.isNull[row] = true;
+          }
+        } else {
+          BytesColumnVector bytesColumnVector = (BytesColumnVector) batch.cols[keyIndex];
+          byte[] value = stringValues[row][stringIndex++].getBytes();
+          bytesColumnVector.setVal(row, value);
+          if (isNull != null && isNull[row][keyIndex]) {
+            bytesColumnVector.isNull[row] = true;
+          }
+        }
+      }
+    }
+  }
+
+  private void mutateFirstStringValue(VectorizedRowBatch batch, TypeInfo[] typeInfos) {
+    for (int keyIndex = 0; keyIndex < typeInfos.length; keyIndex++) {
+      if (typeInfos[keyIndex] == TypeInfoFactory.stringTypeInfo) {
+        ((BytesColumnVector) batch.cols[keyIndex]).vector[0][0] = 'z';
+      }
+    }
+  }
+
+  private void assertMixedLongStringWrapperConsistentWithGeneral(
+      VectorHashKeyWrapperBase wrapper, VectorHashKeyWrapperBatch vhkwb, int longCount, int stringCount) {
+    VectorHashKeyWrapperGeneral generalWrapper = new VectorHashKeyWrapperGeneral(
+        new VectorHashKeyWrapperBase.HashContext(), longCount, 0, stringCount, 0, 0, 0,
+        longCount + stringCount);
+    for (int keyIndex = 0; keyIndex < vhkwb.keyCount; keyIndex++) {
+      int typeSpecificIndex = vhkwb.columnTypeSpecificIndices[keyIndex];
+      switch (vhkwb.columnVectorTypes[keyIndex]) {
+      case LONG:
+        if (wrapper.isNull(keyIndex)) {
+          generalWrapper.assignNullLong(keyIndex, typeSpecificIndex);
+        } else {
+          generalWrapper.assignLong(keyIndex, typeSpecificIndex, wrapper.getLongValue(typeSpecificIndex));
+        }
+        break;
+      case BYTES:
+        if (wrapper.isNull(keyIndex)) {
+          generalWrapper.assignNullString(keyIndex, typeSpecificIndex);
+        } else {
+          generalWrapper.assignString(typeSpecificIndex, wrapper.getBytes(typeSpecificIndex),
+              wrapper.getByteStart(typeSpecificIndex), wrapper.getByteLength(typeSpecificIndex));
+        }
+        break;
+      default:
+        throw new RuntimeException("Unexpected column vector type " + vhkwb.columnVectorTypes[keyIndex]);
+      }
+    }
+    generalWrapper.setHashKey();
+
+    for (int keyIndex = 0; keyIndex < vhkwb.keyCount; keyIndex++) {
+      assertEquals(generalWrapper.isNull(keyIndex), wrapper.isNull(keyIndex));
+      int typeSpecificIndex = vhkwb.columnTypeSpecificIndices[keyIndex];
+      switch (vhkwb.columnVectorTypes[keyIndex]) {
+      case LONG:
+        assertEquals(generalWrapper.getLongValue(typeSpecificIndex), wrapper.getLongValue(typeSpecificIndex));
+        break;
+      case BYTES:
+        assertEquals(generalWrapper.getByteStart(typeSpecificIndex), wrapper.getByteStart(typeSpecificIndex));
+        assertEquals(generalWrapper.getByteLength(typeSpecificIndex), wrapper.getByteLength(typeSpecificIndex));
+        if (generalWrapper.isNull(keyIndex)) {
+          assertEquals(generalWrapper.getBytes(typeSpecificIndex), wrapper.getBytes(typeSpecificIndex));
+        } else {
+          assertTrue(StringExpr.equal(generalWrapper.getBytes(typeSpecificIndex),
+              generalWrapper.getByteStart(typeSpecificIndex), generalWrapper.getByteLength(typeSpecificIndex),
+              wrapper.getBytes(typeSpecificIndex), wrapper.getByteStart(typeSpecificIndex),
+              wrapper.getByteLength(typeSpecificIndex)));
+        }
+        break;
+      default:
+        throw new RuntimeException("Unexpected column vector type " + vhkwb.columnVectorTypes[keyIndex]);
+      }
+    }
+    assertEquals(generalWrapper.stringifyKeys(vhkwb), wrapper.stringifyKeys(vhkwb));
+    assertEquals(generalWrapper.toString(), wrapper.toString());
+    assertEquals(generalWrapper.getVariableSize(), wrapper.getVariableSize());
   }
 
   private void assertLongWrapperConsistentWithGeneral(

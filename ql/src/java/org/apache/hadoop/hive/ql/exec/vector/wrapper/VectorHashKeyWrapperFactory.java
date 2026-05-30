@@ -52,6 +52,10 @@ public class VectorHashKeyWrapperFactory {
         } else if (byteValuesCount == 2) {
           return new VectorHashKeyWrapperTwoString(ctx);
         }
+      } else if (longValuesCount == 1 && byteValuesCount == 2) {
+        return new VectorHashKeyWrapperSingleLongTwoString(ctx);
+      } else if (longValuesCount == 2 && byteValuesCount == 1) {
+        return new VectorHashKeyWrapperTwoLongSingleString(ctx);
       }
     }
 
