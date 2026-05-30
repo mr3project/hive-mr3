@@ -34,6 +34,9 @@ public class VectorHashKeyWrapperSingleString extends VectorHashKeyWrapperSingle
   private int start0;
   private int length0;
 
+  private static final int nonNullHashcode = Arrays.hashCode(new boolean[] { false });
+  private static final int singleStringNullHashcode = Arrays.hashCode(new boolean[] { true });
+
   private HashContext hashCtx;
 
   protected VectorHashKeyWrapperSingleString(HashContext ctx) {
@@ -46,14 +49,14 @@ public class VectorHashKeyWrapperSingleString extends VectorHashKeyWrapperSingle
 
   @Override
   public void setHashKey() {
-    if (isNull0) {
-      hashcode = nullHashcode;
-    } else {
+    int hash = isNull0 ? singleStringNullHashcode : nonNullHashcode;
+    if (length0 != -1) {
       Murmur3.IncrementalHash32 bytesHash = HashContext.getBytesHash(hashCtx);
-      bytesHash.start(0);
+      bytesHash.start(hash);
       bytesHash.add(bytes0, start0, length0);
-      hashcode = bytesHash.end();
+      hash = bytesHash.end();
     }
+    hashcode = hash;
   }
 
   @Override
@@ -140,13 +143,12 @@ public class VectorHashKeyWrapperSingleString extends VectorHashKeyWrapperSingle
   public String stringifyKeys(VectorColumnSetInfo columnSetInfo)
   {
     StringBuilder sb = new StringBuilder();
-    sb.append("bytes lengths [");
+    sb.append("byte lengths ");
     if (!isNull0) {
       sb.append(length0);
     } else {
       sb.append("null");
     }
-    sb.append("]");
     return sb.toString();
   }
 
@@ -154,7 +156,7 @@ public class VectorHashKeyWrapperSingleString extends VectorHashKeyWrapperSingle
   public String toString()
   {
     StringBuilder sb = new StringBuilder();
-    sb.append("bytes lengths [");
+    sb.append("byte lengths [");
     sb.append(length0);
     sb.append("], nulls [");
     sb.append(isNull0);
@@ -191,6 +193,6 @@ public class VectorHashKeyWrapperSingleString extends VectorHashKeyWrapperSingle
 
   @Override
   public int getVariableSize() {
-    return isNull0 ? 0 : (int) JavaDataModel.get().lengthForByteArrayOfSize(length0);
+    return (int) JavaDataModel.get().lengthForByteArrayOfSize(length0);
   }
 }
