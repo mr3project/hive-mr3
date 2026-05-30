@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneral;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLong;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLongSingleString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLongTwoString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperThreeLong;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperThreeString;
@@ -691,6 +692,22 @@ public class TestVectorHashKeyWrapperBatch {
   }
 
   @Test
+  public void testVectorHashKeyWrapperSingleLongSingleStringPermutations() throws HiveException {
+    assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.stringTypeInfo},
+        VectorHashKeyWrapperSingleLongSingleString.class, 1, 1);
+    assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.longTypeInfo},
+        VectorHashKeyWrapperSingleLongSingleString.class, 1, 1);
+  }
+
+  @Test
+  public void testVectorHashKeyWrapperSingleLongSingleStringNullPermutations() throws HiveException {
+    assertMixedLongStringNullWrapper(new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.stringTypeInfo},
+        VectorHashKeyWrapperSingleLongSingleString.class, 1, 1);
+    assertMixedLongStringNullWrapper(new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.longTypeInfo},
+        VectorHashKeyWrapperSingleLongSingleString.class, 1, 1);
+  }
+
+  @Test
   public void testVectorHashKeyWrapperTwoLongSingleStringPermutations() throws HiveException {
     assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.longTypeInfo,
         TypeInfoFactory.stringTypeInfo}, VectorHashKeyWrapperTwoLongSingleString.class, 2, 1);
@@ -782,20 +799,30 @@ public class TestVectorHashKeyWrapperBatch {
         identityExpressions(typeInfos.length), typeInfos);
     VectorizedRowBatch batch = createMixedLongStringBatch(typeInfos, true);
 
+    boolean twoKeyShape = typeInfos.length == 2;
     long[][] longValues = longCount == 2 ?
         new long[][] {{10, 20}, {10, 20}, {10, 20}, {10, 20}, {10, 20}, {10, 20}} :
-        new long[][] {{10}, {10}, {10}, {10}, {10}, {10}};
+        (twoKeyShape ? new long[][] {{10}, {10}, {10}, {10}, {10}} :
+            new long[][] {{10}, {10}, {10}, {10}, {10}, {10}});
     String[][] stringValues = stringCount == 2 ?
         new String[][] {{"alpha", "one"}, {"alpha", "one"}, {"alpha", "one"}, {"alpha", "one"},
             {"alpha", "one"}, {"alpha", "one"}} :
-        new String[][] {{"alpha"}, {"alpha"}, {"alpha"}, {"alpha"}, {"alpha"}, {"alpha"}};
-    boolean[][] isNull = new boolean[][] {
-        {false, false, false},
-        {true, false, false},
-        {false, true, false},
-        {false, false, true},
-        {true, false, false},
-        {true, true, true}};
+        (twoKeyShape ? new String[][] {{"alpha"}, {"alpha"}, {"alpha"}, {"alpha"}, {"alpha"}} :
+            new String[][] {{"alpha"}, {"alpha"}, {"alpha"}, {"alpha"}, {"alpha"}, {"alpha"}});
+    boolean[][] isNull = twoKeyShape ?
+        new boolean[][] {
+            {false, false},
+            {true, false},
+            {false, true},
+            {true, false},
+            {true, true}} :
+        new boolean[][] {
+            {false, false, false},
+            {true, false, false},
+            {false, true, false},
+            {false, false, true},
+            {true, false, false},
+            {true, true, true}};
     fillMixedLongStringBatch(batch, typeInfos, longValues, stringValues, isNull);
 
     vhkwb.evaluateBatch(batch);
