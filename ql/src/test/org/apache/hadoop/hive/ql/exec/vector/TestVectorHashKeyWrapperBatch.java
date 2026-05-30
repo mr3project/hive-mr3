@@ -35,6 +35,7 @@ import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleS
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLong;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLongTwoString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperThreeLong;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperThreeString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperTwoLong;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperTwoLongSingleString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperTwoString;
@@ -344,6 +345,166 @@ public class TestVectorHashKeyWrapperBatch {
     assertFalse(vhkwArray[0].equals(vhkwArray[1]));
     assertFalse(vhkwArray[0].equals(vhkwArray[2]));
     assertFalse(vhkwArray[0].equals(vhkwArray[3]));
+  }
+
+  @Test
+  public void testVectorHashKeyWrapperThreeString() throws HiveException {
+    VectorExpression[] keyExpressions = new VectorExpression[] { new IdentityExpression(0),
+        new IdentityExpression(1), new IdentityExpression(2) };
+    TypeInfo[] typeInfos = new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.stringTypeInfo,
+        TypeInfoFactory.stringTypeInfo};
+    VectorHashKeyWrapperBatch vhkwb = VectorHashKeyWrapperBatch.compileKeyWrapperBatch(
+        keyExpressions,
+        typeInfos);
+
+    VectorizedRowBatch batch = new VectorizedRowBatch(3);
+    batch.selectedInUse = false;
+    BytesColumnVector firstColumnVector = new BytesColumnVector();
+    firstColumnVector.initBuffer(1024);
+    BytesColumnVector secondColumnVector = new BytesColumnVector();
+    secondColumnVector.initBuffer(1024);
+    BytesColumnVector thirdColumnVector = new BytesColumnVector();
+    thirdColumnVector.initBuffer(1024);
+    batch.cols[0] = firstColumnVector;
+    batch.cols[1] = secondColumnVector;
+    batch.cols[2] = thirdColumnVector;
+
+    byte[] alpha = "alpha".getBytes();
+    byte[] beta = "beta".getBytes();
+    byte[] one = "one".getBytes();
+    byte[] two = "two".getBytes();
+    byte[] red = "red".getBytes();
+    byte[] blue = "blue".getBytes();
+    firstColumnVector.setVal(0, alpha);
+    secondColumnVector.setVal(0, one);
+    thirdColumnVector.setVal(0, red);
+    firstColumnVector.setVal(1, alpha);
+    secondColumnVector.setVal(1, two);
+    thirdColumnVector.setVal(1, red);
+    firstColumnVector.setVal(2, alpha);
+    secondColumnVector.setVal(2, one);
+    thirdColumnVector.setVal(2, red);
+    firstColumnVector.setVal(3, beta);
+    secondColumnVector.setVal(3, one);
+    thirdColumnVector.setVal(3, red);
+    firstColumnVector.setVal(4, alpha);
+    secondColumnVector.setVal(4, one);
+    thirdColumnVector.setVal(4, blue);
+    batch.size = 5;
+
+    vhkwb.evaluateBatch(batch);
+    VectorHashKeyWrapperBase[] vhkwArray = vhkwb.getVectorHashKeyWrappers();
+    for (int i = 0; i < batch.size; i++) {
+      assertTrue(vhkwArray[i] instanceof VectorHashKeyWrapperThreeString);
+      assertStringWrapperConsistentWithGeneral(vhkwArray[i], vhkwb, 3);
+    }
+    assertEquals(vhkwArray[0], vhkwArray[2]);
+    assertEquals(vhkwArray[0].hashCode(), vhkwArray[2].hashCode());
+    assertFalse(vhkwArray[0].equals(vhkwArray[1]));
+    assertFalse(vhkwArray[0].equals(vhkwArray[3]));
+    assertFalse(vhkwArray[0].equals(vhkwArray[4]));
+
+    VectorHashKeyWrapperBase copy = (VectorHashKeyWrapperBase) vhkwArray[0].copyKey();
+    assertTrue(copy instanceof VectorHashKeyWrapperThreeString);
+    assertEquals(vhkwArray[0], copy);
+    assertEquals(vhkwArray[0].hashCode(), copy.hashCode());
+    assertStringWrapperConsistentWithGeneral(copy, vhkwb, 3);
+
+    firstColumnVector.vector[0][0] = 'z';
+    secondColumnVector.vector[0][0] = 'z';
+    thirdColumnVector.vector[0][0] = 'z';
+    assertTrue(StringExpr.equal(copy.getBytes(0), copy.getByteStart(0), copy.getByteLength(0),
+        alpha, 0, alpha.length));
+    assertTrue(StringExpr.equal(copy.getBytes(1), copy.getByteStart(1), copy.getByteLength(1),
+        one, 0, one.length));
+    assertTrue(StringExpr.equal(copy.getBytes(2), copy.getByteStart(2), copy.getByteLength(2),
+        red, 0, red.length));
+    assertFalse(StringExpr.equal(vhkwArray[0].getBytes(0), vhkwArray[0].getByteStart(0),
+        vhkwArray[0].getByteLength(0), copy.getBytes(0), copy.getByteStart(0), copy.getByteLength(0)));
+    assertFalse(StringExpr.equal(vhkwArray[0].getBytes(1), vhkwArray[0].getByteStart(1),
+        vhkwArray[0].getByteLength(1), copy.getBytes(1), copy.getByteStart(1), copy.getByteLength(1)));
+    assertFalse(StringExpr.equal(vhkwArray[0].getBytes(2), vhkwArray[0].getByteStart(2),
+        vhkwArray[0].getByteLength(2), copy.getBytes(2), copy.getByteStart(2), copy.getByteLength(2)));
+
+    vhkwArray[1].copyKey(copy);
+    assertEquals(vhkwArray[1], copy);
+    assertTrue(StringExpr.equal(copy.getBytes(0), copy.getByteStart(0), copy.getByteLength(0),
+        alpha, 0, alpha.length));
+    assertTrue(StringExpr.equal(copy.getBytes(1), copy.getByteStart(1), copy.getByteLength(1),
+        two, 0, two.length));
+    assertTrue(StringExpr.equal(copy.getBytes(2), copy.getByteStart(2), copy.getByteLength(2),
+        red, 0, red.length));
+    assertStringWrapperConsistentWithGeneral(copy, vhkwb, 3);
+  }
+
+  @Test
+  public void testVectorHashKeyWrapperThreeStringNull() throws HiveException {
+    VectorExpression[] keyExpressions = new VectorExpression[] { new IdentityExpression(0),
+        new IdentityExpression(1), new IdentityExpression(2) };
+    TypeInfo[] typeInfos = new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.stringTypeInfo,
+        TypeInfoFactory.stringTypeInfo};
+    VectorHashKeyWrapperBatch vhkwb = VectorHashKeyWrapperBatch.compileKeyWrapperBatch(
+        keyExpressions,
+        typeInfos);
+
+    VectorizedRowBatch batch = new VectorizedRowBatch(3);
+    batch.selectedInUse = false;
+    BytesColumnVector firstColumnVector = new BytesColumnVector();
+    firstColumnVector.initBuffer(1024);
+    firstColumnVector.noNulls = false;
+    BytesColumnVector secondColumnVector = new BytesColumnVector();
+    secondColumnVector.initBuffer(1024);
+    secondColumnVector.noNulls = false;
+    BytesColumnVector thirdColumnVector = new BytesColumnVector();
+    thirdColumnVector.initBuffer(1024);
+    thirdColumnVector.noNulls = false;
+    batch.cols[0] = firstColumnVector;
+    batch.cols[1] = secondColumnVector;
+    batch.cols[2] = thirdColumnVector;
+
+    firstColumnVector.setVal(0, "left".getBytes());
+    secondColumnVector.setVal(0, "middle".getBytes());
+    thirdColumnVector.setVal(0, "right".getBytes());
+    firstColumnVector.isNull[1] = true;
+    secondColumnVector.setVal(1, "middle".getBytes());
+    thirdColumnVector.setVal(1, "right".getBytes());
+    firstColumnVector.setVal(2, "left".getBytes());
+    secondColumnVector.isNull[2] = true;
+    thirdColumnVector.setVal(2, "right".getBytes());
+    firstColumnVector.setVal(3, "left".getBytes());
+    secondColumnVector.setVal(3, "middle".getBytes());
+    thirdColumnVector.isNull[3] = true;
+    firstColumnVector.isNull[4] = true;
+    secondColumnVector.setVal(4, "middle".getBytes());
+    thirdColumnVector.setVal(4, "right".getBytes());
+    firstColumnVector.isNull[5] = true;
+    secondColumnVector.isNull[5] = true;
+    thirdColumnVector.isNull[5] = true;
+    batch.size = 6;
+
+    vhkwb.evaluateBatch(batch);
+    VectorHashKeyWrapperBase[] vhkwArray = vhkwb.getVectorHashKeyWrappers();
+    for (int i = 0; i < batch.size; i++) {
+      assertTrue(vhkwArray[i] instanceof VectorHashKeyWrapperThreeString);
+      assertStringWrapperConsistentWithGeneral(vhkwArray[i], vhkwb, 3);
+    }
+    assertFalse(vhkwArray[0].isNull(0));
+    assertFalse(vhkwArray[0].isNull(1));
+    assertFalse(vhkwArray[0].isNull(2));
+    assertTrue(vhkwArray[1].isNull(0));
+    assertFalse(vhkwArray[1].isNull(1));
+    assertFalse(vhkwArray[1].isNull(2));
+    assertFalse(vhkwArray[2].isNull(0));
+    assertTrue(vhkwArray[2].isNull(1));
+    assertFalse(vhkwArray[2].isNull(2));
+    assertFalse(vhkwArray[3].isNull(0));
+    assertFalse(vhkwArray[3].isNull(1));
+    assertTrue(vhkwArray[3].isNull(2));
+    assertEquals(vhkwArray[1], vhkwArray[4]);
+    assertFalse(vhkwArray[0].equals(vhkwArray[1]));
+    assertFalse(vhkwArray[0].equals(vhkwArray[2]));
+    assertFalse(vhkwArray[0].equals(vhkwArray[3]));
+    assertFalse(vhkwArray[0].equals(vhkwArray[5]));
   }
 
   @Test
