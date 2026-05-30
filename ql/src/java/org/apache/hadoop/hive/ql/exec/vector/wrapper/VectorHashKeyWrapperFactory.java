@@ -44,6 +44,8 @@ public class VectorHashKeyWrapperFactory {
         } else if (longValuesCount == 0) {
           return VectorHashKeyWrapperEmpty.EMPTY_KEY_WRAPPER;
         }
+      } else if (longValuesCount == 0 && byteValuesCount == 1) {
+        return new VectorHashKeyWrapperSingleString(ctx);
       }
     }
 
