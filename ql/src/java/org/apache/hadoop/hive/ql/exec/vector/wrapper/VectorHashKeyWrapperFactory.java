@@ -41,6 +41,8 @@ public class VectorHashKeyWrapperFactory {
           return new VectorHashKeyWrapperSingleLong();
         } else if (longValuesCount == 2) {
           return new VectorHashKeyWrapperTwoLong();
+        } else if (longValuesCount == 3) {
+          return new VectorHashKeyWrapperThreeLong();
         } else if (longValuesCount == 0) {
           return VectorHashKeyWrapperEmpty.EMPTY_KEY_WRAPPER;
         }
