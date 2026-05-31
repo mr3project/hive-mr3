@@ -150,6 +150,12 @@ public class ListColumnVector extends MultiValuedColumnVector {
   }
 
   @Override
+  public void resetInit() {
+    super.resetInit();
+    child.resetInit();
+  }
+
+  @Override
   public void unFlatten() {
     super.unFlatten();
     if (!isRepeating || noNulls || !isNull[0]) {
