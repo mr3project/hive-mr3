@@ -99,7 +99,7 @@ public abstract class ColumnVector {
    *  - sets noNulls to true
    *  - sets isRepeating to false
    */
-  private void resetBase() {
+  public void reset() {
     assert (refCount.get() == 0);
     if (!noNulls) {
       Arrays.fill(isNull, false);
@@ -110,10 +110,6 @@ public abstract class ColumnVector {
     preFlattenIsRepeating = false;
   }
 
-  public void reset() {
-    resetBase();
-  }
-
   /**
    * Reset and initialize the column vector for callers that would otherwise invoke reset() followed
    * by init(). Subclasses that override reset() or init() should override this method to combine
@@ -121,7 +117,14 @@ public abstract class ColumnVector {
    * no-op, so this method only performs the base reset work.
    */
   public void resetInit() {
-    resetBase();
+    assert (refCount.get() == 0);
+    if (!noNulls) {
+      Arrays.fill(isNull, false);
+    }
+    noNulls = true;
+    isRepeating = false;
+    preFlattenNoNulls = true;
+    preFlattenIsRepeating = false;
   }
 
 
