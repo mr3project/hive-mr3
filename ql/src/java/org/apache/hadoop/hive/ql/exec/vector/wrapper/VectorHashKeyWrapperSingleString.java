@@ -114,7 +114,7 @@ public class VectorHashKeyWrapperSingleString extends VectorHashKeyWrapperSingle
   @Override
   public void assignString(int index, byte[] bytes, int start, int length) {
     if (index == 0) {
-      Preconditions.checkState(bytes != null);
+      assert (bytes != null);
       isNull0 = false;
       bytes0 = bytes;
       start0 = start;
