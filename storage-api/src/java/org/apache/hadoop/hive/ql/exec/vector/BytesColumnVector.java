@@ -102,6 +102,12 @@ public class BytesColumnVector extends ColumnVector {
     initBuffer(0);
   }
 
+  @Override
+  public void resetInit() {
+    super.resetInit();
+    initBuffer(0);
+  }
+
   /**
    * Set a field by reference.
    *

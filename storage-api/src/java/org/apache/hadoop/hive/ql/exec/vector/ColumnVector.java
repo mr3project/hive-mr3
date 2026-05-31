@@ -99,7 +99,7 @@ public abstract class ColumnVector {
    *  - sets noNulls to true
    *  - sets isRepeating to false
    */
-  public void reset() {
+  private void resetBase() {
     assert (refCount.get() == 0);
     if (!noNulls) {
       Arrays.fill(isNull, false);
@@ -108,6 +108,20 @@ public abstract class ColumnVector {
     isRepeating = false;
     preFlattenNoNulls = true;
     preFlattenIsRepeating = false;
+  }
+
+  public void reset() {
+    resetBase();
+  }
+
+  /**
+   * Reset and initialize the column vector for callers that would otherwise invoke reset() followed
+   * by init(). Subclasses that override reset() or init() should override this method to combine
+   * their reset and initialization work without duplicate calls. The base init() implementation is a
+   * no-op, so this method only performs the base reset work.
+   */
+  public void resetInit() {
+    resetBase();
   }
 
 

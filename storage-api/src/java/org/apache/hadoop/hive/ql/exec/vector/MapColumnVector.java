@@ -164,6 +164,13 @@ public class MapColumnVector extends MultiValuedColumnVector {
   }
 
   @Override
+  public void resetInit() {
+    super.resetInit();
+    keys.resetInit();
+    values.resetInit();
+  }
+
+  @Override
   public void unFlatten() {
     super.unFlatten();
     if (!isRepeating || noNulls || !isNull[0]) {
