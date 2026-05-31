@@ -420,7 +420,7 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
 
   @Override
   public void assignString(int index, byte[] bytes, int start, int length) {
-    Preconditions.checkState(bytes != null);
+    assert (bytes != null);
     byteValues[index] = bytes;
     byteStarts[index] = start;
     byteLengths[index] = length;
