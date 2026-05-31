@@ -653,8 +653,8 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         return 0;
       }
       int avgAccess = (int) (totalAccessCount / numEntriesHashTable);
-      LOG.debug("totalAccessCount:{}, numEntries:{}, avgAccess:{}",
-          totalAccessCount, numEntriesHashTable, avgAccess);
+      /* if (LOG.isDebugEnabled()) { LOG.debug("totalAccessCount:{}, numEntries:{}, avgAccess:{}",
+          totalAccessCount, numEntriesHashTable, avgAccess); } */
       return avgAccess;
     }
 
