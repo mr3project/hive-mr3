@@ -199,7 +199,7 @@ public class VectorHashKeyWrapperSingleLongTwoString extends VectorHashKeyWrappe
 
   @Override
   public void assignString(int index, byte[] bytes, int start, int length) {
-    Preconditions.checkState(bytes != null);
+    assert (bytes != null);
     if (index == 0) {
       bytes0 = bytes;
       start0 = start;
