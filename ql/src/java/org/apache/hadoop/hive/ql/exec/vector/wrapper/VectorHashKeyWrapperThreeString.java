@@ -195,7 +195,7 @@ public class VectorHashKeyWrapperThreeString extends VectorHashKeyWrapperBase {
 
   @Override
   public void assignString(int index, byte[] bytes, int start, int length) {
-    Preconditions.checkState(bytes != null);
+    assert (bytes != null);
     if (index == 0) {
       isNull0 = false;
       bytes0 = bytes;
