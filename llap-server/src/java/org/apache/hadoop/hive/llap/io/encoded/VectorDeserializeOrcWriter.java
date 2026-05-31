@@ -335,8 +335,7 @@ class VectorDeserializeOrcWriter extends EncodingWriter implements Runnable {
         // This resets vectors in both batches.
         ColumnVector colVector = sourceBatch.cols[c];
         if (colVector != null) {
-          colVector.reset();
-          colVector.init();
+          colVector.resetInit();
         }
       }
       sourceBatch.selectedInUse = false;
