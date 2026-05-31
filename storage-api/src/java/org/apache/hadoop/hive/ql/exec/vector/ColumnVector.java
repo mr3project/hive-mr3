@@ -110,6 +110,22 @@ public abstract class ColumnVector {
     preFlattenIsRepeating = false;
   }
 
+  /**
+   * Reset and initialize the column vector for callers that would otherwise invoke reset() followed
+   * by init(). Subclasses that override reset() or init() should override this method to combine
+   * their reset and initialization work without duplicate calls. The base init() implementation is a
+   * no-op, so this method only performs the base reset work.
+   */
+  public void resetInit() {
+    if (!noNulls) {
+      Arrays.fill(isNull, false);
+    }
+    noNulls = true;
+    isRepeating = false;
+    preFlattenNoNulls = true;
+    preFlattenIsRepeating = false;
+  }
+
 
   public final void incRef() {
     refCount.incrementAndGet();
