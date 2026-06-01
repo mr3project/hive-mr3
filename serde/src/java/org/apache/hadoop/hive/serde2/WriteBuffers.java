@@ -25,6 +25,7 @@ import org.apache.hadoop.hive.common.MemoryEstimate;
 import org.apache.hadoop.hive.ql.util.JavaDataModel;
 import org.apache.hadoop.hive.serde2.ByteStream.RandomAccessOutput;
 import org.apache.hive.common.util.HashCodeUtil;
+import org.apache.tez.util.FastByteComparisons;
 
 import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
 import static org.apache.tez.util.FastByteComparisons.theUnsafe;
@@ -306,14 +307,11 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
         leftFrom = getOffset(leftOffset), rightFrom = getOffset(rightOffset);
     byte[] leftBuffer = writeBuffers.get(leftIndex), rightBuffer = writeBuffers.get(rightIndex);
     if (leftFrom + leftLength <= wbSize && rightFrom + rightLength <= wbSize) {
-      for (int i = 0; i < leftLength; ++i) {
-        if (leftBuffer[leftFrom + i] != rightBuffer[rightFrom + i]) {
-          return false;
-        }
-      }
-      return true;
+      return FastByteComparisons.compareEqual(
+          leftBuffer, leftFrom, leftLength, rightBuffer, rightFrom, rightLength);
     }
-    for (int i = 0; i < leftLength; ++i) {
+    int length = leftLength;
+    while (length > 0) {
       if (leftFrom == wbSize) {
         ++leftIndex;
         leftBuffer = writeBuffers.get(leftIndex);
@@ -324,9 +322,14 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
         rightBuffer = writeBuffers.get(rightIndex);
         rightFrom = 0;
       }
-      if (leftBuffer[leftFrom++] != rightBuffer[rightFrom++]) {
+      int chunkLength = Math.min(length, Math.min(wbSize - leftFrom, wbSize - rightFrom));
+      if (!FastByteComparisons.compareEqual(
+          leftBuffer, leftFrom, chunkLength, rightBuffer, rightFrom, chunkLength)) {
         return false;
       }
+      leftFrom += chunkLength;
+      rightFrom += chunkLength;
+      length -= chunkLength;
     }
     return true;
   }
@@ -339,27 +342,22 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
     // rightOffset is within the buffers
     byte[] rightBuffer = writeBuffers.get(rightIndex);
     if (rightFrom + length <= wbSize) {
-      // TODO: allow using unsafe optionally.
-      // bounds check first, to trigger bugs whether the first byte matches or not
-      if (left[leftOffset + length - 1] != rightBuffer[rightFrom + length - 1]) {
-        return false;
-      }
-      for (int i = 0; i < length; ++i) {
-        if (left[leftOffset + i] != rightBuffer[rightFrom + i]) {
-          return false;
-        }
-      }
-      return true;
+      return FastByteComparisons.compareEqual(left, leftOffset, length, rightBuffer, rightFrom, length);
     }
-    for (int i = 0; i < length; ++i) {
+    int remaining = length;
+    while (remaining > 0) {
       if (rightFrom == wbSize) {
         ++rightIndex;
         rightBuffer = writeBuffers.get(rightIndex);
         rightFrom = 0;
       }
-      if (left[leftOffset + i] != rightBuffer[rightFrom++]) {
+      int chunkLength = Math.min(remaining, wbSize - rightFrom);
+      if (!FastByteComparisons.compareEqual(left, leftOffset, chunkLength, rightBuffer, rightFrom, chunkLength)) {
         return false;
       }
+      leftOffset += chunkLength;
+      rightFrom += chunkLength;
+      remaining -= chunkLength;
     }
     return true;
   }
