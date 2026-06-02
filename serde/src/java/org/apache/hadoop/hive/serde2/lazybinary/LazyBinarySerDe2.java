@@ -249,7 +249,7 @@ public class LazyBinarySerDe2 extends LazyBinarySerDe {
         boolean skipLengthPrefix, BooleanRef warnedOnceNullMapKey) {
       IntObjectInspector ioi = (IntObjectInspector) objInspector;
       int v = ioi.get(obj);
-      LazyBinaryUtils.writeVInt(byteStream, v);
+      byteStream.appendInt(v);
     }
   }
 
@@ -259,7 +259,7 @@ public class LazyBinarySerDe2 extends LazyBinarySerDe {
         boolean skipLengthPrefix, BooleanRef warnedOnceNullMapKey) {
       LongObjectInspector loi = (LongObjectInspector) objInspector;
       long v = loi.get(obj);
-      LazyBinaryUtils.writeVLong(byteStream, v);
+      byteStream.appendLong(v);
       return;
     }
   }

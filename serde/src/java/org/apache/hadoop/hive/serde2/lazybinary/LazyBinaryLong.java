@@ -18,14 +18,11 @@
 package org.apache.hadoop.hive.serde2.lazybinary;
 
 import org.apache.hadoop.hive.serde2.lazy.ByteArrayRef;
-import org.apache.hadoop.hive.serde2.lazybinary.LazyBinaryUtils.VLong;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableLongObjectInspector;
 import org.apache.hadoop.io.LongWritable;
 
 /**
- * LazyBinaryObject for long which stores as VLong.
- * 
- * @see LazyBinaryUtils#readVLong(byte[], int, VLong)
+ * LazyBinaryObject for long which is serialized as a fixed-width long.
  */
 public class LazyBinaryLong extends
     LazyBinaryPrimitive<WritableLongObjectInspector, LongWritable> {
@@ -40,15 +37,9 @@ public class LazyBinaryLong extends
     data = new LongWritable(copy.data.get());
   }
 
-  /**
-   * The reusable vLong for decoding the long.
-   */
-  VLong vLong = new LazyBinaryUtils.VLong();
-
   @Override
   public void init(ByteArrayRef bytes, int start, int length) {
-    LazyBinaryUtils.readVLong(bytes.getData(), start, vLong);
-    assert (length == vLong.length);
-    data.set(vLong.value);
+    assert (length == Long.BYTES);
+    data.set(LazyBinaryUtils.byteArrayToLong(bytes.getData(), start));
   }
 }

@@ -452,13 +452,13 @@ public class LazyBinarySerDe extends AbstractSerDe {
       case INT: {
         IntObjectInspector ioi = (IntObjectInspector) poi;
         int v = ioi.get(obj);
-        LazyBinaryUtils.writeVInt(byteStream, v);
+        byteStream.appendInt(v);
         return;
       }
       case LONG: {
         LongObjectInspector loi = (LongObjectInspector) poi;
         long v = loi.get(obj);
-        LazyBinaryUtils.writeVLong(byteStream, v);
+        byteStream.appendLong(v);
         return;
       }
       case FLOAT: {

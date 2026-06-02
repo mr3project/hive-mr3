@@ -168,11 +168,11 @@ public final class LazyBinaryUtils {
         break;
       case INT:
         recordInfo.elementOffset = 0;
-        recordInfo.elementSize = WritableUtils.decodeVIntSize(bytes[offset]);
+        recordInfo.elementSize = Integer.BYTES;
         break;
       case LONG:
         recordInfo.elementOffset = 0;
-        recordInfo.elementSize = WritableUtils.decodeVIntSize(bytes[offset]);
+        recordInfo.elementSize = Long.BYTES;
         break;
       case STRING:
         // using vint instead of 4 bytes

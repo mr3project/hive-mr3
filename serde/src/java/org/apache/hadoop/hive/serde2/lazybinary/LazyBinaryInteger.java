@@ -18,14 +18,11 @@
 package org.apache.hadoop.hive.serde2.lazybinary;
 
 import org.apache.hadoop.hive.serde2.lazy.ByteArrayRef;
-import org.apache.hadoop.hive.serde2.lazybinary.LazyBinaryUtils.VInt;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableIntObjectInspector;
 import org.apache.hadoop.io.IntWritable;
 
 /**
- * LazyBinaryObject for integer which is serialized as VInt.
- * 
- * @see LazyBinaryUtils#readVInt(byte[], int, VInt)
+ * LazyBinaryObject for integer which is serialized as a fixed-width int.
  */
 public class LazyBinaryInteger extends
     LazyBinaryPrimitive<WritableIntObjectInspector, IntWritable> {
@@ -40,15 +37,9 @@ public class LazyBinaryInteger extends
     data = new IntWritable(copy.data.get());
   }
 
-  /**
-   * The reusable vInt for decoding the integer.
-   */
-  VInt vInt = new LazyBinaryUtils.VInt();
-
   @Override
   public void init(ByteArrayRef bytes, int start, int length) {
-    LazyBinaryUtils.readVInt(bytes.getData(), start, vInt);
-    assert (length == vInt.length);
-    data.set(vInt.value);
+    assert (length == Integer.BYTES);
+    data.set(LazyBinaryUtils.byteArrayToInt(bytes.getData(), start));
   }
 }
