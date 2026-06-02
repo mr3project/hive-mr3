@@ -246,7 +246,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeInt(int v) throws IOException {
     beginElement();
-    writeVInt(v);
+    output.appendInt(v);
     finishElement();
   }
 
@@ -256,7 +256,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeLong(long v) throws IOException {
     beginElement();
-    writeVLong(v);
+    output.appendLong(v);
     finishElement();
   }
 

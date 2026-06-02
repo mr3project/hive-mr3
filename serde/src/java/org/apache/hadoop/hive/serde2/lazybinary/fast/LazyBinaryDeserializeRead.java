@@ -285,22 +285,20 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
       offset += 2;
       break;
     case INT:
-      // Parse the first byte of a vint/vlong to determine the number of bytes.
-      if (offset + WritableUtils.decodeVIntSize(bytes[offset]) > end) {
+      // Last item -- ok to be at end.
+      if (offset + Integer.BYTES > end) {
         throw new EOFException();
       }
-      LazyBinaryUtils.readVInt(bytes, offset, tempVInt);
-      offset += tempVInt.length;
-      currentInt = tempVInt.value;
+      currentInt = LazyBinaryUtils.byteArrayToInt(bytes, offset);
+      offset += Integer.BYTES;
       break;
     case LONG:
-      // Parse the first byte of a vint/vlong to determine the number of bytes.
-      if (offset + WritableUtils.decodeVIntSize(bytes[offset]) > end) {
+      // Last item -- ok to be at end.
+      if (offset + Long.BYTES > end) {
         throw new EOFException();
       }
-      LazyBinaryUtils.readVLong(bytes, offset, tempVLong);
-      offset += tempVLong.length;
-      currentLong = tempVLong.value;
+      currentLong = LazyBinaryUtils.byteArrayToLong(bytes, offset);
+      offset += Long.BYTES;
       break;
     case FLOAT:
       // Last item -- ok to be at end.
