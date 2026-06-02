@@ -66,9 +66,6 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
   private int end;
 
   private boolean skipLengthPrefix = false;
-  // Preserve the standard LazyBinary VInt/VLong format unless the caller explicitly opts into
-  // the experimental fixed-width INT/LONG encoding.
-  private final boolean useFixedLengthIntLong;
 
   // Object to receive results of reading a decoded variable length int or long.
   private VInt tempVInt;
@@ -100,23 +97,12 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
   }
 
   public LazyBinaryDeserializeRead(TypeInfo[] typeInfos, boolean useExternalBuffer) {
-    this(typeInfos, null, useExternalBuffer, false);
-  }
-
-  public LazyBinaryDeserializeRead(TypeInfo[] typeInfos, boolean useExternalBuffer,
-      boolean useFixedLengthIntLong) {
-    this(typeInfos, null, useExternalBuffer, useFixedLengthIntLong);
+    this(typeInfos, null, useExternalBuffer);
   }
 
   public LazyBinaryDeserializeRead(TypeInfo[] typeInfos, DataTypePhysicalVariation[] dataTypePhysicalVariations,
       boolean useExternalBuffer) {
-    this(typeInfos, dataTypePhysicalVariations, useExternalBuffer, false);
-  }
-
-  public LazyBinaryDeserializeRead(TypeInfo[] typeInfos, DataTypePhysicalVariation[] dataTypePhysicalVariations,
-      boolean useExternalBuffer, boolean useFixedLengthIntLong) {
     super(typeInfos, dataTypePhysicalVariations, useExternalBuffer);
-    this.useFixedLengthIntLong = useFixedLengthIntLong;
     tempVInt = new VInt();
     tempVLong = new VLong();
     currentExternalBufferNeeded = false;
@@ -299,40 +285,20 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
       offset += 2;
       break;
     case INT:
-      if (useFixedLengthIntLong) {
-        // Last item -- ok to be at end.
-        if (offset + Integer.BYTES > end) {
-          throw new EOFException();
-        }
-        currentInt = LazyBinaryUtils.byteArrayToInt(bytes, offset);
-        offset += Integer.BYTES;
-      } else {
-        // Parse the first byte of a vint/vlong to determine the number of bytes.
-        if (offset + WritableUtils.decodeVIntSize(bytes[offset]) > end) {
-          throw new EOFException();
-        }
-        LazyBinaryUtils.readVInt(bytes, offset, tempVInt);
-        offset += tempVInt.length;
-        currentInt = tempVInt.value;
+      // Last item -- ok to be at end.
+      if (offset + Integer.BYTES > end) {
+        throw new EOFException();
       }
+      currentInt = LazyBinaryUtils.byteArrayToInt(bytes, offset);
+      offset += Integer.BYTES;
       break;
     case LONG:
-      if (useFixedLengthIntLong) {
-        // Last item -- ok to be at end.
-        if (offset + Long.BYTES > end) {
-          throw new EOFException();
-        }
-        currentLong = LazyBinaryUtils.byteArrayToLong(bytes, offset);
-        offset += Long.BYTES;
-      } else {
-        // Parse the first byte of a vint/vlong to determine the number of bytes.
-        if (offset + WritableUtils.decodeVIntSize(bytes[offset]) > end) {
-          throw new EOFException();
-        }
-        LazyBinaryUtils.readVLong(bytes, offset, tempVLong);
-        offset += tempVLong.length;
-        currentLong = tempVLong.value;
+      // Last item -- ok to be at end.
+      if (offset + Long.BYTES > end) {
+        throw new EOFException();
       }
+      currentLong = LazyBinaryUtils.byteArrayToLong(bytes, offset);
+      offset += Long.BYTES;
       break;
     case FLOAT:
       // Last item -- ok to be at end.
