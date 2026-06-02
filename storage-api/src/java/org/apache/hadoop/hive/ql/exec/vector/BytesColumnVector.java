@@ -144,10 +144,8 @@ public class BytesColumnVector extends ColumnVector {
     if (sharedBuffer != null) {
       // Free up any previously allocated buffers that are referenced by vector
       if (bufferAllocationCount > 0) {
-        for (int idx = 0; idx < vector.length; ++idx) {
-          vector[idx] = null;
-          length[idx] = 0;
-        }
+        Arrays.fill(vector, null);
+        Arrays.fill(length, 0);
       }
     } else {
       // allocate a little extra space to limit need to re-allocate

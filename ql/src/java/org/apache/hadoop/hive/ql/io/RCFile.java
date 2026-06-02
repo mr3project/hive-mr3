@@ -642,9 +642,7 @@ public class RCFile {
         skippedColIDs = skippedCols;
       } else {
         skippedColIDs = new boolean[columnNumber];
-        for (int i = 0; i < skippedColIDs.length; i++) {
-          skippedColIDs[i] = false;
-        }
+        Arrays.fill(skippedColIDs, false);
       }
 
       int skipped = 0;

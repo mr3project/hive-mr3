@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hive.ql.optimizer.calcite.reloperators;
 
+import java.util.Arrays;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.SqlCall;
@@ -90,9 +91,7 @@ public class HiveBetween extends SqlSpecialOperator {
 
           RelDataTypeFactory typeFactory = callBinding.getTypeFactory();
           operandTypes[0] = typeFactory.createSqlType(SqlTypeName.BOOLEAN);
-          for (int i = 1; i < operandTypes.length; ++i) {
-            operandTypes[i] = knownType;
-          }
+          Arrays.fill(operandTypes, 1, operandTypes.length, knownType);
         }
       };
 

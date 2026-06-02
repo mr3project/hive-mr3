@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.hive.ql.exec.vector;
 
+import java.util.Arrays;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
@@ -212,10 +214,8 @@ public class VectorExpressionDescriptor {
     private int argCount = 0;
 
     public Builder() {
-      for (int i = 0 ; i < MAX_NUM_ARGUMENTS; i++) {
-        argTypes[i] = ArgumentType.NONE;
-        exprTypes[i] = InputExpressionType.NONE;
-      }
+      Arrays.fill(argTypes, ArgumentType.NONE);
+      Arrays.fill(exprTypes, InputExpressionType.NONE);
     }
 
     public Builder setMode(Mode m) {

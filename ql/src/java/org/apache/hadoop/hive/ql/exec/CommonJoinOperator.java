@@ -739,9 +739,7 @@ public abstract class CommonJoinOperator<T extends JoinDesc> extends
         // results, we need to take that record, replace the right side with NULL
         // values, and produce the records
         int i = numAliases - 1;
-        for (int j = offsets[i]; j < offsets[i + 1]; j++) {
-          forwardCache[j] = null;
-        }
+        Arrays.fill(forwardCache, offsets[i], offsets[i + 1], null);
         internalForward(forwardCache, outputObjInspector);
         countAfterReport = 0;
       }

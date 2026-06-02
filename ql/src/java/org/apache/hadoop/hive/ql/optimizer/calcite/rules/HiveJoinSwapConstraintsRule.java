@@ -17,6 +17,7 @@
 package org.apache.hadoop.hive.ql.optimizer.calcite.rules;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import org.apache.calcite.plan.RelOptRule;
@@ -213,17 +214,9 @@ public class HiveJoinSwapConstraintsRule extends RelOptRule {
       int nFieldsZ,
       int adjustY,
       int adjustZ) {
-    for (int i = 0; i < nFieldsX; i++) {
-      adjustments[i] = 0;
-    }
-    for (int i = nFieldsX; i < (nFieldsX + nFieldsY); i++) {
-      adjustments[i] = adjustY;
-    }
-    for (int i = nFieldsX + nFieldsY;
-         i < (nFieldsX + nFieldsY + nFieldsZ);
-         i++) {
-      adjustments[i] = adjustZ;
-    }
+    Arrays.fill(adjustments, 0, nFieldsX, 0);
+    Arrays.fill(adjustments, nFieldsX, nFieldsX + nFieldsY, adjustY);
+    Arrays.fill(adjustments, nFieldsX + nFieldsY, nFieldsX + nFieldsY + nFieldsZ, adjustZ);
   }
 
 }

@@ -22,6 +22,7 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 
@@ -358,9 +359,7 @@ public final class GenericUDFUtils {
           ObjectInspector oi = ObjectInspectorFactory
               .getReflectionObjectInspector(lastParaElementType,
               ObjectInspectorOptions.JAVA);
-          for (int i = methodParameterTypes.length - 1; i < parameterOIs.length; i++) {
-            methodParameterOIs[i] = oi;
-          }
+          Arrays.fill(methodParameterOIs, methodParameterTypes.length - 1, parameterOIs.length, oi);
         }
 
       } else {

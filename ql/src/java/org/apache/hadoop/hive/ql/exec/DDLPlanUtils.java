@@ -24,6 +24,7 @@ import static org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.CTAS_
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import java.util.Arrays;
 import java.util.Comparator;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.common.StatsSetupConst;
@@ -393,9 +394,7 @@ public class DDLPlanUtils {
     for (int i = 0; i < arr.length; i++) {
       temp[i] = arr[i];
     }
-    for (int i = arr.length; i < 8; i++) {
-      temp[i] = (byte) 0;
-    }
+    Arrays.fill(temp, arr.length, temp.length, (byte) 0);
     return temp;
   }
 

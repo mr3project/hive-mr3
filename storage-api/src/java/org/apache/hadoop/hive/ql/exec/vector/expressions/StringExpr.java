@@ -87,9 +87,7 @@ public class StringExpr {
     final int resultStart = outV.getValPreallocatedStart();
     System.arraycopy(bytes, start, resultBytes, resultStart, length);
     final int padEnd = resultStart + resultLength;
-    for (int p = resultStart + length; p < padEnd; p++) {
-      resultBytes[p] = ' ';
-    }
+    Arrays.fill(resultBytes, resultStart + length, padEnd, (byte) ' ');
     outV.setValPreallocated(i, resultLength);
   }
 
@@ -102,9 +100,7 @@ public class StringExpr {
     final int resultStart = 0;
     System.arraycopy(bytes, start, resultBytes, resultStart, length);
     final int padEnd = resultStart + resultLength;
-    for (int p = resultStart + length; p < padEnd; p++) {
-      resultBytes[p] = ' ';
-    }
+    Arrays.fill(resultBytes, resultStart + length, padEnd, (byte) ' ');
     return resultBytes;
   }
 

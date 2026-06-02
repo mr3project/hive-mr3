@@ -19,6 +19,7 @@ package org.apache.hadoop.hive.ql.exec.tez.tools;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
@@ -68,9 +69,7 @@ public class KeyValuesInputMerger extends KeyValuesReader {
     }
 
     public void init(List<KeyValuesReader> readerList) {
-      for (int i = 0; i < readerList.size(); i++) {
-        readerArray[i] = null;
-      }
+      Arrays.fill(readerArray, 0, readerList.size(), null);
       loadedSize = 0;
       for (KeyValuesReader kvsReader : readerList) {
         readerArray[loadedSize] = kvsReader;

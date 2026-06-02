@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.optimizer.calcite.rules;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
 
@@ -467,9 +468,7 @@ public abstract class HiveFilterJoinRule extends FilterJoinRule {
       List<RelDataTypeField> rightFields,
       RexNode filter) {
     int[] adjustments = new int[nTotalFields];
-    for (int i = start; i < end; i++) {
-      adjustments[i] = offset;
-    }
+    Arrays.fill(adjustments, start, end, offset);
     return filter.accept(
         new RexInputConverter(
             rexBuilder,

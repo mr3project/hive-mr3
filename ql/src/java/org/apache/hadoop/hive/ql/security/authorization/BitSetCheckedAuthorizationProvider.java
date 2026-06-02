@@ -19,6 +19,7 @@
 package org.apache.hadoop.hive.ql.security.authorization;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -48,15 +49,11 @@ public abstract class BitSetCheckedAuthorizationProvider extends
       BitSetChecker checker = new BitSetChecker();
       if (inputRequiredPriv != null) {
         checker.inputCheck = new boolean[inputRequiredPriv.length];
-        for (int i = 0; i < checker.inputCheck.length; i++) {
-          checker.inputCheck[i] = false;
-        }
+        Arrays.fill(checker.inputCheck, false);
       }
       if (outputRequiredPriv != null) {
         checker.outputCheck = new boolean[outputRequiredPriv.length];
-        for (int i = 0; i < checker.outputCheck.length; i++) {
-          checker.outputCheck[i] = false;
-        }
+        Arrays.fill(checker.outputCheck, false);
       }
 
       return checker;
@@ -440,9 +437,7 @@ public abstract class BitSetCheckedAuthorizationProvider extends
   }
 
   private static void setBooleanArray(boolean[] check, boolean b) {
-    for (int i = 0; i < check.length; i++) {
-      check[i] = b;
-    }
+    Arrays.fill(check, b);
   }
 
   private static void booleanArrayOr(boolean[] output, boolean[] input) {

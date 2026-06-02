@@ -281,9 +281,7 @@ public class MuxOperator extends Operator<MuxDesc> implements Serializable{
 
   @Override
   public void startGroup() throws HiveException{
-    for (int i = 0; i < numParents; i++) {
-      processGroupCalled[i] = false;
-    }
+    Arrays.fill(processGroupCalled, 0, numParents, false);
     super.startGroup();
   }
 
