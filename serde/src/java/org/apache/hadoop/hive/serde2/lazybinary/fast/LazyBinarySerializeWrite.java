@@ -61,6 +61,9 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
 
   private int rootFieldCount;
   private boolean skipLengthPrefix = false;
+  // Preserve the standard LazyBinary VInt/VLong format unless the caller explicitly opts into
+  // the experimental fixed-width INT/LONG encoding.
+  private final boolean useFixedLengthIntLong;
 
   // For thread safety, we allocate private writable objects for our use only.
   private TimestampWritableV2 timestampWritable;
@@ -106,14 +109,19 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   }
 
   public LazyBinarySerializeWrite(int fieldCount) {
-    this();
+    this(fieldCount, false);
+  }
+
+  public LazyBinarySerializeWrite(int fieldCount, boolean useFixedLengthIntLong) {
+    this(useFixedLengthIntLong);
     vLongBytes = new byte[LazyBinaryUtils.VLONG_BYTES_LEN];
     this.rootFieldCount = fieldCount;
     resetWithoutOutput();
   }
 
   // Not public since we must have the field count and other information.
-  private LazyBinarySerializeWrite() {
+  private LazyBinarySerializeWrite(boolean useFixedLengthIntLong) {
+    this.useFixedLengthIntLong = useFixedLengthIntLong;
     this.root = new Field(STRUCT);
     this.stack = new Field[INITIAL_STACK_SIZE];
   }
@@ -246,7 +254,11 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeInt(int v) throws IOException {
     beginElement();
-    output.appendInt(v);
+    if (useFixedLengthIntLong) {
+      output.appendInt(v);
+    } else {
+      writeVInt(v);
+    }
     finishElement();
   }
 
@@ -256,7 +268,11 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeLong(long v) throws IOException {
     beginElement();
-    output.appendLong(v);
+    if (useFixedLengthIntLong) {
+      output.appendLong(v);
+    } else {
+      writeVLong(v);
+    }
     finishElement();
   }
 
