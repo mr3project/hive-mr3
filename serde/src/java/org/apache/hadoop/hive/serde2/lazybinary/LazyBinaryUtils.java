@@ -21,6 +21,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
+
 import org.apache.hadoop.hive.serde2.ByteStream.RandomAccessOutput;
 import org.apache.hadoop.hive.serde2.io.TimestampLocalTZWritable;
 import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
@@ -55,12 +58,8 @@ public final class LazyBinaryUtils {
    * @return the integer
    */
   public static int byteArrayToInt(byte[] b, int offset) {
-    int value = 0;
-    for (int i = 0; i < 4; i++) {
-      int shift = (4 - 1 - i) * 8;
-      value += (b[i + offset] & 0x000000FF) << shift;
-    }
-    return value;
+    int value = theUnsafe.getInt(b, BYTE_ARRAY_BASE_OFFSET + offset);
+    return Integer.reverseBytes(value);
   }
 
   /**
@@ -73,12 +72,8 @@ public final class LazyBinaryUtils {
    * @return the long
    */
   public static long byteArrayToLong(byte[] b, int offset) {
-    long value = 0;
-    for (int i = 0; i < 8; i++) {
-      int shift = (8 - 1 - i) * 8;
-      value += ((long) (b[i + offset] & 0x00000000000000FF)) << shift;
-    }
-    return value;
+    long value = theUnsafe.getLong(b, BYTE_ARRAY_BASE_OFFSET + offset);
+    return Long.reverseBytes(value);
   }
 
   /**
