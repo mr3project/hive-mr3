@@ -512,21 +512,19 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
   }
 
   private boolean isNull(Field field) {
-    final byte b = (byte) (1 << (field.index % 8));
+    final int bit = 1 << (field.index & 7);
     switch (field.category) {
     case PRIMITIVE:
+    case UNION:
       return false;
     case LIST:
     case MAP:
-      final byte nullByte = bytes[field.nullByteStart + (field.index / 8)];
-      return (nullByte & b) == 0;
+      return (bytes[field.nullByteStart + (field.index >>> 3)] & bit) == 0;
     case STRUCT:
-      if (field.index % 8 == 0) {
+      if ((field.index & 7) == 0) {
         field.nullByte = bytes[offset++];
       }
-      return (field.nullByte & b) == 0;
-    case UNION:
-      return false;
+      return (field.nullByte & bit) == 0;
     default:
       throw new RuntimeException();
     }
