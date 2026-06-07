@@ -46,8 +46,15 @@ public class TestVectorShuffleBatchSerde {
   private static final long BIGINT_PROPERTY_TEST_SEED = 0x5EEDB16L;
   private static final long STRING_PROPERTY_TEST_SEED = 0x5EED517L;
   private static final long DECIMAL_PROPERTY_TEST_SEED = 0x5EEDDEC1L;
+  private static final long ARRAY_BIGINT_PROPERTY_TEST_SEED = 0xA22A7B16L;
+  private static final long ARRAY_STRING_PROPERTY_TEST_SEED = 0xA22A7517L;
+  private static final long ARRAY_DECIMAL_PROPERTY_TEST_SEED = 0xA22ADEC1L;
+  private static final long NESTED_ARRAY_PROPERTY_TEST_SEED = 0xA22AA22AL;
   private static final int BIGINT_PROPERTY_TEST_ITERATIONS = 10000;
   private static final int PROPERTY_TEST_ITERATIONS = 200;
+  private static final int ARRAY_PROPERTY_TEST_ITERATIONS = 1000;
+  private static final int NESTED_ARRAY_PROPERTY_TEST_ITERATIONS = 500;
+  private static final int MAX_ARRAY_LENGTH = 16;
   private static final int DECIMAL_PRECISION = 20;
   private static final int DECIMAL_SCALE = 4;
   private static final String BIGINT_COLUMN_LOG =
@@ -72,104 +79,48 @@ public class TestVectorShuffleBatchSerde {
   @Test
   public void testBigIntColumnSchema() throws Exception {
     assertRandomColumnRoundTrips("BIGINT", BIGINT_PROPERTY_TEST_SEED,
-        BIGINT_PROPERTY_TEST_ITERATIONS, new RandomColumnAdapter<Long>() {
-          @Override
-          public ColumnVector createVector() {
-            return new LongColumnVector();
-          }
-
-          @Override
-          public Long randomValue(Random random, Long previous, int logical) {
-            if (logical == 0) {
-              return Long.MIN_VALUE;
-            } else if (logical == 1) {
-              return 0L;
-            } else if (logical == 2) {
-              return Long.MAX_VALUE;
-            }
-            return randomBigInt(random, previous);
-          }
-
-          @Override
-          public void setValue(ColumnVector vector, int index, Long value) {
-            ((LongColumnVector) vector).vector[index] = value;
-          }
-
-          @Override
-          public void assertValueEquals(String context, Long expected, ColumnVector vector,
-              int index) {
-            assertEquals(context, expected.longValue(), ((LongColumnVector) vector).vector[index]);
-          }
-        }, newColumnLog(BIGINT_COLUMN_LOG, BIGINT_PROPERTY_TEST_SEED, String::valueOf));
+        BIGINT_PROPERTY_TEST_ITERATIONS, bigIntAdapter(),
+        newColumnLog(BIGINT_COLUMN_LOG, BIGINT_PROPERTY_TEST_SEED, String::valueOf));
   }
 
   @Test
   public void testStringColumnSchema() throws Exception {
     assertRandomColumnRoundTrips("STRING", STRING_PROPERTY_TEST_SEED, PROPERTY_TEST_ITERATIONS,
-        new RandomColumnAdapter<byte[]>() {
-          @Override
-          public ColumnVector createVector() {
-            BytesColumnVector vector = new BytesColumnVector();
-            vector.initBuffer();
-            return vector;
-          }
-
-          @Override
-          public byte[] randomValue(Random random, byte[] previous, int logical) {
-            if (logical < INTERESTING_STRINGS.length) {
-              return INTERESTING_STRINGS[logical];
-            }
-            return randomString(random, previous);
-          }
-
-          @Override
-          public void setValue(ColumnVector vector, int index, byte[] value) {
-            ((BytesColumnVector) vector).setVal(index, value);
-          }
-
-          @Override
-          public void assertValueEquals(String context, byte[] expected, ColumnVector vector,
-              int index) {
-            BytesColumnVector actual = (BytesColumnVector) vector;
-            assertArrayEquals(context, expected, Arrays.copyOfRange(actual.vector[index],
-                actual.start[index], actual.start[index] + actual.length[index]));
-          }
-        });
+        stringAdapter());
   }
 
   @Test
   public void testDecimalColumnSchema() throws Exception {
     assertRandomColumnRoundTrips("DECIMAL", DECIMAL_PROPERTY_TEST_SEED, PROPERTY_TEST_ITERATIONS,
-        new RandomColumnAdapter<HiveDecimal>() {
-          @Override
-          public ColumnVector createVector() {
-            return new DecimalColumnVector(DECIMAL_PRECISION, DECIMAL_SCALE);
-          }
-
-          @Override
-          public HiveDecimal randomValue(Random random, HiveDecimal previous, int logical) {
-            if (logical < INTERESTING_DECIMALS.length) {
-              return INTERESTING_DECIMALS[logical];
-            }
-            return randomDecimal(random, previous);
-          }
-
-          @Override
-          public void setValue(ColumnVector vector, int index, HiveDecimal value) {
-            ((DecimalColumnVector) vector).set(index, value);
-          }
-
-          @Override
-          public void assertValueEquals(String context, HiveDecimal expected, ColumnVector vector,
-              int index) {
-            assertEquals(context, expected,
-                ((DecimalColumnVector) vector).vector[index].getHiveDecimal());
-          }
-        });
+        decimalAdapter());
   }
 
   @Test
   public void testArrayOfBigIntColumnSchema() throws Exception {
+    assertRandomColumnRoundTrips("ARRAY<BIGINT>", ARRAY_BIGINT_PROPERTY_TEST_SEED,
+        ARRAY_PROPERTY_TEST_ITERATIONS, arrayAdapter(bigIntAdapter()));
+  }
+
+  @Test
+  public void testArrayOfStringColumnSchema() throws Exception {
+    assertRandomColumnRoundTrips("ARRAY<STRING>", ARRAY_STRING_PROPERTY_TEST_SEED,
+        ARRAY_PROPERTY_TEST_ITERATIONS, arrayAdapter(stringAdapter()));
+  }
+
+  @Test
+  public void testArrayOfDecimalColumnSchema() throws Exception {
+    assertRandomColumnRoundTrips("ARRAY<DECIMAL>", ARRAY_DECIMAL_PROPERTY_TEST_SEED,
+        ARRAY_PROPERTY_TEST_ITERATIONS, arrayAdapter(decimalAdapter()));
+  }
+
+  @Test
+  public void testNestedArrayColumnSchema() throws Exception {
+    assertRandomColumnRoundTrips("ARRAY<ARRAY<BIGINT>>", NESTED_ARRAY_PROPERTY_TEST_SEED,
+        NESTED_ARRAY_PROPERTY_TEST_ITERATIONS, arrayAdapter(arrayAdapter(bigIntAdapter())));
+  }
+
+  @Test
+  public void testSparseArrayOfBigIntColumnSchema() throws Exception {
     LongColumnVector sourceElements = new LongColumnVector();
     ListColumnVector sourceLists =
         new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, sourceElements);
@@ -1168,7 +1119,7 @@ public class TestVectorShuffleBatchSerde {
         output.write(iteration, scenario, expected);
         ColumnVector sourceColumn = adapter.createVector();
         scenario.columnLayout.apply(sourceColumn, scenario.batchLayout);
-        for (int logical = 0; logical < scenario.size(); logical++) {
+        for (int logical = 0; logical < scenario.valueCount(); logical++) {
           if (!scenario.isNull(logical)) {
             adapter.setValue(sourceColumn, scenario.sourceIndex(logical), expected.get(logical));
           }
@@ -1217,6 +1168,191 @@ public class TestVectorShuffleBatchSerde {
             actual, actualIndex);
       }
     }
+    adapter.assertColumnInvariants(context, expected, scenario, actual);
+  }
+
+  private static RandomColumnAdapter<Long> bigIntAdapter() {
+    return new RandomColumnAdapter<Long>() {
+      @Override
+      public ColumnVector createVector() {
+        return new LongColumnVector();
+      }
+
+      @Override
+      public Long randomValue(Random random, Long previous, int logical) {
+        if (logical == 0) {
+          return Long.MIN_VALUE;
+        } else if (logical == 1) {
+          return 0L;
+        } else if (logical == 2) {
+          return Long.MAX_VALUE;
+        }
+        return randomBigInt(random, previous);
+      }
+
+      @Override
+      public void setValue(ColumnVector vector, int index, Long value) {
+        ((LongColumnVector) vector).vector[index] = value;
+      }
+
+      @Override
+      public void assertValueEquals(String context, Long expected, ColumnVector vector, int index) {
+        assertEquals(context, expected.longValue(), ((LongColumnVector) vector).vector[index]);
+      }
+    };
+  }
+
+  private static RandomColumnAdapter<byte[]> stringAdapter() {
+    return new RandomColumnAdapter<byte[]>() {
+      @Override
+      public ColumnVector createVector() {
+        BytesColumnVector vector = new BytesColumnVector();
+        vector.initBuffer();
+        return vector;
+      }
+
+      @Override
+      public byte[] randomValue(Random random, byte[] previous, int logical) {
+        if (logical < INTERESTING_STRINGS.length) {
+          return INTERESTING_STRINGS[logical];
+        }
+        return randomString(random, previous);
+      }
+
+      @Override
+      public void setValue(ColumnVector vector, int index, byte[] value) {
+        ((BytesColumnVector) vector).setVal(index, value);
+      }
+
+      @Override
+      public void assertValueEquals(String context, byte[] expected, ColumnVector vector,
+          int index) {
+        BytesColumnVector actual = (BytesColumnVector) vector;
+        assertArrayEquals(context, expected, Arrays.copyOfRange(actual.vector[index],
+            actual.start[index], actual.start[index] + actual.length[index]));
+      }
+    };
+  }
+
+  private static RandomColumnAdapter<HiveDecimal> decimalAdapter() {
+    return new RandomColumnAdapter<HiveDecimal>() {
+      @Override
+      public ColumnVector createVector() {
+        return new DecimalColumnVector(DECIMAL_PRECISION, DECIMAL_SCALE);
+      }
+
+      @Override
+      public HiveDecimal randomValue(Random random, HiveDecimal previous, int logical) {
+        if (logical < INTERESTING_DECIMALS.length) {
+          return INTERESTING_DECIMALS[logical];
+        }
+        return randomDecimal(random, previous);
+      }
+
+      @Override
+      public void setValue(ColumnVector vector, int index, HiveDecimal value) {
+        ((DecimalColumnVector) vector).set(index, value);
+      }
+
+      @Override
+      public void assertValueEquals(String context, HiveDecimal expected, ColumnVector vector,
+          int index) {
+        assertEquals(context, expected,
+            ((DecimalColumnVector) vector).vector[index].getHiveDecimal());
+      }
+    };
+  }
+
+  private static <T> RandomColumnAdapter<ArrayValue<T>> arrayAdapter(
+      RandomColumnAdapter<T> childAdapter) {
+    return new RandomColumnAdapter<ArrayValue<T>>() {
+      @Override
+      public ColumnVector createVector() {
+        return new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, childAdapter.createVector());
+      }
+
+      @Override
+      public ArrayValue<T> randomValue(Random random, ArrayValue<T> previous, int logical) {
+        if (previous != null && random.nextInt(10) == 0) {
+          return previous;
+        }
+        int choice = random.nextInt(100);
+        int length = choice < 15 ? 0 : choice < 25 ? 1 : random.nextInt(MAX_ARRAY_LENGTH + 1);
+        List<NullableValue<T>> elements = new ArrayList<>(length);
+        T previousElement = null;
+        for (int element = 0; element < length; element++) {
+          boolean isNull = random.nextInt(5) == 0;
+          T value = isNull ? null : childAdapter.randomValue(random, previousElement, element);
+          elements.add(new NullableValue<>(isNull, value));
+          if (!isNull) {
+            previousElement = value;
+          }
+        }
+        return new ArrayValue<>(random.nextInt(4), elements);
+      }
+
+      @Override
+      public void setValue(ColumnVector vector, int index, ArrayValue<T> value) {
+        ListColumnVector list = (ListColumnVector) vector;
+        int offset = list.childCount + value.gapBefore;
+        list.offsets[index] = offset;
+        list.lengths[index] = value.elements.size();
+        list.child.ensureSize(offset + value.elements.size(), true);
+        for (int element = 0; element < value.elements.size(); element++) {
+          NullableValue<T> expected = value.elements.get(element);
+          int childIndex = offset + element;
+          if (expected.isNull) {
+            setNull(list.child, childIndex);
+          } else {
+            childAdapter.setValue(list.child, childIndex, expected.value);
+          }
+        }
+        list.childCount = offset + value.elements.size();
+      }
+
+      @Override
+      public void assertValueEquals(String context, ArrayValue<T> expected, ColumnVector vector,
+          int index) {
+        ListColumnVector list = (ListColumnVector) vector;
+        assertEquals(context, expected.elements.size(), list.lengths[index]);
+        int offset = Math.toIntExact(list.offsets[index]);
+        for (int element = 0; element < expected.elements.size(); element++) {
+          NullableValue<T> expectedElement = expected.elements.get(element);
+          int childIndex = offset + element;
+          boolean actualIsNull = isNull(list.child, childIndex);
+          assertEquals(context + ", element=" + element, expectedElement.isNull, actualIsNull);
+          if (!actualIsNull) {
+            childAdapter.assertValueEquals(context + ", element=" + element,
+                expectedElement.value, list.child, childIndex);
+          }
+        }
+      }
+
+      @Override
+      public void assertColumnInvariants(String context, List<ArrayValue<T>> expected,
+          RandomColumnScenario scenario, ColumnVector vector) {
+        ListColumnVector list = (ListColumnVector) vector;
+        int expectedChildCount = 0;
+        for (int logical = 0; logical < scenario.valueCount(); logical++) {
+          int index = list.isRepeating ? 0 : logical;
+          assertEquals(context + ", logicalRow=" + logical, expectedChildCount,
+              list.offsets[index]);
+          int expectedLength = scenario.isNull(logical) ? 0 : expected.get(logical).elements.size();
+          assertEquals(context + ", logicalRow=" + logical, expectedLength, list.lengths[index]);
+          expectedChildCount += expectedLength;
+        }
+        assertEquals(context, expectedChildCount, list.childCount);
+      }
+    };
+  }
+
+  private static void setNull(ColumnVector vector, int index) {
+    vector.noNulls = false;
+    vector.isNull[index] = true;
+  }
+
+  private static boolean isNull(ColumnVector vector, int index) {
+    return !vector.noNulls && vector.isNull[index];
   }
 
   private static long randomBigInt(Random random, Long previous) {
@@ -1314,6 +1450,30 @@ public class TestVectorShuffleBatchSerde {
     void setValue(ColumnVector vector, int index, T value);
 
     void assertValueEquals(String context, T expected, ColumnVector vector, int index);
+
+    default void assertColumnInvariants(String context, List<T> expected,
+        RandomColumnScenario scenario, ColumnVector vector) {
+    }
+  }
+
+  private static final class NullableValue<T> {
+    private final boolean isNull;
+    private final T value;
+
+    private NullableValue(boolean isNull, T value) {
+      this.isNull = isNull;
+      this.value = value;
+    }
+  }
+
+  private static final class ArrayValue<T> {
+    private final int gapBefore;
+    private final List<NullableValue<T>> elements;
+
+    private ArrayValue(int gapBefore, List<NullableValue<T>> elements) {
+      this.gapBefore = gapBefore;
+      this.elements = elements;
+    }
   }
 
   private static final class RandomColumnScenario {
@@ -1327,6 +1487,10 @@ public class TestVectorShuffleBatchSerde {
 
     private int size() {
       return batchLayout.size;
+    }
+
+    private int valueCount() {
+      return columnLayout.isRepeating ? Math.min(size(), 1) : size();
     }
 
     private boolean isNull(int logical) {
