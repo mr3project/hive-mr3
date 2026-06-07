@@ -35,6 +35,202 @@ public class TestVectorShuffleBatchSerde {
   private final VectorShuffleBatchDeserializer deserializer = new VectorShuffleBatchDeserializer();
 
   @Test
+  public void testBigIntColumnSchema() throws Exception {
+    VectorizedRowBatch source = new VectorizedRowBatch(1);
+    LongColumnVector sourceLongs = new LongColumnVector();
+    source.cols[0] = sourceLongs;
+    source.size = 3;
+    sourceLongs.vector[0] = Long.MIN_VALUE;
+    sourceLongs.vector[1] = 0;
+    sourceLongs.vector[2] = Long.MAX_VALUE;
+
+    VectorizedRowBatch result = new VectorizedRowBatch(1);
+    result.cols[0] = new LongColumnVector();
+    roundTrip(source, new int[] {0}, result);
+
+    LongColumnVector resultLongs = (LongColumnVector) result.cols[0];
+    assertEquals(Long.MIN_VALUE, resultLongs.vector[0]);
+    assertEquals(0, resultLongs.vector[1]);
+    assertEquals(Long.MAX_VALUE, resultLongs.vector[2]);
+  }
+
+  @Test
+  public void testStringColumnSchema() throws Exception {
+    VectorizedRowBatch source = new VectorizedRowBatch(1);
+    BytesColumnVector sourceStrings = new BytesColumnVector();
+    sourceStrings.initBuffer();
+    source.cols[0] = sourceStrings;
+    source.size = 3;
+    sourceStrings.setVal(0, bytes("alpha"));
+    sourceStrings.setVal(1, bytes(""));
+    sourceStrings.setVal(2, bytes("omega"));
+
+    VectorizedRowBatch result = new VectorizedRowBatch(1);
+    result.cols[0] = new BytesColumnVector();
+    roundTrip(source, new int[] {0}, result);
+
+    BytesColumnVector resultStrings = (BytesColumnVector) result.cols[0];
+    assertBytes("alpha", resultStrings, 0);
+    assertBytes("", resultStrings, 1);
+    assertBytes("omega", resultStrings, 2);
+  }
+
+  @Test
+  public void testDecimalColumnSchema() throws Exception {
+    VectorizedRowBatch source = new VectorizedRowBatch(1);
+    DecimalColumnVector sourceDecimals = new DecimalColumnVector(20, 4);
+    source.cols[0] = sourceDecimals;
+    source.size = 3;
+    sourceDecimals.set(0, HiveDecimal.create("-12345.6789"));
+    sourceDecimals.set(1, HiveDecimal.ZERO);
+    sourceDecimals.set(2, HiveDecimal.create("98765.4321"));
+
+    VectorizedRowBatch result = new VectorizedRowBatch(1);
+    result.cols[0] = new DecimalColumnVector(20, 4);
+    roundTrip(source, new int[] {0}, result);
+
+    DecimalColumnVector resultDecimals = (DecimalColumnVector) result.cols[0];
+    assertEquals(HiveDecimal.create("-12345.6789"), resultDecimals.vector[0].getHiveDecimal());
+    assertEquals(HiveDecimal.ZERO, resultDecimals.vector[1].getHiveDecimal());
+    assertEquals(HiveDecimal.create("98765.4321"), resultDecimals.vector[2].getHiveDecimal());
+  }
+
+  @Test
+  public void testArrayOfBigIntColumnSchema() throws Exception {
+    LongColumnVector sourceElements = new LongColumnVector();
+    ListColumnVector sourceLists =
+        new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, sourceElements);
+    VectorizedRowBatch source = new VectorizedRowBatch(1);
+    source.cols[0] = sourceLists;
+    source.size = 2;
+    sourceLists.offsets[0] = 2;
+    sourceLists.lengths[0] = 2;
+    sourceLists.offsets[1] = 7;
+    sourceLists.lengths[1] = 1;
+    sourceLists.childCount = 8;
+    sourceElements.vector[2] = 20;
+    sourceElements.vector[3] = 30;
+    sourceElements.vector[7] = 70;
+
+    ListColumnVector resultLists =
+        new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new LongColumnVector());
+    VectorizedRowBatch result = new VectorizedRowBatch(1);
+    result.cols[0] = resultLists;
+    roundTrip(source, new int[] {0}, result);
+
+    LongColumnVector resultElements = (LongColumnVector) resultLists.child;
+    assertEquals(3, resultLists.childCount);
+    assertEquals(0, resultLists.offsets[0]);
+    assertEquals(2, resultLists.lengths[0]);
+    assertEquals(2, resultLists.offsets[1]);
+    assertEquals(1, resultLists.lengths[1]);
+    assertEquals(20, resultElements.vector[0]);
+    assertEquals(30, resultElements.vector[1]);
+    assertEquals(70, resultElements.vector[2]);
+  }
+
+  @Test
+  public void testMapOfStringToBigIntColumnSchema() throws Exception {
+    BytesColumnVector sourceKeys = new BytesColumnVector();
+    sourceKeys.initBuffer();
+    LongColumnVector sourceValues = new LongColumnVector();
+    MapColumnVector sourceMaps =
+        new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE, sourceKeys, sourceValues);
+    VectorizedRowBatch source = new VectorizedRowBatch(1);
+    source.cols[0] = sourceMaps;
+    source.size = 2;
+    sourceMaps.offsets[0] = 1;
+    sourceMaps.lengths[0] = 2;
+    sourceMaps.offsets[1] = 5;
+    sourceMaps.lengths[1] = 1;
+    sourceMaps.childCount = 6;
+    sourceKeys.setVal(1, bytes("one"));
+    sourceKeys.setVal(2, bytes("two"));
+    sourceKeys.setVal(5, bytes("five"));
+    sourceValues.vector[1] = 1;
+    sourceValues.vector[2] = 2;
+    sourceValues.vector[5] = 5;
+
+    BytesColumnVector resultKeys = new BytesColumnVector();
+    LongColumnVector resultValues = new LongColumnVector();
+    MapColumnVector resultMaps =
+        new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE, resultKeys, resultValues);
+    VectorizedRowBatch result = new VectorizedRowBatch(1);
+    result.cols[0] = resultMaps;
+    roundTrip(source, new int[] {0}, result);
+
+    assertEquals(3, resultMaps.childCount);
+    assertEquals(0, resultMaps.offsets[0]);
+    assertEquals(2, resultMaps.lengths[0]);
+    assertEquals(2, resultMaps.offsets[1]);
+    assertEquals(1, resultMaps.lengths[1]);
+    assertBytes("one", resultKeys, 0);
+    assertBytes("two", resultKeys, 1);
+    assertBytes("five", resultKeys, 2);
+    assertEquals(1, resultValues.vector[0]);
+    assertEquals(2, resultValues.vector[1]);
+    assertEquals(5, resultValues.vector[2]);
+  }
+
+  @Test
+  public void testArrayOfMapOfStringToBigIntColumnSchema() throws Exception {
+    BytesColumnVector sourceKeys = new BytesColumnVector();
+    sourceKeys.initBuffer();
+    LongColumnVector sourceValues = new LongColumnVector();
+    MapColumnVector sourceMaps =
+        new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE, sourceKeys, sourceValues);
+    ListColumnVector sourceLists =
+        new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, sourceMaps);
+    VectorizedRowBatch source = new VectorizedRowBatch(1);
+    source.cols[0] = sourceLists;
+    source.size = 2;
+
+    sourceLists.offsets[0] = 1;
+    sourceLists.lengths[0] = 1;
+    sourceLists.offsets[1] = 3;
+    sourceLists.lengths[1] = 1;
+    sourceLists.childCount = 4;
+    sourceMaps.offsets[1] = 2;
+    sourceMaps.lengths[1] = 2;
+    sourceMaps.offsets[3] = 6;
+    sourceMaps.lengths[3] = 1;
+    sourceMaps.childCount = 7;
+    sourceKeys.setVal(2, bytes("a"));
+    sourceKeys.setVal(3, bytes("b"));
+    sourceKeys.setVal(6, bytes("c"));
+    sourceValues.vector[2] = 10;
+    sourceValues.vector[3] = 20;
+    sourceValues.vector[6] = 30;
+
+    BytesColumnVector resultKeys = new BytesColumnVector();
+    LongColumnVector resultValues = new LongColumnVector();
+    MapColumnVector resultMaps =
+        new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE, resultKeys, resultValues);
+    ListColumnVector resultLists =
+        new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, resultMaps);
+    VectorizedRowBatch result = new VectorizedRowBatch(1);
+    result.cols[0] = resultLists;
+    roundTrip(source, new int[] {0}, result);
+
+    assertEquals(2, resultLists.childCount);
+    assertEquals(0, resultLists.offsets[0]);
+    assertEquals(1, resultLists.lengths[0]);
+    assertEquals(1, resultLists.offsets[1]);
+    assertEquals(1, resultLists.lengths[1]);
+    assertEquals(3, resultMaps.childCount);
+    assertEquals(0, resultMaps.offsets[0]);
+    assertEquals(2, resultMaps.lengths[0]);
+    assertEquals(2, resultMaps.offsets[1]);
+    assertEquals(1, resultMaps.lengths[1]);
+    assertBytes("a", resultKeys, 0);
+    assertBytes("b", resultKeys, 1);
+    assertBytes("c", resultKeys, 2);
+    assertEquals(10, resultValues.vector[0]);
+    assertEquals(20, resultValues.vector[1]);
+    assertEquals(30, resultValues.vector[2]);
+  }
+
+  @Test
   public void testSelectedRowsAndColumnMapAreCompacted() throws Exception {
     VectorizedRowBatch source = new VectorizedRowBatch(3);
     LongColumnVector ignored = new LongColumnVector();
