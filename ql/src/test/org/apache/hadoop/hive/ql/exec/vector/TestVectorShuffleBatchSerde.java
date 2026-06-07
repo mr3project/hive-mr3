@@ -44,6 +44,7 @@ public class TestVectorShuffleBatchSerde {
     source.cols[1] = strings;
     source.cols[2] = longs;
 
+    strings.initBuffer();
     strings.setVal(2, bytes("two"));
     strings.setVal(5, bytes("five"));
     strings.setVal(9, bytes("nine"));
