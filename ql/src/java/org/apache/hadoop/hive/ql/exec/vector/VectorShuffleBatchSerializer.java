@@ -29,9 +29,8 @@ import org.apache.hadoop.io.WritableUtils;
  *
  * <p>The receiver is expected to know the column schema and physical vector layout. Selected rows
  * are compacted in logical order, inactive rows and unselected columns are omitted, null values are
- * omitted, and repeating columns are represented by a single value. Primitive, list, map, and
- * struct vectors are supported; union vectors are rejected until their active child tags can be encoded
- * safely.</p>
+ * omitted, and repeating columns are represented by a single value. Primitive, list, map, struct, and
+ * union vectors are supported recursively.</p>
  */
 public final class VectorShuffleBatchSerializer {
   private static final int IS_REPEATING = 1;
@@ -84,7 +83,7 @@ public final class VectorShuffleBatchSerializer {
       writeStructChildren((StructColumnVector) column, indices, valueCount, repeating,
           nullBitmap);
     } else if (column instanceof UnionColumnVector) {
-      throw unsupported(column);
+      writeUnionChildren((UnionColumnVector) column, indices, valueCount, repeating, nullBitmap);
     } else if (column instanceof ListColumnVector) {
       ListColumnVector list = (ListColumnVector) column;
       writeMultiValuedChildren(list, list.child, null, indices, valueCount, repeating, nullBitmap);
@@ -121,6 +120,43 @@ public final class VectorShuffleBatchSerializer {
 
     for (ColumnVector field : struct.fields) {
       writeColumn(field, activeIndices, activeCount);
+    }
+  }
+
+  private void writeUnionChildren(UnionColumnVector union, int[] indices, int valueCount,
+      boolean repeating, byte[] nullBitmap) throws IOException {
+    int[] fieldCounts = new int[union.fields.length];
+    for (int logical = 0; logical < valueCount; logical++) {
+      if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
+        int tag = union.tags[physicalIndex(indices, logical, repeating)];
+        validateUnionTag(tag, union.fields.length);
+        WritableUtils.writeVInt(buffer, tag);
+        fieldCounts[tag]++;
+      }
+    }
+
+    int[][] fieldIndices = new int[union.fields.length][];
+    for (int tag = 0; tag < union.fields.length; tag++) {
+      fieldIndices[tag] = new int[fieldCounts[tag]];
+    }
+    int[] fieldPositions = new int[union.fields.length];
+    for (int logical = 0; logical < valueCount; logical++) {
+      if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
+        int index = physicalIndex(indices, logical, repeating);
+        int tag = union.tags[index];
+        fieldIndices[tag][fieldPositions[tag]++] = index;
+      }
+    }
+
+    for (int tag = 0; tag < union.fields.length; tag++) {
+      writeColumn(union.fields[tag], fieldIndices[tag], fieldCounts[tag]);
+    }
+  }
+
+  private void validateUnionTag(int tag, int fieldCount) {
+    if (tag < 0 || tag >= fieldCount) {
+      throw new IllegalArgumentException(
+          "Invalid union tag " + tag + " for " + fieldCount + " fields");
     }
   }
 

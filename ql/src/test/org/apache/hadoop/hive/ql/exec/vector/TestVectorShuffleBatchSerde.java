@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.vector;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -662,27 +663,329 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
-  public void testDirectAndNestedUnionColumnsRemainRejected() {
-    VectorizedRowBatch direct = batchWithColumn(
-        new UnionColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new LongColumnVector()), 1);
-    assertThrows(IllegalArgumentException.class,
-        () -> serializer.serialize(direct, new int[] {0}, new BytesWritable()));
+  public void testDirectUnionWithMixedPrimitiveFields() throws Exception {
+    UnionColumnVector union = unionOf(new LongColumnVector(), bytesColumn(),
+        new DoubleColumnVector());
+    union.tags[0] = 0;
+    union.tags[1] = 1;
+    union.tags[2] = 2;
+    union.tags[3] = 0;
+    ((LongColumnVector) union.fields[0]).vector[0] = 10;
+    ((LongColumnVector) union.fields[0]).vector[3] = 40;
+    ((BytesColumnVector) union.fields[1]).setVal(1, bytes("one"));
+    ((DoubleColumnVector) union.fields[2]).vector[2] = 2.5;
 
-    StructColumnVector struct = structOf(
-        new UnionColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new LongColumnVector()));
-    VectorizedRowBatch nested = batchWithColumn(struct, 1);
-    assertThrows(IllegalArgumentException.class,
-        () -> serializer.serialize(nested, new int[] {0}, new BytesWritable()));
+    UnionColumnVector result = unionOf(new LongColumnVector(), bytesColumn(),
+        new DoubleColumnVector());
+    roundTrip(batchWithColumn(union, 4), new int[] {0}, batchWithColumn(result, 0));
 
-    BytesWritable directPayload = new BytesWritable(new byte[] {1, 1, 0});
+    assertEquals(0, result.tags[0]);
+    assertEquals(1, result.tags[1]);
+    assertEquals(2, result.tags[2]);
+    assertEquals(0, result.tags[3]);
+    assertEquals(10, ((LongColumnVector) result.fields[0]).vector[0]);
+    assertBytes("one", (BytesColumnVector) result.fields[1], 1);
+    assertEquals(2.5, ((DoubleColumnVector) result.fields[2]).vector[2], 0);
+    assertEquals(40, ((LongColumnVector) result.fields[0]).vector[3]);
+  }
+
+  @Test
+  public void testNullUnionRowsDoNotConsumeTagsOrChildren() throws Exception {
+    UnionColumnVector union = unionOf(new LongColumnVector(), bytesColumn());
+    union.noNulls = false;
+    union.isNull[1] = true;
+    union.tags[0] = 0;
+    union.tags[2] = 1;
+    ((LongColumnVector) union.fields[0]).vector[0] = 11;
+    ((BytesColumnVector) union.fields[1]).setVal(2, bytes("after-null"));
+
+    UnionColumnVector result = unionOf(new LongColumnVector(), bytesColumn());
+    roundTrip(batchWithColumn(union, 3), new int[] {0}, batchWithColumn(result, 0));
+
+    assertFalse(result.isNull[0]);
+    assertTrue(result.isNull[1]);
+    assertFalse(result.isNull[2]);
+    assertEquals(0, result.tags[0]);
+    assertEquals(1, result.tags[2]);
+    assertEquals(11, ((LongColumnVector) result.fields[0]).vector[0]);
+    assertBytes("after-null", (BytesColumnVector) result.fields[1], 2);
+  }
+
+  @Test
+  public void testSelectedUnionRowsAreCompacted() throws Exception {
+    UnionColumnVector union = unionOf(new LongColumnVector(), bytesColumn());
+    union.tags[2] = 1;
+    union.tags[5] = 0;
+    ((BytesColumnVector) union.fields[1]).setVal(2, bytes("selected"));
+    ((LongColumnVector) union.fields[0]).vector[5] = 55;
+    VectorizedRowBatch source = batchWithColumn(union, 2);
+    source.selectedInUse = true;
+    source.selected[0] = 2;
+    source.selected[1] = 5;
+
+    UnionColumnVector result = unionOf(new LongColumnVector(), bytesColumn());
+    roundTrip(source, new int[] {0}, batchWithColumn(result, 0));
+
+    assertEquals(1, result.tags[0]);
+    assertEquals(0, result.tags[1]);
+    assertBytes("selected", (BytesColumnVector) result.fields[1], 0);
+    assertEquals(55, ((LongColumnVector) result.fields[0]).vector[1]);
+  }
+
+  @Test
+  public void testRepeatingUnion() throws Exception {
+    UnionColumnVector nonNull = unionOf(new LongColumnVector(), bytesColumn());
+    nonNull.isRepeating = true;
+    nonNull.tags[0] = 1;
+    ((BytesColumnVector) nonNull.fields[1]).setVal(0, bytes("repeat"));
+    UnionColumnVector nullUnion = unionOf(new LongColumnVector());
+    nullUnion.isRepeating = true;
+    nullUnion.noNulls = false;
+    nullUnion.isNull[0] = true;
+    VectorizedRowBatch source = new VectorizedRowBatch(2);
+    source.cols[0] = nonNull;
+    source.cols[1] = nullUnion;
+    source.size = 4;
+
+    UnionColumnVector resultNonNull = unionOf(new LongColumnVector(), bytesColumn());
+    UnionColumnVector resultNull = unionOf(new LongColumnVector());
+    VectorizedRowBatch result = new VectorizedRowBatch(2);
+    result.cols[0] = resultNonNull;
+    result.cols[1] = resultNull;
+    roundTrip(source, new int[] {0, 1}, result);
+
+    assertTrue(resultNonNull.isRepeating);
+    assertEquals(1, resultNonNull.tags[0]);
+    assertBytes("repeat", (BytesColumnVector) resultNonNull.fields[1], 0);
+    assertTrue(resultNull.isRepeating);
+    assertTrue(resultNull.isNull[0]);
+  }
+
+  @Test
+  public void testUnionUnusedFieldHasZeroActiveRows() throws Exception {
+    UnionColumnVector union = unionOf(new LongColumnVector(), bytesColumn());
+    union.tags[0] = 0;
+    union.tags[1] = 0;
+    ((LongColumnVector) union.fields[0]).vector[0] = 1;
+    ((LongColumnVector) union.fields[0]).vector[1] = 2;
+
+    UnionColumnVector result = unionOf(new LongColumnVector(), bytesColumn());
+    roundTrip(batchWithColumn(union, 2), new int[] {0}, batchWithColumn(result, 0));
+
+    assertEquals(1, ((LongColumnVector) result.fields[0]).vector[0]);
+    assertEquals(2, ((LongColumnVector) result.fields[0]).vector[1]);
+    assertNull(((BytesColumnVector) result.fields[1]).vector[0]);
+  }
+
+  @Test
+  public void testAllNullUnionHasNoTagsOrActiveChildren() throws Exception {
+    UnionColumnVector union = unionOf(new LongColumnVector(), bytesColumn());
+    union.noNulls = false;
+    union.isNull[0] = true;
+    union.isNull[1] = true;
+    ((LongColumnVector) union.fields[0]).vector[0] = 100;
+
+    UnionColumnVector result = unionOf(new LongColumnVector(), bytesColumn());
+    roundTrip(batchWithColumn(union, 2), new int[] {0}, batchWithColumn(result, 0));
+
+    assertTrue(result.isNull[0]);
+    assertTrue(result.isNull[1]);
+    assertEquals(0, ((LongColumnVector) result.fields[0]).vector[0]);
+  }
+
+  @Test
+  public void testStructContainingUnion() throws Exception {
+    UnionColumnVector union = unionOf(new LongColumnVector(), bytesColumn());
+    union.tags[0] = 1;
+    ((BytesColumnVector) union.fields[1]).setVal(0, bytes("nested"));
+    StructColumnVector struct = structOf(union);
+
+    UnionColumnVector resultUnion = unionOf(new LongColumnVector(), bytesColumn());
+    roundTrip(batchWithColumn(struct, 1), new int[] {0},
+        batchWithColumn(structOf(resultUnion), 0));
+
+    assertEquals(1, resultUnion.tags[0]);
+    assertBytes("nested", (BytesColumnVector) resultUnion.fields[1], 0);
+  }
+
+  @Test
+  public void testUnionContainingStruct() throws Exception {
+    StructColumnVector field = structOf(new LongColumnVector(), bytesColumn());
+    UnionColumnVector union = unionOf(field, new DoubleColumnVector());
+    union.tags[0] = 0;
+    ((LongColumnVector) field.fields[0]).vector[0] = 7;
+    ((BytesColumnVector) field.fields[1]).setVal(0, bytes("struct"));
+
+    StructColumnVector resultField = structOf(new LongColumnVector(), bytesColumn());
+    UnionColumnVector result = unionOf(resultField, new DoubleColumnVector());
+    roundTrip(batchWithColumn(union, 1), new int[] {0}, batchWithColumn(result, 0));
+
+    assertEquals(0, result.tags[0]);
+    assertEquals(7, ((LongColumnVector) resultField.fields[0]).vector[0]);
+    assertBytes("struct", (BytesColumnVector) resultField.fields[1], 0);
+  }
+
+  @Test
+  public void testListContainingUnion() throws Exception {
+    UnionColumnVector child = unionOf(new LongColumnVector(), bytesColumn());
+    child.tags[2] = 1;
+    child.tags[3] = 0;
+    ((BytesColumnVector) child.fields[1]).setVal(2, bytes("list-union"));
+    ((LongColumnVector) child.fields[0]).vector[3] = 33;
+    ListColumnVector list = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, child);
+    list.offsets[0] = 2;
+    list.lengths[0] = 2;
+
+    UnionColumnVector resultChild = unionOf(new LongColumnVector(), bytesColumn());
+    ListColumnVector result = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, resultChild);
+    roundTrip(batchWithColumn(list, 1), new int[] {0}, batchWithColumn(result, 0));
+
+    assertEquals(1, resultChild.tags[0]);
+    assertEquals(0, resultChild.tags[1]);
+    assertBytes("list-union", (BytesColumnVector) resultChild.fields[1], 0);
+    assertEquals(33, ((LongColumnVector) resultChild.fields[0]).vector[1]);
+  }
+
+  @Test
+  public void testUnionContainingList() throws Exception {
+    LongColumnVector child = new LongColumnVector();
+    ListColumnVector list = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, child);
+    list.offsets[1] = 3;
+    list.lengths[1] = 2;
+    child.vector[3] = 30;
+    child.vector[4] = 40;
+    BytesColumnVector firstField = bytesColumn();
+    firstField.setVal(0, bytes("first"));
+    UnionColumnVector union = unionOf(firstField, list);
+    union.tags[1] = 1;
+
+    ListColumnVector resultList = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+        new LongColumnVector());
+    UnionColumnVector result = unionOf(bytesColumn(), resultList);
+    roundTrip(batchWithColumn(union, 2), new int[] {0}, batchWithColumn(result, 0));
+
+    assertEquals(1, result.tags[1]);
+    assertEquals(2, resultList.lengths[1]);
+    assertEquals(30, ((LongColumnVector) resultList.child).vector[0]);
+    assertEquals(40, ((LongColumnVector) resultList.child).vector[1]);
+  }
+
+  @Test
+  public void testMapValueContainingUnion() throws Exception {
+    BytesColumnVector keys = bytesColumn();
+    UnionColumnVector values = unionOf(new LongColumnVector(), bytesColumn());
+    keys.setVal(2, bytes("key"));
+    values.tags[2] = 1;
+    ((BytesColumnVector) values.fields[1]).setVal(2, bytes("value"));
+    MapColumnVector map = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE, keys, values);
+    map.offsets[0] = 2;
+    map.lengths[0] = 1;
+
+    UnionColumnVector resultValues = unionOf(new LongColumnVector(), bytesColumn());
+    MapColumnVector result = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+        bytesColumn(), resultValues);
+    roundTrip(batchWithColumn(map, 1), new int[] {0}, batchWithColumn(result, 0));
+
+    assertBytes("key", (BytesColumnVector) result.keys, 0);
+    assertEquals(1, resultValues.tags[0]);
+    assertBytes("value", (BytesColumnVector) resultValues.fields[1], 0);
+  }
+
+  @Test
+  public void testUnionContainingMap() throws Exception {
+    BytesColumnVector keys = bytesColumn();
+    LongColumnVector values = new LongColumnVector();
+    keys.setVal(4, bytes("map-key"));
+    values.vector[4] = 44;
+    MapColumnVector map = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE, keys, values);
+    map.offsets[1] = 4;
+    map.lengths[1] = 1;
+    UnionColumnVector union = unionOf(new LongColumnVector(), map);
+    union.tags[1] = 1;
+
+    MapColumnVector resultMap = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+        bytesColumn(), new LongColumnVector());
+    UnionColumnVector result = unionOf(new LongColumnVector(), resultMap);
+    roundTrip(batchWithColumn(union, 2), new int[] {0}, batchWithColumn(result, 0));
+
+    assertEquals(1, result.tags[1]);
+    assertBytes("map-key", (BytesColumnVector) resultMap.keys, 0);
+    assertEquals(44, ((LongColumnVector) resultMap.values).vector[0]);
+  }
+
+  @Test
+  public void testNestedUnionContainingUnion() throws Exception {
+    UnionColumnVector inner = unionOf(new LongColumnVector(), bytesColumn());
+    inner.tags[0] = 1;
+    ((BytesColumnVector) inner.fields[1]).setVal(0, bytes("inner"));
+    UnionColumnVector outer = unionOf(inner, new DoubleColumnVector());
+    outer.tags[0] = 0;
+
+    UnionColumnVector resultInner = unionOf(new LongColumnVector(), bytesColumn());
+    UnionColumnVector resultOuter = unionOf(resultInner, new DoubleColumnVector());
+    roundTrip(batchWithColumn(outer, 1), new int[] {0}, batchWithColumn(resultOuter, 0));
+
+    assertEquals(0, resultOuter.tags[0]);
+    assertEquals(1, resultInner.tags[0]);
+    assertBytes("inner", (BytesColumnVector) resultInner.fields[1], 0);
+  }
+
+  @Test
+  public void testSerializerRejectsNegativeUnionTag() {
+    UnionColumnVector union = unionOf(new LongColumnVector());
+    union.tags[0] = -1;
     assertThrows(IllegalArgumentException.class,
-        () -> deserializer.deserialize(directPayload, batchWithColumn(
-            new UnionColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new LongColumnVector()), 0)));
-    BytesWritable nestedPayload = new BytesWritable(new byte[] {1, 1, 0, 0});
+        () -> serializer.serialize(batchWithColumn(union, 1), new int[] {0}, new BytesWritable()));
+  }
+
+  @Test
+  public void testSerializerRejectsUnionTagBeyondFieldCount() {
+    UnionColumnVector union = unionOf(new LongColumnVector());
+    union.tags[0] = 1;
     assertThrows(IllegalArgumentException.class,
-        () -> deserializer.deserialize(nestedPayload,
-            batchWithColumn(structOf(new UnionColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
-                new LongColumnVector())), 0)));
+        () -> serializer.serialize(batchWithColumn(union, 1), new int[] {0}, new BytesWritable()));
+  }
+
+  @Test
+  public void testDeserializerRejectsInvalidEncodedUnionTag() {
+    BytesWritable invalid = new BytesWritable(new byte[] {1, 1, 0, 1});
+    assertThrows(IOException.class, () -> deserializer.deserialize(invalid,
+        batchWithColumn(unionOf(new LongColumnVector()), 0)));
+  }
+
+  @Test
+  public void testDeserializerRejectsTruncatedUnionTagSequence() {
+    BytesWritable truncated = new BytesWritable(new byte[] {2, 1, 0, 0});
+    assertThrows(IOException.class, () -> deserializer.deserialize(truncated,
+        batchWithColumn(unionOf(new LongColumnVector()), 0)));
+  }
+
+  @Test
+  public void testDeserializerRejectsTruncatedUnionChildPayload() throws Exception {
+    UnionColumnVector union = unionOf(new LongColumnVector());
+    union.tags[0] = 0;
+    ((LongColumnVector) union.fields[0]).vector[0] = 9;
+    BytesWritable serialized = serialize(batchWithColumn(union, 1));
+    byte[] truncatedBytes = java.util.Arrays.copyOf(
+        serialized.getBytes(), serialized.getLength() - 1);
+
+    assertThrows(IOException.class,
+        () -> deserializer.deserialize(new BytesWritable(truncatedBytes),
+            batchWithColumn(unionOf(new LongColumnVector()), 0)));
+  }
+
+  @Test
+  public void testDeserializerRejectsTrailingUnionBytes() throws Exception {
+    UnionColumnVector union = unionOf(new LongColumnVector());
+    union.tags[0] = 0;
+    ((LongColumnVector) union.fields[0]).vector[0] = 9;
+    BytesWritable serialized = serialize(batchWithColumn(union, 1));
+    byte[] trailingBytes = java.util.Arrays.copyOf(
+        serialized.getBytes(), serialized.getLength() + 1);
+
+    assertThrows(IOException.class,
+        () -> deserializer.deserialize(new BytesWritable(trailingBytes),
+            batchWithColumn(unionOf(new LongColumnVector()), 0)));
   }
 
   @Test
@@ -715,8 +1018,24 @@ public class TestVectorShuffleBatchSerde {
     return batch;
   }
 
+  private static BytesColumnVector bytesColumn() {
+    BytesColumnVector bytes = new BytesColumnVector();
+    bytes.initBuffer();
+    return bytes;
+  }
+
   private static StructColumnVector structOf(ColumnVector... fields) {
     return new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE, fields);
+  }
+
+  private static UnionColumnVector unionOf(ColumnVector... fields) {
+    return new UnionColumnVector(VectorizedRowBatch.DEFAULT_SIZE, fields);
+  }
+
+  private BytesWritable serialize(VectorizedRowBatch source) throws Exception {
+    BytesWritable serialized = new BytesWritable();
+    serializer.serialize(source, new int[] {0}, serialized);
+    return serialized;
   }
 
   private void roundTrip(VectorizedRowBatch source, int[] sourceColumnMap,
