@@ -664,7 +664,7 @@ public class TestVectorShuffleBatchSerde {
 
   @Test
   public void testDirectUnionWithMixedPrimitiveFields() throws Exception {
-    UnionColumnVector union = unionOf(new LongColumnVector(), new BytesColumnVector(),
+    UnionColumnVector union = unionOf(new LongColumnVector(), bytesColumn(),
         new DoubleColumnVector());
     union.tags[0] = 0;
     union.tags[1] = 1;
@@ -675,7 +675,7 @@ public class TestVectorShuffleBatchSerde {
     ((BytesColumnVector) union.fields[1]).setVal(1, bytes("one"));
     ((DoubleColumnVector) union.fields[2]).vector[2] = 2.5;
 
-    UnionColumnVector result = unionOf(new LongColumnVector(), new BytesColumnVector(),
+    UnionColumnVector result = unionOf(new LongColumnVector(), bytesColumn(),
         new DoubleColumnVector());
     roundTrip(batchWithColumn(union, 4), new int[] {0}, batchWithColumn(result, 0));
 
@@ -691,7 +691,7 @@ public class TestVectorShuffleBatchSerde {
 
   @Test
   public void testNullUnionRowsDoNotConsumeTagsOrChildren() throws Exception {
-    UnionColumnVector union = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector union = unionOf(new LongColumnVector(), bytesColumn());
     union.noNulls = false;
     union.isNull[1] = true;
     union.tags[0] = 0;
@@ -699,7 +699,7 @@ public class TestVectorShuffleBatchSerde {
     ((LongColumnVector) union.fields[0]).vector[0] = 11;
     ((BytesColumnVector) union.fields[1]).setVal(2, bytes("after-null"));
 
-    UnionColumnVector result = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector result = unionOf(new LongColumnVector(), bytesColumn());
     roundTrip(batchWithColumn(union, 3), new int[] {0}, batchWithColumn(result, 0));
 
     assertFalse(result.isNull[0]);
@@ -713,7 +713,7 @@ public class TestVectorShuffleBatchSerde {
 
   @Test
   public void testSelectedUnionRowsAreCompacted() throws Exception {
-    UnionColumnVector union = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector union = unionOf(new LongColumnVector(), bytesColumn());
     union.tags[2] = 1;
     union.tags[5] = 0;
     ((BytesColumnVector) union.fields[1]).setVal(2, bytes("selected"));
@@ -723,7 +723,7 @@ public class TestVectorShuffleBatchSerde {
     source.selected[0] = 2;
     source.selected[1] = 5;
 
-    UnionColumnVector result = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector result = unionOf(new LongColumnVector(), bytesColumn());
     roundTrip(source, new int[] {0}, batchWithColumn(result, 0));
 
     assertEquals(1, result.tags[0]);
@@ -734,7 +734,7 @@ public class TestVectorShuffleBatchSerde {
 
   @Test
   public void testRepeatingUnion() throws Exception {
-    UnionColumnVector nonNull = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector nonNull = unionOf(new LongColumnVector(), bytesColumn());
     nonNull.isRepeating = true;
     nonNull.tags[0] = 1;
     ((BytesColumnVector) nonNull.fields[1]).setVal(0, bytes("repeat"));
@@ -747,7 +747,7 @@ public class TestVectorShuffleBatchSerde {
     source.cols[1] = nullUnion;
     source.size = 4;
 
-    UnionColumnVector resultNonNull = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector resultNonNull = unionOf(new LongColumnVector(), bytesColumn());
     UnionColumnVector resultNull = unionOf(new LongColumnVector());
     VectorizedRowBatch result = new VectorizedRowBatch(2);
     result.cols[0] = resultNonNull;
@@ -763,13 +763,13 @@ public class TestVectorShuffleBatchSerde {
 
   @Test
   public void testUnionUnusedFieldHasZeroActiveRows() throws Exception {
-    UnionColumnVector union = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector union = unionOf(new LongColumnVector(), bytesColumn());
     union.tags[0] = 0;
     union.tags[1] = 0;
     ((LongColumnVector) union.fields[0]).vector[0] = 1;
     ((LongColumnVector) union.fields[0]).vector[1] = 2;
 
-    UnionColumnVector result = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector result = unionOf(new LongColumnVector(), bytesColumn());
     roundTrip(batchWithColumn(union, 2), new int[] {0}, batchWithColumn(result, 0));
 
     assertEquals(1, ((LongColumnVector) result.fields[0]).vector[0]);
@@ -779,13 +779,13 @@ public class TestVectorShuffleBatchSerde {
 
   @Test
   public void testAllNullUnionHasNoTagsOrActiveChildren() throws Exception {
-    UnionColumnVector union = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector union = unionOf(new LongColumnVector(), bytesColumn());
     union.noNulls = false;
     union.isNull[0] = true;
     union.isNull[1] = true;
     ((LongColumnVector) union.fields[0]).vector[0] = 100;
 
-    UnionColumnVector result = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector result = unionOf(new LongColumnVector(), bytesColumn());
     roundTrip(batchWithColumn(union, 2), new int[] {0}, batchWithColumn(result, 0));
 
     assertTrue(result.isNull[0]);
@@ -795,12 +795,12 @@ public class TestVectorShuffleBatchSerde {
 
   @Test
   public void testStructContainingUnion() throws Exception {
-    UnionColumnVector union = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector union = unionOf(new LongColumnVector(), bytesColumn());
     union.tags[0] = 1;
     ((BytesColumnVector) union.fields[1]).setVal(0, bytes("nested"));
     StructColumnVector struct = structOf(union);
 
-    UnionColumnVector resultUnion = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector resultUnion = unionOf(new LongColumnVector(), bytesColumn());
     roundTrip(batchWithColumn(struct, 1), new int[] {0},
         batchWithColumn(structOf(resultUnion), 0));
 
@@ -810,13 +810,13 @@ public class TestVectorShuffleBatchSerde {
 
   @Test
   public void testUnionContainingStruct() throws Exception {
-    StructColumnVector field = structOf(new LongColumnVector(), new BytesColumnVector());
+    StructColumnVector field = structOf(new LongColumnVector(), bytesColumn());
     UnionColumnVector union = unionOf(field, new DoubleColumnVector());
     union.tags[0] = 0;
     ((LongColumnVector) field.fields[0]).vector[0] = 7;
     ((BytesColumnVector) field.fields[1]).setVal(0, bytes("struct"));
 
-    StructColumnVector resultField = structOf(new LongColumnVector(), new BytesColumnVector());
+    StructColumnVector resultField = structOf(new LongColumnVector(), bytesColumn());
     UnionColumnVector result = unionOf(resultField, new DoubleColumnVector());
     roundTrip(batchWithColumn(union, 1), new int[] {0}, batchWithColumn(result, 0));
 
@@ -827,7 +827,7 @@ public class TestVectorShuffleBatchSerde {
 
   @Test
   public void testListContainingUnion() throws Exception {
-    UnionColumnVector child = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector child = unionOf(new LongColumnVector(), bytesColumn());
     child.tags[2] = 1;
     child.tags[3] = 0;
     ((BytesColumnVector) child.fields[1]).setVal(2, bytes("list-union"));
@@ -836,7 +836,7 @@ public class TestVectorShuffleBatchSerde {
     list.offsets[0] = 2;
     list.lengths[0] = 2;
 
-    UnionColumnVector resultChild = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector resultChild = unionOf(new LongColumnVector(), bytesColumn());
     ListColumnVector result = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, resultChild);
     roundTrip(batchWithColumn(list, 1), new int[] {0}, batchWithColumn(result, 0));
 
@@ -854,14 +854,14 @@ public class TestVectorShuffleBatchSerde {
     list.lengths[1] = 2;
     child.vector[3] = 30;
     child.vector[4] = 40;
-    BytesColumnVector firstField = new BytesColumnVector();
+    BytesColumnVector firstField = bytesColumn();
     firstField.setVal(0, bytes("first"));
     UnionColumnVector union = unionOf(firstField, list);
     union.tags[1] = 1;
 
     ListColumnVector resultList = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
         new LongColumnVector());
-    UnionColumnVector result = unionOf(new BytesColumnVector(), resultList);
+    UnionColumnVector result = unionOf(bytesColumn(), resultList);
     roundTrip(batchWithColumn(union, 2), new int[] {0}, batchWithColumn(result, 0));
 
     assertEquals(1, result.tags[1]);
@@ -872,8 +872,8 @@ public class TestVectorShuffleBatchSerde {
 
   @Test
   public void testMapValueContainingUnion() throws Exception {
-    BytesColumnVector keys = new BytesColumnVector();
-    UnionColumnVector values = unionOf(new LongColumnVector(), new BytesColumnVector());
+    BytesColumnVector keys = bytesColumn();
+    UnionColumnVector values = unionOf(new LongColumnVector(), bytesColumn());
     keys.setVal(2, bytes("key"));
     values.tags[2] = 1;
     ((BytesColumnVector) values.fields[1]).setVal(2, bytes("value"));
@@ -881,9 +881,9 @@ public class TestVectorShuffleBatchSerde {
     map.offsets[0] = 2;
     map.lengths[0] = 1;
 
-    UnionColumnVector resultValues = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector resultValues = unionOf(new LongColumnVector(), bytesColumn());
     MapColumnVector result = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
-        new BytesColumnVector(), resultValues);
+        bytesColumn(), resultValues);
     roundTrip(batchWithColumn(map, 1), new int[] {0}, batchWithColumn(result, 0));
 
     assertBytes("key", (BytesColumnVector) result.keys, 0);
@@ -893,7 +893,7 @@ public class TestVectorShuffleBatchSerde {
 
   @Test
   public void testUnionContainingMap() throws Exception {
-    BytesColumnVector keys = new BytesColumnVector();
+    BytesColumnVector keys = bytesColumn();
     LongColumnVector values = new LongColumnVector();
     keys.setVal(4, bytes("map-key"));
     values.vector[4] = 44;
@@ -904,7 +904,7 @@ public class TestVectorShuffleBatchSerde {
     union.tags[1] = 1;
 
     MapColumnVector resultMap = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
-        new BytesColumnVector(), new LongColumnVector());
+        bytesColumn(), new LongColumnVector());
     UnionColumnVector result = unionOf(new LongColumnVector(), resultMap);
     roundTrip(batchWithColumn(union, 2), new int[] {0}, batchWithColumn(result, 0));
 
@@ -915,13 +915,13 @@ public class TestVectorShuffleBatchSerde {
 
   @Test
   public void testNestedUnionContainingUnion() throws Exception {
-    UnionColumnVector inner = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector inner = unionOf(new LongColumnVector(), bytesColumn());
     inner.tags[0] = 1;
     ((BytesColumnVector) inner.fields[1]).setVal(0, bytes("inner"));
     UnionColumnVector outer = unionOf(inner, new DoubleColumnVector());
     outer.tags[0] = 0;
 
-    UnionColumnVector resultInner = unionOf(new LongColumnVector(), new BytesColumnVector());
+    UnionColumnVector resultInner = unionOf(new LongColumnVector(), bytesColumn());
     UnionColumnVector resultOuter = unionOf(resultInner, new DoubleColumnVector());
     roundTrip(batchWithColumn(outer, 1), new int[] {0}, batchWithColumn(resultOuter, 0));
 
@@ -1016,6 +1016,12 @@ public class TestVectorShuffleBatchSerde {
     batch.cols[0] = column;
     batch.size = size;
     return batch;
+  }
+
+  private static BytesColumnVector bytesColumn() {
+    BytesColumnVector bytes = new BytesColumnVector();
+    bytes.initBuffer();
+    return bytes;
   }
 
   private static StructColumnVector structOf(ColumnVector... fields) {
