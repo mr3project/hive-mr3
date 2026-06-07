@@ -29,9 +29,9 @@ import org.apache.hadoop.io.WritableUtils;
  *
  * <p>The receiver is expected to know the column schema and physical vector layout. Selected rows
  * are compacted in logical order, inactive rows and unselected columns are omitted, null values are
- * omitted, and repeating columns are represented by a single value. Primitive, list, and map
- * vectors are supported; struct and union vectors are rejected until their inactive child slots can
- * be omitted safely.</p>
+ * omitted, and repeating columns are represented by a single value. Primitive, list, map, and
+ * struct vectors are supported; union vectors are rejected until their active child tags can be encoded
+ * safely.</p>
  */
 public final class VectorShuffleBatchSerializer {
   private static final int IS_REPEATING = 1;
@@ -80,7 +80,10 @@ public final class VectorShuffleBatchSerializer {
     }
 
     writeTypeMetadata(column);
-    if (column instanceof StructColumnVector || column instanceof UnionColumnVector) {
+    if (column instanceof StructColumnVector) {
+      writeStructChildren((StructColumnVector) column, indices, valueCount, repeating,
+          nullBitmap);
+    } else if (column instanceof UnionColumnVector) {
       throw unsupported(column);
     } else if (column instanceof ListColumnVector) {
       ListColumnVector list = (ListColumnVector) column;
@@ -95,6 +98,29 @@ public final class VectorShuffleBatchSerializer {
           writeValue(column, physicalIndex(indices, logical, repeating));
         }
       }
+    }
+  }
+
+
+  private void writeStructChildren(StructColumnVector struct, int[] indices, int valueCount,
+      boolean repeating, byte[] nullBitmap) throws IOException {
+    int activeCount = 0;
+    for (int logical = 0; logical < valueCount; logical++) {
+      if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
+        activeCount++;
+      }
+    }
+
+    int[] activeIndices = new int[activeCount];
+    int activePosition = 0;
+    for (int logical = 0; logical < valueCount; logical++) {
+      if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
+        activeIndices[activePosition++] = physicalIndex(indices, logical, repeating);
+      }
+    }
+
+    for (ColumnVector field : struct.fields) {
+      writeColumn(field, activeIndices, activeCount);
     }
   }
 

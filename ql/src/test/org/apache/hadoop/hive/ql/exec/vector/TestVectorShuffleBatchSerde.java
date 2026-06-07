@@ -23,6 +23,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 import org.apache.hadoop.hive.common.type.HiveDecimal;
@@ -391,13 +392,331 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
-  public void testStructColumnIsRejectedUntilInactiveChildrenCanBeOmitted() {
-    VectorizedRowBatch source = new VectorizedRowBatch(1);
-    source.cols[0] = new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new BytesColumnVector());
+  public void testSimpleStructWithPrimitiveFields() throws Exception {
+    BytesColumnVector strings = new BytesColumnVector();
+    strings.initBuffer();
+    LongColumnVector longs = new LongColumnVector();
+    StructColumnVector struct =
+        new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE, strings, longs);
+    VectorizedRowBatch source = batchWithColumn(struct, 2);
+    strings.setVal(0, bytes("zero"));
+    strings.setVal(1, bytes("one"));
+    longs.vector[0] = 10;
+    longs.vector[1] = 11;
+
+    StructColumnVector result = structOf(new BytesColumnVector(), new LongColumnVector());
+    roundTrip(source, new int[] {0}, batchWithColumn(result, 0));
+
+    assertBytes("zero", (BytesColumnVector) result.fields[0], 0);
+    assertBytes("one", (BytesColumnVector) result.fields[0], 1);
+    assertEquals(10, ((LongColumnVector) result.fields[1]).vector[0]);
+    assertEquals(11, ((LongColumnVector) result.fields[1]).vector[1]);
+  }
+
+  @Test
+  public void testNullableStructParentOmitsInactiveFieldValues() throws Exception {
+    LongColumnVector field = new LongColumnVector();
+    StructColumnVector struct = new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE, field);
+    VectorizedRowBatch source = batchWithColumn(struct, 3);
+    struct.noNulls = false;
+    struct.isNull[1] = true;
+    field.vector[0] = 10;
+    field.vector[1] = 999;
+    field.vector[2] = 30;
+
+    StructColumnVector result = structOf(new LongColumnVector());
+    roundTrip(source, new int[] {0}, batchWithColumn(result, 0));
+
+    assertTrue(result.isNull[1]);
+    assertEquals(10, ((LongColumnVector) result.fields[0]).vector[0]);
+    assertEquals(30, ((LongColumnVector) result.fields[0]).vector[2]);
+  }
+
+  @Test
+  public void testSelectedStructRowsAreCompacted() throws Exception {
+    LongColumnVector field = new LongColumnVector();
+    StructColumnVector struct = new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE, field);
+    VectorizedRowBatch source = batchWithColumn(struct, 3);
+    source.selectedInUse = true;
+    source.selected[0] = 2;
+    source.selected[1] = 5;
+    source.selected[2] = 9;
+    struct.noNulls = false;
+    struct.isNull[5] = true;
+    field.vector[2] = 20;
+    field.vector[5] = 999;
+    field.vector[9] = 90;
+
+    StructColumnVector result = structOf(new LongColumnVector());
+    roundTrip(source, new int[] {0}, batchWithColumn(result, 0));
+
+    assertEquals(20, ((LongColumnVector) result.fields[0]).vector[0]);
+    assertTrue(result.isNull[1]);
+    assertEquals(90, ((LongColumnVector) result.fields[0]).vector[2]);
+  }
+
+  @Test
+  public void testNullableStructFieldsRetainIndependentNulls() throws Exception {
+    LongColumnVector first = new LongColumnVector();
+    DoubleColumnVector second = new DoubleColumnVector();
+    StructColumnVector struct =
+        new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE, first, second);
+    VectorizedRowBatch source = batchWithColumn(struct, 2);
+    first.noNulls = false;
+    first.isNull[0] = true;
+    first.vector[1] = 12;
+    second.noNulls = false;
+    second.vector[0] = 2.5;
+    second.isNull[1] = true;
+
+    StructColumnVector result = structOf(new LongColumnVector(), new DoubleColumnVector());
+    roundTrip(source, new int[] {0}, batchWithColumn(result, 0));
+
+    assertTrue(result.fields[0].isNull[0]);
+    assertEquals(12, ((LongColumnVector) result.fields[0]).vector[1]);
+    assertEquals(2.5, ((DoubleColumnVector) result.fields[1]).vector[0], 0);
+    assertTrue(result.fields[1].isNull[1]);
+  }
+
+  @Test
+  public void testRepeatingNonNullAndNullStructs() throws Exception {
+    LongColumnVector nonNullField = new LongColumnVector();
+    StructColumnVector nonNull =
+        new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE, nonNullField);
+    nonNull.isRepeating = true;
+    nonNullField.vector[0] = 77;
+    StructColumnVector nullStruct = structOf(new LongColumnVector());
+    nullStruct.isRepeating = true;
+    nullStruct.noNulls = false;
+    nullStruct.isNull[0] = true;
+    VectorizedRowBatch source = new VectorizedRowBatch(2);
+    source.cols[0] = nonNull;
+    source.cols[1] = nullStruct;
+    source.size = 4;
+
+    StructColumnVector resultNonNull = structOf(new LongColumnVector());
+    StructColumnVector resultNull = structOf(new LongColumnVector());
+    VectorizedRowBatch result = new VectorizedRowBatch(2);
+    result.cols[0] = resultNonNull;
+    result.cols[1] = resultNull;
+    roundTrip(source, new int[] {0, 1}, result);
+
+    assertTrue(resultNonNull.isRepeating);
+    assertEquals(77, ((LongColumnVector) resultNonNull.fields[0]).vector[0]);
+    assertTrue(resultNull.isRepeating);
+    assertTrue(resultNull.isNull[0]);
+  }
+
+  @Test
+  public void testRepeatingStructChildFieldIsPreserved() throws Exception {
+    LongColumnVector field = new LongColumnVector();
+    field.isRepeating = true;
+    field.vector[0] = 44;
+    StructColumnVector struct = new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE, field);
+    VectorizedRowBatch source = batchWithColumn(struct, 3);
+
+    StructColumnVector result = structOf(new LongColumnVector());
+    roundTrip(source, new int[] {0}, batchWithColumn(result, 0));
+
+    assertTrue(result.fields[0].isRepeating);
+    assertEquals(44, ((LongColumnVector) result.fields[0]).vector[0]);
+  }
+
+  @Test
+  public void testNestedStructsWithIndependentNulls() throws Exception {
+    LongColumnVector nestedLong = new LongColumnVector();
+    BytesColumnVector nestedBytes = new BytesColumnVector();
+    nestedBytes.initBuffer();
+    StructColumnVector inner = new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+        nestedLong, nestedBytes);
+    DoubleColumnVector outerDouble = new DoubleColumnVector();
+    StructColumnVector outer = new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+        inner, outerDouble);
+    VectorizedRowBatch source = batchWithColumn(outer, 3);
+    outer.noNulls = false;
+    outer.isNull[1] = true;
+    inner.noNulls = false;
+    inner.isNull[2] = true;
+    nestedLong.vector[0] = 10;
+    nestedBytes.setVal(0, bytes("ten"));
+    outerDouble.vector[0] = 1.5;
+    outerDouble.vector[2] = 3.5;
+
+    StructColumnVector resultInner = structOf(new LongColumnVector(), new BytesColumnVector());
+    StructColumnVector resultOuter = structOf(resultInner, new DoubleColumnVector());
+    roundTrip(source, new int[] {0}, batchWithColumn(resultOuter, 0));
+
+    assertTrue(resultOuter.isNull[1]);
+    assertTrue(resultInner.isNull[2]);
+    assertEquals(10, ((LongColumnVector) resultInner.fields[0]).vector[0]);
+    assertBytes("ten", (BytesColumnVector) resultInner.fields[1], 0);
+    assertEquals(3.5, ((DoubleColumnVector) resultOuter.fields[1]).vector[2], 0);
+  }
+
+  @Test
+  public void testStructContainingListAndMapUsesScatteredParentPositions() throws Exception {
+    LongColumnVector listChild = new LongColumnVector();
+    ListColumnVector list = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, listChild);
+    BytesColumnVector mapKeys = new BytesColumnVector();
+    mapKeys.initBuffer();
+    LongColumnVector mapValues = new LongColumnVector();
+    MapColumnVector map = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE, mapKeys, mapValues);
+    StructColumnVector struct = new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE, list, map);
+    VectorizedRowBatch source = batchWithColumn(struct, 3);
+    struct.noNulls = false;
+    struct.isNull[1] = true;
+    list.offsets[0] = 3;
+    list.lengths[0] = 1;
+    listChild.vector[3] = 30;
+    list.offsets[2] = 7;
+    list.lengths[2] = 2;
+    listChild.vector[7] = 70;
+    listChild.vector[8] = 80;
+    map.offsets[0] = 2;
+    map.lengths[0] = 1;
+    mapKeys.setVal(2, bytes("a"));
+    mapValues.vector[2] = 1;
+    map.offsets[2] = 5;
+    map.lengths[2] = 1;
+    mapKeys.setVal(5, bytes("c"));
+    mapValues.vector[5] = 3;
+
+    ListColumnVector resultList =
+        new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new LongColumnVector());
+    MapColumnVector resultMap = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+        new BytesColumnVector(), new LongColumnVector());
+    StructColumnVector result = structOf(resultList, resultMap);
+    roundTrip(source, new int[] {0}, batchWithColumn(result, 0));
+
+    assertEquals(0, resultList.offsets[0]);
+    assertEquals(1, resultList.lengths[0]);
+    assertEquals(1, resultList.offsets[2]);
+    assertEquals(2, resultList.lengths[2]);
+    assertEquals(80, ((LongColumnVector) resultList.child).vector[2]);
+    assertEquals(0, resultMap.offsets[0]);
+    assertEquals(1, resultMap.offsets[2]);
+    assertBytes("c", (BytesColumnVector) resultMap.keys, 1);
+  }
+
+  @Test
+  public void testListAndMapContainingStructs() throws Exception {
+    LongColumnVector listField = new LongColumnVector();
+    StructColumnVector listStruct =
+        new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE, listField);
+    ListColumnVector list = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, listStruct);
+    list.offsets[0] = 2;
+    list.lengths[0] = 2;
+    listField.vector[2] = 20;
+    listField.vector[3] = 30;
+    BytesColumnVector mapKeys = new BytesColumnVector();
+    mapKeys.initBuffer();
+    LongColumnVector mapField = new LongColumnVector();
+    StructColumnVector mapStruct =
+        new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE, mapField);
+    MapColumnVector map = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE, mapKeys, mapStruct);
+    map.offsets[0] = 4;
+    map.lengths[0] = 1;
+    mapKeys.setVal(4, bytes("k"));
+    mapField.vector[4] = 40;
+    VectorizedRowBatch source = new VectorizedRowBatch(2);
+    source.cols[0] = list;
+    source.cols[1] = map;
     source.size = 1;
 
+    ListColumnVector resultList = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+        structOf(new LongColumnVector()));
+    MapColumnVector resultMap = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+        new BytesColumnVector(), structOf(new LongColumnVector()));
+    VectorizedRowBatch result = new VectorizedRowBatch(2);
+    result.cols[0] = resultList;
+    result.cols[1] = resultMap;
+    roundTrip(source, new int[] {0, 1}, result);
+
+    LongColumnVector resultListField =
+        (LongColumnVector) ((StructColumnVector) resultList.child).fields[0];
+    assertEquals(20, resultListField.vector[0]);
+    assertEquals(30, resultListField.vector[1]);
+    assertBytes("k", (BytesColumnVector) resultMap.keys, 0);
+    LongColumnVector resultMapField =
+        (LongColumnVector) ((StructColumnVector) resultMap.values).fields[0];
+    assertEquals(40, resultMapField.vector[0]);
+  }
+
+  @Test
+  public void testAllNullStructHasZeroActiveChildren() throws Exception {
+    LongColumnVector field = new LongColumnVector();
+    StructColumnVector struct = new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE, field);
+    VectorizedRowBatch source = batchWithColumn(struct, 2);
+    struct.noNulls = false;
+    struct.isNull[0] = true;
+    struct.isNull[1] = true;
+    field.vector[0] = 100;
+    field.vector[1] = 200;
+
+    StructColumnVector result = structOf(new LongColumnVector());
+    roundTrip(source, new int[] {0}, batchWithColumn(result, 0));
+
+    assertTrue(result.isNull[0]);
+    assertTrue(result.isNull[1]);
+    assertEquals(0, ((LongColumnVector) result.fields[0]).vector[0]);
+  }
+
+  @Test
+  public void testDirectAndNestedUnionColumnsRemainRejected() {
+    VectorizedRowBatch direct = batchWithColumn(
+        new UnionColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new LongColumnVector()), 1);
     assertThrows(IllegalArgumentException.class,
-        () -> serializer.serialize(source, new int[] {0}, new BytesWritable()));
+        () -> serializer.serialize(direct, new int[] {0}, new BytesWritable()));
+
+    StructColumnVector struct = structOf(
+        new UnionColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new LongColumnVector()));
+    VectorizedRowBatch nested = batchWithColumn(struct, 1);
+    assertThrows(IllegalArgumentException.class,
+        () -> serializer.serialize(nested, new int[] {0}, new BytesWritable()));
+
+    BytesWritable directPayload = new BytesWritable(new byte[] {1, 1, 0});
+    assertThrows(IllegalArgumentException.class,
+        () -> deserializer.deserialize(directPayload, batchWithColumn(
+            new UnionColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new LongColumnVector()), 0)));
+    BytesWritable nestedPayload = new BytesWritable(new byte[] {1, 1, 0, 0});
+    assertThrows(IllegalArgumentException.class,
+        () -> deserializer.deserialize(nestedPayload,
+            batchWithColumn(structOf(new UnionColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+                new LongColumnVector())), 0)));
+  }
+
+  @Test
+  public void testStructPayloadRejectsTrailingAndMalformedBytes() throws Exception {
+    StructColumnVector struct = structOf(new LongColumnVector());
+    ((LongColumnVector) struct.fields[0]).vector[0] = 7;
+    VectorizedRowBatch source = batchWithColumn(struct, 1);
+    BytesWritable serialized = new BytesWritable();
+    serializer.serialize(source, new int[] {0}, serialized);
+
+    byte[] trailingBytes = new byte[serialized.getLength() + 1];
+    System.arraycopy(serialized.getBytes(), 0, trailingBytes, 0, serialized.getLength());
+    BytesWritable trailing = new BytesWritable(trailingBytes);
+    assertThrows(IOException.class,
+        () -> deserializer.deserialize(trailing,
+            batchWithColumn(structOf(new LongColumnVector()), 0)));
+
+    byte[] malformedBytes = new byte[serialized.getLength() - 1];
+    System.arraycopy(serialized.getBytes(), 0, malformedBytes, 0, malformedBytes.length);
+    BytesWritable malformed = new BytesWritable(malformedBytes);
+    assertThrows(IOException.class,
+        () -> deserializer.deserialize(malformed,
+            batchWithColumn(structOf(new LongColumnVector()), 0)));
+  }
+
+  private static VectorizedRowBatch batchWithColumn(ColumnVector column, int size) {
+    VectorizedRowBatch batch = new VectorizedRowBatch(1);
+    batch.cols[0] = column;
+    batch.size = size;
+    return batch;
+  }
+
+  private static StructColumnVector structOf(ColumnVector... fields) {
+    return new StructColumnVector(VectorizedRowBatch.DEFAULT_SIZE, fields);
   }
 
   private void roundTrip(VectorizedRowBatch source, int[] sourceColumnMap,
