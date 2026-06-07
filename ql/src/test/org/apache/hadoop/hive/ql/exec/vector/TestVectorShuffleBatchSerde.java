@@ -24,13 +24,18 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.function.Function;
 
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
@@ -45,6 +50,8 @@ public class TestVectorShuffleBatchSerde {
   private static final int PROPERTY_TEST_ITERATIONS = 200;
   private static final int DECIMAL_PRECISION = 20;
   private static final int DECIMAL_SCALE = 4;
+  private static final String BIGINT_COLUMN_LOG =
+      "TestVectorShuffleBatchSerde-bigint-columns.log";
   private static final long[] INTERESTING_BIGINTS = {
       Long.MIN_VALUE, Long.MIN_VALUE + 1, Integer.MIN_VALUE, -11, -10, -1, 0, 1, 10, 11,
       Integer.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE
@@ -93,7 +100,7 @@ public class TestVectorShuffleBatchSerde {
               int index) {
             assertEquals(context, expected.longValue(), ((LongColumnVector) vector).vector[index]);
           }
-        });
+        }, newColumnLog(BIGINT_COLUMN_LOG, BIGINT_PROPERTY_TEST_SEED, String::valueOf));
   }
 
   @Test
@@ -1148,22 +1155,30 @@ public class TestVectorShuffleBatchSerde {
 
   private <T> void assertRandomColumnRoundTrips(String typeName, long seed, int iterations,
       RandomColumnAdapter<T> adapter) throws Exception {
-    Random random = new Random(seed);
-    for (int iteration = 0; iteration < iterations; iteration++) {
-      RandomColumnScenario scenario = randomColumnScenario(random, iteration);
-      List<T> expected = randomValues(random, scenario, adapter);
-      ColumnVector sourceColumn = adapter.createVector();
-      scenario.columnLayout.apply(sourceColumn, scenario.batchLayout);
-      for (int logical = 0; logical < scenario.size(); logical++) {
-        if (!scenario.isNull(logical)) {
-          adapter.setValue(sourceColumn, scenario.sourceIndex(logical), expected.get(logical));
-        }
-      }
+    assertRandomColumnRoundTrips(typeName, seed, iterations, adapter, noOpColumnLog());
+  }
 
-      VectorizedRowBatch result = batchWithColumn(adapter.createVector(), 0);
-      roundTrip(scenario.batchLayout.batchWithColumn(sourceColumn), new int[] {0}, result);
-      assertColumnRoundTrip(expected, scenario, result, adapter,
-          typeName + ", seed=" + seed + ", iteration=" + iteration + ", " + scenario);
+  private <T> void assertRandomColumnRoundTrips(String typeName, long seed, int iterations,
+      RandomColumnAdapter<T> adapter, RandomColumnLog<T> columnLog) throws Exception {
+    Random random = new Random(seed);
+    try (RandomColumnLog<T> output = columnLog) {
+      for (int iteration = 0; iteration < iterations; iteration++) {
+        RandomColumnScenario scenario = randomColumnScenario(random, iteration);
+        List<T> expected = randomValues(random, scenario, adapter);
+        output.write(iteration, scenario, expected);
+        ColumnVector sourceColumn = adapter.createVector();
+        scenario.columnLayout.apply(sourceColumn, scenario.batchLayout);
+        for (int logical = 0; logical < scenario.size(); logical++) {
+          if (!scenario.isNull(logical)) {
+            adapter.setValue(sourceColumn, scenario.sourceIndex(logical), expected.get(logical));
+          }
+        }
+
+        VectorizedRowBatch result = batchWithColumn(adapter.createVector(), 0);
+        roundTrip(scenario.batchLayout.batchWithColumn(sourceColumn), new int[] {0}, result);
+        assertColumnRoundTrip(expected, scenario, result, adapter,
+            typeName + ", seed=" + seed + ", iteration=" + iteration + ", " + scenario);
+      }
     }
   }
 
@@ -1241,6 +1256,54 @@ public class TestVectorShuffleBatchSerde {
         : new BigInteger(66, random).multiply(random.nextBoolean() ? BigInteger.ONE
             : BigInteger.valueOf(-1));
     return HiveDecimal.create(unscaled, DECIMAL_SCALE);
+  }
+
+  private static <T> RandomColumnLog<T> newColumnLog(String fileName, long seed,
+      Function<T, String> formatter) throws IOException {
+    Path directory = Paths.get(System.getProperty("test.tmp.dir", "target/tmp"));
+    Files.createDirectories(directory);
+    BufferedWriter writer = Files.newBufferedWriter(directory.resolve(fileName),
+        StandardCharsets.UTF_8);
+    return new RandomColumnLog<T>() {
+      @Override
+      public void write(int iteration, RandomColumnScenario scenario, List<T> values)
+          throws IOException {
+        writer.write("seed=" + seed + ", iteration=" + iteration + ", " + scenario
+            + ", values=[");
+        for (int logical = 0; logical < values.size(); logical++) {
+          if (logical > 0) {
+            writer.write(", ");
+          }
+          writer.write(scenario.isNull(logical) ? "NULL" : formatter.apply(values.get(logical)));
+        }
+        writer.write("]");
+        writer.newLine();
+      }
+
+      @Override
+      public void close() throws IOException {
+        writer.close();
+      }
+    };
+  }
+
+  private static <T> RandomColumnLog<T> noOpColumnLog() {
+    return new RandomColumnLog<T>() {
+      @Override
+      public void write(int iteration, RandomColumnScenario scenario, List<T> values) {
+      }
+
+      @Override
+      public void close() {
+      }
+    };
+  }
+
+  private interface RandomColumnLog<T> extends AutoCloseable {
+    void write(int iteration, RandomColumnScenario scenario, List<T> values) throws IOException;
+
+    @Override
+    void close() throws IOException;
   }
 
   private interface RandomColumnAdapter<T> {
