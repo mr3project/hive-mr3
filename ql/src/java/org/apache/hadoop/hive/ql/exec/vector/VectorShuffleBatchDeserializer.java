@@ -69,11 +69,16 @@ public final class VectorShuffleBatchDeserializer {
   }
 
   private void readColumn(ColumnVector column, int rowCount) throws IOException {
+    readColumn(column, null, rowCount);
+  }
+
+  private void readColumn(ColumnVector column, int[] destinationIndices, int rowCount)
+      throws IOException {
     final int flags = input.readUnsignedByte();
     final boolean repeating = (flags & IS_REPEATING) != 0;
     final boolean hasNulls = (flags & HAS_NULLS) != 0;
     final int valueCount = repeating ? Math.min(rowCount, 1) : rowCount;
-    column.ensureSize(valueCount, false);
+    column.ensureSize(requiredSize(destinationIndices, valueCount, repeating), false);
 
     byte[] nullBitmap = null;
     if (hasNulls) {
@@ -83,53 +88,100 @@ public final class VectorShuffleBatchDeserializer {
 
     column.isRepeating = repeating;
     column.noNulls = !hasNulls;
-    for (int index = 0; index < valueCount; index++) {
-      column.isNull[index] = hasNulls && (nullBitmap[index >>> 3] & (1 << (index & 7))) != 0;
+    for (int logical = 0; logical < valueCount; logical++) {
+      int destinationIndex = destinationIndex(destinationIndices, logical, repeating);
+      column.isNull[destinationIndex] = hasNulls && isNull(nullBitmap, logical);
     }
     readTypeMetadata(column);
 
-    if (column instanceof StructColumnVector || column instanceof UnionColumnVector) {
+    if (column instanceof StructColumnVector) {
+      readStructChildren((StructColumnVector) column, destinationIndices, valueCount, repeating);
+    } else if (column instanceof UnionColumnVector) {
       throw unsupported(column);
     } else if (column instanceof ListColumnVector) {
       ListColumnVector list = (ListColumnVector) column;
-      int childCount = readMultiValuedLengths(list, valueCount);
+      int childCount = readMultiValuedLengths(list, destinationIndices, valueCount, repeating);
       list.child.ensureSize(childCount, false);
       readColumn(list.child, childCount);
     } else if (column instanceof MapColumnVector) {
       MapColumnVector map = (MapColumnVector) column;
-      int childCount = readMultiValuedLengths(map, valueCount);
+      int childCount = readMultiValuedLengths(map, destinationIndices, valueCount, repeating);
       map.keys.ensureSize(childCount, false);
       map.values.ensureSize(childCount, false);
       readColumn(map.keys, childCount);
       readColumn(map.values, childCount);
     } else {
       ensurePrimitiveSupported(column);
-      for (int index = 0; index < valueCount; index++) {
-        if (!column.isNull[index]) {
-          readValue(column, index);
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          readValue(column, destinationIndex(destinationIndices, logical, repeating));
         }
       }
     }
   }
 
-  private int readMultiValuedLengths(MultiValuedColumnVector column, int valueCount)
-      throws IOException {
+  private void readStructChildren(StructColumnVector struct, int[] destinationIndices,
+      int valueCount, boolean repeating) throws IOException {
+    int activeCount = 0;
+    for (int logical = 0; logical < valueCount; logical++) {
+      if (!struct.isNull[destinationIndex(destinationIndices, logical, repeating)]) {
+        activeCount++;
+      }
+    }
+
+    int[] activeDestinationIndices = new int[activeCount];
+    int activePosition = 0;
+    for (int logical = 0; logical < valueCount; logical++) {
+      int destinationIndex = destinationIndex(destinationIndices, logical, repeating);
+      if (!struct.isNull[destinationIndex]) {
+        activeDestinationIndices[activePosition++] = destinationIndex;
+      }
+    }
+
+    for (ColumnVector field : struct.fields) {
+      field.ensureSize(requiredSize(activeDestinationIndices, activeCount, false), false);
+      readColumn(field, activeDestinationIndices, activeCount);
+    }
+  }
+
+  private int readMultiValuedLengths(MultiValuedColumnVector column, int[] destinationIndices,
+      int valueCount, boolean repeating) throws IOException {
     int childCount = 0;
-    for (int index = 0; index < valueCount; index++) {
-      column.offsets[index] = childCount;
-      if (!column.isNull[index]) {
+    for (int logical = 0; logical < valueCount; logical++) {
+      int destinationIndex = destinationIndex(destinationIndices, logical, repeating);
+      column.offsets[destinationIndex] = childCount;
+      if (!column.isNull[destinationIndex]) {
         int length = WritableUtils.readVInt(input);
         if (length < 0) {
           throw new IOException("Negative multi-valued vector length " + length);
         }
-        column.lengths[index] = length;
+        column.lengths[destinationIndex] = length;
         childCount = Math.addExact(childCount, length);
       } else {
-        column.lengths[index] = 0;
+        column.lengths[destinationIndex] = 0;
       }
     }
     column.childCount = childCount;
     return childCount;
+  }
+
+  private boolean isNull(byte[] nullBitmap, int logical) {
+    return nullBitmap != null && (nullBitmap[logical >>> 3] & (1 << (logical & 7))) != 0;
+  }
+
+  private int destinationIndex(int[] destinationIndices, int logical, boolean repeating) {
+    return repeating ? 0 : destinationIndices == null ? logical : destinationIndices[logical];
+  }
+
+  private int requiredSize(int[] destinationIndices, int valueCount, boolean repeating) {
+    if (repeating || destinationIndices == null) {
+      return valueCount;
+    }
+    int requiredSize = 0;
+    for (int logical = 0; logical < valueCount; logical++) {
+      requiredSize = Math.max(requiredSize, destinationIndices[logical] + 1);
+    }
+    return requiredSize;
   }
 
   private void readTypeMetadata(ColumnVector column) throws IOException {
