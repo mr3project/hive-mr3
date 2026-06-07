@@ -97,7 +97,7 @@ public final class VectorShuffleBatchDeserializer {
     if (column instanceof StructColumnVector) {
       readStructChildren((StructColumnVector) column, destinationIndices, valueCount, repeating);
     } else if (column instanceof UnionColumnVector) {
-      throw unsupported(column);
+      readUnionChildren((UnionColumnVector) column, destinationIndices, valueCount, repeating);
     } else if (column instanceof ListColumnVector) {
       ListColumnVector list = (ListColumnVector) column;
       int childCount = readMultiValuedLengths(list, destinationIndices, valueCount, repeating);
@@ -141,6 +141,42 @@ public final class VectorShuffleBatchDeserializer {
     for (ColumnVector field : struct.fields) {
       field.ensureSize(requiredSize(activeDestinationIndices, activeCount, false), false);
       readColumn(field, activeDestinationIndices, activeCount);
+    }
+  }
+
+  private void readUnionChildren(UnionColumnVector union, int[] destinationIndices,
+      int valueCount, boolean repeating) throws IOException {
+    int[] fieldCounts = new int[union.fields.length];
+    for (int logical = 0; logical < valueCount; logical++) {
+      int destinationIndex = destinationIndex(destinationIndices, logical, repeating);
+      if (!union.isNull[destinationIndex]) {
+        int tag = WritableUtils.readVInt(input);
+        if (tag < 0 || tag >= union.fields.length) {
+          throw new IOException("Invalid union tag " + tag + " for " + union.fields.length
+              + " fields");
+        }
+        union.tags[destinationIndex] = tag;
+        fieldCounts[tag]++;
+      }
+    }
+
+    int[][] fieldDestinationIndices = new int[union.fields.length][];
+    for (int tag = 0; tag < union.fields.length; tag++) {
+      fieldDestinationIndices[tag] = new int[fieldCounts[tag]];
+    }
+    int[] fieldPositions = new int[union.fields.length];
+    for (int logical = 0; logical < valueCount; logical++) {
+      int destinationIndex = destinationIndex(destinationIndices, logical, repeating);
+      if (!union.isNull[destinationIndex]) {
+        int tag = union.tags[destinationIndex];
+        fieldDestinationIndices[tag][fieldPositions[tag]++] = destinationIndex;
+      }
+    }
+
+    for (int tag = 0; tag < union.fields.length; tag++) {
+      ColumnVector field = union.fields[tag];
+      field.ensureSize(requiredSize(fieldDestinationIndices[tag], fieldCounts[tag], false), false);
+      readColumn(field, fieldDestinationIndices[tag], fieldCounts[tag]);
     }
   }
 
