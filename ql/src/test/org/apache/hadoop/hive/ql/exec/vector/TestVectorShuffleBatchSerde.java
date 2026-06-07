@@ -26,6 +26,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Random;
 
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
@@ -33,27 +34,42 @@ import org.apache.hadoop.io.BytesWritable;
 import org.junit.Test;
 
 public class TestVectorShuffleBatchSerde {
+  private static final long BIGINT_PROPERTY_TEST_SEED = 0x5EEDB16L;
+  private static final int BIGINT_PROPERTY_TEST_ITERATIONS = 200;
+  private static final long[] INTERESTING_BIGINTS = {
+      Long.MIN_VALUE, Long.MIN_VALUE + 1, Integer.MIN_VALUE, -11, -10, -1, 0, 1, 10, 11,
+      Integer.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE
+  };
+
   private final VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
   private final VectorShuffleBatchDeserializer deserializer = new VectorShuffleBatchDeserializer();
 
   @Test
   public void testBigIntColumnSchema() throws Exception {
-    VectorizedRowBatch source = new VectorizedRowBatch(1);
-    LongColumnVector sourceLongs = new LongColumnVector();
-    source.cols[0] = sourceLongs;
-    source.size = 3;
-    sourceLongs.vector[0] = Long.MIN_VALUE;
-    sourceLongs.vector[1] = 0;
-    sourceLongs.vector[2] = Long.MAX_VALUE;
+    Random random = new Random(BIGINT_PROPERTY_TEST_SEED);
 
-    VectorizedRowBatch result = new VectorizedRowBatch(1);
-    result.cols[0] = new LongColumnVector();
-    roundTrip(source, new int[] {0}, result);
+    for (int iteration = 0; iteration < BIGINT_PROPERTY_TEST_ITERATIONS; iteration++) {
+      RandomBatchLayout batchLayout = randomBatchLayout(random, iteration);
+      RandomColumnLayout columnLayout = randomColumnLayout(random, batchLayout.size, iteration);
+      long[] expected = randomBigInts(random, batchLayout.size, columnLayout.isRepeating);
 
-    LongColumnVector resultLongs = (LongColumnVector) result.cols[0];
-    assertEquals(Long.MIN_VALUE, resultLongs.vector[0]);
-    assertEquals(0, resultLongs.vector[1]);
-    assertEquals(Long.MAX_VALUE, resultLongs.vector[2]);
+      LongColumnVector sourceLongs = new LongColumnVector();
+      columnLayout.apply(sourceLongs, batchLayout);
+      for (int logical = 0; logical < batchLayout.size; logical++) {
+        if (!columnLayout.isNull(logical)) {
+          sourceLongs.vector[columnLayout.sourceIndex(batchLayout, logical)] = expected[logical];
+        }
+      }
+      VectorizedRowBatch source = batchLayout.batchWithColumn(sourceLongs);
+
+      VectorizedRowBatch result = new VectorizedRowBatch(1);
+      result.cols[0] = new LongColumnVector();
+      roundTrip(source, new int[] {0}, result);
+
+      assertBigIntRoundTrip(expected, columnLayout, result,
+          "seed=" + BIGINT_PROPERTY_TEST_SEED + ", iteration=" + iteration + ", "
+              + batchLayout + ", " + columnLayout);
+    }
   }
 
   @Test
@@ -1009,6 +1025,213 @@ public class TestVectorShuffleBatchSerde {
     assertThrows(IOException.class,
         () -> deserializer.deserialize(malformed,
             batchWithColumn(structOf(new LongColumnVector()), 0)));
+  }
+
+  private static RandomBatchLayout randomBatchLayout(Random random, int iteration) {
+    final int size;
+    switch (iteration) {
+    case 0:
+      size = 0;
+      break;
+    case 1:
+      size = 1;
+      break;
+    case 2:
+      size = 2;
+      break;
+    case 3:
+      size = VectorizedRowBatch.DEFAULT_SIZE - 1;
+      break;
+    case 4:
+      size = VectorizedRowBatch.DEFAULT_SIZE;
+      break;
+    default:
+      size = random.nextInt(VectorizedRowBatch.DEFAULT_SIZE + 1);
+      break;
+    }
+
+    // Force one selected scenario, then use selections often enough to exercise compaction.
+    boolean selectedInUse = iteration == 2 || iteration > 4 && random.nextInt(4) == 0;
+    int[] selected = null;
+    if (selectedInUse) {
+      selected = shuffledIndices(random);
+    }
+    return new RandomBatchLayout(size, selected);
+  }
+
+  private static RandomColumnLayout randomColumnLayout(Random random, int size, int iteration) {
+    switch (iteration) {
+    case 0:
+    case 3:
+      return RandomColumnLayout.nonNull(size, false);
+    case 1:
+      return RandomColumnLayout.nonNull(size, true);
+    case 2:
+      return RandomColumnLayout.randomNulls(random, size, false);
+    case 4:
+      return RandomColumnLayout.allNull(size, true);
+    case 5:
+      return RandomColumnLayout.allNull(size, false);
+    default:
+      boolean repeating = random.nextInt(10) == 0;
+      if (random.nextInt(10) == 0) {
+        return RandomColumnLayout.allNull(size, repeating);
+      }
+      if (random.nextInt(4) == 0) {
+        return RandomColumnLayout.randomNulls(random, size, repeating);
+      }
+      return RandomColumnLayout.nonNull(size, repeating);
+    }
+  }
+
+  private static int[] shuffledIndices(Random random) {
+    int[] indices = new int[VectorizedRowBatch.DEFAULT_SIZE];
+    for (int index = 0; index < indices.length; index++) {
+      indices[index] = index;
+    }
+    for (int index = indices.length - 1; index > 0; index--) {
+      int other = random.nextInt(index + 1);
+      int value = indices[index];
+      indices[index] = indices[other];
+      indices[other] = value;
+    }
+    return indices;
+  }
+
+  private static long[] randomBigInts(Random random, int size, boolean repeating) {
+    long[] values = new long[size];
+    for (int logical = 0; logical < size; logical++) {
+      if (repeating && logical > 0) {
+        values[logical] = values[0];
+      } else if (logical == 0) {
+        values[logical] = Long.MIN_VALUE;
+      } else if (logical == 1) {
+        values[logical] = 0;
+      } else if (logical == 2) {
+        values[logical] = Long.MAX_VALUE;
+      } else {
+        values[logical] = randomBigInt(random, values[logical - 1]);
+      }
+    }
+    return values;
+  }
+
+  private static long randomBigInt(Random random, long previous) {
+    int choice = random.nextInt(100);
+    if (choice < 55) {
+      return random.nextInt(21) - 10;
+    }
+    if (choice < 70) {
+      return INTERESTING_BIGINTS[random.nextInt(INTERESTING_BIGINTS.length)];
+    }
+    if (choice < 90) {
+      return random.nextLong();
+    }
+    return previous;
+  }
+
+  private static void assertBigIntRoundTrip(long[] expected, RandomColumnLayout expectedLayout,
+      VectorizedRowBatch result, String context) {
+    assertEquals(context, expected.length, result.size);
+    assertFalse(context, result.selectedInUse);
+
+    LongColumnVector actual = (LongColumnVector) result.cols[0];
+    assertEquals(context, expectedLayout.isRepeating, actual.isRepeating);
+    for (int logical = 0; logical < expected.length; logical++) {
+      int actualIndex = actual.isRepeating ? 0 : logical;
+      boolean actualIsNull = !actual.noNulls && actual.isNull[actualIndex];
+      assertEquals(context + ", logicalRow=" + logical, expectedLayout.isNull(logical),
+          actualIsNull);
+      if (!actualIsNull) {
+        assertEquals(context + ", logicalRow=" + logical, expected[logical],
+            actual.vector[actualIndex]);
+      }
+    }
+  }
+
+  /** A reusable description of logical rows and their physical positions in a source batch. */
+  private static final class RandomBatchLayout {
+    private final int size;
+    private final int[] selected;
+
+    private RandomBatchLayout(int size, int[] selected) {
+      this.size = size;
+      this.selected = selected;
+    }
+
+    private int sourceIndex(int logical) {
+      return selected == null ? logical : selected[logical];
+    }
+
+    private VectorizedRowBatch batchWithColumn(ColumnVector column) {
+      VectorizedRowBatch batch = TestVectorShuffleBatchSerde.batchWithColumn(column, size);
+      if (selected != null) {
+        batch.selectedInUse = true;
+        System.arraycopy(selected, 0, batch.selected, 0, size);
+      }
+      return batch;
+    }
+
+    @Override
+    public String toString() {
+      return "size=" + size + ", selectedInUse=" + (selected != null);
+    }
+  }
+
+  /** A reusable description of repeating and null state for a column of any vector type. */
+  private static final class RandomColumnLayout {
+    private final boolean isRepeating;
+    private final boolean[] nulls;
+
+    private RandomColumnLayout(boolean isRepeating, boolean[] nulls) {
+      this.isRepeating = isRepeating;
+      this.nulls = nulls;
+    }
+
+    private static RandomColumnLayout nonNull(int size, boolean repeating) {
+      return new RandomColumnLayout(repeating, new boolean[repeating ? Math.min(size, 1) : size]);
+    }
+
+    private static RandomColumnLayout allNull(int size, boolean repeating) {
+      boolean[] nulls = new boolean[repeating ? Math.min(size, 1) : size];
+      java.util.Arrays.fill(nulls, true);
+      return new RandomColumnLayout(repeating, nulls);
+    }
+
+    private static RandomColumnLayout randomNulls(Random random, int size, boolean repeating) {
+      boolean[] nulls = new boolean[repeating ? Math.min(size, 1) : size];
+      for (int logical = 0; logical < nulls.length; logical++) {
+        nulls[logical] = random.nextInt(5) == 0;
+      }
+      return new RandomColumnLayout(repeating, nulls);
+    }
+
+    private boolean isNull(int logical) {
+      return nulls.length > 0 && nulls[isRepeating ? 0 : logical];
+    }
+
+    private int sourceIndex(RandomBatchLayout batchLayout, int logical) {
+      return isRepeating ? 0 : batchLayout.sourceIndex(logical);
+    }
+
+    private void apply(ColumnVector column, RandomBatchLayout batchLayout) {
+      column.isRepeating = isRepeating;
+      for (int logical = 0; logical < batchLayout.size; logical++) {
+        if (isNull(logical)) {
+          column.noNulls = false;
+          column.isNull[sourceIndex(batchLayout, logical)] = true;
+        }
+      }
+    }
+
+    @Override
+    public String toString() {
+      int nullCount = 0;
+      for (boolean isNull : nulls) {
+        nullCount += isNull ? 1 : 0;
+      }
+      return "isRepeating=" + isRepeating + ", nullCount=" + nullCount;
+    }
   }
 
   private static VectorizedRowBatch batchWithColumn(ColumnVector column, int size) {
