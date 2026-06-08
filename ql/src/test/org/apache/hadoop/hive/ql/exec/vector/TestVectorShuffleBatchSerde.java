@@ -49,10 +49,20 @@ public class TestVectorShuffleBatchSerde {
   private static final long ARRAY_STRING_PROPERTY_TEST_SEED = 0xA22A7517L;
   private static final long ARRAY_DECIMAL_PROPERTY_TEST_SEED = 0xA22ADEC1L;
   private static final long NESTED_ARRAY_PROPERTY_TEST_SEED = 0xA22AA22AL;
+  private static final long STRUCT_PROPERTY_TEST_SEED = 0x572AC7L;
+  private static final long NESTED_STRUCT_PROPERTY_TEST_SEED = 0x572AC7A22AL;
+  private static final long UNION_PROPERTY_TEST_SEED = 0xA110L;
+  private static final long NESTED_UNION_PROPERTY_TEST_SEED = 0xA110A22AL;
+  private static final long STRUCT_WITH_UNION_PROPERTY_TEST_SEED = 0x572A110L;
+  private static final long UNION_WITH_STRUCT_PROPERTY_TEST_SEED = 0xA110572L;
+  private static final long ARRAY_STRUCT_PROPERTY_TEST_SEED = 0xA22572L;
+  private static final long ARRAY_UNION_PROPERTY_TEST_SEED = 0xA22A110L;
   private static final int BIGINT_PROPERTY_TEST_ITERATIONS = 10000;
   private static final int PROPERTY_TEST_ITERATIONS = 200;
   private static final int ARRAY_PROPERTY_TEST_ITERATIONS = 1000;
   private static final int NESTED_ARRAY_PROPERTY_TEST_ITERATIONS = 500;
+  private static final int COMPLEX_PROPERTY_TEST_ITERATIONS = 500;
+  private static final int NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS = 200;
   private static final int MAX_ARRAY_LENGTH = 16;
   private static final int DECIMAL_PRECISION = 20;
   private static final int DECIMAL_SCALE = 4;
@@ -115,6 +125,64 @@ public class TestVectorShuffleBatchSerde {
   public void testNestedArrayColumnSchema() throws Exception {
     assertRandomColumnRoundTrips("ARRAY<ARRAY<BIGINT>>", NESTED_ARRAY_PROPERTY_TEST_SEED,
         NESTED_ARRAY_PROPERTY_TEST_ITERATIONS, arrayAdapter(arrayAdapter(bigIntAdapter())));
+  }
+
+  @Test
+  public void testStructColumnSchema() throws Exception {
+    assertRandomColumnRoundTrips("STRUCT<BIGINT,STRING,DECIMAL>", STRUCT_PROPERTY_TEST_SEED,
+        COMPLEX_PROPERTY_TEST_ITERATIONS,
+        structAdapter(bigIntAdapter(), stringAdapter(), decimalAdapter()));
+  }
+
+  @Test
+  public void testNestedStructColumnSchema() throws Exception {
+    assertRandomColumnRoundTrips("STRUCT<ARRAY<BIGINT>,STRING>", NESTED_STRUCT_PROPERTY_TEST_SEED,
+        NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS,
+        structAdapter(arrayAdapter(bigIntAdapter()), stringAdapter()));
+  }
+
+  @Test
+  public void testUnionColumnSchema() throws Exception {
+    assertRandomColumnRoundTrips("UNIONTYPE<BIGINT,STRING,DECIMAL>", UNION_PROPERTY_TEST_SEED,
+        COMPLEX_PROPERTY_TEST_ITERATIONS,
+        unionAdapter(bigIntAdapter(), stringAdapter(), decimalAdapter()));
+  }
+
+  @Test
+  public void testNestedUnionColumnSchema() throws Exception {
+    assertRandomColumnRoundTrips("UNIONTYPE<ARRAY<BIGINT>,STRING>", NESTED_UNION_PROPERTY_TEST_SEED,
+        NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS,
+        unionAdapter(arrayAdapter(bigIntAdapter()), stringAdapter()));
+  }
+
+  @Test
+  public void testStructContainingUnionPropertySchema() throws Exception {
+    assertRandomColumnRoundTrips("STRUCT<UNIONTYPE<BIGINT,STRING>,ARRAY<DECIMAL>>",
+        STRUCT_WITH_UNION_PROPERTY_TEST_SEED, NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS,
+        structAdapter(unionAdapter(bigIntAdapter(), stringAdapter()),
+            arrayAdapter(decimalAdapter())));
+  }
+
+  @Test
+  public void testUnionContainingStructPropertySchema() throws Exception {
+    assertRandomColumnRoundTrips("UNIONTYPE<STRUCT<BIGINT,STRING>,ARRAY<DECIMAL>>",
+        UNION_WITH_STRUCT_PROPERTY_TEST_SEED, NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS,
+        unionAdapter(structAdapter(bigIntAdapter(), stringAdapter()),
+            arrayAdapter(decimalAdapter())));
+  }
+
+  @Test
+  public void testArrayContainingStructPropertySchema() throws Exception {
+    assertRandomColumnRoundTrips("ARRAY<STRUCT<BIGINT,STRING>>", ARRAY_STRUCT_PROPERTY_TEST_SEED,
+        NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS,
+        arrayAdapter(structAdapter(bigIntAdapter(), stringAdapter())));
+  }
+
+  @Test
+  public void testArrayContainingUnionPropertySchema() throws Exception {
+    assertRandomColumnRoundTrips("ARRAY<UNIONTYPE<BIGINT,STRING>>", ARRAY_UNION_PROPERTY_TEST_SEED,
+        NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS,
+        arrayAdapter(unionAdapter(bigIntAdapter(), stringAdapter())));
   }
 
   @Test
@@ -1367,6 +1435,168 @@ public class TestVectorShuffleBatchSerde {
     };
   }
 
+  private static RandomColumnAdapter<StructValue> structAdapter(
+      RandomColumnAdapter<?>... fieldAdapters) {
+    return new RandomColumnAdapter<StructValue>() {
+      @Override
+      public ColumnVector createVector() {
+        ColumnVector[] fields = new ColumnVector[fieldAdapters.length];
+        for (int field = 0; field < fields.length; field++) {
+          fields[field] = fieldAdapters[field].createVector();
+        }
+        return structOf(fields);
+      }
+
+      @Override
+      public StructValue randomValue(Random random, StructValue previous, int logical) {
+        if (previous != null && random.nextInt(10) == 0) {
+          return previous;
+        }
+        List<NullableValue<?>> fields = new ArrayList<>(fieldAdapters.length);
+        for (int field = 0; field < fieldAdapters.length; field++) {
+          boolean isNull = random.nextInt(5) == 0;
+          Object previousValue = previous == null || previous.fields.get(field).isNull
+              ? null : previous.fields.get(field).value;
+          fields.add(new NullableValue<>(isNull, isNull ? null
+              : randomValue(fieldAdapters[field], random, previousValue, logical)));
+        }
+        return new StructValue(fields);
+      }
+
+      @Override
+      public void setValue(ColumnVector vector, int index, StructValue value) {
+        StructColumnVector struct = (StructColumnVector) vector;
+        for (int field = 0; field < fieldAdapters.length; field++) {
+          NullableValue<?> expected = value.fields.get(field);
+          if (expected.isNull) {
+            setNull(struct.fields[field], index);
+          } else {
+            setAdapterValue(fieldAdapters[field], struct.fields[field], index, expected.value);
+          }
+        }
+      }
+
+      @Override
+      public void assertValueEquals(String context, StructValue expected, ColumnVector vector,
+          int index) {
+        StructColumnVector struct = (StructColumnVector) vector;
+        assertEquals(context, fieldAdapters.length, struct.fields.length);
+        for (int field = 0; field < fieldAdapters.length; field++) {
+          NullableValue<?> expectedField = expected.fields.get(field);
+          int fieldIndex = struct.fields[field].isRepeating ? 0 : index;
+          boolean actualIsNull = isNull(struct.fields[field], fieldIndex);
+          String fieldContext = context + ", field=" + field;
+          assertEquals(fieldContext, expectedField.isNull, actualIsNull);
+          if (!actualIsNull) {
+            assertAdapterValue(fieldAdapters[field], fieldContext, expectedField.value,
+                struct.fields[field], fieldIndex);
+          }
+        }
+      }
+
+      @Override
+      public String formatValue(StructValue value) {
+        StringBuilder formatted = new StringBuilder("STRUCT{");
+        for (int field = 0; field < fieldAdapters.length; field++) {
+          if (field > 0) {
+            formatted.append(", ");
+          }
+          NullableValue<?> expected = value.fields.get(field);
+          formatted.append('f').append(field).append('=').append(expected.isNull ? "NULL"
+              : formatAdapterValue(fieldAdapters[field], expected.value));
+        }
+        return formatted.append('}').toString();
+      }
+    };
+  }
+
+  private static RandomColumnAdapter<UnionValue> unionAdapter(
+      RandomColumnAdapter<?>... fieldAdapters) {
+    if (fieldAdapters.length == 0) {
+      throw new IllegalArgumentException("A union property adapter requires at least one field");
+    }
+    return new RandomColumnAdapter<UnionValue>() {
+      @Override
+      public ColumnVector createVector() {
+        ColumnVector[] fields = new ColumnVector[fieldAdapters.length];
+        for (int field = 0; field < fields.length; field++) {
+          fields[field] = fieldAdapters[field].createVector();
+        }
+        return unionOf(fields);
+      }
+
+      @Override
+      public UnionValue randomValue(Random random, UnionValue previous, int logical) {
+        if (previous != null && random.nextInt(10) == 0) {
+          return previous;
+        }
+        int tag = logical < fieldAdapters.length ? logical : random.nextInt(fieldAdapters.length);
+        boolean isNull = random.nextInt(5) == 0;
+        Object previousValue = previous == null || previous.tag != tag || previous.value.isNull
+            ? null : previous.value.value;
+        return new UnionValue(tag, new NullableValue<>(isNull, isNull ? null
+            : randomValue(fieldAdapters[tag], random, previousValue, logical)));
+      }
+
+      @Override
+      public void setValue(ColumnVector vector, int index, UnionValue value) {
+        UnionColumnVector union = (UnionColumnVector) vector;
+        union.tags[index] = value.tag;
+        if (value.value.isNull) {
+          setNull(union.fields[value.tag], index);
+        } else {
+          setAdapterValue(fieldAdapters[value.tag], union.fields[value.tag], index,
+              value.value.value);
+        }
+      }
+
+      @Override
+      public void assertValueEquals(String context, UnionValue expected, ColumnVector vector,
+          int index) {
+        UnionColumnVector union = (UnionColumnVector) vector;
+        assertEquals(context + ", tag", expected.tag, union.tags[index]);
+        ColumnVector field = union.fields[expected.tag];
+        int fieldIndex = field.isRepeating ? 0 : index;
+        boolean actualIsNull = isNull(field, fieldIndex);
+        String fieldContext = context + ", tag=" + expected.tag;
+        assertEquals(fieldContext, expected.value.isNull, actualIsNull);
+        if (!actualIsNull) {
+          assertAdapterValue(fieldAdapters[expected.tag], fieldContext, expected.value.value,
+              field, fieldIndex);
+        }
+      }
+
+      @Override
+      public String formatValue(UnionValue value) {
+        return "UNION{tag=" + value.tag + ", value=" + (value.value.isNull ? "NULL"
+            : formatAdapterValue(fieldAdapters[value.tag], value.value.value)) + "}";
+      }
+    };
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Object randomValue(RandomColumnAdapter<?> adapter, Random random,
+      Object previous, int logical) {
+    return ((RandomColumnAdapter<Object>) adapter).randomValue(random, previous, logical);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void setAdapterValue(RandomColumnAdapter<?> adapter, ColumnVector vector,
+      int index, Object value) {
+    ((RandomColumnAdapter<Object>) adapter).setValue(vector, index, value);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void assertAdapterValue(RandomColumnAdapter<?> adapter, String context,
+      Object expected, ColumnVector vector, int index) {
+    ((RandomColumnAdapter<Object>) adapter).assertValueEquals(context, expected, vector, index);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static String formatAdapterValue(RandomColumnAdapter<?> adapter, Object value) {
+    return ((RandomColumnAdapter<Object>) adapter).formatValue(value);
+  }
+
   private static void setNull(ColumnVector vector, int index) {
     vector.noNulls = false;
     vector.isNull[index] = true;
@@ -1495,6 +1725,24 @@ public class TestVectorShuffleBatchSerde {
 
     private NullableValue(boolean isNull, T value) {
       this.isNull = isNull;
+      this.value = value;
+    }
+  }
+
+  private static final class StructValue {
+    private final List<NullableValue<?>> fields;
+
+    private StructValue(List<NullableValue<?>> fields) {
+      this.fields = fields;
+    }
+  }
+
+  private static final class UnionValue {
+    private final int tag;
+    private final NullableValue<?> value;
+
+    private UnionValue(int tag, NullableValue<?> value) {
+      this.tag = tag;
       this.value = value;
     }
   }
