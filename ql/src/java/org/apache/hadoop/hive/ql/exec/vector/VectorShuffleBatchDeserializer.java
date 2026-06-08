@@ -249,6 +249,7 @@ public final class VectorShuffleBatchDeserializer {
     } else if (column instanceof DecimalColumnVector) {
       ((DecimalColumnVector) column).vector[index].readFields(input);
     } else if (column instanceof LongColumnVector) {
+      // Decimal64ColumnVector extends LongColumnVector, so this branch covers it.
       ((LongColumnVector) column).vector[index] = input.readLong();
     } else if (column instanceof DoubleColumnVector) {
       ((DoubleColumnVector) column).vector[index] = input.readDouble();
