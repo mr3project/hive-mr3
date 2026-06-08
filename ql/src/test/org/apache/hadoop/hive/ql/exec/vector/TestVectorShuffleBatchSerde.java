@@ -57,6 +57,13 @@ public class TestVectorShuffleBatchSerde {
   private static final long UNION_WITH_STRUCT_PROPERTY_TEST_SEED = 0xA110572L;
   private static final long ARRAY_STRUCT_PROPERTY_TEST_SEED = 0xA22572L;
   private static final long ARRAY_UNION_PROPERTY_TEST_SEED = 0xA22A110L;
+  private static final long MAP_PROPERTY_TEST_SEED = 0x6A4B16L;
+  private static final long NESTED_MAP_PROPERTY_TEST_SEED = 0x6A4A22AL;
+  private static final long COMPLEX_MAP_PROPERTY_TEST_SEED = 0x6A4572A110L;
+  private static final long MAP_MAP_PROPERTY_TEST_SEED = 0x6A46A4L;
+  private static final long ARRAY_MAP_PROPERTY_TEST_SEED = 0xA226A4L;
+  private static final long STRUCT_MAP_PROPERTY_TEST_SEED = 0x5726A4L;
+  private static final long UNION_MAP_PROPERTY_TEST_SEED = 0xA1106A4L;
   private static final int BIGINT_PROPERTY_TEST_ITERATIONS = 10000;
   private static final int PROPERTY_TEST_ITERATIONS = 200;
   private static final int ARRAY_PROPERTY_TEST_ITERATIONS = 1000;
@@ -64,6 +71,7 @@ public class TestVectorShuffleBatchSerde {
   private static final int COMPLEX_PROPERTY_TEST_ITERATIONS = 500;
   private static final int NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS = 200;
   private static final int MAX_ARRAY_LENGTH = 16;
+  private static final int MAX_MAP_LENGTH = 16;
   private static final int DECIMAL_PRECISION = 20;
   private static final int DECIMAL_SCALE = 4;
   private static final int MAX_LOGGED_PROPERTY_TEST_CASES = 10;
@@ -183,6 +191,57 @@ public class TestVectorShuffleBatchSerde {
     assertRandomColumnRoundTrips("ARRAY<UNIONTYPE<BIGINT,STRING>>", ARRAY_UNION_PROPERTY_TEST_SEED,
         NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS,
         arrayAdapter(unionAdapter(bigIntAdapter(), stringAdapter())));
+  }
+
+  @Test
+  public void testMapColumnSchema() throws Exception {
+    assertRandomColumnRoundTrips("MAP<STRING,BIGINT>", MAP_PROPERTY_TEST_SEED,
+        COMPLEX_PROPERTY_TEST_ITERATIONS, mapAdapter(stringAdapter(), bigIntAdapter()));
+  }
+
+  @Test
+  public void testNestedMapColumnSchema() throws Exception {
+    assertRandomColumnRoundTrips("MAP<STRING,ARRAY<BIGINT>>", NESTED_MAP_PROPERTY_TEST_SEED,
+        NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS,
+        mapAdapter(stringAdapter(), arrayAdapter(bigIntAdapter())));
+  }
+
+  @Test
+  public void testMapContainingMapPropertySchema() throws Exception {
+    assertRandomColumnRoundTrips("MAP<STRING,MAP<BIGINT,STRING>>", MAP_MAP_PROPERTY_TEST_SEED,
+        NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS,
+        mapAdapter(stringAdapter(), mapAdapter(bigIntAdapter(), stringAdapter())));
+  }
+
+  @Test
+  public void testComplexMapKeyAndValueColumnSchema() throws Exception {
+    assertRandomColumnRoundTrips("MAP<STRUCT<BIGINT,STRING>,UNIONTYPE<BIGINT,STRING>>",
+        COMPLEX_MAP_PROPERTY_TEST_SEED, NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS,
+        mapAdapter(structAdapter(bigIntAdapter(), stringAdapter()),
+            unionAdapter(bigIntAdapter(), stringAdapter())));
+  }
+
+  @Test
+  public void testArrayContainingMapPropertySchema() throws Exception {
+    assertRandomColumnRoundTrips("ARRAY<MAP<STRING,BIGINT>>", ARRAY_MAP_PROPERTY_TEST_SEED,
+        NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS,
+        arrayAdapter(mapAdapter(stringAdapter(), bigIntAdapter())));
+  }
+
+  @Test
+  public void testStructContainingMapPropertySchema() throws Exception {
+    assertRandomColumnRoundTrips("STRUCT<MAP<STRING,BIGINT>,DECIMAL>",
+        STRUCT_MAP_PROPERTY_TEST_SEED,
+        NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS,
+        structAdapter(mapAdapter(stringAdapter(), bigIntAdapter()), decimalAdapter()));
+  }
+
+  @Test
+  public void testUnionContainingMapPropertySchema() throws Exception {
+    assertRandomColumnRoundTrips("UNIONTYPE<MAP<STRING,BIGINT>,STRING>",
+        UNION_MAP_PROPERTY_TEST_SEED,
+        NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS,
+        unionAdapter(mapAdapter(stringAdapter(), bigIntAdapter()), stringAdapter()));
   }
 
   @Test
@@ -1435,6 +1494,113 @@ public class TestVectorShuffleBatchSerde {
     };
   }
 
+  private static <K, V> RandomColumnAdapter<MapValue<K, V>> mapAdapter(
+      RandomColumnAdapter<K> keyAdapter, RandomColumnAdapter<V> valueAdapter) {
+    return new RandomColumnAdapter<MapValue<K, V>>() {
+      @Override
+      public ColumnVector createVector() {
+        return new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE, keyAdapter.createVector(),
+            valueAdapter.createVector());
+      }
+
+      @Override
+      public MapValue<K, V> randomValue(Random random, MapValue<K, V> previous, int logical) {
+        if (previous != null && random.nextInt(10) == 0) {
+          return previous;
+        }
+        int choice = random.nextInt(100);
+        int length = choice < 15 ? 0 : choice < 25 ? 1 : random.nextInt(MAX_MAP_LENGTH + 1);
+        List<MapEntryValue<K, V>> entries = new ArrayList<>(length);
+        K previousKey = null;
+        V previousValue = null;
+        for (int entry = 0; entry < length; entry++) {
+          K key = keyAdapter.randomValue(random, previousKey, entry);
+          boolean valueIsNull = random.nextInt(5) == 0;
+          V value = valueIsNull ? null : valueAdapter.randomValue(random, previousValue, entry);
+          entries.add(new MapEntryValue<>(key, new NullableValue<>(valueIsNull, value)));
+          previousKey = key;
+          if (!valueIsNull) {
+            previousValue = value;
+          }
+        }
+        return new MapValue<>(random.nextInt(4), entries);
+      }
+
+      @Override
+      public void setValue(ColumnVector vector, int index, MapValue<K, V> value) {
+        MapColumnVector map = (MapColumnVector) vector;
+        int offset = map.childCount + value.gapBefore;
+        map.offsets[index] = offset;
+        map.lengths[index] = value.entries.size();
+        map.keys.ensureSize(offset + value.entries.size(), true);
+        map.values.ensureSize(offset + value.entries.size(), true);
+        for (int entry = 0; entry < value.entries.size(); entry++) {
+          MapEntryValue<K, V> expected = value.entries.get(entry);
+          int childIndex = offset + entry;
+          keyAdapter.setValue(map.keys, childIndex, expected.key);
+          if (expected.value.isNull) {
+            setNull(map.values, childIndex);
+          } else {
+            valueAdapter.setValue(map.values, childIndex, expected.value.value);
+          }
+        }
+        map.childCount = offset + value.entries.size();
+      }
+
+      @Override
+      public void assertValueEquals(String context, MapValue<K, V> expected, ColumnVector vector,
+          int index) {
+        MapColumnVector map = (MapColumnVector) vector;
+        assertEquals(context, expected.entries.size(), map.lengths[index]);
+        int offset = Math.toIntExact(map.offsets[index]);
+        for (int entry = 0; entry < expected.entries.size(); entry++) {
+          MapEntryValue<K, V> expectedEntry = expected.entries.get(entry);
+          int childIndex = offset + entry;
+          String entryContext = context + ", entry=" + entry;
+          assertFalse(entryContext + ", key", isNull(map.keys, childIndex));
+          keyAdapter.assertValueEquals(entryContext + ", key", expectedEntry.key, map.keys,
+              childIndex);
+          boolean actualValueIsNull = isNull(map.values, childIndex);
+          assertEquals(entryContext + ", value", expectedEntry.value.isNull, actualValueIsNull);
+          if (!actualValueIsNull) {
+            valueAdapter.assertValueEquals(entryContext + ", value", expectedEntry.value.value,
+                map.values, childIndex);
+          }
+        }
+      }
+
+      @Override
+      public String formatValue(MapValue<K, V> value) {
+        StringBuilder formatted = new StringBuilder("MAP{");
+        for (int entry = 0; entry < value.entries.size(); entry++) {
+          if (entry > 0) {
+            formatted.append(", ");
+          }
+          MapEntryValue<K, V> expected = value.entries.get(entry);
+          formatted.append(keyAdapter.formatValue(expected.key)).append(" -> ")
+              .append(expected.value.isNull ? "NULL"
+                  : valueAdapter.formatValue(expected.value.value));
+        }
+        return formatted.append('}').toString();
+      }
+
+      @Override
+      public void assertColumnInvariants(String context, List<MapValue<K, V>> expected,
+          RandomColumnScenario scenario, ColumnVector vector) {
+        MapColumnVector map = (MapColumnVector) vector;
+        int expectedChildCount = 0;
+        for (int logical = 0; logical < scenario.valueCount(); logical++) {
+          int index = map.isRepeating ? 0 : logical;
+          assertEquals(context + ", logicalRow=" + logical, expectedChildCount, map.offsets[index]);
+          int expectedLength = scenario.isNull(logical) ? 0 : expected.get(logical).entries.size();
+          assertEquals(context + ", logicalRow=" + logical, expectedLength, map.lengths[index]);
+          expectedChildCount += expectedLength;
+        }
+        assertEquals(context, expectedChildCount, map.childCount);
+      }
+    };
+  }
+
   private static RandomColumnAdapter<StructValue> structAdapter(
       RandomColumnAdapter<?>... fieldAdapters) {
     return new RandomColumnAdapter<StructValue>() {
@@ -1726,6 +1892,26 @@ public class TestVectorShuffleBatchSerde {
     private NullableValue(boolean isNull, T value) {
       this.isNull = isNull;
       this.value = value;
+    }
+  }
+
+  private static final class MapEntryValue<K, V> {
+    private final K key;
+    private final NullableValue<V> value;
+
+    private MapEntryValue(K key, NullableValue<V> value) {
+      this.key = key;
+      this.value = value;
+    }
+  }
+
+  private static final class MapValue<K, V> {
+    private final int gapBefore;
+    private final List<MapEntryValue<K, V>> entries;
+
+    private MapValue(int gapBefore, List<MapEntryValue<K, V>> entries) {
+      this.gapBefore = gapBefore;
+      this.entries = entries;
     }
   }
 
