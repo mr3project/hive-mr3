@@ -239,6 +239,7 @@ public final class VectorShuffleBatchSerializer {
     } else if (column instanceof DecimalColumnVector) {
       ((DecimalColumnVector) column).vector[index].write(buffer);
     } else if (column instanceof LongColumnVector) {
+      // Decimal64ColumnVector extends LongColumnVector, so this branch covers it.
       buffer.writeLong(((LongColumnVector) column).vector[index]);
     } else if (column instanceof DoubleColumnVector) {
       buffer.writeDouble(((DoubleColumnVector) column).vector[index]);
