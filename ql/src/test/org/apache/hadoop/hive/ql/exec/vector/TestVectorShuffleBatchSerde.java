@@ -35,7 +35,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
-import java.util.function.Function;
 
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
@@ -57,8 +56,8 @@ public class TestVectorShuffleBatchSerde {
   private static final int MAX_ARRAY_LENGTH = 16;
   private static final int DECIMAL_PRECISION = 20;
   private static final int DECIMAL_SCALE = 4;
-  private static final String BIGINT_COLUMN_LOG =
-      "TestVectorShuffleBatchSerde-bigint-columns.log";
+  private static final int MAX_LOGGED_PROPERTY_TEST_CASES = 100;
+  private static final String COLUMN_LOG_PREFIX = "TestVectorShuffleBatchSerde-";
   private static final long[] INTERESTING_BIGINTS = {
       Long.MIN_VALUE, Long.MIN_VALUE + 1, Integer.MIN_VALUE, -11, -10, -1, 0, 1, 10, 11,
       Integer.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE
@@ -79,8 +78,7 @@ public class TestVectorShuffleBatchSerde {
   @Test
   public void testBigIntColumnSchema() throws Exception {
     assertRandomColumnRoundTrips("BIGINT", BIGINT_PROPERTY_TEST_SEED,
-        BIGINT_PROPERTY_TEST_ITERATIONS, bigIntAdapter(),
-        newColumnLog(BIGINT_COLUMN_LOG, BIGINT_PROPERTY_TEST_SEED, String::valueOf));
+        BIGINT_PROPERTY_TEST_ITERATIONS, bigIntAdapter());
   }
 
   @Test
@@ -1106,13 +1104,8 @@ public class TestVectorShuffleBatchSerde {
 
   private <T> void assertRandomColumnRoundTrips(String typeName, long seed, int iterations,
       RandomColumnAdapter<T> adapter) throws Exception {
-    assertRandomColumnRoundTrips(typeName, seed, iterations, adapter, noOpColumnLog());
-  }
-
-  private <T> void assertRandomColumnRoundTrips(String typeName, long seed, int iterations,
-      RandomColumnAdapter<T> adapter, RandomColumnLog<T> columnLog) throws Exception {
     Random random = new Random(seed);
-    try (RandomColumnLog<T> output = columnLog) {
+    try (RandomColumnLog<T> output = newColumnLog(typeName, seed, adapter)) {
       for (int iteration = 0; iteration < iterations; iteration++) {
         RandomColumnScenario scenario = randomColumnScenario(random, iteration);
         List<T> expected = randomValues(random, scenario, adapter);
@@ -1199,6 +1192,11 @@ public class TestVectorShuffleBatchSerde {
       public void assertValueEquals(String context, Long expected, ColumnVector vector, int index) {
         assertEquals(context, expected.longValue(), ((LongColumnVector) vector).vector[index]);
       }
+
+      @Override
+      public String formatValue(Long value) {
+        return String.valueOf(value);
+      }
     };
   }
 
@@ -1231,6 +1229,11 @@ public class TestVectorShuffleBatchSerde {
         assertArrayEquals(context, expected, Arrays.copyOfRange(actual.vector[index],
             actual.start[index], actual.start[index] + actual.length[index]));
       }
+
+      @Override
+      public String formatValue(byte[] value) {
+        return Arrays.toString(value);
+      }
     };
   }
 
@@ -1259,6 +1262,11 @@ public class TestVectorShuffleBatchSerde {
           int index) {
         assertEquals(context, expected,
             ((DecimalColumnVector) vector).vector[index].getHiveDecimal());
+      }
+
+      @Override
+      public String formatValue(HiveDecimal value) {
+        return value.toString();
       }
     };
   }
@@ -1329,6 +1337,19 @@ public class TestVectorShuffleBatchSerde {
       }
 
       @Override
+      public String formatValue(ArrayValue<T> value) {
+        StringBuilder formatted = new StringBuilder("[");
+        for (int element = 0; element < value.elements.size(); element++) {
+          if (element > 0) {
+            formatted.append(", ");
+          }
+          NullableValue<T> expected = value.elements.get(element);
+          formatted.append(expected.isNull ? "NULL" : childAdapter.formatValue(expected.value));
+        }
+        return formatted.append(']').toString();
+      }
+
+      @Override
       public void assertColumnInvariants(String context, List<ArrayValue<T>> expected,
           RandomColumnScenario scenario, ColumnVector vector) {
         ListColumnVector list = (ListColumnVector) vector;
@@ -1394,23 +1415,28 @@ public class TestVectorShuffleBatchSerde {
     return HiveDecimal.create(unscaled, DECIMAL_SCALE);
   }
 
-  private static <T> RandomColumnLog<T> newColumnLog(String fileName, long seed,
-      Function<T, String> formatter) throws IOException {
+  private static <T> RandomColumnLog<T> newColumnLog(String typeName, long seed,
+      RandomColumnAdapter<T> adapter) throws IOException {
     Path directory = Paths.get(System.getProperty("test.tmp.dir", "target/tmp"));
     Files.createDirectories(directory);
+    String fileName = COLUMN_LOG_PREFIX + typeName.replaceAll("[^A-Za-z0-9]+", "-") + ".log";
     BufferedWriter writer = Files.newBufferedWriter(directory.resolve(fileName),
         StandardCharsets.UTF_8);
     return new RandomColumnLog<T>() {
       @Override
       public void write(int iteration, RandomColumnScenario scenario, List<T> values)
           throws IOException {
+        if (iteration >= MAX_LOGGED_PROPERTY_TEST_CASES) {
+          return;
+        }
         writer.write("seed=" + seed + ", iteration=" + iteration + ", " + scenario
             + ", values=[");
         for (int logical = 0; logical < values.size(); logical++) {
           if (logical > 0) {
             writer.write(", ");
           }
-          writer.write(scenario.isNull(logical) ? "NULL" : formatter.apply(values.get(logical)));
+          writer.write(scenario.isNull(logical)
+              ? "NULL" : adapter.formatValue(values.get(logical)));
         }
         writer.write("]");
         writer.newLine();
@@ -1419,18 +1445,6 @@ public class TestVectorShuffleBatchSerde {
       @Override
       public void close() throws IOException {
         writer.close();
-      }
-    };
-  }
-
-  private static <T> RandomColumnLog<T> noOpColumnLog() {
-    return new RandomColumnLog<T>() {
-      @Override
-      public void write(int iteration, RandomColumnScenario scenario, List<T> values) {
-      }
-
-      @Override
-      public void close() {
       }
     };
   }
@@ -1450,6 +1464,8 @@ public class TestVectorShuffleBatchSerde {
     void setValue(ColumnVector vector, int index, T value);
 
     void assertValueEquals(String context, T expected, ColumnVector vector, int index);
+
+    String formatValue(T value);
 
     default void assertColumnInvariants(String context, List<T> expected,
         RandomColumnScenario scenario, ColumnVector vector) {
