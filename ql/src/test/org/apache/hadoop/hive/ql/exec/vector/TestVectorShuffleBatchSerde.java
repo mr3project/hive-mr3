@@ -1458,7 +1458,7 @@ public class TestVectorShuffleBatchSerde {
           Object previousValue = previous == null || previous.fields.get(field).isNull
               ? null : previous.fields.get(field).value;
           fields.add(new NullableValue<>(isNull, isNull ? null
-              : randomValue(fieldAdapters[field], random, previousValue, logical)));
+              : randomAdapterValue(fieldAdapters[field], random, previousValue, logical)));
         }
         return new StructValue(fields);
       }
@@ -1535,7 +1535,7 @@ public class TestVectorShuffleBatchSerde {
         Object previousValue = previous == null || previous.tag != tag || previous.value.isNull
             ? null : previous.value.value;
         return new UnionValue(tag, new NullableValue<>(isNull, isNull ? null
-            : randomValue(fieldAdapters[tag], random, previousValue, logical)));
+            : randomAdapterValue(fieldAdapters[tag], random, previousValue, logical)));
       }
 
       @Override
@@ -1575,7 +1575,7 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @SuppressWarnings("unchecked")
-  private static Object randomValue(RandomColumnAdapter<?> adapter, Random random,
+  private static Object randomAdapterValue(RandomColumnAdapter<?> adapter, Random random,
       Object previous, int logical) {
     return ((RandomColumnAdapter<Object>) adapter).randomValue(random, previous, logical);
   }
