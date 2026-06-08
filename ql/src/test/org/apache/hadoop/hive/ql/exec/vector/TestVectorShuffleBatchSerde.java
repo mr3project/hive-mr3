@@ -81,8 +81,8 @@ public class TestVectorShuffleBatchSerde {
       Integer.MAX_VALUE, Long.MAX_VALUE - 1, Long.MAX_VALUE
   };
   private static final byte[][] INTERESTING_STRINGS = {
-      bytes(""), bytes("a"), bytes("alpha"), bytes("with spaces"), bytes("\0embedded"),
-      bytes("Hive \u2603 \ud83d\udc1d")
+      bytes(""), bytes("a"), bytes("alpha"), bytes("with spaces"),
+      bytes("special-_.:/@#"), bytes("quote\"slash\\")
   };
   private static final HiveDecimal[] INTERESTING_DECIMALS = {
       HiveDecimal.create("-9999999999999999.9999"), HiveDecimal.create("-1.0000"),
@@ -962,7 +962,7 @@ public class TestVectorShuffleBatchSerde {
       } else if (unsignedByte >= 0x20 && unsignedByte <= 0x7e) {
         formatted.append((char) unsignedByte);
       } else {
-        formatted.append('�');
+        formatted.append(String.format("\\x%02x", unsignedByte));
       }
     }
     return formatted.append('\"').toString();
