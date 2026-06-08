@@ -1232,7 +1232,7 @@ public class TestVectorShuffleBatchSerde {
 
       @Override
       public String formatValue(byte[] value) {
-        return Arrays.toString(value);
+        return formatUtf8String(value);
       }
     };
   }
@@ -1386,6 +1386,40 @@ public class TestVectorShuffleBatchSerde {
       return random.nextLong();
     }
     return previous;
+  }
+
+  private static String formatUtf8String(byte[] value) {
+    String decoded = new String(value, StandardCharsets.UTF_8);
+    StringBuilder formatted = new StringBuilder("\"");
+    for (int offset = 0; offset < decoded.length();) {
+      int codePoint = decoded.codePointAt(offset);
+      offset += Character.charCount(codePoint);
+      switch (codePoint) {
+      case '\\':
+        formatted.append("\\\\");
+        break;
+      case '\"':
+        formatted.append("\\\"");
+        break;
+      case '\n':
+        formatted.append("\\n");
+        break;
+      case '\r':
+        formatted.append("\\r");
+        break;
+      case '\t':
+        formatted.append("\\t");
+        break;
+      default:
+        if (Character.isISOControl(codePoint)) {
+          formatted.append(String.format("\\u%04x", codePoint));
+        } else {
+          formatted.appendCodePoint(codePoint);
+        }
+        break;
+      }
+    }
+    return formatted.append('\"').toString();
   }
 
   private static byte[] randomString(Random random, byte[] previous) {
