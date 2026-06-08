@@ -1232,7 +1232,7 @@ public class TestVectorShuffleBatchSerde {
 
       @Override
       public String formatValue(byte[] value) {
-        return formatUtf8String(value);
+        return formatPrintableAsciiString(value);
       }
     };
   }
@@ -1388,35 +1388,18 @@ public class TestVectorShuffleBatchSerde {
     return previous;
   }
 
-  private static String formatUtf8String(byte[] value) {
-    String decoded = new String(value, StandardCharsets.UTF_8);
+  private static String formatPrintableAsciiString(byte[] value) {
     StringBuilder formatted = new StringBuilder("\"");
-    for (int offset = 0; offset < decoded.length();) {
-      int codePoint = decoded.codePointAt(offset);
-      offset += Character.charCount(codePoint);
-      switch (codePoint) {
-      case '\\':
+    for (byte rawByte : value) {
+      int unsignedByte = rawByte & 0xff;
+      if (unsignedByte == '\\') {
         formatted.append("\\\\");
-        break;
-      case '\"':
+      } else if (unsignedByte == '\"') {
         formatted.append("\\\"");
-        break;
-      case '\n':
-        formatted.append("\\n");
-        break;
-      case '\r':
-        formatted.append("\\r");
-        break;
-      case '\t':
-        formatted.append("\\t");
-        break;
-      default:
-        if (Character.isISOControl(codePoint)) {
-          formatted.append(String.format("\\u%04x", codePoint));
-        } else {
-          formatted.appendCodePoint(codePoint);
-        }
-        break;
+      } else if (unsignedByte >= 0x20 && unsignedByte <= 0x7e) {
+        formatted.append((char) unsignedByte);
+      } else {
+        formatted.append('�');
       }
     }
     return formatted.append('\"').toString();
