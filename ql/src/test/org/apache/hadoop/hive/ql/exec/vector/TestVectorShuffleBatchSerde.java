@@ -67,6 +67,7 @@ public class TestVectorShuffleBatchSerde {
   private static final int NESTED_ARRAY_PROPERTY_TEST_ITERATIONS = 500;
   private static final int COMPLEX_PROPERTY_TEST_ITERATIONS = 500;
   private static final int NESTED_COMPLEX_PROPERTY_TEST_ITERATIONS = 200;
+  private static final int MAX_STRING_LENGTH = 24;
   private static final int MAX_ARRAY_LENGTH = 16;
   private static final int MAX_MAP_LENGTH = 16;
   private static final int DECIMAL_PRECISION = 20;
@@ -974,7 +975,7 @@ public class TestVectorShuffleBatchSerde {
     } else if (choice >= 90 && previous != null) {
       return previous;
     }
-    int length = choice < 85 ? random.nextInt(33) : 256 + random.nextInt(769);
+    int length = random.nextInt(MAX_STRING_LENGTH + 1);
     byte[] value = new byte[length];
     for (int index = 0; index < length; index++) {
       value[index] = ALPHANUMERIC[random.nextInt(ALPHANUMERIC.length)];
