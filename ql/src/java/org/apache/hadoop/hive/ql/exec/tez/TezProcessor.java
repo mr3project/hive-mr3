@@ -32,6 +32,7 @@ import org.apache.tez.mapreduce.output.MROutput;
 import org.apache.tez.runtime.api.TaskFailureType;
 import org.apache.tez.runtime.api.events.CustomProcessorEvent;
 import org.apache.tez.runtime.library.api.KeyValuesWriterEdge;
+import org.apache.tez.runtime.library.api.KeyValuesWriterEdgeVector;
 import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -408,6 +409,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
   public static class TezKVOutputCollector
       implements OutputCollector<BytesWritable, BytesWritable>, VectorBatchOutputCollector {
     private KeyValuesWriterEdge writer;
+    private KeyValuesWriterEdgeVector vectorWriter;
     private final LogicalOutputEdge output;
 
     TezKVOutputCollector(LogicalOutputEdge logicalOutput) {
@@ -416,6 +418,8 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
     void initialize() throws Exception {
       this.writer = output.getWriter();
+      this.vectorWriter = writer instanceof KeyValuesWriterEdgeVector
+          ? (KeyValuesWriterEdgeVector) writer : null;
     }
 
     // Invariant:
@@ -431,12 +435,15 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
     @Override
     public boolean supportsVectorBatch() {
-      return writer.supportsVectorBatch();
+      return vectorWriter != null && vectorWriter.supportsVectorBatch();
     }
 
     @Override
     public void writeVectorBatch(BytesWritable serializedBatch) throws IOException {
-      writer.writeVectorBatch(serializedBatch);
+      if (vectorWriter == null) {
+        throw new IllegalStateException("Output writer does not support vector batches");
+      }
+      vectorWriter.writeVectorBatch(serializedBatch);
     }
 
     public void close() {

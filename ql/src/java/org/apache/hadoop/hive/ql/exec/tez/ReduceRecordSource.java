@@ -24,6 +24,8 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
+import org.apache.tez.runtime.library.api.KeyValueReaderEdgeVector;
+import org.apache.tez.runtime.library.api.KeyValueReaderEdgeVector.NextResult;
 import org.apache.tez.runtime.library.api.KeyValuesReaderEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -111,9 +113,9 @@ public class ReduceRecordSource implements RecordSource {
 
   private KeyValuesAdapter reader;
   private KeyValueReaderEdge keyValueReader;
+  private KeyValueReaderEdgeVector keyValueReaderVector;
   private KeyValuesReaderEdge keyValuesReader;
   private boolean isKeyValueReader;
-  private boolean isVectorBatch;
 
   private boolean handleGroupKey;
 
@@ -154,7 +156,8 @@ public class ReduceRecordSource implements RecordSource {
       // for unordered key/value records
       this.isKeyValueReader = true;
       this.keyValueReader = (KeyValueReaderEdge) reader;
-      this.isVectorBatch = keyValueReader.isVectorBatch();
+      this.keyValueReaderVector = keyValueReader instanceof KeyValueReaderEdgeVector
+          ? (KeyValueReaderEdgeVector) keyValueReader : null;
       if (!vectorized) {
         this.reader = new KeyValuesFromKeyValue((KeyValueReaderEdge) reader);
       }
@@ -424,15 +427,24 @@ public class ReduceRecordSource implements RecordSource {
 
   private boolean pushRecordVectorFromKeyValueUnordered() {
     try {
-      if (!keyValueReader.next()) {
-        return false;
-      }
-
-      BytesWritable valueWritable = keyValueReader.getCurrentValue();
-      if (isVectorBatch) {
-        processVectorBatch(valueWritable, tag);
+      if (keyValueReaderVector != null) {
+        NextResult result = keyValueReaderVector.nextVectorBatchAware();
+        if (result == NextResult.END_OF_INPUT) {
+          return false;
+        } else if (result == NextResult.VECTOR_BATCH) {
+          processVectorBatch(keyValueReader.getCurrentValue(), tag);
+        } else if (result == NextResult.KEY_VALUE) {
+          processVectorRecordUnordered(keyValueReader.getCurrentKey(),
+              keyValueReader.getCurrentValue(), tag);
+        } else {
+          throw new IOException("Unexpected vector-aware next result " + result);
+        }
       } else {
-        processVectorRecordUnordered(keyValueReader.getCurrentKey(), valueWritable, tag);
+        if (!keyValueReader.next()) {
+          return false;
+        }
+        processVectorRecordUnordered(keyValueReader.getCurrentKey(),
+            keyValueReader.getCurrentValue(), tag);
       }
       return true;
     } catch (Throwable e) {
@@ -481,16 +493,26 @@ public class ReduceRecordSource implements RecordSource {
 
   void consumeAllUnordered(RecordProgress progress) throws HiveException, InterruptedException {
     try {
-      keyValueReader.consumeAll((keyWritable, valueWritable) -> {
-        // KeyValueReaderEdge provides unordered key/value records. The same logical key can
-        // appear again later, so every record must be treated as an independent final batch.
-        if (isVectorBatch) {
-          processVectorBatch(valueWritable, tag);
-        } else {
-          processVectorRecordUnordered(keyWritable, valueWritable, tag);
+      if (keyValueReaderVector == null) {
+        if (keyValueReader.next()) {
+          // consumeAll() includes the current record and must immediately follow a successful next().
+          consumeAllKeyValues(progress);
         }
-        progress.onRecord();
-      });
+        return;
+      }
+
+      NextResult result = keyValueReaderVector.nextVectorBatchAware();
+      if (result == NextResult.END_OF_INPUT) {
+        return;
+      } else if (result == NextResult.KEY_VALUE) {
+        // For a vector-aware reader, consumeAll() must be called immediately after KEY_VALUE and
+        // includes the current record prepared by nextVectorBatchAware().
+        consumeAllKeyValues(progress);
+      } else if (result == NextResult.VECTOR_BATCH) {
+        consumeVectorBatches(progress);
+      } else {
+        throw new IOException("Unexpected vector-aware next result " + result);
+      }
     } catch (OutOfMemoryError e) {
       abort = true;
       throw e;
@@ -500,6 +522,30 @@ public class ReduceRecordSource implements RecordSource {
     } catch (Exception e) {
       abort = true;
       throw new HiveException(e);
+    }
+  }
+
+  private void consumeAllKeyValues(RecordProgress progress) throws Exception {
+    keyValueReader.consumeAll((keyWritable, valueWritable) -> {
+      // KeyValueReaderEdge provides unordered key/value records. The same logical key can appear
+      // again later, so every record must be treated as an independent final batch.
+      processVectorRecordUnordered(keyWritable, valueWritable, tag);
+      progress.onRecord();
+    });
+  }
+
+  private void consumeVectorBatches(RecordProgress progress) throws Exception {
+    while (true) {
+      processVectorBatch(keyValueReader.getCurrentValue(), tag);
+      progress.onRecord();
+
+      NextResult result = keyValueReaderVector.nextVectorBatchAware();
+      if (result == NextResult.END_OF_INPUT) {
+        return;
+      }
+      if (result != NextResult.VECTOR_BATCH) {
+        throw new IOException("Vector-aware reader changed mode to " + result);
+      }
     }
   }
 

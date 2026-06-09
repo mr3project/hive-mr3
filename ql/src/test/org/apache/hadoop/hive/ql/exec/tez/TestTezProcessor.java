@@ -19,6 +19,7 @@ package org.apache.hadoop.hive.ql.exec.tez;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.withSettings;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
@@ -33,6 +34,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.tez.common.TezUtils;
 import org.apache.tez.runtime.api.ProcessorContext;
 import org.apache.tez.runtime.library.api.KeyValuesWriterEdge;
+import org.apache.tez.runtime.library.api.KeyValuesWriterEdgeVector;
 import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.junit.Assert;
 import org.junit.Test;
@@ -57,17 +59,31 @@ public class TestTezProcessor {
   @Test
   public void testVectorBatchOutputCollectorDelegatesToEdgeWriter() throws Exception {
     LogicalOutputEdge output = mock(LogicalOutputEdge.class);
-    KeyValuesWriterEdge writer = mock(KeyValuesWriterEdge.class);
+    KeyValuesWriterEdge writer = mock(KeyValuesWriterEdge.class,
+        withSettings().extraInterfaces(KeyValuesWriterEdgeVector.class));
+    KeyValuesWriterEdgeVector vectorWriter = (KeyValuesWriterEdgeVector) writer;
     BytesWritable serializedBatch = new BytesWritable(new byte[] {1, 2, 3});
     when(output.getWriter()).thenReturn(writer);
-    when(writer.supportsVectorBatch()).thenReturn(true);
+    when(vectorWriter.supportsVectorBatch()).thenReturn(true);
 
     TezProcessor.TezKVOutputCollector collector = new TezProcessor.TezKVOutputCollector(output);
     collector.initialize();
 
     Assert.assertTrue(collector.supportsVectorBatch());
     collector.writeVectorBatch(serializedBatch);
-    verify(writer).writeVectorBatch(serializedBatch);
+    verify(vectorWriter).writeVectorBatch(serializedBatch);
+  }
+
+  @Test
+  public void testNonVectorWriterDoesNotAdvertiseVectorBatches() throws Exception {
+    LogicalOutputEdge output = mock(LogicalOutputEdge.class);
+    KeyValuesWriterEdge writer = mock(KeyValuesWriterEdge.class);
+    when(output.getWriter()).thenReturn(writer);
+
+    TezProcessor.TezKVOutputCollector collector = new TezProcessor.TezKVOutputCollector(output);
+    collector.initialize();
+
+    Assert.assertFalse(collector.supportsVectorBatch());
   }
 
   private ProcessorContext mockProcessorContext() throws IOException {
