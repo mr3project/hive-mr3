@@ -24,6 +24,8 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
+import org.apache.tez.runtime.library.api.KeyValueReaderEdgeVector;
+import org.apache.tez.runtime.library.api.KeyValueReaderEdgeVector.NextResult;
 import org.apache.tez.runtime.library.api.KeyValuesReaderEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +35,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorDeserializeRow;
+import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchDeserializer;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedBatchUtil;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
@@ -97,6 +100,8 @@ public class ReduceRecordSource implements RecordSource {
 
   private VectorizedRowBatchCtx batchContext;
   private VectorizedRowBatch batch;
+  private VectorShuffleBatchDeserializer vectorShuffleBatchDeserializer;
+  private int vectorBatchColumnCount;
 
   // number of columns pertaining to keys in a vectorized row batch
   private int firstValueColumnOffset;
@@ -108,6 +113,7 @@ public class ReduceRecordSource implements RecordSource {
 
   private KeyValuesAdapter reader;
   private KeyValueReaderEdge keyValueReader;
+  private KeyValueReaderEdgeVector keyValueReaderVector;
   private KeyValuesReaderEdge keyValuesReader;
   private boolean isKeyValueReader;
 
@@ -150,6 +156,8 @@ public class ReduceRecordSource implements RecordSource {
       // for unordered key/value records
       this.isKeyValueReader = true;
       this.keyValueReader = (KeyValueReaderEdge) reader;
+      this.keyValueReaderVector = keyValueReader instanceof KeyValueReaderEdgeVector
+          ? (KeyValueReaderEdgeVector) keyValueReader : null;
       if (!vectorized) {
         this.reader = new KeyValuesFromKeyValue((KeyValueReaderEdge) reader);
       }
@@ -194,6 +202,8 @@ public class ReduceRecordSource implements RecordSource {
             valueStructInspectors);
         this.batchContext = batchContext;
         batch = batchContext.createVectorizedRowBatch();
+        vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
+        vectorBatchColumnCount = totalColumns;
 
         // Setup vectorized deserialization for the key and value.
         BinarySortableSerDe binarySortableSerDe = (BinarySortableSerDe) inputKeySerDe;
@@ -417,14 +427,25 @@ public class ReduceRecordSource implements RecordSource {
 
   private boolean pushRecordVectorFromKeyValueUnordered() {
     try {
-      if (!keyValueReader.next()) {
-        return false;
+      if (keyValueReaderVector != null) {
+        NextResult result = keyValueReaderVector.nextVectorBatchAware();
+        if (result == NextResult.END_OF_INPUT) {
+          return false;
+        } else if (result == NextResult.VECTOR_BATCH) {
+          processVectorBatch(keyValueReader.getCurrentValue(), tag);
+        } else if (result == NextResult.KEY_VALUE) {
+          processVectorRecordUnordered(keyValueReader.getCurrentKey(),
+              keyValueReader.getCurrentValue(), tag);
+        } else {
+          throw new IOException("Unexpected vector-aware next result " + result);
+        }
+      } else {
+        if (!keyValueReader.next()) {
+          return false;
+        }
+        processVectorRecordUnordered(keyValueReader.getCurrentKey(),
+            keyValueReader.getCurrentValue(), tag);
       }
-
-      BytesWritable keyWritable = keyValueReader.getCurrentKey();
-      BytesWritable valueWritable = keyValueReader.getCurrentValue();
-
-      processVectorRecordUnordered(keyWritable, valueWritable, tag);
       return true;
     } catch (Throwable e) {
       abort = true;
@@ -472,12 +493,26 @@ public class ReduceRecordSource implements RecordSource {
 
   void consumeAllUnordered(RecordProgress progress) throws HiveException, InterruptedException {
     try {
-      keyValueReader.consumeAll((keyWritable, valueWritable) -> {
-        // KeyValueReaderEdge provides unordered key/value records. The same logical key can
-        // appear again later, so every record must be treated as an independent final batch.
-        processVectorRecordUnordered(keyWritable, valueWritable, tag);
-        progress.onRecord();
-      });
+      if (keyValueReaderVector == null) {
+        if (keyValueReader.next()) {
+          // consumeAll() includes the current record and must immediately follow a successful next().
+          consumeAllKeyValues(progress);
+        }
+        return;
+      }
+
+      NextResult result = keyValueReaderVector.nextVectorBatchAware();
+      if (result == NextResult.END_OF_INPUT) {
+        return;
+      } else if (result == NextResult.KEY_VALUE) {
+        // For a vector-aware reader, consumeAll() must be called immediately after KEY_VALUE and
+        // includes the current record prepared by nextVectorBatchAware().
+        consumeAllKeyValues(progress);
+      } else if (result == NextResult.VECTOR_BATCH) {
+        consumeVectorBatches(progress);
+      } else {
+        throw new IOException("Unexpected vector-aware next result " + result);
+      }
     } catch (OutOfMemoryError e) {
       abort = true;
       throw e;
@@ -487,6 +522,50 @@ public class ReduceRecordSource implements RecordSource {
     } catch (Exception e) {
       abort = true;
       throw new HiveException(e);
+    }
+  }
+
+  private void consumeAllKeyValues(RecordProgress progress) throws Exception {
+    keyValueReader.consumeAll((keyWritable, valueWritable) -> {
+      // KeyValueReaderEdge provides unordered key/value records. The same logical key can appear
+      // again later, so every record must be treated as an independent final batch.
+      processVectorRecordUnordered(keyWritable, valueWritable, tag);
+      progress.onRecord();
+    });
+  }
+
+  private void consumeVectorBatches(RecordProgress progress) throws Exception {
+    while (true) {
+      processVectorBatch(keyValueReader.getCurrentValue(), tag);
+      progress.onRecord();
+
+      NextResult result = keyValueReaderVector.nextVectorBatchAware();
+      if (result == NextResult.END_OF_INPUT) {
+        return;
+      }
+      if (result != NextResult.VECTOR_BATCH) {
+        throw new IOException("Vector-aware reader changed mode to " + result);
+      }
+    }
+  }
+
+  private void processVectorBatch(BytesWritable valueWritable, byte tag) throws HiveException {
+    if (reducer.batchNeedsClone()) {
+      batch = batchContext.createVectorizedRowBatch();
+    }
+    Preconditions.checkState(batch.size == 0);
+
+    try {
+      vectorShuffleBatchDeserializer.deserialize(valueWritable, batch, vectorBatchColumnCount);
+      reducer.process(batch, tag);
+
+      // reset only when we reuse the batch
+      if (!reducer.batchNeedsClone()) {
+        batch.reset();
+      }
+    } catch (Exception e) {
+      throw new HiveException("Hive Runtime Error while processing vector shuffle batch (tag="
+          + tag + ") (vectorizedVertexNum " + vectorizedVertexNum + ")", e);
     }
   }
 

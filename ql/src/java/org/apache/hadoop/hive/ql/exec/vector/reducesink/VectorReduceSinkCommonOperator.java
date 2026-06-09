@@ -29,7 +29,10 @@ import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.TerminalOperator;
 import org.apache.hadoop.hive.ql.exec.TopNHash;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.vector.VectorBatchOutputCollector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
+import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchSerializer;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContextRegion;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationOperator;
@@ -128,6 +131,10 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   // Where to write our key and value pairs.
   private transient OutputCollector out;
+  private transient VectorBatchOutputCollector vectorBatchOutputCollector;
+  private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
+  private transient BytesWritable serializedVectorBatch;
+  private transient int[] vectorBatchColumnMap;
 
   private transient long cntr = 1;
   private transient long logEveryNRows = 0;
@@ -292,6 +299,19 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
     valueBytesWritable = new BytesWritable();
 
+    int keyColumnCount = isEmptyKey ? 0 : reduceSinkKeyColumnMap.length;
+    int valueColumnCount = isEmptyValue ? 0 : reduceSinkValueColumnMap.length;
+    vectorBatchColumnMap = new int[keyColumnCount + valueColumnCount];
+    if (keyColumnCount > 0) {
+      System.arraycopy(reduceSinkKeyColumnMap, 0, vectorBatchColumnMap, 0, keyColumnCount);
+    }
+    if (valueColumnCount > 0) {
+      System.arraycopy(reduceSinkValueColumnMap, 0, vectorBatchColumnMap, keyColumnCount,
+          valueColumnCount);
+    }
+    vectorShuffleBatchSerializer = new VectorShuffleBatchSerializer();
+    serializedVectorBatch = new BytesWritable();
+
     int limit = conf.getTopN();
     float memUsage = conf.getTopNMemoryUsage();
 
@@ -347,19 +367,38 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
   }
 
+  /**
+   * Writes the active rows as one vector batch when the edge supports the vector-batch protocol and
+   * no Top-N hash needs to inspect individual records.
+   */
+  protected boolean tryWriteVectorBatch(VectorizedRowBatch batch) throws IOException {
+    if (reducerHash != null || vectorBatchOutputCollector == null
+        || !vectorBatchOutputCollector.supportsVectorBatch()) {
+      return false;
+    }
+    vectorShuffleBatchSerializer.serialize(batch, vectorBatchColumnMap, serializedVectorBatch);
+    vectorBatchOutputCollector.writeVectorBatch(serializedVectorBatch);
+    addToNumRows(batch.size);
+    return true;
+  }
+
+  private void addToNumRows(long rowCount) {
+    numRows += rowCount;
+    if (numRows >= cntr) {
+      cntr = logEveryNRows == 0 ? cntr * 10 : numRows + logEveryNRows;
+      if (cntr < 0 || numRows < 0) {
+        cntr = 0;
+        numRows = 1;
+      }
+      LOG.info("{}: records written - {}", this, numRows);
+    }
+  }
+
   private void doCollect(HiveKey keyWritable, BytesWritable valueWritable) throws IOException {
     // Since this is a terminal operator, update counters explicitly -
     // forward is not called
     if (null != out) {
-      numRows++;
-      if (numRows == cntr) {
-        cntr = logEveryNRows == 0 ? cntr * 10 : numRows + logEveryNRows;
-        if (cntr < 0 || numRows < 0) {
-          cntr = 0;
-          numRows = 1;
-        }
-        LOG.info("{}: records written - {}", this, numRows);
-      }
+      addToNumRows(1);
 
       // BytesWritable valueBytesWritable = (BytesWritable) valueWritable;
       // LOG.info("VectorReduceSinkCommonOperator collect keyWritable " + keyWritable.getLength() + " " +
@@ -379,6 +418,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     runTimeNumRows = numRows;
     super.closeOp(abort);
     out = null;
+    vectorBatchOutputCollector = null;
     reducerHash = null;
     LOG.info("{}:: records written - {}", this, numRows);
     this.runTimeNumRows = numRows;
@@ -419,6 +459,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   @Override
   public void setOutputCollector(OutputCollector _out) {
     this.out = _out;
+    vectorBatchOutputCollector =
+        _out instanceof VectorBatchOutputCollector ? (VectorBatchOutputCollector) _out : null;
   }
 
   @Override

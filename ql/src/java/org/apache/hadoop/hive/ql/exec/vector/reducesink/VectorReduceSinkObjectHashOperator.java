@@ -234,6 +234,11 @@ public class VectorReduceSinkObjectHashOperator extends VectorReduceSinkCommonOp
         }
       }
 
+      // BucketNumExpression is evaluated per row below and may populate a logical key column.
+      if (bucketExpr == null && tryWriteVectorBatch(batch)) {
+        return;
+      }
+
       // Perform any bucket expressions.  Results will go into scratch columns.
       if (reduceSinkBucketExpressions != null) {
         for (VectorExpression ve : reduceSinkBucketExpressions) {

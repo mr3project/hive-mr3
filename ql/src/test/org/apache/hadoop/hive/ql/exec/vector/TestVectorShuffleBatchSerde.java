@@ -474,6 +474,15 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testDeserializerRejectsUnexpectedColumnCount() throws Exception {
+    BytesWritable serialized = serialize(batchWithColumn(new LongColumnVector(), 1));
+    VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
+
+    assertThrows(IOException.class, () -> deserializer.deserialize(serialized, destination, 2));
+    assertEquals(0, destination.size);
+  }
+
+  @Test
   public void testStructPayloadRejectsTrailingAndMalformedBytes() throws Exception {
     StructColumnVector struct = structOf(new LongColumnVector());
     ((LongColumnVector) struct.fields[0]).vector[0] = 7;
