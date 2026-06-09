@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorDeserializeRow;
+import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchDeserializer;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedBatchUtil;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
@@ -97,6 +98,8 @@ public class ReduceRecordSource implements RecordSource {
 
   private VectorizedRowBatchCtx batchContext;
   private VectorizedRowBatch batch;
+  private VectorShuffleBatchDeserializer vectorShuffleBatchDeserializer;
+  private int vectorBatchColumnCount;
 
   // number of columns pertaining to keys in a vectorized row batch
   private int firstValueColumnOffset;
@@ -110,6 +113,7 @@ public class ReduceRecordSource implements RecordSource {
   private KeyValueReaderEdge keyValueReader;
   private KeyValuesReaderEdge keyValuesReader;
   private boolean isKeyValueReader;
+  private boolean isVectorBatch;
 
   private boolean handleGroupKey;
 
@@ -150,6 +154,7 @@ public class ReduceRecordSource implements RecordSource {
       // for unordered key/value records
       this.isKeyValueReader = true;
       this.keyValueReader = (KeyValueReaderEdge) reader;
+      this.isVectorBatch = keyValueReader.isVectorBatch();
       if (!vectorized) {
         this.reader = new KeyValuesFromKeyValue((KeyValueReaderEdge) reader);
       }
@@ -194,6 +199,8 @@ public class ReduceRecordSource implements RecordSource {
             valueStructInspectors);
         this.batchContext = batchContext;
         batch = batchContext.createVectorizedRowBatch();
+        vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
+        vectorBatchColumnCount = totalColumns;
 
         // Setup vectorized deserialization for the key and value.
         BinarySortableSerDe binarySortableSerDe = (BinarySortableSerDe) inputKeySerDe;
@@ -421,10 +428,12 @@ public class ReduceRecordSource implements RecordSource {
         return false;
       }
 
-      BytesWritable keyWritable = keyValueReader.getCurrentKey();
       BytesWritable valueWritable = keyValueReader.getCurrentValue();
-
-      processVectorRecordUnordered(keyWritable, valueWritable, tag);
+      if (isVectorBatch) {
+        processVectorBatch(valueWritable, tag);
+      } else {
+        processVectorRecordUnordered(keyValueReader.getCurrentKey(), valueWritable, tag);
+      }
       return true;
     } catch (Throwable e) {
       abort = true;
@@ -475,7 +484,11 @@ public class ReduceRecordSource implements RecordSource {
       keyValueReader.consumeAll((keyWritable, valueWritable) -> {
         // KeyValueReaderEdge provides unordered key/value records. The same logical key can
         // appear again later, so every record must be treated as an independent final batch.
-        processVectorRecordUnordered(keyWritable, valueWritable, tag);
+        if (isVectorBatch) {
+          processVectorBatch(valueWritable, tag);
+        } else {
+          processVectorRecordUnordered(keyWritable, valueWritable, tag);
+        }
         progress.onRecord();
       });
     } catch (OutOfMemoryError e) {
@@ -487,6 +500,26 @@ public class ReduceRecordSource implements RecordSource {
     } catch (Exception e) {
       abort = true;
       throw new HiveException(e);
+    }
+  }
+
+  private void processVectorBatch(BytesWritable valueWritable, byte tag) throws HiveException {
+    if (reducer.batchNeedsClone()) {
+      batch = batchContext.createVectorizedRowBatch();
+    }
+    Preconditions.checkState(batch.size == 0);
+
+    try {
+      vectorShuffleBatchDeserializer.deserialize(valueWritable, batch, vectorBatchColumnCount);
+      reducer.process(batch, tag);
+
+      // reset only when we reuse the batch
+      if (!reducer.batchNeedsClone()) {
+        batch.reset();
+      }
+    } catch (Exception e) {
+      throw new HiveException("Hive Runtime Error while processing vector shuffle batch (tag="
+          + tag + ") (vectorizedVertexNum " + vectorizedVertexNum + ")", e);
     }
   }
 

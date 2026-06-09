@@ -18,10 +18,12 @@
 package org.apache.hadoop.hive.ql.exec.tez;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -30,6 +32,8 @@ import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.tez.common.TezUtils;
 import org.apache.tez.runtime.api.ProcessorContext;
+import org.apache.tez.runtime.library.api.KeyValuesWriterEdge;
+import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -48,6 +52,22 @@ public class TestTezProcessor {
     tezProcessor.initialize();
     JobConf conf = tezProcessor.getConf();
     Assert.assertEquals(token, conf.getCredentials().getToken(tokenId));
+  }
+
+  @Test
+  public void testVectorBatchOutputCollectorDelegatesToEdgeWriter() throws Exception {
+    LogicalOutputEdge output = mock(LogicalOutputEdge.class);
+    KeyValuesWriterEdge writer = mock(KeyValuesWriterEdge.class);
+    BytesWritable serializedBatch = new BytesWritable(new byte[] {1, 2, 3});
+    when(output.getWriter()).thenReturn(writer);
+    when(writer.supportsVectorBatch()).thenReturn(true);
+
+    TezProcessor.TezKVOutputCollector collector = new TezProcessor.TezKVOutputCollector(output);
+    collector.initialize();
+
+    Assert.assertTrue(collector.supportsVectorBatch());
+    collector.writeVectorBatch(serializedBatch);
+    verify(writer).writeVectorBatch(serializedBatch);
   }
 
   private ProcessorContext mockProcessorContext() throws IOException {

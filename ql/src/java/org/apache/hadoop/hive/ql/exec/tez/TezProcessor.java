@@ -37,6 +37,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.exec.LimitOperator;
+import org.apache.hadoop.hive.ql.exec.vector.VectorBatchOutputCollector;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.mapred.JobConf;
@@ -404,7 +405,8 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
    * Must be initialized before it is used.
    *
    */
-  public static class TezKVOutputCollector implements OutputCollector<BytesWritable, BytesWritable> {
+  public static class TezKVOutputCollector
+      implements OutputCollector<BytesWritable, BytesWritable>, VectorBatchOutputCollector {
     private KeyValuesWriterEdge writer;
     private final LogicalOutputEdge output;
 
@@ -425,6 +427,16 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     @Override
     public void collect(BytesWritable key, BytesWritable value) throws IOException {
       writer.write(key, value);
+    }
+
+    @Override
+    public boolean supportsVectorBatch() {
+      return writer.supportsVectorBatch();
+    }
+
+    @Override
+    public void writeVectorBatch(BytesWritable serializedBatch) throws IOException {
+      writer.writeVectorBatch(serializedBatch);
     }
 
     public void close() {
