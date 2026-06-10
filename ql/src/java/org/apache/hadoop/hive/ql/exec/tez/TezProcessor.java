@@ -410,6 +410,8 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       implements OutputCollector<BytesWritable, BytesWritable>, VectorBatchOutputCollector {
     private KeyValuesWriterEdge writer;
     private KeyValuesWriterEdgeVector vectorWriter;
+    private boolean ordinaryWritesStarted;
+    private boolean vectorWritesStarted;
     private final LogicalOutputEdge output;
 
     TezKVOutputCollector(LogicalOutputEdge logicalOutput) {
@@ -430,6 +432,10 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
     @Override
     public void collect(BytesWritable key, BytesWritable value) throws IOException {
+      if (vectorWritesStarted) {
+        throw new IllegalStateException("Cannot mix ordinary and vector-batch writes");
+      }
+      ordinaryWritesStarted = true;
       writer.write(key, value);
     }
 
@@ -440,9 +446,13 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
     @Override
     public void writeVectorBatch(BytesWritable serializedBatch) throws IOException {
-      if (vectorWriter == null) {
+      if (!supportsVectorBatch()) {
         throw new IllegalStateException("Output writer does not support vector batches");
       }
+      if (ordinaryWritesStarted) {
+        throw new IllegalStateException("Cannot mix ordinary and vector-batch writes");
+      }
+      vectorWritesStarted = true;
       vectorWriter.writeVectorBatch(serializedBatch);
     }
 

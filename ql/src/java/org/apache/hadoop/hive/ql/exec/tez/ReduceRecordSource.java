@@ -114,6 +114,8 @@ public class ReduceRecordSource implements RecordSource {
   private KeyValuesAdapter reader;
   private KeyValueReaderEdge keyValueReader;
   private KeyValueReaderEdgeVector keyValueReaderVector;
+  private boolean keyValueReaderVectorUsesKeyValues;
+  private boolean keyValueReaderVectorUsesBatches;
   private KeyValuesReaderEdge keyValuesReader;
   private boolean isKeyValueReader;
 
@@ -427,25 +429,29 @@ public class ReduceRecordSource implements RecordSource {
 
   private boolean pushRecordVectorFromKeyValueUnordered() {
     try {
-      if (keyValueReaderVector != null) {
+      if (keyValueReaderVector != null && !keyValueReaderVectorUsesKeyValues) {
         NextResult result = keyValueReaderVector.nextVectorBatchAware();
         if (result == NextResult.END_OF_INPUT) {
           return false;
         } else if (result == NextResult.VECTOR_BATCH) {
+          keyValueReaderVectorUsesBatches = true;
           processVectorBatch(keyValueReader.getCurrentValue(), tag);
+          return true;
         } else if (result == NextResult.KEY_VALUE) {
-          processVectorRecordUnordered(keyValueReader.getCurrentKey(),
-              keyValueReader.getCurrentValue(), tag);
+          if (keyValueReaderVectorUsesBatches) {
+            throw new IOException("Vector-aware reader changed mode to " + result);
+          }
+          // KEY_VALUE is only a mode probe and does not select a current record.
+          keyValueReaderVectorUsesKeyValues = true;
         } else {
           throw new IOException("Unexpected vector-aware next result " + result);
         }
-      } else {
-        if (!keyValueReader.next()) {
-          return false;
-        }
-        processVectorRecordUnordered(keyValueReader.getCurrentKey(),
-            keyValueReader.getCurrentValue(), tag);
       }
+      if (!keyValueReader.next()) {
+        return false;
+      }
+      processVectorRecordUnordered(keyValueReader.getCurrentKey(),
+          keyValueReader.getCurrentValue(), tag);
       return true;
     } catch (Throwable e) {
       abort = true;
@@ -494,10 +500,7 @@ public class ReduceRecordSource implements RecordSource {
   void consumeAllUnordered(RecordProgress progress) throws HiveException, InterruptedException {
     try {
       if (keyValueReaderVector == null) {
-        if (keyValueReader.next()) {
-          // consumeAll() includes the current record and must immediately follow a successful next().
-          consumeAllKeyValues(progress);
-        }
+        consumeAllKeyValues(progress);
         return;
       }
 
@@ -505,8 +508,7 @@ public class ReduceRecordSource implements RecordSource {
       if (result == NextResult.END_OF_INPUT) {
         return;
       } else if (result == NextResult.KEY_VALUE) {
-        // For a vector-aware reader, consumeAll() must be called immediately after KEY_VALUE and
-        // includes the current record prepared by nextVectorBatchAware().
+        // KEY_VALUE is only a mode probe; consumeAll() starts with the first ordinary record.
         consumeAllKeyValues(progress);
       } else if (result == NextResult.VECTOR_BATCH) {
         consumeVectorBatches(progress);

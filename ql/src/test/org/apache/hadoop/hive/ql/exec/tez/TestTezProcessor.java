@@ -74,6 +74,36 @@ public class TestTezProcessor {
     verify(vectorWriter).writeVectorBatch(serializedBatch);
   }
 
+  @Test(expected = IllegalStateException.class)
+  public void testVectorBatchOutputCollectorRejectsOrdinaryWriteAfterVectorWrite() throws Exception {
+    LogicalOutputEdge output = mock(LogicalOutputEdge.class);
+    KeyValuesWriterEdge writer = mock(KeyValuesWriterEdge.class,
+        withSettings().extraInterfaces(KeyValuesWriterEdgeVector.class));
+    KeyValuesWriterEdgeVector vectorWriter = (KeyValuesWriterEdgeVector) writer;
+    when(output.getWriter()).thenReturn(writer);
+    when(vectorWriter.supportsVectorBatch()).thenReturn(true);
+
+    TezProcessor.TezKVOutputCollector collector = new TezProcessor.TezKVOutputCollector(output);
+    collector.initialize();
+    collector.writeVectorBatch(new BytesWritable());
+    collector.collect(new BytesWritable(), new BytesWritable());
+  }
+
+  @Test(expected = IllegalStateException.class)
+  public void testVectorBatchOutputCollectorRejectsVectorWriteAfterOrdinaryWrite() throws Exception {
+    LogicalOutputEdge output = mock(LogicalOutputEdge.class);
+    KeyValuesWriterEdge writer = mock(KeyValuesWriterEdge.class,
+        withSettings().extraInterfaces(KeyValuesWriterEdgeVector.class));
+    KeyValuesWriterEdgeVector vectorWriter = (KeyValuesWriterEdgeVector) writer;
+    when(output.getWriter()).thenReturn(writer);
+    when(vectorWriter.supportsVectorBatch()).thenReturn(true);
+
+    TezProcessor.TezKVOutputCollector collector = new TezProcessor.TezKVOutputCollector(output);
+    collector.initialize();
+    collector.collect(new BytesWritable(), new BytesWritable());
+    collector.writeVectorBatch(new BytesWritable());
+  }
+
   @Test
   public void testNonVectorWriterDoesNotAdvertiseVectorBatches() throws Exception {
     LogicalOutputEdge output = mock(LogicalOutputEdge.class);
