@@ -135,6 +135,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
   private transient BytesWritable serializedVectorBatch;
   private transient int[] vectorBatchColumnMap;
+  private transient boolean ordinaryWritesStarted;
+  private transient boolean vectorWritesStarted;
 
   private transient long cntr = 1;
   private transient long logEveryNRows = 0;
@@ -311,6 +313,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
     vectorShuffleBatchSerializer = new VectorShuffleBatchSerializer();
     serializedVectorBatch = new BytesWritable();
+    ordinaryWritesStarted = false;
+    vectorWritesStarted = false;
 
     int limit = conf.getTopN();
     float memUsage = conf.getTopNMemoryUsage();
@@ -373,13 +377,27 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
    */
   protected boolean tryWriteVectorBatch(VectorizedRowBatch batch) throws IOException {
     if (reducerHash != null || vectorBatchOutputCollector == null
-        || !vectorBatchOutputCollector.supportsVectorBatch()) {
+        || !vectorBatchOutputCollector.supportsVectorBatch() || ordinaryWritesStarted) {
       return false;
     }
+
+    // Runtime-value inputs consumed by DynamicValueRegistryTez contain zero or one row and use
+    // ordinary KeyValueReaderEdge iteration.  Keep a single-row first batch in ordinary mode.  Once
+    // either output mode has emitted data, stay in that mode for the remainder of the writer.
+    if (!shouldWriteVectorBatch(batch.size, ordinaryWritesStarted, vectorWritesStarted)) {
+      return false;
+    }
+
     vectorShuffleBatchSerializer.serialize(batch, vectorBatchColumnMap, serializedVectorBatch);
     vectorBatchOutputCollector.writeVectorBatch(serializedVectorBatch);
+    vectorWritesStarted = true;
     addToNumRows(batch.size);
     return true;
+  }
+
+  static boolean shouldWriteVectorBatch(
+      int batchSize, boolean ordinaryWritesStarted, boolean vectorWritesStarted) {
+    return !ordinaryWritesStarted && (vectorWritesStarted || batchSize > 1);
   }
 
   private void addToNumRows(long rowCount) {
@@ -398,6 +416,10 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     // Since this is a terminal operator, update counters explicitly -
     // forward is not called
     if (null != out) {
+      if (vectorWritesStarted) {
+        throw new IllegalStateException("Cannot mix ordinary and vector-batch writes");
+      }
+      ordinaryWritesStarted = true;
       addToNumRows(1);
 
       // BytesWritable valueBytesWritable = (BytesWritable) valueWritable;
