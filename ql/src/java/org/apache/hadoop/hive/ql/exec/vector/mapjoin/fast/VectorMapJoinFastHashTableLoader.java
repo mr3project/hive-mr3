@@ -18,7 +18,9 @@
 package org.apache.hadoop.hive.ql.exec.vector.mapjoin.fast;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -38,6 +40,8 @@ import org.apache.hive.common.util.FixedSizedObjectPool;
 import org.apache.tez.common.counters.TaskCounter;
 import org.apache.tez.common.counters.TezCounter;
 import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
+import org.apache.tez.runtime.library.api.KeyValueReaderEdgeVector;
+import org.apache.tez.runtime.library.api.KeyValueReaderEdgeVector.NextResult;
 import org.apache.tez.runtime.library.api.LogicalInputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,9 +53,19 @@ import org.apache.hadoop.hive.ql.exec.mr.ExecMapperContext;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainerSerDe;
 import org.apache.hadoop.hive.ql.exec.tez.TezContext;
+import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
+import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchDeserializer;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedBatchUtil;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
 import org.apache.hadoop.hive.serde2.SerDeException;
+import org.apache.hadoop.hive.serde2.ByteStream.Output;
+import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableSerializeWrite;
+import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
+import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.tez.runtime.api.Input;
 import org.apache.tez.runtime.api.LogicalInput;
@@ -279,42 +293,40 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
 
         long receivedEntries = 0;
         long startTime = System.currentTimeMillis();
-        while (kvReader.next()) {
-          // currentKey, currentValue: backing byte[] arrays of BytesWritable are immutable.
-          BytesWritable currentKey = kvReader.getCurrentKey();
-          BytesWritable currentValue = kvReader.getCurrentValue();
-
-          long hashCode = tableContainer.getHashCode(currentKey);
-
-          int partitionId = (int) ((numLoadThreads - 1) & hashCode); // numLoadThreads divisor must be a power of 2!
-
-          HashTableElement h = new HashTableElement(hashCode,
-              currentKey.getBytesRaw(), currentKey.getOffset(), currentKey.getLength(),
-              currentValue.getBytesRaw(), currentValue.getOffset(), currentValue.getLength());
-
-          if (elementBatches[partitionId].addElement(h)) {
-            loadBatchQueues[partitionId].add(elementBatches[partitionId]);
-            elementBatches[partitionId] = batchPool.take();
-          }
-          receivedEntries++;
-          if ((receivedEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
-            throw new InterruptedException("Hash table loading interrupted");
-          }
-          if (doMemCheck && (receivedEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
-            final long estMemUsage = tableContainer.getEstimatedMemorySize();
-            if (estMemUsage > effectiveThreshold) {
-              String msg = "Hash table loading exceeded memory limits for input: " + inputName +
-                  " numEntries: " + receivedEntries + " estimatedMemoryUsage: " + estMemUsage +
-                  " effectiveThreshold: " + effectiveThreshold + " memoryMonitorInfo: " + memoryMonitorInfo;
-                LOG.error(msg);
-                throw new MapJoinMemoryExhaustionError(msg);
-              } else {
-              if (LOG.isDebugEnabled()) { LOG.debug(
-                  "Checking hash table loader memory usage for input: {} numEntries: {} "
-                      + "estimatedMemoryUsage: {} effectiveThreshold: {}",
-                  inputName, receivedEntries, estMemUsage, effectiveThreshold); }
+        KeyValueReaderEdgeVector vectorReader = kvReader instanceof KeyValueReaderEdgeVector
+            ? (KeyValueReaderEdgeVector) kvReader : null;
+        NextResult nextResult = vectorReader == null ? NextResult.KEY_VALUE
+            : vectorReader.nextVectorBatchAware();
+        if (nextResult == NextResult.VECTOR_BATCH) {
+          VectorBatchReaderSerde vectorSerde = new VectorBatchReaderSerde(desc, pos);
+          do {
+            vectorSerde.deserialize(kvReader.getCurrentValue());
+            for (int logicalIndex = 0; logicalIndex < vectorSerde.getBatch().size; logicalIndex++) {
+              int batchIndex = vectorSerde.getBatch().selectedInUse
+                  ? vectorSerde.getBatch().selected[logicalIndex] : logicalIndex;
+              addHashTableEntry(tableContainer, vectorSerde.serializeKey(batchIndex),
+                  vectorSerde.serializeValue(batchIndex), true);
+              receivedEntries++;
+              checkLoadProgress(tableContainer, inputName, receivedEntries, interruptCheckInterval,
+                  doMemCheck, memoryMonitorInfo, effectiveThreshold);
             }
+            nextResult = vectorReader.nextVectorBatchAware();
+            if (nextResult == NextResult.KEY_VALUE) {
+              throw new IOException("Vector-aware reader changed mode to " + nextResult);
+            }
+          } while (nextResult == NextResult.VECTOR_BATCH);
+        } else if (nextResult == NextResult.KEY_VALUE) {
+          // KEY_VALUE is a mode probe and does not select the first ordinary record.
+          while (kvReader.next()) {
+            // Reader-edge backing arrays are immutable and may be retained by Hive-MR3.
+            addHashTableEntry(tableContainer, kvReader.getCurrentKey(), kvReader.getCurrentValue(),
+                false);
+            receivedEntries++;
+            checkLoadProgress(tableContainer, inputName, receivedEntries, interruptCheckInterval,
+                doMemCheck, memoryMonitorInfo, effectiveThreshold);
           }
+        } else if (nextResult != NextResult.END_OF_INPUT) {
+          throw new IOException("Unexpected vector-aware next result " + nextResult);
         }
 
         LOG.info("Finished loading the queue for input: {} waiting {} minutes for TPool shutdown", inputName, 2);
@@ -352,6 +364,127 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
           loadExecService.shutdownNow();
         }
       }
+    }
+  }
+
+  private void addHashTableEntry(VectorMapJoinFastTableContainer tableContainer,
+      BytesWritable currentKey, BytesWritable currentValue, boolean copyBytes)
+      throws HiveException, IOException, InterruptedException {
+    long hashCode = tableContainer.getHashCode(currentKey);
+    int partitionId = (int) ((numLoadThreads - 1) & hashCode);
+    byte[] keyBytes = copyBytes
+        ? Arrays.copyOfRange(currentKey.getBytesRaw(), currentKey.getOffset(),
+            currentKey.getOffset() + currentKey.getLength())
+        : currentKey.getBytesRaw();
+    byte[] valueBytes = copyBytes
+        ? Arrays.copyOfRange(currentValue.getBytesRaw(), currentValue.getOffset(),
+            currentValue.getOffset() + currentValue.getLength())
+        : currentValue.getBytesRaw();
+    HashTableElement element = new HashTableElement(hashCode, keyBytes,
+        copyBytes ? 0 : currentKey.getOffset(), currentKey.getLength(), valueBytes,
+        copyBytes ? 0 : currentValue.getOffset(), currentValue.getLength());
+    if (elementBatches[partitionId].addElement(element)) {
+      loadBatchQueues[partitionId].add(elementBatches[partitionId]);
+      elementBatches[partitionId] = batchPool.take();
+    }
+  }
+
+  private void checkLoadProgress(VectorMapJoinFastTableContainer tableContainer, String inputName,
+      long receivedEntries, long interruptCheckInterval, boolean doMemCheck,
+      MemoryMonitorInfo memoryMonitorInfo, long effectiveThreshold) throws InterruptedException {
+    if ((receivedEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
+      throw new InterruptedException("Hash table loading interrupted");
+    }
+    if (!doMemCheck || receivedEntries % memoryMonitorInfo.getMemoryCheckInterval() != 0) {
+      return;
+    }
+    long estimatedMemoryUsage = tableContainer.getEstimatedMemorySize();
+    if (estimatedMemoryUsage > effectiveThreshold) {
+      String message = "Hash table loading exceeded memory limits for input: " + inputName
+          + " numEntries: " + receivedEntries + " estimatedMemoryUsage: " + estimatedMemoryUsage
+          + " effectiveThreshold: " + effectiveThreshold + " memoryMonitorInfo: "
+          + memoryMonitorInfo;
+      LOG.error(message);
+      throw new MapJoinMemoryExhaustionError(message);
+    }
+    LOG.debug("Checking hash table loader memory usage for input: {} numEntries: {} "
+        + "estimatedMemoryUsage: {} effectiveThreshold: {}", inputName, receivedEntries,
+        estimatedMemoryUsage, effectiveThreshold);
+  }
+
+  static final class VectorBatchReaderSerde {
+    private final VectorShuffleBatchDeserializer deserializer = new VectorShuffleBatchDeserializer();
+    private final VectorizedRowBatch batch;
+    private final BinarySortableSerializeWrite keySerializeWrite;
+    private final LazyBinarySerializeWrite valueSerializeWrite;
+    private final VectorSerializeRow<BinarySortableSerializeWrite> keySerializer;
+    private final VectorSerializeRow<LazyBinarySerializeWrite> valueSerializer;
+    private final Output keyOutput = new Output();
+    private final Output valueOutput = new Output();
+    private final BytesWritable key = new BytesWritable();
+    private final BytesWritable value = new BytesWritable();
+
+    VectorBatchReaderSerde(MapJoinDesc desc, int smallTablePosition) throws HiveException {
+      TypeInfo[] keyTypes = getTypeInfos(desc.getKeyTblDesc().getProperties()
+          .getProperty(serdeConstants.LIST_COLUMN_TYPES));
+      TypeInfo[] valueTypes = getTypeInfos((desc.getNoOuterJoin() ? desc.getValueTblDescs()
+          : desc.getValueFilteredTblDescs()).get(smallTablePosition).getProperties()
+          .getProperty(serdeConstants.LIST_COLUMN_TYPES));
+      TypeInfo[] allTypes = new TypeInfo[keyTypes.length + valueTypes.length];
+      System.arraycopy(keyTypes, 0, allTypes, 0, keyTypes.length);
+      System.arraycopy(valueTypes, 0, allTypes, keyTypes.length, valueTypes.length);
+      batch = new VectorizedRowBatch(allTypes.length);
+      for (int i = 0; i < allTypes.length; i++) {
+        batch.cols[i] = VectorizedBatchUtil.createColumnVector(allTypes[i]);
+      }
+
+      keySerializeWrite = BinarySortableSerializeWrite.with(
+          desc.getKeyTblDesc().getProperties(), keyTypes.length);
+      keySerializer = new VectorSerializeRow<>(keySerializeWrite);
+      keySerializer.init(keyTypes, sequence(0, keyTypes.length));
+      keySerializer.setOutput(keyOutput);
+      valueSerializeWrite = new LazyBinarySerializeWrite(valueTypes.length);
+      valueSerializer = new VectorSerializeRow<>(valueSerializeWrite);
+      valueSerializer.init(valueTypes, sequence(keyTypes.length, valueTypes.length));
+      valueSerializer.setOutput(valueOutput);
+    }
+
+    private static TypeInfo[] getTypeInfos(String typeNames) {
+      if (typeNames == null || typeNames.isEmpty()) {
+        return new TypeInfo[0];
+      }
+      List<TypeInfo> types = TypeInfoUtils.getTypeInfosFromTypeString(typeNames);
+      return types.toArray(new TypeInfo[types.size()]);
+    }
+
+    private static int[] sequence(int start, int length) {
+      int[] result = new int[length];
+      for (int i = 0; i < length; i++) {
+        result[i] = start + i;
+      }
+      return result;
+    }
+
+    void deserialize(BytesWritable serialized) throws IOException {
+      deserializer.deserialize(serialized, batch, batch.cols.length);
+    }
+
+    VectorizedRowBatch getBatch() {
+      return batch;
+    }
+
+    BytesWritable serializeKey(int batchIndex) throws IOException {
+      keySerializeWrite.reset();
+      keySerializer.serializeWrite(batch, batchIndex);
+      key.set(keyOutput.getData(), 0, keyOutput.getLength());
+      return key;
+    }
+
+    BytesWritable serializeValue(int batchIndex) throws IOException {
+      valueSerializeWrite.reset();
+      valueSerializer.serializeWrite(batch, batchIndex);
+      value.set(valueOutput.getData(), 0, valueOutput.getLength());
+      return value;
     }
   }
 
