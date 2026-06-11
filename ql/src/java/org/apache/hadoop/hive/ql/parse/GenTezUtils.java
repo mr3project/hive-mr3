@@ -703,6 +703,9 @@ public class GenTezUtils {
     TezWork tezWork = procCtx.currentTask.getWork();
     tezWork.connect(parentWork, childWork, edgeProperty);
 
+    // DynamicValueRegistryTez consumes ordinary key/value records rather than vector batches.
+    rs.getConf().setVectorBatchWriteEnabled(false);
+
     // Set output names in ReduceSink
     rs.getConf().setOutputName(childWork.getName());
 

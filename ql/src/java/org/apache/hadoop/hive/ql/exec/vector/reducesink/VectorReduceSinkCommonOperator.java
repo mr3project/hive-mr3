@@ -372,8 +372,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
    * no Top-N hash needs to inspect individual records.
    */
   protected boolean tryWriteVectorBatch(VectorizedRowBatch batch) throws IOException {
-    if (reducerHash != null || vectorBatchOutputCollector == null
-        || !vectorBatchOutputCollector.supportsVectorBatch()) {
+    if (reducerHash != null || !conf.isVectorBatchWriteEnabled()
+        || vectorBatchOutputCollector == null || !vectorBatchOutputCollector.supportsVectorBatch()) {
       return false;
     }
     vectorShuffleBatchSerializer.serialize(batch, vectorBatchColumnMap, serializedVectorBatch);
