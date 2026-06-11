@@ -93,6 +93,12 @@ public class VectorMapJoinFastLongHashMultiSetContainer extends VectorMapJoinFas
   }
 
   @Override
+  public void putLongRow(long hashCode, long key, BytesWritable currentValue) {
+    vectorMapJoinFastLongHashMultiSets[(int) ((numThreads - 1) & hashCode)]
+        .putLongRow(hashCode, key, currentValue);
+  }
+
+  @Override
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
     vectorMapJoinFastLongHashMultiSets[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey, currentValue);

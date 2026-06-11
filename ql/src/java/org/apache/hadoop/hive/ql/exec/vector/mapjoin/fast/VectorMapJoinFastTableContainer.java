@@ -165,6 +165,15 @@ public class VectorMapJoinFastTableContainer implements VectorMapJoinTableContai
     return INSTANCE.getHashCode(currentKey);
   }
 
+  public void putLongRow(long hashCode, long key, BytesWritable currentValue) {
+    INSTANCE.putLongRow(hashCode, key, currentValue);
+  }
+
+  public void putBytesRow(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
+      BytesWritable currentValue) {
+    INSTANCE.putBytesRow(hashCode, keyBytes, keyOffset, keyLength, currentValue);
+  }
+
   @Override
   public MapJoinKey putRow(Writable currentKey, Writable currentValue)
       throws SerDeException, HiveException, IOException {

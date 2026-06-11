@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.ql.exec.vector.mapjoin.fast.VectorMapJoinFastLongH
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKeyType;
+import org.apache.hive.common.util.HashCodeUtil;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -69,6 +70,17 @@ public class TestVectorMapJoinFastLongHashSet extends CommonFastHashTable {
      map.testPutRow(key);
     verifyTable.add(key);
     verifyTable.verify(map);
+  }
+
+  @Test
+  public void testPutLongRow() throws Exception {
+    VectorMapJoinFastLongHashSet map = new VectorMapJoinFastLongHashSet(
+        false, false, HashTableKeyType.LONG, CAPACITY, LOAD_FACTOR, WB_SIZE, -1, keyTableDesc);
+    long key = 42;
+
+    map.putLongRow(HashCodeUtil.calculateLongHashCode(key), key, null);
+
+    assertTrue(map.containsLongKey(key));
   }
 
   @Test

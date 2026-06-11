@@ -152,6 +152,10 @@ public class VectorMapJoinFastLongHashMap
     }
   }
 
+  public void putLongRow(long hashCode, long key, BytesWritable currentValue) {
+    add(hashCode, key, currentValue);
+  }
+
   @Override
   public boolean containsLongKey(long currentKey) {
     return containsKey(currentKey);

@@ -53,12 +53,18 @@ import org.apache.hadoop.hive.ql.exec.mr.ExecMapperContext;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainerSerDe;
 import org.apache.hadoop.hive.ql.exec.tez.TezContext;
+import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchDeserializer;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedBatchUtil;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
+import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc;
+import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKeyType;
+import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKind;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.ByteStream.Output;
 import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableSerializeWrite;
@@ -67,6 +73,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.io.BytesWritable;
+import org.apache.hive.common.util.HashCodeUtil;
 import org.apache.tez.runtime.api.Input;
 import org.apache.tez.runtime.api.LogicalInput;
 import org.apache.tez.runtime.library.api.KeyValueReader;
@@ -196,7 +203,14 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       for (int i = 0; i < batch.getSize(); i++) {
         try {
           HashTableElement h = batch.getBatch(i);
-          tableContainer.putRow(h.getHashCode(), h.getKey(), h.getValue());
+          if (h.isDirectLongKey()) {
+            tableContainer.putLongRow(h.getHashCode(), h.getLongKey(), h.getValue());
+          } else if (h.isDirectBytesKey()) {
+            tableContainer.putBytesRow(h.getHashCode(), h.getKeyBytes(), h.getKeyOffset(),
+                h.getKeyLength(), h.getValue());
+          } else {
+            tableContainer.putRow(h.getHashCode(), h.getKey(), h.getValue());
+          }
         }
         catch (Exception e) {
           throw new HiveException("Exception in draining thread put row", e);
@@ -304,8 +318,10 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
             for (int logicalIndex = 0; logicalIndex < vectorSerde.getBatch().size; logicalIndex++) {
               int batchIndex = vectorSerde.getBatch().selectedInUse
                   ? vectorSerde.getBatch().selected[logicalIndex] : logicalIndex;
-              addHashTableEntry(tableContainer, vectorSerde.serializeKey(batchIndex),
-                  vectorSerde.serializeValue(batchIndex), true);
+              if (!vectorSerde.addDirectHashTableEntry(this, batchIndex)) {
+                addHashTableEntry(tableContainer, vectorSerde.serializeKey(batchIndex),
+                    vectorSerde.serializeValue(batchIndex), true);
+              }
               receivedEntries++;
               checkLoadProgress(tableContainer, inputName, receivedEntries, interruptCheckInterval,
                   doMemCheck, memoryMonitorInfo, effectiveThreshold);
@@ -383,6 +399,31 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
     HashTableElement element = new HashTableElement(hashCode, keyBytes,
         copyBytes ? 0 : currentKey.getOffset(), currentKey.getLength(), valueBytes,
         copyBytes ? 0 : currentValue.getOffset(), currentValue.getLength());
+    addHashTableElement(partitionId, element);
+  }
+
+  private void addLongHashTableEntry(long key, BytesWritable currentValue)
+      throws InterruptedException {
+    long hashCode = HashCodeUtil.calculateLongHashCode(key);
+    addHashTableElement((int) ((numLoadThreads - 1) & hashCode),
+        HashTableElement.forLongKey(hashCode, key, copyBytes(currentValue)));
+  }
+
+  private void addBytesHashTableEntry(byte[] keyBytes, int keyOffset, int keyLength,
+      BytesWritable currentValue) throws InterruptedException {
+    byte[] keyCopy = Arrays.copyOfRange(keyBytes, keyOffset, keyOffset + keyLength);
+    long hashCode = HashCodeUtil.murmurHash(keyCopy, 0, keyCopy.length);
+    addHashTableElement((int) ((numLoadThreads - 1) & hashCode),
+        HashTableElement.forBytesKey(hashCode, keyCopy, copyBytes(currentValue)));
+  }
+
+  private static byte[] copyBytes(BytesWritable writable) {
+    return Arrays.copyOfRange(writable.getBytesRaw(), writable.getOffset(),
+        writable.getOffset() + writable.getLength());
+  }
+
+  private void addHashTableElement(int partitionId, HashTableElement element)
+      throws InterruptedException {
     if (elementBatches[partitionId].addElement(element)) {
       loadBatchQueues[partitionId].add(elementBatches[partitionId]);
       elementBatches[partitionId] = batchPool.take();
@@ -423,8 +464,14 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
     private final Output valueOutput = new Output();
     private final BytesWritable key = new BytesWritable();
     private final BytesWritable value = new BytesWritable();
+    private final BytesWritable emptyValue = new BytesWritable();
+    private final HashTableKeyType hashTableKeyType;
+    private final HashTableKind hashTableKind;
 
     VectorBatchReaderSerde(MapJoinDesc desc, int smallTablePosition) throws HiveException {
+      VectorMapJoinDesc vectorDesc = (VectorMapJoinDesc) desc.getVectorDesc();
+      hashTableKeyType = vectorDesc.getHashTableKeyType();
+      hashTableKind = vectorDesc.getHashTableKind();
       TypeInfo[] keyTypes = getTypeInfos(desc.getKeyTblDesc().getProperties()
           .getProperty(serdeConstants.LIST_COLUMN_TYPES));
       TypeInfo[] valueTypes = getTypeInfos((desc.getNoOuterJoin() ? desc.getValueTblDescs()
@@ -473,6 +520,39 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       return batch;
     }
 
+    boolean addDirectHashTableEntry(VectorMapJoinFastHashTableLoader loader, int batchIndex)
+        throws IOException, InterruptedException {
+      if (batch.cols.length == 0) {
+        return false;
+      }
+      ColumnVector keyColumn = batch.cols[0];
+      int keyIndex = keyColumn.isRepeating ? 0 : batchIndex;
+      if (!keyColumn.noNulls && keyColumn.isNull[keyIndex]) {
+        return false;
+      }
+      // Maps retain serialized values in their value store. Sets and multisets only need the
+      // direct key, so skip value serialization for them as well.
+      BytesWritable serializedValue = hashTableKind == HashTableKind.HASH_MAP
+          ? serializeValue(batchIndex) : emptyValue;
+      switch (hashTableKeyType) {
+      case BOOLEAN:
+      case BYTE:
+      case SHORT:
+      case INT:
+      case DATE:
+      case LONG:
+        loader.addLongHashTableEntry(((LongColumnVector) keyColumn).vector[keyIndex], serializedValue);
+        return true;
+      case STRING:
+        BytesColumnVector bytesColumn = (BytesColumnVector) keyColumn;
+        loader.addBytesHashTableEntry(bytesColumn.vector[keyIndex], bytesColumn.start[keyIndex],
+            bytesColumn.length[keyIndex], serializedValue);
+        return true;
+      default:
+        return false;
+      }
+    }
+
     BytesWritable serializeKey(int batchIndex) throws IOException {
       keySerializeWrite.reset();
       keySerializer.serializeWrite(batch, batchIndex);
@@ -490,23 +570,44 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
 
   private static class HashTableElement {
     private final long hashCode;
+    private final long longKey;
+    private final boolean directLongKey;
+    private final boolean directBytesKey;
     private final byte[] keyBytes;
     private final int keyOffset, keyLength;
     private final byte[] valueBytes;
     private final int valueOffset, valueLength;
 
     public HashTableElement(long hashCode,
-                            byte[] keyBytes, int keyOffset, int keyLength,
-                            byte[] valueBytes, int valueOffset, int valueLength) {
-      this.hashCode = hashCode;
+        byte[] keyBytes, int keyOffset, int keyLength,
+        byte[] valueBytes, int valueOffset, int valueLength) {
+      this(hashCode, 0, false, false, keyBytes, keyOffset, keyLength,
+          valueBytes, valueOffset, valueLength);
+    }
 
+    private HashTableElement(long hashCode, long longKey, boolean directLongKey,
+        boolean directBytesKey, byte[] keyBytes, int keyOffset, int keyLength,
+        byte[] valueBytes, int valueOffset, int valueLength) {
+      this.hashCode = hashCode;
+      this.longKey = longKey;
+      this.directLongKey = directLongKey;
+      this.directBytesKey = directBytesKey;
       this.keyBytes = keyBytes;
       this.keyOffset = keyOffset;
       this.keyLength = keyLength;
-
       this.valueBytes = valueBytes;
       this.valueOffset = valueOffset;
       this.valueLength = valueLength;
+    }
+
+    static HashTableElement forLongKey(long hashCode, long key, byte[] valueBytes) {
+      return new HashTableElement(hashCode, key, true, false, null, 0, 0,
+          valueBytes, 0, valueBytes.length);
+    }
+
+    static HashTableElement forBytesKey(long hashCode, byte[] keyBytes, byte[] valueBytes) {
+      return new HashTableElement(hashCode, 0, false, true, keyBytes, 0, keyBytes.length,
+          valueBytes, 0, valueBytes.length);
     }
 
     public BytesWritable getKey() {
@@ -518,7 +619,31 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
     }
 
     public long getHashCode() {
-      return this.hashCode;
+      return hashCode;
+    }
+
+    public long getLongKey() {
+      return longKey;
+    }
+
+    public boolean isDirectLongKey() {
+      return directLongKey;
+    }
+
+    public boolean isDirectBytesKey() {
+      return directBytesKey;
+    }
+
+    public byte[] getKeyBytes() {
+      return keyBytes;
+    }
+
+    public int getKeyOffset() {
+      return keyOffset;
+    }
+
+    public int getKeyLength() {
+      return keyLength;
     }
   }
 

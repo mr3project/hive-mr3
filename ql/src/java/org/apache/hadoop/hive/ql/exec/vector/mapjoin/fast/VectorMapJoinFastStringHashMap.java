@@ -45,6 +45,11 @@ public class VectorMapJoinFastStringHashMap extends VectorMapJoinFastBytesHashMa
     }
   }
 
+  public void putBytesRow(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
+      BytesWritable currentValue) {
+    add(keyBytes, keyOffset, keyLength, currentValue, hashCode);
+  }
+
   public VectorMapJoinFastStringHashMap(
           boolean isFullOuter,
           int initialCapacity, float loadFactor, int writeBuffersSize, long estimatedKeyCount, TableDesc tableDesc) {

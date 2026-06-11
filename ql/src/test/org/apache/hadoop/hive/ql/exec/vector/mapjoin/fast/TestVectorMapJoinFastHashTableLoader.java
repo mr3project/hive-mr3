@@ -24,6 +24,9 @@ import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
+import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc;
+import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKeyType;
+import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKind;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.io.BytesWritable;
 import org.junit.Assert;
@@ -37,6 +40,10 @@ public class TestVectorMapJoinFastHashTableLoader {
     desc.setNoOuterJoin(true);
     desc.setKeyTblDesc(tableDesc("bigint"));
     desc.setValueTblDescs(Arrays.asList(null, tableDesc("bigint")));
+    VectorMapJoinDesc vectorDesc = new VectorMapJoinDesc();
+    vectorDesc.setHashTableKeyType(HashTableKeyType.LONG);
+    vectorDesc.setHashTableKind(HashTableKind.HASH_MAP);
+    desc.setVectorDesc(vectorDesc);
 
     VectorMapJoinFastHashTableLoader.VectorBatchReaderSerde serde =
         new VectorMapJoinFastHashTableLoader.VectorBatchReaderSerde(desc, 1);

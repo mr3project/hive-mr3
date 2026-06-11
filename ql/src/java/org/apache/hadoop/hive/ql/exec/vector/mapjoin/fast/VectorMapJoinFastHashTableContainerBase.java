@@ -35,6 +35,15 @@ public abstract class VectorMapJoinFastHashTableContainerBase implements VectorM
 
   public abstract long getHashCode(BytesWritable currentKey) throws HiveException, IOException;
 
+  public void putLongRow(long hashCode, long key, BytesWritable currentValue) {
+    throw new UnsupportedOperationException();
+  }
+
+  public void putBytesRow(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
+      BytesWritable currentValue) {
+    throw new UnsupportedOperationException();
+  }
+
   public abstract long getEstimatedMemorySize();
 
   public abstract int size();
