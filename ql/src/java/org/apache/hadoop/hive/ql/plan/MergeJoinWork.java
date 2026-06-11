@@ -81,6 +81,7 @@ public class MergeJoinWork extends BaseWork {
       }
       this.bigTableWork = work;
       setName(work.getName());
+      configureReduceSinkInput(work, leafOperatorToFollowingWork, work.getName());
     }
 
     if (connectWork != null) {
@@ -95,7 +96,7 @@ public class MergeJoinWork extends BaseWork {
          * In this case, if the big table work has already been created, we can hook up the merge
          * work items for the small table correctly.
          */
-        setReduceSinkOutputName(connectWork, leafOperatorToFollowingWork, bigTableWork.getName());
+        configureReduceSinkInput(connectWork, leafOperatorToFollowingWork, bigTableWork.getName());
       }
     }
 
@@ -106,17 +107,21 @@ public class MergeJoinWork extends BaseWork {
        */
       for (BaseWork mergeWork : mergeWorkList) {
         if (mergeWork instanceof ReduceWork) {
-          setReduceSinkOutputName(mergeWork, leafOperatorToFollowingWork, work.getName());
+          configureReduceSinkInput(mergeWork, leafOperatorToFollowingWork, work.getName());
         }
       }
     }
   }
 
-  private void setReduceSinkOutputName(BaseWork mergeWork,
+  private void configureReduceSinkInput(BaseWork mergeWork,
       Map<Operator<?>, BaseWork> leafOperatorToFollowingWork, String name) {
     for (Entry<Operator<?>, BaseWork> entry : leafOperatorToFollowingWork.entrySet()) {
       if (entry.getValue() == mergeWork) {
-        ((ReduceSinkOperator) entry.getKey()).getConf().setOutputName(name);
+        ReduceSinkDesc reduceSinkDesc = ((ReduceSinkOperator) entry.getKey()).getConf();
+        // CommonMergeJoinOperator consumes rows through non-vectorized ReduceRecordSource paths,
+        // including fetchOneRow() for side inputs, so it cannot consume serialized vector batches.
+        reduceSinkDesc.setVectorBatchWriteEnabled(false);
+        reduceSinkDesc.setOutputName(name);
       }
     }
   }
