@@ -102,6 +102,10 @@ public class VectorReduceSinkEmptyKeyOperator extends VectorReduceSinkCommonOper
         }
       }
 
+      if (tryWriteVectorBatch(batch)) {
+        return;
+      }
+
       final int size = batch.size;
       if (!isEmptyValue) {
         if (batch.selectedInUse) {

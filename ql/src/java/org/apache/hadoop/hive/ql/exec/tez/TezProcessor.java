@@ -32,11 +32,13 @@ import org.apache.tez.mapreduce.output.MROutput;
 import org.apache.tez.runtime.api.TaskFailureType;
 import org.apache.tez.runtime.api.events.CustomProcessorEvent;
 import org.apache.tez.runtime.library.api.KeyValuesWriterEdge;
+import org.apache.tez.runtime.library.api.KeyValuesWriterEdgeVector;
 import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.exec.LimitOperator;
+import org.apache.hadoop.hive.ql.exec.vector.VectorBatchOutputCollector;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.mapred.JobConf;
@@ -404,8 +406,12 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
    * Must be initialized before it is used.
    *
    */
-  public static class TezKVOutputCollector implements OutputCollector<BytesWritable, BytesWritable> {
+  public static class TezKVOutputCollector
+      implements OutputCollector<BytesWritable, BytesWritable>, VectorBatchOutputCollector {
     private KeyValuesWriterEdge writer;
+    private KeyValuesWriterEdgeVector vectorWriter;
+    private boolean ordinaryWritesStarted;
+    private boolean vectorWritesStarted;
     private final LogicalOutputEdge output;
 
     TezKVOutputCollector(LogicalOutputEdge logicalOutput) {
@@ -414,6 +420,8 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
     void initialize() throws Exception {
       this.writer = output.getWriter();
+      this.vectorWriter = writer instanceof KeyValuesWriterEdgeVector
+          ? (KeyValuesWriterEdgeVector) writer : null;
     }
 
     // Invariant:
@@ -424,7 +432,28 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
     @Override
     public void collect(BytesWritable key, BytesWritable value) throws IOException {
+      if (vectorWritesStarted) {
+        throw new IllegalStateException("Cannot mix ordinary and vector-batch writes");
+      }
+      ordinaryWritesStarted = true;
       writer.write(key, value);
+    }
+
+    @Override
+    public boolean supportsVectorBatch() {
+      return vectorWriter != null && vectorWriter.supportsVectorBatch();
+    }
+
+    @Override
+    public void writeVectorBatch(BytesWritable serializedBatch) throws IOException {
+      if (!supportsVectorBatch()) {
+        throw new IllegalStateException("Output writer does not support vector batches");
+      }
+      if (ordinaryWritesStarted) {
+        throw new IllegalStateException("Cannot mix ordinary and vector-batch writes");
+      }
+      vectorWritesStarted = true;
+      vectorWriter.writeVectorBatch(serializedBatch);
     }
 
     public void close() {

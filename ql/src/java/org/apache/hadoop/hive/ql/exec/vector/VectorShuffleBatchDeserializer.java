@@ -33,6 +33,11 @@ public final class VectorShuffleBatchDeserializer {
 
   public void deserialize(BytesWritable serialized, VectorizedRowBatch destination)
       throws IOException {
+    deserialize(serialized, destination, -1);
+  }
+
+  public void deserialize(BytesWritable serialized, VectorizedRowBatch destination,
+      int expectedColumnCount) throws IOException {
     if (serialized == null || destination == null) {
       throw new IllegalArgumentException("Serialized batch and destination are required");
     }
@@ -40,9 +45,11 @@ public final class VectorShuffleBatchDeserializer {
     input.reset(serialized.getBytes(), serialized.getLength());
     final int rowCount = WritableUtils.readVInt(input);
     final int columnCount = WritableUtils.readVInt(input);
-    if (rowCount < 0 || columnCount < 0 || columnCount > destination.cols.length) {
+    if (rowCount < 0 || columnCount < 0 || columnCount > destination.cols.length
+        || expectedColumnCount >= 0 && columnCount != expectedColumnCount) {
       throw new IOException("Invalid vector shuffle batch dimensions: " + rowCount + " rows, "
-          + columnCount + " columns");
+          + columnCount + " columns"
+          + (expectedColumnCount >= 0 ? ", expected " + expectedColumnCount + " columns" : ""));
     }
 
     destination.reset();
