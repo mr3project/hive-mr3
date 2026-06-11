@@ -88,7 +88,7 @@
     <junit.jupiter.version>5.11.2</junit.jupiter.version>
     <junit.vintage.version>5.11.2</junit.vintage.version>
     <libfb303.version>0.9.3</libfb303.version>
-    <libthrift.version>0.16.0</libthrift.version>
+    <libthrift.version>0.23.0</libthrift.version>
     <log4j2.version>2.18.0</log4j2.version>
     <mockito-core.version>3.4.4</mockito-core.version>
     <orc.version>2.0.3</orc.version>
