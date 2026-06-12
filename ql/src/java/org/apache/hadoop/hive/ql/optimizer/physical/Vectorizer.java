@@ -1066,6 +1066,9 @@ public class Vectorizer implements PhysicalPlanResolver {
 
             // Always set the EXPLAIN conditions.
             setMergeJoinWorkExplainConditions(mergeJoinWork);
+            // Merge-join reducers remain row-mode, but their ReduceRecordSources still need the
+            // input vector schema when an upstream reduce sink supplies serialized vector batches.
+            attachMergeJoinDecodeBatchContexts(mergeJoinWork);
 
             logMergeJoinWorkExplainVectorization(mergeJoinWork);
           }
@@ -1106,6 +1109,34 @@ public class Vectorizer implements PhysicalPlanResolver {
     private void setMergeJoinWorkExplainConditions(MergeJoinWork mergeJoinWork) {
 
       setExplainConditions(mergeJoinWork);
+    }
+
+    private void attachMergeJoinDecodeBatchContexts(MergeJoinWork mergeJoinWork)
+        throws SemanticException {
+      attachDecodeBatchContext(mergeJoinWork.getMainWork());
+      for (BaseWork mergedWork : mergeJoinWork.getBaseWorkList()) {
+        attachDecodeBatchContext(mergedWork);
+      }
+    }
+
+    private void attachDecodeBatchContext(BaseWork baseWork) throws SemanticException {
+      if (!(baseWork instanceof ReduceWork)) {
+        return;
+      }
+      ReduceWork reduceWork = (ReduceWork) baseWork;
+      if (reduceWork.getVectorizedRowBatchCtx() != null) {
+        return;
+      }
+      VectorTaskColumnInfo vectorTaskColumnInfo = new VectorTaskColumnInfo();
+      vectorTaskColumnInfo.assume();
+      if (!getOnlyStructObjectInspectors(reduceWork, vectorTaskColumnInfo)) {
+        return;
+      }
+      // This context is only used to decode shuffle batches; no vectorized operator tree exists.
+      vectorTaskColumnInfo.setScratchTypeNameArray(new String[0]);
+      vectorTaskColumnInfo.setScratchdataTypePhysicalVariationsArray(
+          new DataTypePhysicalVariation[0]);
+      vectorTaskColumnInfo.transferToBaseWork(reduceWork);
     }
 
     private boolean logExplainVectorization(BaseWork baseWork, String name) {

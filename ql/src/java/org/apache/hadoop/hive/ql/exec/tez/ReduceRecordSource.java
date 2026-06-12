@@ -35,6 +35,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorDeserializeRow;
+import org.apache.hadoop.hive.ql.exec.vector.VectorExtractRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchDeserializer;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedBatchUtil;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
@@ -102,6 +103,9 @@ public class ReduceRecordSource implements RecordSource {
   private VectorizedRowBatch batch;
   private VectorShuffleBatchDeserializer vectorShuffleBatchDeserializer;
   private int vectorBatchColumnCount;
+  private VectorExtractRow keyVectorExtractRow;
+  private VectorExtractRow valueVectorExtractRow;
+  private int vectorBatchRowIndex;
 
   // number of columns pertaining to keys in a vectorized row batch
   private int firstValueColumnOffset;
@@ -153,6 +157,7 @@ public class ReduceRecordSource implements RecordSource {
 
     this.reducer = reducer;
     this.vectorized = vectorized;
+    this.batchContext = batchContext;
     this.keyTableDesc = keyTableDesc;
     if (reader instanceof KeyValueReaderEdge) {
       // for unordered key/value records
@@ -180,7 +185,7 @@ public class ReduceRecordSource implements RecordSource {
 
       keyObjectInspector = inputKeySerDe.getObjectInspector();
 
-      if(vectorized) {
+      if (vectorized || (keyValueReaderVector != null && batchContext != null)) {
         keyStructInspector = (StructObjectInspector) keyObjectInspector;
         firstValueColumnOffset = keyStructInspector.getAllStructFieldRefs().size();
       }
@@ -193,19 +198,21 @@ public class ReduceRecordSource implements RecordSource {
 
       ArrayList<ObjectInspector> ois = new ArrayList<ObjectInspector>();
 
-      if(vectorized) {
+      if (vectorized || (keyValueReaderVector != null && batchContext != null)) {
         /* vectorization only works with struct object inspectors */
         valueStructInspectors = (StructObjectInspector) valueObjectInspector;
 
         final int totalColumns = firstValueColumnOffset +
             valueStructInspectors.getAllStructFieldRefs().size();
 
-        rowObjectInspector = Utilities.constructVectorizedReduceRowOI(keyStructInspector,
-            valueStructInspectors);
-        this.batchContext = batchContext;
-        batch = batchContext.createVectorizedRowBatch();
-        vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
-        vectorBatchColumnCount = totalColumns;
+        if (batchContext != null) {
+          batch = batchContext.createVectorizedRowBatch();
+          vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
+          vectorBatchColumnCount = totalColumns;
+          if (!vectorized) {
+            initializeVectorBatchRowExtraction();
+          }
+        }
 
         // Setup vectorized deserialization for the key and value.
         BinarySortableSerDe binarySortableSerDe = (BinarySortableSerDe) inputKeySerDe;
@@ -248,6 +255,10 @@ public class ReduceRecordSource implements RecordSource {
             }
           }
         }
+      }
+      if (vectorized) {
+        rowObjectInspector = Utilities.constructVectorizedReduceRowOI(keyStructInspector,
+            valueStructInspectors);
       } else {
         ois.add(keyObjectInspector);
         ois.add(valueObjectInspector);
@@ -280,6 +291,9 @@ public class ReduceRecordSource implements RecordSource {
   public boolean pushRecord() throws HiveException {
     if (vectorized) {
       return pushRecordVector();
+    }
+    if (isKeyValueReader && keyValueReaderVector != null && !keyValueReaderVectorUsesKeyValues) {
+      return pushRecordVectorAwareAsRows();
     }
 
     if (groupIterator.hasNext()) {
@@ -354,6 +368,79 @@ public class ReduceRecordSource implements RecordSource {
           + Utilities.formatBinaryString(
               valueWritable.getBytesRaw(), valueWritable.getOffset(), valueWritable.getLength())
           + " with properties " + valueTableDesc.getProperties(), e);
+    }
+  }
+
+  private void initializeVectorBatchRowExtraction() throws HiveException {
+    List<Integer> keyColumns = new ArrayList<Integer>(firstValueColumnOffset);
+    for (int i = 0; i < firstValueColumnOffset; i++) {
+      keyColumns.add(i);
+    }
+    int valueColumnCount = vectorBatchColumnCount - firstValueColumnOffset;
+    List<Integer> valueColumns = new ArrayList<Integer>(valueColumnCount);
+    for (int i = 0; i < valueColumnCount; i++) {
+      valueColumns.add(firstValueColumnOffset + i);
+    }
+    keyVectorExtractRow = new VectorExtractRow();
+    keyVectorExtractRow.init(keyStructInspector, keyColumns);
+    valueVectorExtractRow = new VectorExtractRow();
+    valueVectorExtractRow.init(valueStructInspectors, valueColumns);
+  }
+
+  private boolean pushRecordVectorAwareAsRows() throws HiveException {
+    try {
+      while (batch == null || vectorBatchRowIndex >= batch.size) {
+        if (batch != null) {
+          batch.reset();
+          vectorBatchRowIndex = 0;
+        }
+        NextResult result = keyValueReaderVector.nextVectorBatchAware();
+        if (result == NextResult.END_OF_INPUT) {
+          if (flushLastRecord) {
+            reducer.flushRecursive();
+          }
+          return false;
+        }
+        if (result == NextResult.KEY_VALUE) {
+          if (keyValueReaderVectorUsesBatches) {
+            throw new IOException("Vector-aware reader changed mode to " + result);
+          }
+          keyValueReaderVectorUsesKeyValues = true;
+          return pushRecord();
+        }
+        if (result != NextResult.VECTOR_BATCH) {
+          throw new IOException("Unexpected vector-aware next result " + result);
+        }
+        keyValueReaderVectorUsesBatches = true;
+        if (batchContext == null) {
+          throw new IllegalStateException(
+              "Vector-batch input requires a VectorizedRowBatchCtx (tag=" + tag + ")");
+        }
+        vectorShuffleBatchDeserializer.deserialize(
+            keyValueReader.getCurrentValue(), batch, vectorBatchColumnCount);
+      }
+
+      int batchIndex = batch.selectedInUse ? batch.selected[vectorBatchRowIndex] : vectorBatchRowIndex;
+      Object[] keyFields = new Object[keyVectorExtractRow.getCount()];
+      Object[] valueFields = new Object[valueVectorExtractRow.getCount()];
+      keyVectorExtractRow.extractRow(batch, batchIndex, keyFields);
+      valueVectorExtractRow.extractRow(batch, batchIndex, valueFields);
+      List<Object> row = new ArrayList<Object>(Utilities.reduceFieldNameList.size());
+      row.add(Arrays.asList(keyFields));
+      row.add(Arrays.asList(valueFields));
+      reducer.process(row, tag);
+      vectorBatchRowIndex++;
+      return true;
+    } catch (Throwable e) {
+      abort = true;
+      if (e instanceof OutOfMemoryError) {
+        throw (OutOfMemoryError) e;
+      }
+      if (e instanceof RuntimeException) {
+        throw (RuntimeException) e;
+      }
+      throw new HiveException("Hive Runtime Error while converting vector shuffle batch to rows (tag="
+          + tag + ")", e);
     }
   }
 
