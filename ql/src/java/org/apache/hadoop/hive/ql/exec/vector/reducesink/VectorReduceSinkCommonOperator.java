@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.ql.exec.vector.VectorBatchOutputCollector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchSerializer;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContextRegion;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationOperator;
@@ -376,7 +377,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         || vectorBatchOutputCollector == null || !vectorBatchOutputCollector.supportsVectorBatch()) {
       return false;
     }
+    LOG.info("Serializing vector shuffle batch: output={}, columnMap={}, sourceBatch={}",
+        conf.getOutputName(), VectorizedRowBatchCtx.describeBatchColumns(batch, vectorBatchColumnMap),
+        VectorizedRowBatchCtx.describeBatch(batch));
     vectorShuffleBatchSerializer.serialize(batch, vectorBatchColumnMap, serializedVectorBatch);
+    LOG.info("Serialized vector shuffle batch: output={}, serializedLength={}",
+        conf.getOutputName(), serializedVectorBatch.getLength());
     vectorBatchOutputCollector.writeVectorBatch(serializedVectorBatch);
     addToNumRows(batch.size);
     return true;

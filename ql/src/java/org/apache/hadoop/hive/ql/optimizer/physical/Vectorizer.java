@@ -1125,6 +1125,9 @@ public class Vectorizer implements PhysicalPlanResolver {
       }
       ReduceWork reduceWork = (ReduceWork) baseWork;
       if (reduceWork.getVectorizedRowBatchCtx() != null) {
+        LOG.info("Merge-join decode context already exists: work={}, tag={}, context={}",
+            reduceWork.getName(), reduceWork.getTag(),
+            reduceWork.getVectorizedRowBatchCtx().describe());
         return;
       }
       VectorTaskColumnInfo vectorTaskColumnInfo = new VectorTaskColumnInfo();
@@ -1137,6 +1140,8 @@ public class Vectorizer implements PhysicalPlanResolver {
       vectorTaskColumnInfo.setScratchdataTypePhysicalVariationsArray(
           new DataTypePhysicalVariation[0]);
       vectorTaskColumnInfo.transferToBaseWork(reduceWork);
+      LOG.info("Attached merge-join decode context: work={}, tag={}, context={}",
+          reduceWork.getName(), reduceWork.getTag(), reduceWork.getVectorizedRowBatchCtx().describe());
     }
 
     private boolean logExplainVectorization(BaseWork baseWork, String name) {

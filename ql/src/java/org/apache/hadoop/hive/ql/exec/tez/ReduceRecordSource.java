@@ -416,8 +416,22 @@ public class ReduceRecordSource implements RecordSource {
           throw new IllegalStateException(
               "Vector-batch input requires a VectorizedRowBatchCtx (tag=" + tag + ")");
         }
-        vectorShuffleBatchDeserializer.deserialize(
-            keyValueReader.getCurrentValue(), batch, vectorBatchColumnCount);
+        BytesWritable serializedBatch = keyValueReader.getCurrentValue();
+        l4j.info("Decoding vector shuffle batch as rows: tag={}, serializedLength={}, "
+                + "expectedColumnCount={}, context={}, destinationBatch={}",
+            tag, serializedBatch.getLength(), vectorBatchColumnCount, batchContext.describe(),
+            VectorizedRowBatchCtx.describeBatch(batch));
+        try {
+          vectorShuffleBatchDeserializer.deserialize(serializedBatch, batch, vectorBatchColumnCount);
+        } catch (IOException e) {
+          l4j.error("Failed to decode vector shuffle batch as rows: tag={}, serializedLength={}, "
+                  + "expectedColumnCount={}, context={}, destinationBatch={}",
+              tag, serializedBatch.getLength(), vectorBatchColumnCount, batchContext.describe(),
+              VectorizedRowBatchCtx.describeBatch(batch), e);
+          throw e;
+        }
+        l4j.info("Decoded vector shuffle batch as rows: tag={}, destinationBatch={}", tag,
+            VectorizedRowBatchCtx.describeBatch(batch));
       }
 
       int batchIndex = batch.selectedInUse ? batch.selected[vectorBatchRowIndex] : vectorBatchRowIndex;

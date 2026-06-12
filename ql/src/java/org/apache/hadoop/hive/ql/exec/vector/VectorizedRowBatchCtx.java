@@ -212,6 +212,59 @@ public class VectorizedRowBatchCtx {
     return scratchDataTypePhysicalVariations;
   }
 
+  public String describe() {
+    return "rowColumnNames=" + Arrays.toString(rowColumnNames)
+        + ", rowColumnTypeInfos=" + Arrays.toString(rowColumnTypeInfos)
+        + ", rowDataTypePhysicalVariations=" + Arrays.toString(rowDataTypePhysicalVariations)
+        + ", dataColumnNums=" + Arrays.toString(dataColumnNums)
+        + ", dataColumnCount=" + dataColumnCount
+        + ", partitionColumnCount=" + partitionColumnCount
+        + ", virtualColumnCount=" + virtualColumnCount
+        + ", scratchColumnTypeNames=" + Arrays.toString(scratchColumnTypeNames)
+        + ", scratchDataTypePhysicalVariations="
+        + Arrays.toString(scratchDataTypePhysicalVariations);
+  }
+
+  public static String describeBatch(VectorizedRowBatch batch) {
+    if (batch == null) {
+      return "null";
+    }
+    StringBuilder builder = new StringBuilder("numCols=").append(batch.numCols)
+        .append(", size=").append(batch.size)
+        .append(", selectedInUse=").append(batch.selectedInUse)
+        .append(", projectionSize=").append(batch.projectionSize)
+        .append(", columns=[");
+    for (int column = 0; column < batch.numCols; column++) {
+      if (column > 0) {
+        builder.append(", ");
+      }
+      ColumnVector vector = batch.cols[column];
+      builder.append(column).append(':')
+          .append(vector == null ? "null" : vector.getClass().getSimpleName());
+    }
+    return builder.append(']').toString();
+  }
+
+  public static String describeBatchColumns(VectorizedRowBatch batch, int[] columnMap) {
+    if (batch == null || columnMap == null) {
+      return "null";
+    }
+    StringBuilder builder = new StringBuilder("[");
+    for (int outputColumn = 0; outputColumn < columnMap.length; outputColumn++) {
+      if (outputColumn > 0) {
+        builder.append(", ");
+      }
+      int sourceColumn = columnMap[outputColumn];
+      builder.append(outputColumn).append("<- ").append(sourceColumn).append(':');
+      if (sourceColumn < 0 || sourceColumn >= batch.numCols || batch.cols[sourceColumn] == null) {
+        builder.append("invalid");
+      } else {
+        builder.append(batch.cols[sourceColumn].getClass().getSimpleName());
+      }
+    }
+    return builder.append(']').toString();
+  }
+
   /**
    * Initializes the VectorizedRowBatch context based on an scratch column type names and
    * object inspector.
