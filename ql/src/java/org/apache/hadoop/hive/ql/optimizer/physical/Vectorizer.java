@@ -1129,7 +1129,10 @@ public class Vectorizer implements PhysicalPlanResolver {
       }
       VectorTaskColumnInfo vectorTaskColumnInfo = new VectorTaskColumnInfo();
       vectorTaskColumnInfo.assume();
-      if (!getOnlyStructObjectInspectors(reduceWork, vectorTaskColumnInfo)) {
+      // ReduceRecordProcessor initializes each ReduceWork contained in MergeJoinWork from value
+      // descriptor 0, independently of the work's merge-join tag. Build the decode context from
+      // that same descriptor so its physical column layout matches the serialized batch.
+      if (!getOnlyStructObjectInspectors(reduceWork, 0, vectorTaskColumnInfo)) {
         return;
       }
       // This context is only used to decode shuffle batches; no vectorized operator tree exists.
@@ -2356,6 +2359,11 @@ public class Vectorizer implements PhysicalPlanResolver {
 
     private boolean getOnlyStructObjectInspectors(ReduceWork reduceWork,
             VectorTaskColumnInfo vectorTaskColumnInfo) throws SemanticException {
+      return getOnlyStructObjectInspectors(reduceWork, reduceWork.getTag(), vectorTaskColumnInfo);
+    }
+
+    private boolean getOnlyStructObjectInspectors(ReduceWork reduceWork, int valueDescIndex,
+            VectorTaskColumnInfo vectorTaskColumnInfo) throws SemanticException {
 
       ArrayList<String> reduceColumnNames = new ArrayList<String>();
       ArrayList<TypeInfo> reduceTypeInfos = new ArrayList<TypeInfo>();
@@ -2373,7 +2381,7 @@ public class Vectorizer implements PhysicalPlanResolver {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Using reduce tag " + reduceWork.getTag());
         }
-        TableDesc valueTableDesc = reduceWork.getTagToValueDesc().get(reduceWork.getTag());
+        TableDesc valueTableDesc = reduceWork.getTagToValueDesc().get(valueDescIndex);
 
         Properties keyTableProperties = keyTableDesc.getProperties();
         AbstractSerDe keyDeserializer =
