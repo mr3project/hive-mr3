@@ -35,7 +35,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorDeserializeRow;
-import org.apache.hadoop.hive.ql.exec.vector.VectorExtractRow;
+import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchDeserializer;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedBatchUtil;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
@@ -47,9 +47,12 @@ import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeUtils;
+import org.apache.hadoop.hive.serde2.ByteStream.Output;
 import org.apache.hadoop.hive.serde2.binarysortable.BinarySortableSerDe;
 import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableDeserializeRead;
+import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableSerializeWrite;
 import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinaryDeserializeRead;
+import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
@@ -103,8 +106,14 @@ public class ReduceRecordSource implements RecordSource {
   private VectorizedRowBatch batch;
   private VectorShuffleBatchDeserializer vectorShuffleBatchDeserializer;
   private int vectorBatchColumnCount;
-  private VectorExtractRow keyVectorExtractRow;
-  private VectorExtractRow valueVectorExtractRow;
+  private BinarySortableSerializeWrite keyBinarySortableSerializeWrite;
+  private VectorSerializeRow<BinarySortableSerializeWrite> keyVectorSerializeRow;
+  private LazyBinarySerializeWrite valueLazyBinarySerializeWrite;
+  private VectorSerializeRow<LazyBinarySerializeWrite> valueVectorSerializeRow;
+  private Output keyOutput;
+  private Output valueOutput;
+  private final BytesWritable vectorBatchKeyWritable = new BytesWritable();
+  private final BytesWritable vectorBatchValueWritable = new BytesWritable();
   private int vectorBatchRowIndex;
 
   // number of columns pertaining to keys in a vectorized row batch
@@ -210,7 +219,7 @@ public class ReduceRecordSource implements RecordSource {
           vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
           vectorBatchColumnCount = totalColumns;
           if (!vectorized) {
-            initializeVectorBatchRowExtraction();
+            initializeVectorBatchRowConversion();
           }
         }
 
@@ -371,20 +380,34 @@ public class ReduceRecordSource implements RecordSource {
     }
   }
 
-  private void initializeVectorBatchRowExtraction() throws HiveException {
-    List<Integer> keyColumns = new ArrayList<Integer>(firstValueColumnOffset);
+  private void initializeVectorBatchRowConversion() throws HiveException {
+    // Recreate the ordinary shuffle key/value representations so the configured row-mode object
+    // inspectors receive BinarySortable and LazyBinary objects, not standard Java struct lists.
+    int[] keyColumnMap = new int[firstValueColumnOffset];
     for (int i = 0; i < firstValueColumnOffset; i++) {
-      keyColumns.add(i);
+      keyColumnMap[i] = i;
     }
+    keyBinarySortableSerializeWrite = BinarySortableSerializeWrite.with(
+        keyTableDesc.getProperties(), firstValueColumnOffset);
+    keyOutput = new Output();
+    keyBinarySortableSerializeWrite.set(keyOutput);
+    keyVectorSerializeRow =
+        new VectorSerializeRow<BinarySortableSerializeWrite>(keyBinarySortableSerializeWrite);
+    keyVectorSerializeRow.init(VectorizedBatchUtil.typeInfosFromStructObjectInspector(keyStructInspector),
+        keyColumnMap);
+
     int valueColumnCount = vectorBatchColumnCount - firstValueColumnOffset;
-    List<Integer> valueColumns = new ArrayList<Integer>(valueColumnCount);
+    int[] valueColumnMap = new int[valueColumnCount];
     for (int i = 0; i < valueColumnCount; i++) {
-      valueColumns.add(firstValueColumnOffset + i);
+      valueColumnMap[i] = firstValueColumnOffset + i;
     }
-    keyVectorExtractRow = new VectorExtractRow();
-    keyVectorExtractRow.init(keyStructInspector, keyColumns);
-    valueVectorExtractRow = new VectorExtractRow();
-    valueVectorExtractRow.init(valueStructInspectors, valueColumns);
+    valueLazyBinarySerializeWrite = new LazyBinarySerializeWrite(valueColumnCount);
+    valueOutput = new Output();
+    valueLazyBinarySerializeWrite.set(valueOutput);
+    valueVectorSerializeRow =
+        new VectorSerializeRow<LazyBinarySerializeWrite>(valueLazyBinarySerializeWrite);
+    valueVectorSerializeRow.init(
+        VectorizedBatchUtil.typeInfosFromStructObjectInspector(valueStructInspectors), valueColumnMap);
   }
 
   private boolean pushRecordVectorAwareAsRows() throws HiveException {
@@ -435,13 +458,19 @@ public class ReduceRecordSource implements RecordSource {
       }
 
       int batchIndex = batch.selectedInUse ? batch.selected[vectorBatchRowIndex] : vectorBatchRowIndex;
-      Object[] keyFields = new Object[keyVectorExtractRow.getCount()];
-      Object[] valueFields = new Object[valueVectorExtractRow.getCount()];
-      keyVectorExtractRow.extractRow(batch, batchIndex, keyFields);
-      valueVectorExtractRow.extractRow(batch, batchIndex, valueFields);
+      keyBinarySortableSerializeWrite.reset();
+      keyVectorSerializeRow.serializeWrite(batch, batchIndex);
+      vectorBatchKeyWritable.set(keyOutput.getData(), 0, keyOutput.getLength());
+      Object key = inputKeySerDe.deserializeBytesWritable(vectorBatchKeyWritable);
+
+      valueLazyBinarySerializeWrite.reset();
+      valueVectorSerializeRow.serializeWrite(batch, batchIndex);
+      vectorBatchValueWritable.set(valueOutput.getData(), 0, valueOutput.getLength());
+      Object value = inputValueSerDe.deserializeBytesWritable(vectorBatchValueWritable);
+
       List<Object> row = new ArrayList<Object>(Utilities.reduceFieldNameList.size());
-      row.add(Arrays.asList(keyFields));
-      row.add(Arrays.asList(valueFields));
+      row.add(key);
+      row.add(value);
       reducer.process(row, tag);
       vectorBatchRowIndex++;
       return true;
