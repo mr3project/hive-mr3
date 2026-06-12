@@ -28,6 +28,7 @@ import java.util.Set;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.Operator;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
 import org.apache.hadoop.hive.ql.plan.Explain.Level;
 import org.apache.hadoop.hive.ql.plan.Explain.Vectorization;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -72,6 +73,12 @@ public class ReduceWork extends BaseWork {
   private boolean needsTagging;
 
   private Map<Integer, String> tagToInput = new HashMap<Integer, String>();
+
+  // Decode-only contexts for shuffle vector batches. Unlike the regular vectorized row batch
+  // context, these contexts are input-specific because tagged reduce inputs may have different
+  // value schemas.
+  private Map<Integer, VectorizedRowBatchCtx> tagToVectorizedRowBatchCtx =
+      new HashMap<Integer, VectorizedRowBatchCtx>();
 
   // boolean that says whether tez auto reduce parallelism should be used
   private boolean isAutoReduceParallelism;
@@ -173,6 +180,27 @@ public class ReduceWork extends BaseWork {
   @Explain(displayName = "tagToInput", explainLevels = { Level.USER })
   public Map<Integer, String> getTagToInput() {
     return tagToInput;
+  }
+
+  public Map<Integer, VectorizedRowBatchCtx> getTagToVectorizedRowBatchCtx() {
+    if (tagToVectorizedRowBatchCtx == null) {
+      tagToVectorizedRowBatchCtx = new HashMap<Integer, VectorizedRowBatchCtx>();
+    }
+    return tagToVectorizedRowBatchCtx;
+  }
+
+  public void setTagToVectorizedRowBatchCtx(
+      Map<Integer, VectorizedRowBatchCtx> tagToVectorizedRowBatchCtx) {
+    this.tagToVectorizedRowBatchCtx = tagToVectorizedRowBatchCtx;
+  }
+
+  public VectorizedRowBatchCtx getVectorizedRowBatchCtx(int tag) {
+    VectorizedRowBatchCtx batchCtx = getTagToVectorizedRowBatchCtx().get(tag);
+    return batchCtx == null ? getVectorizedRowBatchCtx() : batchCtx;
+  }
+
+  public void setVectorizedRowBatchCtx(int tag, VectorizedRowBatchCtx batchCtx) {
+    getTagToVectorizedRowBatchCtx().put(tag, batchCtx);
   }
 
   @Override

@@ -642,8 +642,7 @@ public class Vectorizer implements PhysicalPlanResolver {
       this.reduceColumnNullOrder = reduceColumnNullOrder;
     }
 
-    public void transferToBaseWork(BaseWork baseWork) {
-
+    public VectorizedRowBatchCtx createVectorizedRowBatchCtx() {
       final int virtualColumnCount =
           (availableVirtualColumnList == null ? 0 : availableVirtualColumnList.size());
       VirtualColumn[] neededVirtualColumns;
@@ -671,8 +670,7 @@ public class Vectorizer implements PhysicalPlanResolver {
             allDataTypePhysicalVariations.toArray(new DataTypePhysicalVariation[0]);
       }
 
-      VectorizedRowBatchCtx vectorizedRowBatchCtx =
-          new VectorizedRowBatchCtx(
+      return new VectorizedRowBatchCtx(
             allColumnNameArray,
             allTypeInfoArray,
             allDataTypePhysicalVariationArray,
@@ -682,7 +680,10 @@ public class Vectorizer implements PhysicalPlanResolver {
             neededVirtualColumns,
             scratchTypeNameArray,
             scratchdataTypePhysicalVariations);
-      baseWork.setVectorizedRowBatchCtx(vectorizedRowBatchCtx);
+    }
+
+    public void transferToBaseWork(BaseWork baseWork) {
+      baseWork.setVectorizedRowBatchCtx(createVectorizedRowBatchCtx());
 
       if (baseWork instanceof MapWork) {
         MapWork mapWork = (MapWork) baseWork;
@@ -1124,24 +1125,31 @@ public class Vectorizer implements PhysicalPlanResolver {
         return;
       }
       ReduceWork reduceWork = (ReduceWork) baseWork;
-      if (reduceWork.getVectorizedRowBatchCtx() != null) {
-        LOG.info("Merge-join decode context already exists: work={}, tag={}, context={}",
-            reduceWork.getName(), reduceWork.getTag(),
-            reduceWork.getVectorizedRowBatchCtx().describe());
-        return;
+      List<TableDesc> tagToValueDesc = reduceWork.getTagToValueDesc();
+      for (int valueDescTag = 0; valueDescTag < tagToValueDesc.size(); valueDescTag++) {
+        if (tagToValueDesc.get(valueDescTag) == null) {
+          continue;
+        }
+        if (reduceWork.getTagToVectorizedRowBatchCtx().containsKey(valueDescTag)) {
+          LOG.info("Merge-join decode context already exists: work={}, valueDescTag={}, context={}",
+              reduceWork.getName(), valueDescTag,
+              reduceWork.getTagToVectorizedRowBatchCtx().get(valueDescTag).describe());
+          continue;
+        }
+        VectorTaskColumnInfo vectorTaskColumnInfo = new VectorTaskColumnInfo();
+        vectorTaskColumnInfo.assume();
+        if (!getOnlyStructObjectInspectors(reduceWork, valueDescTag, vectorTaskColumnInfo)) {
+          continue;
+        }
+        // This context is only used to decode shuffle batches; no vectorized operator tree exists.
+        vectorTaskColumnInfo.setScratchTypeNameArray(new String[0]);
+        vectorTaskColumnInfo.setScratchdataTypePhysicalVariationsArray(
+            new DataTypePhysicalVariation[0]);
+        VectorizedRowBatchCtx batchCtx = vectorTaskColumnInfo.createVectorizedRowBatchCtx();
+        reduceWork.setVectorizedRowBatchCtx(valueDescTag, batchCtx);
+        LOG.info("Attached merge-join decode context: work={}, valueDescTag={}, context={}",
+            reduceWork.getName(), valueDescTag, batchCtx.describe());
       }
-      VectorTaskColumnInfo vectorTaskColumnInfo = new VectorTaskColumnInfo();
-      vectorTaskColumnInfo.assume();
-      if (!getOnlyStructObjectInspectors(reduceWork, vectorTaskColumnInfo)) {
-        return;
-      }
-      // This context is only used to decode shuffle batches; no vectorized operator tree exists.
-      vectorTaskColumnInfo.setScratchTypeNameArray(new String[0]);
-      vectorTaskColumnInfo.setScratchdataTypePhysicalVariationsArray(
-          new DataTypePhysicalVariation[0]);
-      vectorTaskColumnInfo.transferToBaseWork(reduceWork);
-      LOG.info("Attached merge-join decode context: work={}, tag={}, context={}",
-          reduceWork.getName(), reduceWork.getTag(), reduceWork.getVectorizedRowBatchCtx().describe());
     }
 
     private boolean logExplainVectorization(BaseWork baseWork, String name) {
@@ -2361,6 +2369,11 @@ public class Vectorizer implements PhysicalPlanResolver {
 
     private boolean getOnlyStructObjectInspectors(ReduceWork reduceWork,
             VectorTaskColumnInfo vectorTaskColumnInfo) throws SemanticException {
+      return getOnlyStructObjectInspectors(reduceWork, reduceWork.getTag(), vectorTaskColumnInfo);
+    }
+
+    private boolean getOnlyStructObjectInspectors(ReduceWork reduceWork, int valueDescTag,
+            VectorTaskColumnInfo vectorTaskColumnInfo) throws SemanticException {
 
       ArrayList<String> reduceColumnNames = new ArrayList<String>();
       ArrayList<TypeInfo> reduceTypeInfos = new ArrayList<TypeInfo>();
@@ -2376,9 +2389,9 @@ public class Vectorizer implements PhysicalPlanResolver {
       try {
         TableDesc keyTableDesc = reduceWork.getKeyDesc();
         if (LOG.isDebugEnabled()) {
-          LOG.debug("Using reduce tag " + reduceWork.getTag());
+          LOG.debug("Using reduce value descriptor tag " + valueDescTag);
         }
-        TableDesc valueTableDesc = reduceWork.getTagToValueDesc().get(reduceWork.getTag());
+        TableDesc valueTableDesc = reduceWork.getTagToValueDesc().get(valueDescTag);
 
         Properties keyTableProperties = keyTableDesc.getProperties();
         AbstractSerDe keyDeserializer =

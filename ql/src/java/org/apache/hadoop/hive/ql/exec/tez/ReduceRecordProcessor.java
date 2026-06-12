@@ -189,8 +189,10 @@ public class ReduceRecordProcessor extends RecordProcessor {
         reducer = redWork.getReducer();
         // Check immediately after reducer is assigned, in cae the abort came in during
         checkAbortCondition();
-        initializeSourceForTag(redWork, i, mainWorkOIs, sources, redWork.getTagToValueDesc().get(0),
-            redWork.getTagToInput().get(0));
+        // Each merged ReduceWork has one value descriptor at index 0, while i is the runtime
+        // merge-join input tag.
+        initializeSourceForTag(redWork, i, 0, mainWorkOIs, sources,
+            redWork.getTagToValueDesc().get(0), redWork.getTagToInput().get(0));
         reducer.initializeLocalWork(jconf);
       }
       reducer = reduceWork.getReducer();
@@ -261,13 +263,14 @@ public class ReduceRecordProcessor extends RecordProcessor {
         continue;
       }
       checkAbortCondition();
-      initializeSourceForTag(redWork, tag, ois, sources, redWork.getTagToValueDesc().get(tag),
+      initializeSourceForTag(redWork, tag, tag, ois, sources, redWork.getTagToValueDesc().get(tag),
           redWork.getTagToInput().get(tag));
     }
   }
 
-  private void initializeSourceForTag(ReduceWork redWork, int tag, ObjectInspector[] ois, ReduceRecordSource[] sources,
-      TableDesc valueTableDesc, String inputName) throws Exception {
+  private void initializeSourceForTag(ReduceWork redWork, int tag, int valueDescTag,
+      ObjectInspector[] ois, ReduceRecordSource[] sources, TableDesc valueTableDesc, String inputName)
+      throws Exception {
     reducer = redWork.getReducer();
     reducer.getParentOperators().clear();
     reducer.setParentOperators(null); // clear out any parents as reducer is the root
@@ -281,7 +284,8 @@ public class ReduceRecordProcessor extends RecordProcessor {
     // Note this behavior may have to change if we ever implement a vectorized merge join
     boolean vectorizedRecordSource = (tag == bigTablePosition) && redWork.getVectorMode();
     sources[tag].init(jconf, redWork.getReducer(), vectorizedRecordSource, keyTableDesc, valueTableDesc, reader,
-        tag == bigTablePosition, (byte) tag, redWork.getVectorizedRowBatchCtx(), redWork.getVectorizedVertexNum(),
+        tag == bigTablePosition, (byte) tag, redWork.getVectorizedRowBatchCtx(valueDescTag),
+        redWork.getVectorizedVertexNum(),
         redWork.getVectorizedTestingReducerBatchSize());
     ois[tag] = sources[tag].getObjectInspector();
   }
