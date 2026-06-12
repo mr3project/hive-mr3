@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.vector;
 import java.io.IOException;
 
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
+import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.WritableUtils;
@@ -28,6 +29,7 @@ import org.apache.hadoop.io.WritableUtils;
 public final class VectorShuffleBatchDeserializer {
   private static final int IS_REPEATING = 1;
   private static final int HAS_NULLS = 2;
+  private static final int IS_DECIMAL_64 = 4;
 
   private final DataInputBuffer input = new DataInputBuffer();
 
@@ -84,6 +86,12 @@ public final class VectorShuffleBatchDeserializer {
     final int flags = input.readUnsignedByte();
     final boolean repeating = (flags & IS_REPEATING) != 0;
     final boolean hasNulls = (flags & HAS_NULLS) != 0;
+    final boolean sourceIsDecimal64 = (flags & IS_DECIMAL_64) != 0;
+    if (sourceIsDecimal64
+        && !(column instanceof Decimal64ColumnVector || column instanceof DecimalColumnVector)) {
+      throw new IOException("Decimal64 vector payload cannot be decoded into "
+          + column.getClass().getName());
+    }
     final int valueCount = repeating ? Math.min(rowCount, 1) : rowCount;
     column.ensureSize(requiredSize(destinationIndices, valueCount, repeating), false);
 
@@ -121,7 +129,8 @@ public final class VectorShuffleBatchDeserializer {
       ensurePrimitiveSupported(column);
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
-          readValue(column, destinationIndex(destinationIndices, logical, repeating));
+          readValue(column, destinationIndex(destinationIndices, logical, repeating),
+              sourceIsDecimal64);
         }
       }
     }
@@ -237,7 +246,18 @@ public final class VectorShuffleBatchDeserializer {
     }
   }
 
-  private void readValue(ColumnVector column, int index) throws IOException {
+  private void readValue(ColumnVector column, int index, boolean sourceIsDecimal64)
+      throws IOException {
+    if (sourceIsDecimal64) {
+      long decimal64 = input.readLong();
+      if (column instanceof Decimal64ColumnVector) {
+        ((Decimal64ColumnVector) column).vector[index] = decimal64;
+      } else {
+        DecimalColumnVector decimal = (DecimalColumnVector) column;
+        decimal.vector[index].deserialize64(decimal64, decimal.scale);
+      }
+      return;
+    }
     if (column instanceof BytesColumnVector) {
       int length = WritableUtils.readVInt(input);
       if (length < 0) {
@@ -253,6 +273,10 @@ public final class VectorShuffleBatchDeserializer {
     } else if (column instanceof IntervalDayTimeColumnVector) {
       ((IntervalDayTimeColumnVector) column).set(index,
           new HiveIntervalDayTime(input.readLong(), input.readInt()));
+    } else if (column instanceof Decimal64ColumnVector) {
+      HiveDecimalWritable decimal = new HiveDecimalWritable();
+      decimal.readFields(input);
+      ((Decimal64ColumnVector) column).set(index, decimal);
     } else if (column instanceof DecimalColumnVector) {
       ((DecimalColumnVector) column).vector[index].readFields(input);
     } else if (column instanceof LongColumnVector) {
