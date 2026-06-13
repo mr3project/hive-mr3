@@ -27,7 +27,7 @@ import org.apache.hadoop.io.WritableUtils;
 /**
  * Serializes the active rows of selected columns from a {@link VectorizedRowBatch}.
  *
- * <p>The receiver is expected to know the column schema and physical vector layout. Selected rows
+ * <p>The receiver is expected to know the column schema. Selected rows
  * are compacted in logical order, inactive rows and unselected columns are omitted, null values are
  * omitted, and repeating columns are represented by a single value. Primitive, list, map, struct, and
  * union vectors are supported recursively.</p>
@@ -35,6 +35,7 @@ import org.apache.hadoop.io.WritableUtils;
 public final class VectorShuffleBatchSerializer {
   private static final int IS_REPEATING = 1;
   private static final int HAS_NULLS = 2;
+  private static final int IS_DECIMAL_64 = 4;
 
   private final DataOutputBuffer buffer = new DataOutputBuffer();
 
@@ -65,7 +66,8 @@ public final class VectorShuffleBatchSerializer {
     final boolean repeating = column.isRepeating;
     final int valueCount = repeating ? Math.min(count, 1) : count;
     final boolean hasNulls = hasNulls(column, indices, valueCount, repeating);
-    buffer.writeByte((repeating ? IS_REPEATING : 0) | (hasNulls ? HAS_NULLS : 0));
+    buffer.writeByte((repeating ? IS_REPEATING : 0) | (hasNulls ? HAS_NULLS : 0)
+        | (column instanceof Decimal64ColumnVector ? IS_DECIMAL_64 : 0));
 
     byte[] nullBitmap = null;
     if (hasNulls) {
