@@ -164,6 +164,7 @@ public class ReduceRecordSource implements RecordSource {
 
     this.reducer = reducer;
     this.vectorized = vectorized;
+    this.batchContext = batchContext;
     this.keyTableDesc = keyTableDesc;
     if (reader instanceof KeyValueReaderEdge) {
       // for unordered key/value records
@@ -211,7 +212,6 @@ public class ReduceRecordSource implements RecordSource {
 
         rowObjectInspector = Utilities.constructVectorizedReduceRowOI(keyStructInspector,
             valueStructInspectors);
-        this.batchContext = batchContext;
         batch = batchContext.createVectorizedRowBatch();
         vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
 
@@ -262,9 +262,6 @@ public class ReduceRecordSource implements RecordSource {
         rowObjectInspector =
             ObjectInspectorFactory.getStandardStructObjectInspector(Utilities.reduceFieldNameList,
                 ois);
-        if (batchContext != null) {
-          initializeRowModeVectorShuffle(batchContext, keyObjectInspector, valueObjectInspector);
-        }
       }
     } catch (Throwable e) {
       abort = true;
@@ -284,7 +281,6 @@ public class ReduceRecordSource implements RecordSource {
 
   private void initializeRowModeVectorShuffle(VectorizedRowBatchCtx batchContext,
       ObjectInspector keyObjectInspector, ObjectInspector valueObjectInspector) throws HiveException {
-    this.batchContext = batchContext;
     batch = batchContext.createVectorizedRowBatch();
     vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
 
@@ -347,12 +343,15 @@ public class ReduceRecordSource implements RecordSource {
       BytesWritable keyWritable = reader.getCurrentKey();
       valueWritables = reader.getCurrentValues();
 
-      // A regular row-mode input can have the same bytes as the vector-batch marker (for example,
-      // an empty key followed by a reduce tag). Only interpret the marker for inputs that received
-      // a vector batch context and initialized the vector shuffle reader.
-      if (vectorShuffleBatchDeserializer != null && isVectorBatchKey(keyWritable)) {
+      if (batchContext != null && isVectorBatchKey(keyWritable)) {
+        if (vectorShuffleBatchDeserializer == null) {
+          initializeRowModeVectorShuffle(batchContext, inputKeySerDe.getObjectInspector(),
+              valueObjectInspector);
+        }
         vectorBatchValueWritables = valueWritables.iterator();
-        processNextVectorBatchRow();
+        if (!processNextVectorBatchRow()) {
+          throw new HiveException("Vector shuffle batch marker has no rows");
+        }
         return true;
       }
 
@@ -427,6 +426,8 @@ public class ReduceRecordSource implements RecordSource {
     rowModeValueSerializeRow.serializeWrite(batch, batchIndex);
     valueWritable.set(rowModeValueOutput.getData(), 0, rowModeValueOutput.getLength());
 
+    // Preserve the row-mode reducer ObjectInspector contract. In particular, the value object must
+    // be the LazyBinaryStruct produced by inputValueSerDe rather than an extracted standard object.
     row.add(inputKeySerDe.deserializeBytesWritable(keyWritable));
     row.add(inputValueSerDe.deserializeBytesWritable(valueWritable));
     reducer.process(row, tag);
