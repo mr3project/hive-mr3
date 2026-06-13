@@ -121,6 +121,10 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
         }
       }
 
+      if (tryCollectVectorShuffleBatch(batch)) {
+        return;
+      }
+
       serializedKeySeries.processBatch(batch);
 
       boolean selectedInUse = batch.selectedInUse;
