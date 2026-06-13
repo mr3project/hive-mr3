@@ -29,8 +29,11 @@ import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.TerminalOperator;
 import org.apache.hadoop.hive.ql.exec.TopNHash;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.tez.ReduceRecordSource;
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor;
+import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchSerializer;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContextRegion;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationOperator;
@@ -123,6 +126,10 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   // The hive key and bytes writable value needed to pass the key and value to the collector.
   protected transient HiveKey keyWritable;
   protected transient BytesWritable valueBytesWritable;
+
+  private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
+  private transient int[] vectorShuffleBatchColumnMap;
+  private transient HiveKey vectorShuffleBatchKey;
 
   // Picks topN K:V pairs from input.
   protected transient TopNHash reducerHash;
@@ -301,7 +308,40 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       reducerHash.initialize(limit, memUsage, conf.isMapGroupBy(), this, conf, hconf);
     }
 
+    if (conf.isVectorShuffleBatchEnabled() && reducerHash == null) {
+      vectorShuffleBatchSerializer = new VectorShuffleBatchSerializer();
+      final int keyColumnCount = isEmptyKey ? 0 : reduceSinkKeyColumnMap.length;
+      final int valueColumnCount = isEmptyValue ? 0 : reduceSinkValueColumnMap.length;
+      vectorShuffleBatchColumnMap = new int[keyColumnCount + valueColumnCount];
+      if (keyColumnCount > 0) {
+        System.arraycopy(reduceSinkKeyColumnMap, 0, vectorShuffleBatchColumnMap, 0, keyColumnCount);
+      }
+      if (valueColumnCount > 0) {
+        System.arraycopy(reduceSinkValueColumnMap, 0, vectorShuffleBatchColumnMap, keyColumnCount,
+            valueColumnCount);
+      }
+      vectorShuffleBatchKey = new HiveKey(ReduceRecordSource.VECTOR_BATCH_KEY_BYTES, 0);
+      vectorShuffleBatchKey.setDistKeyLength(ReduceRecordSource.VECTOR_BATCH_KEY_BYTES.length);
+    }
+
     batchCounter = 0;
+  }
+
+  protected boolean tryCollectVectorShuffleBatch(VectorizedRowBatch batch)
+      throws IOException {
+    if (vectorShuffleBatchSerializer == null || out == null
+        || out.getNumUnorderedPartitions() != 1) {
+      return false;
+    }
+    // Expressions evaluated by the concrete reduce-sink operator can filter every row after its
+    // initial empty-batch check. Treat that batch as handled without emitting an empty shuffle
+    // record, matching the per-row serialization path.
+    if (batch.size == 0) {
+      return true;
+    }
+    vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap, valueBytesWritable);
+    doCollect(vectorShuffleBatchKey, valueBytesWritable);
+    return true;
   }
 
   protected void initializeEmptyKey(int tag) {
