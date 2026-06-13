@@ -234,6 +234,10 @@ public class VectorReduceSinkObjectHashOperator extends VectorReduceSinkCommonOp
         }
       }
 
+      if (tryCollectVectorShuffleBatch(batch)) {
+        return;
+      }
+
       // Perform any bucket expressions.  Results will go into scratch columns.
       if (reduceSinkBucketExpressions != null) {
         for (VectorExpression ve : reduceSinkBucketExpressions) {

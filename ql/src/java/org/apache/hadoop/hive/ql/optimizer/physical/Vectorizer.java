@@ -1070,6 +1070,7 @@ public class Vectorizer implements PhysicalPlanResolver {
 
             // Always set the EXPLAIN conditions.
             setMergeJoinWorkExplainConditions(mergeJoinWork);
+            setMergeJoinWorkInputVectorizedRowBatchCtxs(mergeJoinWork);
 
             logMergeJoinWorkExplainVectorization(mergeJoinWork);
           }
@@ -1116,6 +1117,19 @@ public class Vectorizer implements PhysicalPlanResolver {
         if (valueTableDesc != null) {
           tagToBatchCtx.put(tag, createReduceInputVectorizedRowBatchCtx(reduceWork.getKeyDesc(),
               valueTableDesc));
+        }
+      }
+    }
+
+    private void setMergeJoinWorkInputVectorizedRowBatchCtxs(MergeJoinWork mergeJoinWork)
+        throws SemanticException {
+      BaseWork mainWork = mergeJoinWork.getMainWork();
+      if (mainWork instanceof ReduceWork) {
+        setReduceWorkInputVectorizedRowBatchCtxs((ReduceWork) mainWork);
+      }
+      for (BaseWork mergeWork : mergeJoinWork.getBaseWorkList()) {
+        if (mergeWork instanceof ReduceWork) {
+          setReduceWorkInputVectorizedRowBatchCtxs((ReduceWork) mergeWork);
         }
       }
     }
