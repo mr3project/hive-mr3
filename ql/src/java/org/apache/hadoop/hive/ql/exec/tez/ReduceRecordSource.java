@@ -135,6 +135,8 @@ public class ReduceRecordSource implements RecordSource {
   private final PerfLogger perfLogger = SessionState.getPerfLogger();
 
   private Iterable<? extends BytesWritable> valueWritables;
+  private Iterator<? extends BytesWritable> vectorBatchValueWritables;
+  private int vectorBatchLogicalRow;
 
   private final GroupIterator groupIterator = new GroupIterator();
 
@@ -331,6 +333,10 @@ public class ReduceRecordSource implements RecordSource {
     }
 
     try {
+      if (processNextVectorBatchRow()) {
+        return true;
+      }
+
       if (!reader.next()) {
         if (flushLastRecord) {
           reducer.flushRecursive();
@@ -345,7 +351,8 @@ public class ReduceRecordSource implements RecordSource {
       // an empty key followed by a reduce tag). Only interpret the marker for inputs that received
       // a vector batch context and initialized the vector shuffle reader.
       if (vectorShuffleBatchDeserializer != null && isVectorBatchKey(keyWritable)) {
-        processVectorBatchAsRows(valueWritables);
+        vectorBatchValueWritables = valueWritables.iterator();
+        processNextVectorBatchRow();
         return true;
       }
 
@@ -391,31 +398,39 @@ public class ReduceRecordSource implements RecordSource {
     }
   }
 
-  private void processVectorBatchAsRows(Iterable<? extends BytesWritable> values)
-      throws Exception {
+  private boolean processNextVectorBatchRow() throws Exception {
+    while (vectorBatchValueWritables != null && vectorBatchLogicalRow >= batch.size) {
+      batch.reset();
+      if (!vectorBatchValueWritables.hasNext()) {
+        vectorBatchValueWritables = null;
+        return false;
+      }
+      vectorShuffleBatchDeserializer.deserialize(vectorBatchValueWritables.next(), batch);
+      vectorBatchLogicalRow = 0;
+    }
+    if (vectorBatchValueWritables == null) {
+      return false;
+    }
+
     List<Object> row = new ArrayList<>(Utilities.reduceFieldNameList.size());
     BytesWritable keyWritable = new BytesWritable();
     BytesWritable valueWritable = new BytesWritable();
-    for (BytesWritable value : values) {
-      vectorShuffleBatchDeserializer.deserialize(value, batch);
-      for (int logical = 0; logical < batch.size; logical++) {
-        int batchIndex = batch.selectedInUse ? batch.selected[logical] : logical;
+    int batchIndex = batch.selectedInUse
+        ? batch.selected[vectorBatchLogicalRow] : vectorBatchLogicalRow;
+    vectorBatchLogicalRow++;
 
-        rowModeKeySerializeWrite.reset();
-        rowModeKeySerializeRow.serializeWrite(batch, batchIndex);
-        keyWritable.set(rowModeKeyOutput.getData(), 0, rowModeKeyOutput.getLength());
+    rowModeKeySerializeWrite.reset();
+    rowModeKeySerializeRow.serializeWrite(batch, batchIndex);
+    keyWritable.set(rowModeKeyOutput.getData(), 0, rowModeKeyOutput.getLength());
 
-        rowModeValueSerializeWrite.reset();
-        rowModeValueSerializeRow.serializeWrite(batch, batchIndex);
-        valueWritable.set(rowModeValueOutput.getData(), 0, rowModeValueOutput.getLength());
+    rowModeValueSerializeWrite.reset();
+    rowModeValueSerializeRow.serializeWrite(batch, batchIndex);
+    valueWritable.set(rowModeValueOutput.getData(), 0, rowModeValueOutput.getLength());
 
-        row.clear();
-        row.add(inputKeySerDe.deserializeBytesWritable(keyWritable));
-        row.add(inputValueSerDe.deserializeBytesWritable(valueWritable));
-        reducer.process(row, tag);
-      }
-      batch.reset();
-    }
+    row.add(inputKeySerDe.deserializeBytesWritable(keyWritable));
+    row.add(inputValueSerDe.deserializeBytesWritable(valueWritable));
+    reducer.process(row, tag);
+    return true;
   }
 
   private Object deserializeValue(BytesWritable valueWritable, byte tag)
