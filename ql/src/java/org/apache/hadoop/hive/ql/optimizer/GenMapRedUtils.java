@@ -39,7 +39,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.BlobStorageUtils;
 import org.apache.hadoop.hive.common.StringInternUtils;
-import org.apache.hadoop.hive.common.type.DataTypePhysicalVariation;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -71,7 +70,6 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr.ExecDriver;
 import org.apache.hadoop.hive.ql.exec.mr.MapRedTask;
 import org.apache.hadoop.hive.ql.exec.tez.TezTask;
-import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
 import org.apache.hadoop.hive.ql.hooks.ReadEntity;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.io.RCFileInputFormat;
@@ -127,7 +125,6 @@ import org.apache.hadoop.hive.ql.security.authorization.HiveCustomStorageHandler
 import org.apache.hadoop.hive.ql.session.LineageState;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.mapred.InputFormat;
 import org.slf4j.Logger;
@@ -824,36 +821,6 @@ public final class GenMapRedUtils {
       tagToSchema.add(null);
     }
     tagToSchema.set(tag, rs.getConf().getValueSerializeInfo());
-    work.getTagToVectorizedRowBatchCtx().put(tag, createVectorizedRowBatchCtx(rs));
-  }
-
-  private static VectorizedRowBatchCtx createVectorizedRowBatchCtx(ReduceSinkOperator rs) {
-    List<String> columnNames = new ArrayList<>();
-    List<TypeInfo> typeInfos = new ArrayList<>();
-    List<DataTypePhysicalVariation> dataTypePhysicalVariations = new ArrayList<>();
-
-    addVectorizedRowBatchColumns(Utilities.ReduceField.KEY, rs.getConf().getOutputKeyColumnNames(),
-        rs.getConf().getKeyCols(), columnNames, typeInfos, dataTypePhysicalVariations);
-    addVectorizedRowBatchColumns(Utilities.ReduceField.VALUE, rs.getConf().getOutputValueColumnNames(),
-        rs.getConf().getValueCols(), columnNames, typeInfos, dataTypePhysicalVariations);
-
-    return new VectorizedRowBatchCtx(columnNames.toArray(new String[0]), typeInfos.toArray(new TypeInfo[0]),
-        dataTypePhysicalVariations.toArray(new DataTypePhysicalVariation[0]), null, 0, 0, null,
-        new String[0], new DataTypePhysicalVariation[0]);
-  }
-
-  private static void addVectorizedRowBatchColumns(Utilities.ReduceField reduceField,
-      List<String> outputColumnNames, List<ExprNodeDesc> columns, List<String> columnNames,
-      List<TypeInfo> typeInfos, List<DataTypePhysicalVariation> dataTypePhysicalVariations) {
-    for (int i = 0; i < columns.size(); i++) {
-      String outputColumnName = outputColumnNames == null || i >= outputColumnNames.size()
-          ? "_col" + i : outputColumnNames.get(i);
-      columnNames.add(reduceField + "." + outputColumnName);
-      TypeInfo typeInfo = columns.get(i).getTypeInfo();
-      typeInfos.add(typeInfo);
-      // ReduceSinkDesc describes the logical shuffle schema, not the source batch's physical layout.
-      dataTypePhysicalVariations.add(DataTypePhysicalVariation.NONE);
-    }
   }
 
   /**

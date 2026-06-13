@@ -60,10 +60,7 @@ public class ReduceWork extends BaseWork {
 
   // schema of the map-reduce 'value' object - this is heterogeneous
   private List<TableDesc> tagToValueDesc = new ArrayList<TableDesc>();
-
-  // Vector batch decode context for each heterogeneous reduce input.
-  private Map<Integer, VectorizedRowBatchCtx> tagToVectorizedRowBatchCtx =
-      new HashMap<Integer, VectorizedRowBatchCtx>();
+  private Map<Integer, VectorizedRowBatchCtx> tagToVectorizedRowBatchCtx = new HashMap<>();
 
   // first operator of the reduce task. (not the reducesinkoperator, but the
   // operator that handles the output of these, e.g.: JoinOperator).
@@ -136,7 +133,7 @@ public class ReduceWork extends BaseWork {
   }
 
   public void setTagToVectorizedRowBatchCtx(
-      final Map<Integer, VectorizedRowBatchCtx> tagToVectorizedRowBatchCtx) {
+      Map<Integer, VectorizedRowBatchCtx> tagToVectorizedRowBatchCtx) {
     this.tagToVectorizedRowBatchCtx = tagToVectorizedRowBatchCtx;
   }
 

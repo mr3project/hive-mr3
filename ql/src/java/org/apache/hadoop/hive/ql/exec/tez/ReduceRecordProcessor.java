@@ -41,10 +41,10 @@ import org.apache.hadoop.hive.ql.exec.ObjectCacheFactory;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
 import org.apache.hadoop.hive.ql.exec.mr.ExecMapper.ReportStats;
 import org.apache.hadoop.hive.ql.exec.tez.DynamicValueRegistryTez.RegistryConfTez;
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor.TezKVOutputCollector;
-import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.DynamicValue;
@@ -268,7 +268,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
   }
 
   private void initializeSourceForTag(ReduceWork redWork, int tag, ObjectInspector[] ois, ReduceRecordSource[] sources,
-      TableDesc valueTableDesc, String inputName, VectorizedRowBatchCtx vectorizedRowBatchCtx) throws Exception {
+      TableDesc valueTableDesc, String inputName, VectorizedRowBatchCtx inputBatchContext) throws Exception {
     reducer = redWork.getReducer();
     reducer.getParentOperators().clear();
     reducer.setParentOperators(null); // clear out any parents as reducer is the root
@@ -282,7 +282,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
     // Note this behavior may have to change if we ever implement a vectorized merge join
     boolean vectorizedRecordSource = (tag == bigTablePosition) && redWork.getVectorMode();
     VectorizedRowBatchCtx batchContext =
-        vectorizedRecordSource ? redWork.getVectorizedRowBatchCtx() : vectorizedRowBatchCtx;
+        vectorizedRecordSource ? redWork.getVectorizedRowBatchCtx() : inputBatchContext;
     sources[tag].init(jconf, redWork.getReducer(), vectorizedRecordSource, keyTableDesc, valueTableDesc, reader,
         tag == bigTablePosition, (byte) tag, batchContext, redWork.getVectorizedVertexNum(),
         redWork.getVectorizedTestingReducerBatchSize());
