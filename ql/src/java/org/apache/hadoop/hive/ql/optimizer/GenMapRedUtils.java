@@ -127,8 +127,6 @@ import org.apache.hadoop.hive.ql.security.authorization.HiveCustomStorageHandler
 import org.apache.hadoop.hive.ql.session.LineageState;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
-import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
-import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.mapred.InputFormat;
@@ -835,9 +833,9 @@ public final class GenMapRedUtils {
     List<DataTypePhysicalVariation> dataTypePhysicalVariations = new ArrayList<>();
 
     addVectorizedRowBatchColumns(Utilities.ReduceField.KEY, rs.getConf().getOutputKeyColumnNames(),
-        rs.getConf().getKeyCols(), columnNames, typeInfos, dataTypePhysicalVariations, false);
+        rs.getConf().getKeyCols(), columnNames, typeInfos, dataTypePhysicalVariations);
     addVectorizedRowBatchColumns(Utilities.ReduceField.VALUE, rs.getConf().getOutputValueColumnNames(),
-        rs.getConf().getValueCols(), columnNames, typeInfos, dataTypePhysicalVariations, true);
+        rs.getConf().getValueCols(), columnNames, typeInfos, dataTypePhysicalVariations);
 
     return new VectorizedRowBatchCtx(columnNames.toArray(new String[0]), typeInfos.toArray(new TypeInfo[0]),
         dataTypePhysicalVariations.toArray(new DataTypePhysicalVariation[0]), null, 0, 0, null,
@@ -846,17 +844,15 @@ public final class GenMapRedUtils {
 
   private static void addVectorizedRowBatchColumns(Utilities.ReduceField reduceField,
       List<String> outputColumnNames, List<ExprNodeDesc> columns, List<String> columnNames,
-      List<TypeInfo> typeInfos, List<DataTypePhysicalVariation> dataTypePhysicalVariations,
-      boolean useDecimal64) {
+      List<TypeInfo> typeInfos, List<DataTypePhysicalVariation> dataTypePhysicalVariations) {
     for (int i = 0; i < columns.size(); i++) {
       String outputColumnName = outputColumnNames == null || i >= outputColumnNames.size()
           ? "_col" + i : outputColumnNames.get(i);
       columnNames.add(reduceField + "." + outputColumnName);
       TypeInfo typeInfo = columns.get(i).getTypeInfo();
       typeInfos.add(typeInfo);
-      dataTypePhysicalVariations.add(useDecimal64 && typeInfo instanceof DecimalTypeInfo
-          && HiveDecimalWritable.isPrecisionDecimal64(((DecimalTypeInfo) typeInfo).getPrecision())
-          ? DataTypePhysicalVariation.DECIMAL_64 : DataTypePhysicalVariation.NONE);
+      // ReduceSinkDesc describes the logical shuffle schema, not the source batch's physical layout.
+      dataTypePhysicalVariations.add(DataTypePhysicalVariation.NONE);
     }
   }
 
