@@ -68,6 +68,10 @@ public class ReduceRecordSource implements RecordSource {
 
   public static final Logger l4j = LoggerFactory.getLogger(ReduceRecordSource.class);
 
+  public static final byte[] VECTOR_BATCH_KEY_BYTES = {
+      0x02
+  };
+
   private static final String CLASS_NAME = ReduceRecordSource.class.getName();
 
   private byte tag;
