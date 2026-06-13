@@ -36,6 +36,7 @@ import java.util.Random;
 
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
+import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.io.BytesWritable;
 import org.junit.Test;
 
@@ -123,6 +124,31 @@ public class TestVectorShuffleBatchSerde {
   public void testDecimalColumnSchema() throws Exception {
     assertRandomColumnRoundTrips("DECIMAL", DECIMAL_PROPERTY_TEST_SEED, PROPERTY_TEST_ITERATIONS,
         decimalAdapter());
+  }
+
+  @Test
+  public void testDecimal64ToDecimalColumnSchema() throws Exception {
+    HiveDecimal expected = HiveDecimal.create("1234567890.1234");
+    Decimal64ColumnVector source = new Decimal64ColumnVector(DECIMAL_PRECISION, DECIMAL_SCALE);
+    source.set(0, expected);
+    DecimalColumnVector destination = new DecimalColumnVector(DECIMAL_PRECISION, DECIMAL_SCALE);
+
+    roundTrip(batchWithColumn(source, 1), new int[] {0}, batchWithColumn(destination, 0));
+
+    assertEquals(expected, destination.vector[0].getHiveDecimal());
+  }
+
+  @Test
+  public void testDecimalToDecimal64ColumnSchema() throws Exception {
+    HiveDecimal expected = HiveDecimal.create("1234567890.1234");
+    DecimalColumnVector source = new DecimalColumnVector(DECIMAL_PRECISION, DECIMAL_SCALE);
+    source.set(0, expected);
+    Decimal64ColumnVector destination = new Decimal64ColumnVector(DECIMAL_PRECISION, DECIMAL_SCALE);
+
+    roundTrip(batchWithColumn(source, 1), new int[] {0}, batchWithColumn(destination, 0));
+
+    HiveDecimalWritable writable = new HiveDecimalWritable(expected);
+    assertEquals(writable.serialize64(DECIMAL_SCALE), destination.vector[0]);
   }
 
   @Test
