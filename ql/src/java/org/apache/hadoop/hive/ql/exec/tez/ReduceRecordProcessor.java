@@ -41,6 +41,7 @@ import org.apache.hadoop.hive.ql.exec.ObjectCacheFactory;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
 import org.apache.hadoop.hive.ql.exec.mr.ExecMapper.ReportStats;
 import org.apache.hadoop.hive.ql.exec.tez.DynamicValueRegistryTez.RegistryConfTez;
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor.TezKVOutputCollector;
@@ -190,7 +191,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
         // Check immediately after reducer is assigned, in cae the abort came in during
         checkAbortCondition();
         initializeSourceForTag(redWork, i, mainWorkOIs, sources, redWork.getTagToValueDesc().get(0),
-            redWork.getTagToInput().get(0));
+            redWork.getTagToInput().get(0), redWork.getTagToVectorizedRowBatchCtx().get(0));
         reducer.initializeLocalWork(jconf);
       }
       reducer = reduceWork.getReducer();
@@ -262,12 +263,12 @@ public class ReduceRecordProcessor extends RecordProcessor {
       }
       checkAbortCondition();
       initializeSourceForTag(redWork, tag, ois, sources, redWork.getTagToValueDesc().get(tag),
-          redWork.getTagToInput().get(tag));
+          redWork.getTagToInput().get(tag), redWork.getTagToVectorizedRowBatchCtx().get(tag));
     }
   }
 
   private void initializeSourceForTag(ReduceWork redWork, int tag, ObjectInspector[] ois, ReduceRecordSource[] sources,
-      TableDesc valueTableDesc, String inputName) throws Exception {
+      TableDesc valueTableDesc, String inputName, VectorizedRowBatchCtx inputBatchContext) throws Exception {
     reducer = redWork.getReducer();
     reducer.getParentOperators().clear();
     reducer.setParentOperators(null); // clear out any parents as reducer is the root
@@ -280,8 +281,10 @@ public class ReduceRecordProcessor extends RecordProcessor {
     // Only the big table input source should be vectorized (if applicable)
     // Note this behavior may have to change if we ever implement a vectorized merge join
     boolean vectorizedRecordSource = (tag == bigTablePosition) && redWork.getVectorMode();
+    VectorizedRowBatchCtx batchContext =
+        vectorizedRecordSource ? redWork.getVectorizedRowBatchCtx() : inputBatchContext;
     sources[tag].init(jconf, redWork.getReducer(), vectorizedRecordSource, keyTableDesc, valueTableDesc, reader,
-        tag == bigTablePosition, (byte) tag, redWork.getVectorizedRowBatchCtx(), redWork.getVectorizedVertexNum(),
+        tag == bigTablePosition, (byte) tag, batchContext, redWork.getVectorizedVertexNum(),
         redWork.getVectorizedTestingReducerBatchSize());
     ois[tag] = sources[tag].getObjectInspector();
   }
