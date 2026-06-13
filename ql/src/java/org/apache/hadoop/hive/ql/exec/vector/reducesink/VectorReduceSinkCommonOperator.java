@@ -333,6 +333,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         || out.getNumUnorderedPartitions() != 1) {
       return false;
     }
+    // Expressions evaluated by the concrete reduce-sink operator can filter every row after its
+    // initial empty-batch check. Treat that batch as handled without emitting an empty shuffle
+    // record, matching the per-row serialization path.
+    if (batch.size == 0) {
+      return true;
+    }
     vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap, valueBytesWritable);
     doCollect(vectorShuffleBatchKey, valueBytesWritable);
     return true;
