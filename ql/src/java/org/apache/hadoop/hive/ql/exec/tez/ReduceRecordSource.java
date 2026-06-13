@@ -341,7 +341,10 @@ public class ReduceRecordSource implements RecordSource {
       BytesWritable keyWritable = reader.getCurrentKey();
       valueWritables = reader.getCurrentValues();
 
-      if (isVectorBatchKey(keyWritable)) {
+      // A regular row-mode input can have the same bytes as the vector-batch marker (for example,
+      // an empty key followed by a reduce tag). Only interpret the marker for inputs that received
+      // a vector batch context and initialized the vector shuffle reader.
+      if (vectorShuffleBatchDeserializer != null && isVectorBatchKey(keyWritable)) {
         processVectorBatchAsRows(valueWritables);
         return true;
       }
