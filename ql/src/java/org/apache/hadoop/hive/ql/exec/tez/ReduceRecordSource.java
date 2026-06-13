@@ -349,9 +349,7 @@ public class ReduceRecordSource implements RecordSource {
               valueObjectInspector);
         }
         vectorBatchValueWritables = valueWritables.iterator();
-        if (!processNextVectorBatchRow()) {
-          throw new HiveException("Vector shuffle batch marker has no rows");
-        }
+        processNextVectorBatchRow();
         return true;
       }
 
