@@ -33,6 +33,8 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorDeserializeRow;
+import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchDeserializer;
+import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedBatchUtil;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
@@ -41,16 +43,20 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
+import org.apache.hadoop.hive.serde2.ByteStream.Output;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.binarysortable.BinarySortableSerDe;
 import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableDeserializeRead;
+import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableSerializeWrite;
 import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinaryDeserializeRead;
+import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -101,6 +107,13 @@ public class ReduceRecordSource implements RecordSource {
 
   private VectorizedRowBatchCtx batchContext;
   private VectorizedRowBatch batch;
+  private VectorShuffleBatchDeserializer vectorShuffleBatchDeserializer;
+  private VectorSerializeRow<BinarySortableSerializeWrite> rowModeKeySerializeRow;
+  private VectorSerializeRow<LazyBinarySerializeWrite> rowModeValueSerializeRow;
+  private BinarySortableSerializeWrite rowModeKeySerializeWrite;
+  private LazyBinarySerializeWrite rowModeValueSerializeWrite;
+  private Output rowModeKeyOutput;
+  private Output rowModeValueOutput;
 
   // number of columns pertaining to keys in a vectorized row batch
   private int firstValueColumnOffset;
@@ -198,6 +211,7 @@ public class ReduceRecordSource implements RecordSource {
             valueStructInspectors);
         this.batchContext = batchContext;
         batch = batchContext.createVectorizedRowBatch();
+        vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
 
         // Setup vectorized deserialization for the key and value.
         BinarySortableSerDe binarySortableSerDe = (BinarySortableSerDe) inputKeySerDe;
@@ -246,6 +260,9 @@ public class ReduceRecordSource implements RecordSource {
         rowObjectInspector =
             ObjectInspectorFactory.getStandardStructObjectInspector(Utilities.reduceFieldNameList,
                 ois);
+        if (batchContext != null) {
+          initializeRowModeVectorShuffle(batchContext, keyObjectInspector, valueObjectInspector);
+        }
       }
     } catch (Throwable e) {
       abort = true;
@@ -261,6 +278,39 @@ public class ReduceRecordSource implements RecordSource {
 
   public TableDesc getKeyTableDesc() {
     return keyTableDesc;
+  }
+
+  private void initializeRowModeVectorShuffle(VectorizedRowBatchCtx batchContext,
+      ObjectInspector keyObjectInspector, ObjectInspector valueObjectInspector) throws HiveException {
+    this.batchContext = batchContext;
+    batch = batchContext.createVectorizedRowBatch();
+    vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
+
+    TypeInfo[] keyTypeInfos = VectorizedBatchUtil.typeInfosFromStructObjectInspector(
+        (StructObjectInspector) keyObjectInspector);
+    TypeInfo[] valueTypeInfos = VectorizedBatchUtil.typeInfosFromStructObjectInspector(
+        (StructObjectInspector) valueObjectInspector);
+    int[] keyColumnMap = new int[keyTypeInfos.length];
+    int[] valueColumnMap = new int[valueTypeInfos.length];
+    for (int i = 0; i < keyColumnMap.length; i++) {
+      keyColumnMap[i] = i;
+    }
+    for (int i = 0; i < valueColumnMap.length; i++) {
+      valueColumnMap[i] = keyColumnMap.length + i;
+    }
+
+    rowModeKeySerializeWrite =
+        BinarySortableSerializeWrite.with(keyTableDesc.getProperties(), keyColumnMap.length);
+    rowModeKeySerializeRow = new VectorSerializeRow<>(rowModeKeySerializeWrite);
+    rowModeKeySerializeRow.init(keyTypeInfos, keyColumnMap);
+    rowModeKeyOutput = new Output();
+    rowModeKeySerializeWrite.set(rowModeKeyOutput);
+
+    rowModeValueSerializeWrite = new LazyBinarySerializeWrite(valueColumnMap.length);
+    rowModeValueSerializeRow = new VectorSerializeRow<>(rowModeValueSerializeWrite);
+    rowModeValueSerializeRow.init(valueTypeInfos, valueColumnMap);
+    rowModeValueOutput = new Output();
+    rowModeValueSerializeRow.setOutput(rowModeValueOutput);
   }
 
   @Override
@@ -290,6 +340,11 @@ public class ReduceRecordSource implements RecordSource {
 
       BytesWritable keyWritable = reader.getCurrentKey();
       valueWritables = reader.getCurrentValues();
+
+      if (isVectorBatchKey(keyWritable)) {
+        processVectorBatchAsRows(valueWritables);
+        return true;
+      }
 
       //Set the key, check if this is a new group or same group
       try {
@@ -330,6 +385,33 @@ public class ReduceRecordSource implements RecordSource {
         l4j.error(StringUtils.stringifyException(e));
         throw new RuntimeException(e);
       }
+    }
+  }
+
+  private void processVectorBatchAsRows(Iterable<? extends BytesWritable> values)
+      throws Exception {
+    List<Object> row = new ArrayList<>(Utilities.reduceFieldNameList.size());
+    BytesWritable keyWritable = new BytesWritable();
+    BytesWritable valueWritable = new BytesWritable();
+    for (BytesWritable value : values) {
+      vectorShuffleBatchDeserializer.deserialize(value, batch);
+      for (int logical = 0; logical < batch.size; logical++) {
+        int batchIndex = batch.selectedInUse ? batch.selected[logical] : logical;
+
+        rowModeKeySerializeWrite.reset();
+        rowModeKeySerializeRow.serializeWrite(batch, batchIndex);
+        keyWritable.set(rowModeKeyOutput.getData(), 0, rowModeKeyOutput.getLength());
+
+        rowModeValueSerializeWrite.reset();
+        rowModeValueSerializeRow.serializeWrite(batch, batchIndex);
+        valueWritable.set(rowModeValueOutput.getData(), 0, rowModeValueOutput.getLength());
+
+        row.clear();
+        row.add(inputKeySerDe.deserializeBytesWritable(keyWritable));
+        row.add(inputValueSerDe.deserializeBytesWritable(valueWritable));
+        reducer.process(row, tag);
+      }
+      batch.reset();
     }
   }
 
@@ -500,6 +582,19 @@ public class ReduceRecordSource implements RecordSource {
     }
     Preconditions.checkState(batch.size == 0);
 
+    if (isVectorBatchKey(keyWritable)) {
+      try {
+        vectorShuffleBatchDeserializer.deserialize(valueWritable, batch);
+        reducer.process(batch, tag);
+        if (!reducer.batchNeedsClone()) {
+          batch.reset();
+        }
+        return;
+      } catch (Exception e) {
+        throw new HiveException("Unable to deserialize vector shuffle batch", e);
+      }
+    }
+
     // Deserialize key into vector row columns.
     byte[] keyBytes = keyWritable.getBytesRaw();
     int keyOffset = keyWritable.getOffset();
@@ -544,6 +639,11 @@ public class ReduceRecordSource implements RecordSource {
       throw new HiveException("Hive Runtime Error while processing vector batch (tag="
           + tag + ") (vectorizedVertexNum " + vectorizedVertexNum + ")", e);
     }
+  }
+
+  private boolean isVectorBatchKey(BytesWritable keyWritable) {
+    return keyWritable.getLength() == VECTOR_BATCH_KEY_BYTES.length
+        && keyWritable.getBytesRaw()[keyWritable.getOffset()] == VECTOR_BATCH_KEY_BYTES[0];
   }
 
   /**
