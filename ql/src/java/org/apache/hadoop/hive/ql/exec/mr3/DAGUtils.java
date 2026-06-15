@@ -921,11 +921,15 @@ public class DAGUtils {
     EdgeType edgeType = edgeProp.getEdgeType();
     switch (edgeType) {
     case BROADCAST_EDGE:
-      UnorderedKVEdgeConfig et1Conf = UnorderedKVEdgeConfig
+      UnorderedKVEdgeConfig.Builder et1Conf = UnorderedKVEdgeConfig
           .newBuilder(keyClass, valClass)
-          .setFromConfiguration(conf)
-          .build();
-      return et1Conf.createDefaultBroadcastEdgeProperty();
+          .setFromConfiguration(conf);
+      if (edgeProp.getBufferSize() != null) {
+        et1Conf.setAdditionalConfiguration(
+            TezRuntimeConfiguration.TEZ_RUNTIME_UNORDERED_OUTPUT_BUFFER_SIZE_MB,
+            edgeProp.getBufferSize().toString());
+      }
+      return et1Conf.build().createDefaultBroadcastEdgeProperty();
     case CUSTOM_EDGE:
       UnorderedPartitionedKVEdgeConfig et2Conf = UnorderedPartitionedKVEdgeConfig
           .newBuilder(keyClass, valClass, HashPartitioner.class.getName())
