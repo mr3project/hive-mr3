@@ -62,6 +62,40 @@ public final class VectorShuffleBatchSerializer {
     output.set(buffer.getData(), 0, buffer.getLength());
   }
 
+  public void serialize(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
+      int rowCount, BytesWritable output) throws IOException {
+    serialize(source, sourceColumnMap, rowIndices, 0, rowCount, output);
+  }
+
+  public void serialize(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
+      int rowOffset, int rowCount, BytesWritable output) throws IOException {
+    if (source == null || sourceColumnMap == null || rowIndices == null || output == null) {
+      throw new IllegalArgumentException(
+          "Source batch, source column map, row indices, and output are required");
+    }
+    if (rowOffset < 0 || rowCount < 0 || rowOffset > rowIndices.length - rowCount) {
+      throw new IllegalArgumentException(
+          "Invalid row offset " + rowOffset + " and row count " + rowCount
+              + " for " + rowIndices.length + " row indices");
+    }
+    int[] logicalRows = rowIndices;
+    if (rowOffset != 0) {
+      logicalRows = new int[rowCount];
+      System.arraycopy(rowIndices, rowOffset, logicalRows, 0, rowCount);
+    }
+
+    buffer.reset();
+    WritableUtils.writeVInt(buffer, rowCount);
+    WritableUtils.writeVInt(buffer, sourceColumnMap.length);
+    for (int sourceColumn : sourceColumnMap) {
+      if (sourceColumn < 0 || sourceColumn >= source.cols.length || source.cols[sourceColumn] == null) {
+        throw new IllegalArgumentException("Invalid source column " + sourceColumn);
+      }
+      writeColumn(source.cols[sourceColumn], logicalRows, rowCount);
+    }
+    output.set(buffer.getData(), 0, buffer.getLength());
+  }
+
   private void writeColumn(ColumnVector column, int[] indices, int count) throws IOException {
     final boolean repeating = column.isRepeating;
     final int valueCount = repeating ? Math.min(count, 1) : count;
