@@ -146,6 +146,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   // Debug display.
   protected transient long batchCounter;
 
+  // Scratch hash codes for active rows in the current batch, indexed by physical row.
+  protected transient int[] batchKeyHashCodes;
+
   //---------------------------------------------------------------------------
 
   /** Kryo ctor. */
@@ -325,6 +328,15 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
 
     batchCounter = 0;
+    batchKeyHashCodes = null;
+  }
+
+  protected int[] ensureBatchKeyHashCodes(VectorizedRowBatch batch) {
+    final int minimumLength = batch.selected.length;
+    if (batchKeyHashCodes == null || batchKeyHashCodes.length < minimumLength) {
+      batchKeyHashCodes = new int[minimumLength];
+    }
+    return batchKeyHashCodes;
   }
 
   protected boolean tryCollectVectorShuffleBatch(VectorizedRowBatch batch)
@@ -343,6 +355,15 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     doCollect(vectorShuffleBatchKey, valueBytesWritable);
     return true;
   }
+
+  /**
+   * Computes reducer-routing hash codes for all active rows in the batch.
+   *
+   * The result is indexed by physical batch row number. When batch.selectedInUse is true,
+   * only entries for batch.selected[0..batch.size) are required to be valid.
+   */
+  protected abstract void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes)
+      throws HiveException;
 
   protected void initializeEmptyKey(int tag) {
 
