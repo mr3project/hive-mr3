@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.vector.reducesink;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Properties;
 
@@ -31,6 +32,7 @@ import org.apache.hadoop.hive.ql.exec.TopNHash;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.tez.ReduceRecordSource;
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor;
+import org.apache.hadoop.hive.ql.exec.vector.VectorExtractRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchSerializer;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
@@ -52,7 +54,10 @@ import org.apache.hadoop.hive.serde2.ByteStream.Output;
 import org.apache.hadoop.hive.serde2.binarysortable.BinarySortableSerDe;
 import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableSerializeWrite;
 import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.slf4j.Logger;
@@ -148,6 +153,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   // Scratch hash codes for active rows in the current batch, indexed by physical row.
   protected transient int[] batchKeyHashCodes;
+  protected transient int[] batchValueHashCodes;
+
+  private transient VectorExtractRow valueVectorExtractRow;
+  private transient Object[] valueFieldValues;
+  private transient ObjectInspector[] valueObjectInspectors;
+  private transient ByteBuffer valueHashByteBuffer;
 
   //---------------------------------------------------------------------------
 
@@ -329,6 +340,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
     batchCounter = 0;
     batchKeyHashCodes = null;
+    batchValueHashCodes = null;
+    valueVectorExtractRow = null;
+    valueFieldValues = null;
+    valueObjectInspectors = null;
+    valueHashByteBuffer = null;
   }
 
   protected int[] ensureBatchKeyHashCodes(VectorizedRowBatch batch) {
@@ -337,6 +353,14 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       batchKeyHashCodes = new int[minimumLength];
     }
     return batchKeyHashCodes;
+  }
+
+  protected int[] ensureBatchValueHashCodes(VectorizedRowBatch batch) {
+    final int minimumLength = batch.selected.length;
+    if (batchValueHashCodes == null || batchValueHashCodes.length < minimumLength) {
+      batchValueHashCodes = new int[minimumLength];
+    }
+    return batchValueHashCodes;
   }
 
   protected boolean tryCollectVectorShuffleBatch(VectorizedRowBatch batch)
@@ -364,6 +388,58 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
    */
   protected abstract void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes)
       throws HiveException;
+
+  private void initializeValueHashCodeScratch() throws HiveException {
+    if (isEmptyValue || valueVectorExtractRow != null) {
+      return;
+    }
+
+    valueVectorExtractRow = new VectorExtractRow();
+    valueVectorExtractRow.init(reduceSinkValueTypeInfos, reduceSinkValueColumnMap);
+    valueFieldValues = new Object[reduceSinkValueTypeInfos.length];
+    valueObjectInspectors = new ObjectInspector[reduceSinkValueTypeInfos.length];
+    for (int i = 0; i < reduceSinkValueTypeInfos.length; i++) {
+      valueObjectInspectors[i] =
+          TypeInfoUtils.getStandardWritableObjectInspectorFromTypeInfo(reduceSinkValueTypeInfos[i]);
+    }
+    valueHashByteBuffer = ByteBuffer.allocate(8);
+  }
+
+  /**
+   * Computes serialization-free value hash codes for all active rows in the batch.
+   *
+   * This helper intentionally does not serialize values or match any serialized-value hash.
+   * The result is indexed by physical batch row number. When batch.selectedInUse is true,
+   * only entries for batch.selected[0..batch.size) are required to be valid.
+   */
+  protected void computeValueHashCodes(VectorizedRowBatch batch, int[] hashCodes)
+      throws HiveException {
+    final boolean selectedInUse = batch.selectedInUse;
+    final int[] selected = batch.selected;
+    final int size = batch.size;
+
+    if (isEmptyValue) {
+      for (int logical = 0; logical < size; logical++) {
+        final int batchIndex = (selectedInUse ? selected[logical] : logical);
+        hashCodes[batchIndex] = 0;
+      }
+      return;
+    }
+
+    initializeValueHashCodeScratch();
+
+    for (int logical = 0; logical < size; logical++) {
+      final int batchIndex = (selectedInUse ? selected[logical] : logical);
+      valueVectorExtractRow.extractRow(batch, batchIndex, valueFieldValues);
+
+      int hashCode = 0;
+      for (int i = 0; i < valueFieldValues.length; i++) {
+        hashCode = 31 * hashCode + ObjectInspectorUtils.hashCodeMurmur(
+            valueFieldValues[i], valueObjectInspectors[i], valueHashByteBuffer);
+      }
+      hashCodes[batchIndex] = hashCode;
+    }
+  }
 
   protected void initializeEmptyKey(int tag) {
 
