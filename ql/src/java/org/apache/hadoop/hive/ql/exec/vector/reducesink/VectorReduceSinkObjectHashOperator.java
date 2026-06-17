@@ -234,22 +234,29 @@ public class VectorReduceSinkObjectHashOperator extends VectorReduceSinkCommonOp
         }
       }
 
-      if (tryCollectVectorShuffleBatch(batch)) {
-        return;
-      }
-
       // Perform any bucket expressions.  Results will go into scratch columns.
+      // The vector shuffle batch path needs these before computing partition hash codes.
+      // Keep _bucket_number evaluation row-local because it depends on the computed bucket id.
       if (reduceSinkBucketExpressions != null) {
         for (VectorExpression ve : reduceSinkBucketExpressions) {
+          if (ve instanceof BucketNumExpression) {
+            continue;
+          }
           ve.evaluate(batch);
         }
       }
 
       // Perform any partition expressions.  Results will go into scratch columns.
+      // This must happen before tryCollectVectorShuffleBatch(), otherwise the partition-aware
+      // batch path hashes stale scratch-column values and can route rows to the wrong partition.
       if (reduceSinkPartitionExpressions != null) {
         for (VectorExpression ve : reduceSinkPartitionExpressions) {
           ve.evaluate(batch);
         }
+      }
+
+      if (tryCollectVectorShuffleBatch(batch)) {
+        return;
       }
 
       final boolean selectedInUse = batch.selectedInUse;
