@@ -234,7 +234,7 @@ public class VectorReduceSinkObjectHashOperator extends VectorReduceSinkCommonOp
         }
       }
 
-      if (tryCollectVectorShuffleBatch(batch)) {
+      if (tryCollectVectorShuffleBatch(batch, tag)) {
         return;
       }
 

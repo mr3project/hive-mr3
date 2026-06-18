@@ -117,7 +117,7 @@ public class VectorReduceSinkEmptyKeyOperator extends VectorReduceSinkCommonOper
         }
       }
 
-      if (tryCollectVectorShuffleBatch(batch)) {
+      if (tryCollectVectorShuffleBatch(batch, tag)) {
         return;
       }
 

@@ -108,7 +108,6 @@ public class ReduceRecordSource implements RecordSource {
   private VectorizedRowBatchCtx batchContext;
   private VectorizedRowBatch batch;
   private VectorShuffleBatchDeserializer vectorShuffleBatchDeserializer;
-  private ShuffleInputFormat shuffleInputFormat = ShuffleInputFormat.UNKNOWN;
   private VectorSerializeRow<BinarySortableSerializeWrite> rowModeKeySerializeRow;
   private VectorSerializeRow<LazyBinarySerializeWrite> rowModeValueSerializeRow;
   private BinarySortableSerializeWrite rowModeKeySerializeWrite;
@@ -146,12 +145,6 @@ public class ReduceRecordSource implements RecordSource {
 
   // Flush the last record when reader is out of records
   private boolean flushLastRecord = false;
-
-  private enum ShuffleInputFormat {
-    UNKNOWN,
-    ROW,
-    VECTOR_BATCH
-  }
 
   void init(JobConf jconf, Operator<?> reducer, boolean vectorized, TableDesc keyTableDesc,
       TableDesc valueTableDesc, ReaderEdge reader, boolean handleGroupKey, byte tag,
@@ -537,8 +530,6 @@ public class ReduceRecordSource implements RecordSource {
       BytesWritable keyWritable = keyValueReader.getCurrentKey();
       BytesWritable valueWritable = keyValueReader.getCurrentValue();
 
-      // This fallback path does not expose the boundary between underlying readers.
-      shuffleInputFormat = ShuffleInputFormat.UNKNOWN;
       processVectorRecordUnordered(keyWritable, valueWritable, tag);
       return true;
     } catch (Throwable e) {
@@ -588,8 +579,7 @@ public class ReduceRecordSource implements RecordSource {
   void consumeAllUnordered(RecordProgress progress) throws HiveException, InterruptedException {
     // called when canConsumeAllUnordered() == true
     try {
-      keyValueReader.consumeAll(() -> shuffleInputFormat = ShuffleInputFormat.UNKNOWN,
-          (keyWritable, valueWritable) -> {
+      keyValueReader.consumeAll((keyWritable, valueWritable) -> {
         // KeyValueReaderEdge provides unordered key/value records. The same logical key can
         // appear again later, so every record must be treated as an independent final batch.
         processVectorRecordUnordered(keyWritable, valueWritable, tag);
@@ -613,11 +603,7 @@ public class ReduceRecordSource implements RecordSource {
     }
     Preconditions.checkState(batch.size == 0);
 
-    if (shuffleInputFormat == ShuffleInputFormat.UNKNOWN) {
-      shuffleInputFormat = isVectorBatchKey(keyWritable) ?
-          ShuffleInputFormat.VECTOR_BATCH : ShuffleInputFormat.ROW;
-    }
-    if (shuffleInputFormat == ShuffleInputFormat.VECTOR_BATCH) {
+    if (isVectorBatchKey(keyWritable)) {
       try {
         vectorShuffleBatchDeserializer.deserialize(valueWritable, batch);
         reducer.process(batch, tag);

@@ -147,7 +147,7 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
         }
       }
 
-      if (tryCollectVectorShuffleBatch(batch)) {
+      if (tryCollectVectorShuffleBatch(batch, tag)) {
         return;
       }
 
