@@ -329,6 +329,7 @@ public class ReduceRecordSource implements RecordSource {
     }
 
     try {
+      // consume a record if a previous vector batch still contains records
       if (processNextVectorBatchRow()) {
         return true;
       }
@@ -343,13 +344,15 @@ public class ReduceRecordSource implements RecordSource {
       BytesWritable keyWritable = reader.getCurrentKey();
       valueWritables = reader.getCurrentValues();
 
+      // For row mode, we call isVectorBatchKey() for every keyWritable.
+      // The overhead is negligible because of significantly more per-record SerDe and operator work.
       if (batchContext != null && isVectorBatchKey(keyWritable)) {
         if (vectorShuffleBatchDeserializer == null) {
           initializeRowModeVectorShuffle(batchContext, inputKeySerDe.getObjectInspector(),
               valueObjectInspector);
         }
         vectorBatchValueWritables = valueWritables.iterator();
-        processNextVectorBatchRow();
+        processNextVectorBatchRow();  // consume the new vector batch
         return true;
       }
 
@@ -574,8 +577,9 @@ public class ReduceRecordSource implements RecordSource {
   }
 
   void consumeAllUnordered(RecordProgress progress) throws HiveException, InterruptedException {
+    // called when canConsumeAllUnordered() == true
     try {
-      keyValueReader.consumeAll((keyWritable, valueWritable) -> {
+      keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
         // KeyValueReaderEdge provides unordered key/value records. The same logical key can
         // appear again later, so every record must be treated as an independent final batch.
         processVectorRecordUnordered(keyWritable, valueWritable, tag);
