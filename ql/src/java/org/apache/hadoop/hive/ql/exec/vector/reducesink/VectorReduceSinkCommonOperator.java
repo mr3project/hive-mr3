@@ -25,7 +25,6 @@ import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
-import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.TerminalOperator;
 import org.apache.hadoop.hive.ql.exec.TopNHash;
 import org.apache.hadoop.hive.ql.exec.Utilities;
@@ -130,14 +129,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   protected transient HiveKey keyWritable;
   protected transient BytesWritable valueBytesWritable;
 
-  private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
-  private transient int[] vectorShuffleBatchColumnMap;
-  private transient HiveKey vectorShuffleBatchKey;
-  private transient BinarySortableSerializeWrite vectorShuffleRowKeySerializeWrite;
-  private transient Output vectorShuffleRowKeyOutput;
-  private transient VectorSerializeRow<BinarySortableSerializeWrite> vectorShuffleRowKeySerializeRow;
-  private transient boolean vectorShuffleBatchAllowed;
-
   // Picks topN K:V pairs from input.
   protected transient TopNHash reducerHash;
 
@@ -152,6 +143,16 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   // Debug display.
   protected transient long batchCounter;
 
+  private transient boolean vectorShuffleBatchAllowed;
+  private transient int vectorShuffleNumUnorderedPartitions;
+
+  private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
+  private transient int[] vectorShuffleBatchColumnMap;
+  private transient HiveKey vectorShuffleBatchKey;
+  private transient BinarySortableSerializeWrite vectorShuffleRowKeySerializeWrite;
+  private transient Output vectorShuffleRowKeyOutput;
+  private transient VectorSerializeRow<BinarySortableSerializeWrite> vectorShuffleRowKeySerializeRow;
+
   // Scratch hash codes for active rows in the current batch, indexed by physical row.
   protected transient int[] batchKeyHashCodes;
   protected transient int[] batchValueHashCodes;
@@ -160,7 +161,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient int[] vectorShufflePartitionPositions;
   private transient int[] vectorShuffleRowPartitions;
   private transient int[] vectorShufflePartitionRowIndices;
-  private transient int vectorShuffleNumUnorderedPartitions;
   private transient int vectorShufflePartitionerType;
 
   //---------------------------------------------------------------------------
@@ -320,9 +320,10 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       reducerHash.initialize(limit, memUsage, conf.isMapGroupBy(), this, conf, hconf);
     }
 
+    batchCounter = 0;
+
     vectorShuffleBatchAllowed = conf.isVectorShuffleBatchEnabled() && reducerHash == null;
 
-    batchCounter = 0;
     batchKeyHashCodes = null;
     batchValueHashCodes = null;
     vectorShuffleBatchSerializer = null;
@@ -437,6 +438,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   }
 
   private void initializeVectorShuffleOutputScratch() throws IOException {
+    assert vectorShuffleBatchSerializer == null;
+    assert vectorShuffleNumUnorderedPartitions >= 1;
+
     vectorShuffleBatchSerializer = new VectorShuffleBatchSerializer();
 
     final int keyColumnCount = isEmptyKey ? 0 : reduceSinkKeyColumnMap.length;
@@ -466,11 +470,17 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       }
     }
 
-    vectorShuffleRowPartitions = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    vectorShufflePartitionRowIndices = new int[VectorizedRowBatch.DEFAULT_SIZE];
-
     if (vectorShuffleNumUnorderedPartitions > 1) {
       vectorShufflePartitionerType = out.getPartitionerType();
+
+      vectorShufflePartitionCounts = new int[vectorShuffleNumUnorderedPartitions];
+      vectorShufflePartitionOffsets = new int[vectorShuffleNumUnorderedPartitions + 1];
+      vectorShufflePartitionPositions = new int[vectorShuffleNumUnorderedPartitions];
+    }
+
+    vectorShuffleRowPartitions = new int[VectorizedRowBatch.DEFAULT_SIZE];
+    vectorShufflePartitionRowIndices = new int[VectorizedRowBatch.DEFAULT_SIZE];
+    if (vectorShuffleNumUnorderedPartitions > 1) {
       if (vectorShufflePartitionerType == 0) {
         batchKeyHashCodes = new int[VectorizedRowBatch.DEFAULT_SIZE];
       } else if (vectorShufflePartitionerType == 1) {
@@ -478,9 +488,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       } else {
         throw new IOException("Unsupported partitioner type " + vectorShufflePartitionerType);
       }
-      vectorShufflePartitionCounts = new int[vectorShuffleNumUnorderedPartitions];
-      vectorShufflePartitionOffsets = new int[vectorShuffleNumUnorderedPartitions + 1];
-      vectorShufflePartitionPositions = new int[vectorShuffleNumUnorderedPartitions];
     }
   }
 
