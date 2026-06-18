@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.reducesink;
 
+import java.io.IOException;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
@@ -87,9 +89,33 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
       nullBytes = new byte[nullBytesLength];
       System.arraycopy(nullKeyOutput.getData(), 0, nullBytes, 0, nullBytesLength);
       nullKeyHashCode = Murmur3.hash32(nullBytes, 0, nullBytesLength, 0);
+
     } catch (Exception e) {
       throw new HiveException(e);
     }
+  }
+
+  @Override
+  protected void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes) throws HiveException {
+    try {
+      serializedKeySeries.processBatch(batch);
+    } catch (IOException e) {
+      throw new HiveException(e);
+    }
+
+    final boolean selectedInUse = batch.selectedInUse;
+    final int[] selected = batch.selected;
+
+    do {
+      final int hashCode = serializedKeySeries.getCurrentIsAllNull()
+          ? nullKeyHashCode : serializedKeySeries.getCurrentHashCode();
+      final int end = serializedKeySeries.getCurrentLogical()
+          + serializedKeySeries.getCurrentDuplicateCount();
+      for (int logical = serializedKeySeries.getCurrentLogical(); logical < end; logical++) {
+        final int batchIndex = selectedInUse ? selected[logical] : logical;
+        hashCodes[batchIndex] = hashCode;
+      }
+    } while (serializedKeySeries.next());
   }
 
   @Override
@@ -121,7 +147,7 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
         }
       }
 
-      if (tryCollectVectorShuffleBatch(batch)) {
+      if (tryCollectVectorShuffleBatch(batch, tag)) {
         return;
       }
 

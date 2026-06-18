@@ -369,6 +369,26 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testExplicitRowIndicesSubset() throws Exception {
+    LongColumnVector source = new LongColumnVector();
+    for (int row = 0; row < 8; row++) {
+      source.vector[row] = row * 10L;
+    }
+    VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
+    BytesWritable serialized = new BytesWritable();
+
+    serializer.serialize(batchWithColumn(source, 8), new int[] {0}, new int[] {5, 1, 7}, 0, 3,
+        serialized);
+    deserializer.deserialize(serialized, destination);
+
+    assertEquals(3, destination.size);
+    LongColumnVector actual = (LongColumnVector) destination.cols[0];
+    assertEquals(50L, actual.vector[0]);
+    assertEquals(10L, actual.vector[1]);
+    assertEquals(70L, actual.vector[2]);
+  }
+
+  @Test
   public void testNullBitmapBoundaries() throws Exception {
     LongColumnVector source = new LongColumnVector();
     source.noNulls = false;
