@@ -389,8 +389,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       return true;
     }
     if (numUnorderedPartitions == 1) {
+      // VectorizedRowBatch.size is the number of active logical rows. When
+      // selectedInUse is true, selected[0..size) contains their physical indices.
+      final int logicalRecordCount = batch.size;
       vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap, valueBytesWritable);
-      doCollect(vectorShuffleBatchKey, valueBytesWritable);
+      doCollect(vectorShuffleBatchKey, valueBytesWritable, logicalRecordCount);
       return true;
     }
 
@@ -424,7 +427,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     final int size = batch.size;
     for (int logical = 0; logical < size; logical++) {
       final int batchIndex = selectedInUse ? selected[logical] : logical;
-      final int partition = Math.floorMod(hashCodes[batchIndex], numUnorderedPartitions);
+      final int partition = (hashCodes[batchIndex] & Integer.MAX_VALUE) % numUnorderedPartitions;
       vectorShuffleRowPartitions[logical] = partition;
       vectorShufflePartitionCounts[partition]++;
     }
@@ -450,7 +453,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
           vectorShufflePartitionRowIndices, vectorShufflePartitionOffsets[partition], rowCount,
           valueBytesWritable);
-      doCollectWithPartition(vectorShuffleBatchKey, valueBytesWritable, partition);
+      doCollectWithPartition(vectorShuffleBatchKey, valueBytesWritable, partition, rowCount);
     }
   }
 
@@ -575,20 +578,26 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   }
 
   private void doCollect(HiveKey keyWritable, BytesWritable valueWritable) throws IOException {
-    doCollect(keyWritable, valueWritable, -1);
+    doCollect(keyWritable, valueWritable, -1, 1);
+  }
+
+  private void doCollect(HiveKey keyWritable, BytesWritable valueWritable,
+      long logicalRecordCount) throws IOException {
+    doCollect(keyWritable, valueWritable, -1, logicalRecordCount);
   }
 
   private void doCollectWithPartition(HiveKey keyWritable, BytesWritable valueWritable,
-      int partition) throws IOException {
-    doCollect(keyWritable, valueWritable, partition);
+      int partition, long logicalRecordCount) throws IOException {
+    doCollect(keyWritable, valueWritable, partition, logicalRecordCount);
   }
 
-  private void doCollect(HiveKey keyWritable, BytesWritable valueWritable, int partition)
-      throws IOException {
+  private void doCollect(HiveKey keyWritable, BytesWritable valueWritable, int partition,
+      long logicalRecordCount) throws IOException {
     // Since this is a terminal operator, update counters explicitly -
     // forward is not called
     if (null != out) {
       numRows++;
+      runTimeNumRows += logicalRecordCount;
       if (numRows == cntr) {
         cntr = logEveryNRows == 0 ? cntr * 10 : numRows + logEveryNRows;
         if (cntr < 0 || numRows < 0) {
@@ -617,12 +626,10 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     if (!abort && reducerHash != null) {
       reducerHash.flush();
     }
-    runTimeNumRows = numRows;
     super.closeOp(abort);
     out = null;
     reducerHash = null;
     LOG.info("{}:: records written - {}", this, numRows);
-    this.runTimeNumRows = numRows;
   }
 
   /**

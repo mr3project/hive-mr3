@@ -18,11 +18,10 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.reducesink;
 
-import java.nio.ByteBuffer;
+import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
-import org.apache.hadoop.hive.ql.exec.vector.VectorExtractRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
@@ -31,9 +30,6 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.VectorDesc;
 import org.apache.hadoop.hive.serde2.ByteStream.Output;
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hive.common.util.Murmur3;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,12 +57,6 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
 
   // The object that determines equal key series.
   protected transient VectorKeySeriesSerialized serializedKeySeries;
-
-  // Serialization-free key hash support.
-  private transient VectorExtractRow keyVectorExtractRow;
-  private transient Object[] keyFieldValues;
-  private transient ObjectInspector[] keyObjectInspectors;
-  private transient ByteBuffer keyHashByteBuffer;
 
 
   /** Kryo ctor. */
@@ -100,50 +90,32 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
       System.arraycopy(nullKeyOutput.getData(), 0, nullBytes, 0, nullBytesLength);
       nullKeyHashCode = Murmur3.hash32(nullBytes, 0, nullBytesLength, 0);
 
-      keyVectorExtractRow = null;
-      keyFieldValues = null;
-      keyObjectInspectors = null;
-      keyHashByteBuffer = null;
     } catch (Exception e) {
       throw new HiveException(e);
     }
   }
 
-  private void initializeKeyHashCodeScratch() throws HiveException {
-    if (keyVectorExtractRow != null) {
-      return;
-    }
-
-    keyVectorExtractRow = new VectorExtractRow();
-    keyVectorExtractRow.init(reduceSinkKeyTypeInfos, reduceSinkKeyColumnMap);
-    keyFieldValues = new Object[reduceSinkKeyTypeInfos.length];
-    keyObjectInspectors = new ObjectInspector[reduceSinkKeyTypeInfos.length];
-    for (int i = 0; i < reduceSinkKeyTypeInfos.length; i++) {
-      keyObjectInspectors[i] =
-          TypeInfoUtils.getStandardWritableObjectInspectorFromTypeInfo(reduceSinkKeyTypeInfos[i]);
-    }
-    keyHashByteBuffer = ByteBuffer.allocate(8);
-  }
-
   @Override
   protected void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes) throws HiveException {
-    initializeKeyHashCodeScratch();
+    try {
+      serializedKeySeries.processBatch(batch);
+    } catch (IOException e) {
+      throw new HiveException(e);
+    }
 
     final boolean selectedInUse = batch.selectedInUse;
     final int[] selected = batch.selected;
-    final int size = batch.size;
 
-    for (int logical = 0; logical < size; logical++) {
-      final int batchIndex = (selectedInUse ? selected[logical] : logical);
-      keyVectorExtractRow.extractRow(batch, batchIndex, keyFieldValues);
-
-      int hashCode = 0;
-      for (int i = 0; i < keyFieldValues.length; i++) {
-        hashCode = 31 * hashCode + ObjectInspectorUtils.hashCodeMurmur(
-            keyFieldValues[i], keyObjectInspectors[i], keyHashByteBuffer);
+    do {
+      final int hashCode = serializedKeySeries.getCurrentIsAllNull()
+          ? nullKeyHashCode : serializedKeySeries.getCurrentHashCode();
+      final int end = serializedKeySeries.getCurrentLogical()
+          + serializedKeySeries.getCurrentDuplicateCount();
+      for (int logical = serializedKeySeries.getCurrentLogical(); logical < end; logical++) {
+        final int batchIndex = selectedInUse ? selected[logical] : logical;
+        hashCodes[batchIndex] = hashCode;
       }
-      hashCodes[batchIndex] = hashCode;
-    }
+    } while (serializedKeySeries.next());
   }
 
   @Override
