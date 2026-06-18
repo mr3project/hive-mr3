@@ -441,6 +441,11 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       writer.write(key, value);
     }
 
+    public void writeWithPartition(BytesWritable key, BytesWritable value, int partition)
+        throws IOException {
+      writer.writeWithPartition(key, value, partition);
+    }
+
     public void close() {
       writer.closeWriter();
     }
@@ -450,6 +455,12 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     //   -1: ordered edge
     public int getNumUnorderedPartitions() {
       return writer.getNumUnorderedPartitions();
+    }
+
+    // return value = 0: use key hash to get partition
+    // return value = 1: use value hash to get partition
+    public int getPartitionerType() {
+      return writer.getPartitionerType();
     }
   }
 
