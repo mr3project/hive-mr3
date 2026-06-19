@@ -151,15 +151,15 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
   }
 
   @Override
-  protected boolean serializeVectorShuffleRowKeyFromBatchCache(int batchIndex, int tag)
+  protected boolean hasVectorShuffleRowKeyBatchCache() {
+    return serializedKeyCacheValid;
+  }
+
+  @Override
+  protected void serializeVectorShuffleRowKeyFromBatchCache(int batchIndex, int tag)
       throws IOException {
-    if (!serializedKeyCacheValid || serializedKeyBytesByRow == null
-        || batchIndex >= serializedKeyBytesByRow.length || serializedKeyBytesByRow[batchIndex] == null) {
-      return false;
-    }
     setVectorShuffleRowKey(serializedKeyBytesByRow[batchIndex], serializedKeyStartsByRow[batchIndex],
         serializedKeyLengthsByRow[batchIndex], serializedKeyHashCodesByRow[batchIndex], tag);
-    return true;
   }
 
   @Override

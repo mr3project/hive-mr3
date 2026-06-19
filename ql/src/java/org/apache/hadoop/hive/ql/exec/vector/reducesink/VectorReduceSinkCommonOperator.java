@@ -514,7 +514,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     try {
       if (isEmptyKey) {
         initializeEmptyKey(tag);
-      } else if (!serializeVectorShuffleRowKeyFromBatchCache(batchIndex, tag)) {
+      } else if (hasVectorShuffleRowKeyBatchCache()) {
+        serializeVectorShuffleRowKeyFromBatchCache(batchIndex, tag);
+      } else {
         vectorShuffleRowKeySerializeWrite.reset();
         vectorShuffleRowKeySerializeRow.serializeWrite(batch, batchIndex);
 
@@ -538,9 +540,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   protected void clearVectorShuffleRowKeyBatchCache() {
   }
 
-  protected boolean serializeVectorShuffleRowKeyFromBatchCache(int batchIndex, int tag)
-      throws IOException {
+  protected boolean hasVectorShuffleRowKeyBatchCache() {
     return false;
+  }
+
+  protected void serializeVectorShuffleRowKeyFromBatchCache(int batchIndex, int tag)
+      throws IOException {
   }
 
   protected void setVectorShuffleRowKey(byte[] keyBytes, int keyStart, int keyLength,
