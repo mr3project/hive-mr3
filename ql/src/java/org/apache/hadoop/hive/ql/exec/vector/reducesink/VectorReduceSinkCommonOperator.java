@@ -382,6 +382,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   private void collectPartitionedVectorShuffleBatch(VectorizedRowBatch batch,
       int numUnorderedPartitions, int tag) throws IOException {
+    ensureVectorShufflePartitionBatchScratch(batch);
+
     final int[] hashCodes;
     final int partitionerType = vectorShufflePartitionerType;
     try {
@@ -472,21 +474,25 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
     if (vectorShuffleNumUnorderedPartitions > 1) {
       vectorShufflePartitionerType = out.getPartitionerType();
+      if (vectorShufflePartitionerType != 0 && vectorShufflePartitionerType != 1) {
+        throw new IOException("Unsupported partitioner type " + vectorShufflePartitionerType);
+      }
 
       vectorShufflePartitionCounts = new int[vectorShuffleNumUnorderedPartitions];
       vectorShufflePartitionOffsets = new int[vectorShuffleNumUnorderedPartitions + 1];
       vectorShufflePartitionPositions = new int[vectorShuffleNumUnorderedPartitions];
     }
+  }
 
-    vectorShuffleRowPartitions = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    vectorShufflePartitionRowIndices = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    if (vectorShuffleNumUnorderedPartitions > 1) {
+  private void ensureVectorShufflePartitionBatchScratch(VectorizedRowBatch batch) {
+    final int minimumLength = batch.selected.length;
+    if (vectorShuffleRowPartitions == null || vectorShuffleRowPartitions.length < minimumLength) {
+      vectorShuffleRowPartitions = new int[minimumLength];
+      vectorShufflePartitionRowIndices = new int[minimumLength];
       if (vectorShufflePartitionerType == 0) {
-        batchKeyHashCodes = new int[VectorizedRowBatch.DEFAULT_SIZE];
-      } else if (vectorShufflePartitionerType == 1) {
-        batchValueHashCodes = new int[VectorizedRowBatch.DEFAULT_SIZE];
+        batchKeyHashCodes = new int[minimumLength];
       } else {
-        throw new IOException("Unsupported partitioner type " + vectorShufflePartitionerType);
+        batchValueHashCodes = new int[minimumLength];
       }
     }
   }
