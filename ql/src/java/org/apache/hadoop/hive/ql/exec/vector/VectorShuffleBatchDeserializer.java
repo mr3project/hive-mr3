@@ -22,8 +22,6 @@ import java.io.IOException;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.io.BytesWritable;
-import org.apache.hadoop.io.DataInputBuffer;
-import org.apache.hadoop.io.WritableUtils;
 
 /** Deserializes a compact vector shuffle payload into an already schema-initialized batch. */
 public final class VectorShuffleBatchDeserializer {
@@ -31,7 +29,9 @@ public final class VectorShuffleBatchDeserializer {
   private static final int HAS_NULLS = 2;
   private static final int IS_DECIMAL_64 = 4;
 
-  private final DataInputBuffer input = new DataInputBuffer();
+  private byte[] buffer;
+  private int position;
+  private int limit;
 
   public void deserialize(BytesWritable serialized, VectorizedRowBatch destination)
       throws IOException {
@@ -39,9 +39,11 @@ public final class VectorShuffleBatchDeserializer {
       throw new IllegalArgumentException("Serialized batch and destination are required");
     }
 
-    input.reset(serialized.getBytes(), serialized.getLength());
-    final int rowCount = WritableUtils.readVInt(input);
-    final int columnCount = WritableUtils.readVInt(input);
+    buffer = serialized.getBytes();
+    position = 0;
+    limit = serialized.getLength();
+    final int rowCount = readInt();
+    final int columnCount = readInt();
     if (rowCount < 0 || columnCount < 0 || columnCount > destination.cols.length) {
       throw new IOException("Invalid vector shuffle batch dimensions: " + rowCount + " rows, "
           + columnCount + " columns");
@@ -64,9 +66,8 @@ public final class VectorShuffleBatchDeserializer {
       }
       readColumn(column, rowCount);
     }
-    if (input.getPosition() != serialized.getLength()) {
-      throw new IOException("Vector shuffle batch has "
-          + (serialized.getLength() - input.getPosition()) + " trailing bytes");
+    if (position != limit) {
+      throw new IOException("Vector shuffle batch has " + (limit - position) + " trailing bytes");
     }
   }
 
@@ -76,7 +77,7 @@ public final class VectorShuffleBatchDeserializer {
 
   private void readColumn(ColumnVector column, int[] destinationIndices, int rowCount)
       throws IOException {
-    final int flags = input.readUnsignedByte();
+    final int flags = readUnsignedByte();
     final boolean repeating = (flags & IS_REPEATING) != 0;
     final boolean hasNulls = (flags & HAS_NULLS) != 0;
     final boolean sourceIsDecimal64 = (flags & IS_DECIMAL_64) != 0;
@@ -91,7 +92,7 @@ public final class VectorShuffleBatchDeserializer {
     byte[] nullBitmap = null;
     if (hasNulls) {
       nullBitmap = new byte[(valueCount + 7) / 8];
-      input.readFully(nullBitmap);
+      readFully(nullBitmap);
     }
 
     column.isRepeating = repeating;
@@ -159,7 +160,7 @@ public final class VectorShuffleBatchDeserializer {
     for (int logical = 0; logical < valueCount; logical++) {
       int destinationIndex = destinationIndex(destinationIndices, logical, repeating);
       if (!union.isNull[destinationIndex]) {
-        int tag = WritableUtils.readVInt(input);
+        int tag = readInt();
         if (tag < 0 || tag >= union.fields.length) {
           throw new IOException("Invalid union tag " + tag + " for " + union.fields.length
               + " fields");
@@ -196,7 +197,7 @@ public final class VectorShuffleBatchDeserializer {
       int destinationIndex = destinationIndex(destinationIndices, logical, repeating);
       column.offsets[destinationIndex] = childCount;
       if (!column.isNull[destinationIndex]) {
-        int length = WritableUtils.readVInt(input);
+        int length = readInt();
         if (length < 0) {
           throw new IOException("Negative multi-valued vector length " + length);
         }
@@ -208,6 +209,55 @@ public final class VectorShuffleBatchDeserializer {
     }
     column.childCount = childCount;
     return childCount;
+  }
+
+  private void requireAvailable(int bytes) throws IOException {
+    if (position + bytes > limit) {
+      throw new IOException("Vector shuffle batch ended while reading " + bytes + " bytes");
+    }
+  }
+
+  private int readUnsignedByte() throws IOException {
+    requireAvailable(1);
+    return buffer[position++] & 0xff;
+  }
+
+  private boolean readBoolean() throws IOException {
+    return readUnsignedByte() != 0;
+  }
+
+  private int readInt() throws IOException {
+    requireAvailable(4);
+    return ((buffer[position++] & 0xff) << 24)
+        | ((buffer[position++] & 0xff) << 16)
+        | ((buffer[position++] & 0xff) << 8)
+        | (buffer[position++] & 0xff);
+  }
+
+  private long readLong() throws IOException {
+    requireAvailable(8);
+    return ((long) (buffer[position++] & 0xff) << 56)
+        | ((long) (buffer[position++] & 0xff) << 48)
+        | ((long) (buffer[position++] & 0xff) << 40)
+        | ((long) (buffer[position++] & 0xff) << 32)
+        | ((long) (buffer[position++] & 0xff) << 24)
+        | ((long) (buffer[position++] & 0xff) << 16)
+        | ((long) (buffer[position++] & 0xff) << 8)
+        | ((long) buffer[position++] & 0xff);
+  }
+
+  private double readDouble() throws IOException {
+    return Double.longBitsToDouble(readLong());
+  }
+
+  private void readFully(byte[] bytes) throws IOException {
+    readFully(bytes, 0, bytes.length);
+  }
+
+  private void readFully(byte[] bytes, int offset, int length) throws IOException {
+    requireAvailable(length);
+    System.arraycopy(buffer, position, bytes, offset, length);
+    position += length;
   }
 
   private boolean isNull(byte[] nullBitmap, int logical) {
@@ -231,18 +281,18 @@ public final class VectorShuffleBatchDeserializer {
 
   private void readTypeMetadata(ColumnVector column) throws IOException {
     if (column instanceof DateColumnVector) {
-      ((DateColumnVector) column).setUsingProlepticCalendar(input.readBoolean());
+      ((DateColumnVector) column).setUsingProlepticCalendar(readBoolean());
     } else if (column instanceof TimestampColumnVector) {
       TimestampColumnVector timestamp = (TimestampColumnVector) column;
-      timestamp.setIsUTC(input.readBoolean());
-      timestamp.setUsingProlepticCalendar(input.readBoolean());
+      timestamp.setIsUTC(readBoolean());
+      timestamp.setUsingProlepticCalendar(readBoolean());
     }
   }
 
   private void readValue(ColumnVector column, int index, boolean sourceIsDecimal64)
       throws IOException {
     if (sourceIsDecimal64) {
-      long decimal64 = input.readLong();
+      long decimal64 = readLong();
       if (column instanceof Decimal64ColumnVector) {
         ((Decimal64ColumnVector) column).vector[index] = decimal64;
       } else {
@@ -252,31 +302,31 @@ public final class VectorShuffleBatchDeserializer {
       return;
     }
     if (column instanceof BytesColumnVector) {
-      int length = WritableUtils.readVInt(input);
+      int length = readInt();
       if (length < 0) {
         throw new IOException("Negative byte-vector value length " + length);
       }
       byte[] bytes = new byte[length];
-      input.readFully(bytes);
+      readFully(bytes);
       ((BytesColumnVector) column).setVal(index, bytes);
     } else if (column instanceof TimestampColumnVector) {
       TimestampColumnVector timestamp = (TimestampColumnVector) column;
-      timestamp.time[index] = input.readLong();
-      timestamp.nanos[index] = input.readInt();
+      timestamp.time[index] = readLong();
+      timestamp.nanos[index] = readInt();
     } else if (column instanceof IntervalDayTimeColumnVector) {
       ((IntervalDayTimeColumnVector) column).set(index,
-          new HiveIntervalDayTime(input.readLong(), input.readInt()));
+          new HiveIntervalDayTime(readLong(), readInt()));
     } else if (column instanceof Decimal64ColumnVector) {
       HiveDecimalWritable decimal = new HiveDecimalWritable();
-      decimal.readFields(input);
+      position += decimal.readDirect(buffer, position);
       ((Decimal64ColumnVector) column).set(index, decimal);
     } else if (column instanceof DecimalColumnVector) {
-      ((DecimalColumnVector) column).vector[index].readFields(input);
+      position += ((DecimalColumnVector) column).vector[index].readDirect(buffer, position);
     } else if (column instanceof LongColumnVector) {
       // Decimal64ColumnVector extends LongColumnVector, so this branch covers it.
-      ((LongColumnVector) column).vector[index] = input.readLong();
+      ((LongColumnVector) column).vector[index] = readLong();
     } else if (column instanceof DoubleColumnVector) {
-      ((DoubleColumnVector) column).vector[index] = input.readDouble();
+      ((DoubleColumnVector) column).vector[index] = readDouble();
     } else if (column instanceof VoidColumnVector) {
       // VOID has no value payload.
     } else {
