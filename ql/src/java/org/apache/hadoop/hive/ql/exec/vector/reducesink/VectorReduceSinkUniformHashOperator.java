@@ -58,6 +58,13 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
   // The object that determines equal key series.
   protected transient VectorKeySeriesSerialized serializedKeySeries;
 
+  // Cached serialized keys from the most recent computeKeyHashCodes call, indexed by physical row.
+  private transient byte[][] serializedKeyBytesByRow;
+  private transient int[] serializedKeyStartsByRow;
+  private transient int[] serializedKeyLengthsByRow;
+  private transient int[] serializedKeyHashCodesByRow;
+  private transient boolean serializedKeyCacheValid;
+
 
   /** Kryo ctor. */
   protected VectorReduceSinkUniformHashOperator() {
@@ -100,22 +107,59 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
     try {
       serializedKeySeries.processBatch(batch);
     } catch (IOException e) {
+      serializedKeyCacheValid = false;
       throw new HiveException(e);
     }
+
+    ensureSerializedKeyCache(batch.selected.length);
+    serializedKeyCacheValid = true;
 
     final boolean selectedInUse = batch.selectedInUse;
     final int[] selected = batch.selected;
 
     do {
-      final int hashCode = serializedKeySeries.getCurrentIsAllNull()
-          ? nullKeyHashCode : serializedKeySeries.getCurrentHashCode();
+      final boolean isAllNull = serializedKeySeries.getCurrentIsAllNull();
+      final byte[] keyBytes = isAllNull ? nullBytes : serializedKeySeries.getSerializedBytes();
+      final int keyStart = isAllNull ? 0 : serializedKeySeries.getSerializedStart();
+      final int keyLength = isAllNull ? nullBytes.length : serializedKeySeries.getSerializedLength();
+      final int hashCode = isAllNull ? nullKeyHashCode : serializedKeySeries.getCurrentHashCode();
       final int end = serializedKeySeries.getCurrentLogical()
           + serializedKeySeries.getCurrentDuplicateCount();
       for (int logical = serializedKeySeries.getCurrentLogical(); logical < end; logical++) {
         final int batchIndex = selectedInUse ? selected[logical] : logical;
         hashCodes[batchIndex] = hashCode;
+        serializedKeyBytesByRow[batchIndex] = keyBytes;
+        serializedKeyStartsByRow[batchIndex] = keyStart;
+        serializedKeyLengthsByRow[batchIndex] = keyLength;
+        serializedKeyHashCodesByRow[batchIndex] = hashCode;
       }
     } while (serializedKeySeries.next());
+  }
+
+  private void ensureSerializedKeyCache(int minimumLength) {
+    if (serializedKeyBytesByRow == null || serializedKeyBytesByRow.length < minimumLength) {
+      serializedKeyBytesByRow = new byte[minimumLength][];
+      serializedKeyStartsByRow = new int[minimumLength];
+      serializedKeyLengthsByRow = new int[minimumLength];
+      serializedKeyHashCodesByRow = new int[minimumLength];
+    }
+  }
+
+  @Override
+  protected void clearVectorShuffleRowKeyBatchCache() {
+    serializedKeyCacheValid = false;
+  }
+
+  @Override
+  protected boolean serializeVectorShuffleRowKeyFromBatchCache(int batchIndex, int tag)
+      throws IOException {
+    if (!serializedKeyCacheValid || serializedKeyBytesByRow == null
+        || batchIndex >= serializedKeyBytesByRow.length || serializedKeyBytesByRow[batchIndex] == null) {
+      return false;
+    }
+    setVectorShuffleRowKey(serializedKeyBytesByRow[batchIndex], serializedKeyStartsByRow[batchIndex],
+        serializedKeyLengthsByRow[batchIndex], serializedKeyHashCodesByRow[batchIndex], tag);
+    return true;
   }
 
   @Override
