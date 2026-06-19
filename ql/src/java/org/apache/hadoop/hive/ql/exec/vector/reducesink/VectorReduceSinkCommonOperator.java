@@ -382,6 +382,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   private void collectPartitionedVectorShuffleBatch(VectorizedRowBatch batch,
       int numUnorderedPartitions, int tag) throws IOException {
+    clearVectorShuffleRowKeyBatchCache();
+
     final int[] hashCodes;
     final int partitionerType = vectorShufflePartitionerType;
     try {
@@ -506,20 +508,15 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     try {
       if (isEmptyKey) {
         initializeEmptyKey(tag);
+      } else if (hasVectorShuffleRowKeyBatchCache()) {
+        serializeVectorShuffleRowKeyFromBatchCache(batchIndex, tag);
       } else {
         vectorShuffleRowKeySerializeWrite.reset();
         vectorShuffleRowKeySerializeRow.serializeWrite(batch, batchIndex);
 
         final int keyLength = vectorShuffleRowKeyOutput.getLength();
-        if (tag == -1 || reduceSkipTag) {
-          keyWritable.set(vectorShuffleRowKeyOutput.getData(), 0, keyLength);
-        } else {
-          keyWritable.setSize(keyLength + 1);
-          System.arraycopy(vectorShuffleRowKeyOutput.getData(), 0, keyWritable.get(), 0, keyLength);
-          keyWritable.get()[keyLength] = reduceTagByte;
-        }
-        keyWritable.setDistKeyLength(keyLength);
-        keyWritable.setHashCode(Murmur3.hash32(vectorShuffleRowKeyOutput.getData(), 0, keyLength, 0));
+        setVectorShuffleRowKey(vectorShuffleRowKeyOutput.getData(), 0, keyLength,
+            Murmur3.hash32(vectorShuffleRowKeyOutput.getData(), 0, keyLength, 0), tag);
       }
 
       if (isEmptyValue) {
@@ -532,6 +529,29 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     } catch (Exception e) {
       throw new IOException("Failed to serialize vector shuffle row", e);
     }
+  }
+
+  protected void clearVectorShuffleRowKeyBatchCache() {
+  }
+
+  protected boolean hasVectorShuffleRowKeyBatchCache() {
+    return false;
+  }
+
+  protected void serializeVectorShuffleRowKeyFromBatchCache(int batchIndex, int tag) {
+  }
+
+  protected void setVectorShuffleRowKey(byte[] keyBytes, int keyStart, int keyLength,
+      int keyHashCode, int tag) {
+    if (tag == -1 || reduceSkipTag) {
+      keyWritable.set(keyBytes, keyStart, keyLength);
+    } else {
+      keyWritable.setSize(keyLength + 1);
+      System.arraycopy(keyBytes, keyStart, keyWritable.get(), 0, keyLength);
+      keyWritable.get()[keyLength] = reduceTagByte;
+    }
+    keyWritable.setDistKeyLength(keyLength);
+    keyWritable.setHashCode(keyHashCode);
   }
 
   private void doCollectRowWithPartition(HiveKey keyWritable, BytesWritable valueWritable, int partition)
