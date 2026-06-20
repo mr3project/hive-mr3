@@ -479,14 +479,24 @@ public class TestVectorShuffleBatchSerde {
 
   @Test
   public void testDeserializerRejectsInvalidEncodedUnionTag() {
-    BytesWritable invalid = new BytesWritable(new byte[] {1, 1, 0, 1});
+    BytesWritable invalid = new BytesWritable(new byte[] {
+        0, 0, 0, 1,  // row count
+        0, 0, 0, 1,  // column count
+        0,           // column flags
+        0, 0, 0, 1   // invalid union tag
+    });
     assertThrows(IOException.class, () -> deserializer.deserialize(invalid,
         batchWithColumn(unionOf(new LongColumnVector()), 0)));
   }
 
   @Test
   public void testDeserializerRejectsTruncatedUnionTagSequence() {
-    BytesWritable truncated = new BytesWritable(new byte[] {2, 1, 0, 0});
+    BytesWritable truncated = new BytesWritable(new byte[] {
+        0, 0, 0, 1,  // row count
+        0, 0, 0, 1,  // column count
+        0,           // column flags
+        0, 0         // truncated union tag
+    });
     assertThrows(IOException.class, () -> deserializer.deserialize(truncated,
         batchWithColumn(unionOf(new LongColumnVector()), 0)));
   }
