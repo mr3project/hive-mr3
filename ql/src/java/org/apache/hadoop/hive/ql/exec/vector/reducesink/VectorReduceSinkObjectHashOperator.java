@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.reducesink;
 
+import java.io.IOException;
 import java.util.Random;
 
 import java.util.function.ToIntFunction;
@@ -294,7 +295,7 @@ public class VectorReduceSinkObjectHashOperator extends VectorReduceSinkCommonOp
 
 
   @Override
-  protected void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes) throws HiveException {
+  protected void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes) throws IOException {
     final boolean selectedInUse = batch.selectedInUse;
     final int[] selected = batch.selected;
     final int size = batch.size;
@@ -322,7 +323,11 @@ public class VectorReduceSinkObjectHashOperator extends VectorReduceSinkCommonOp
         final int bucketNum = ObjectInspectorUtils.getBucketNumber(
             bucketHashFunc.applyAsInt(bucketFieldValues), numBuckets);
         if (bucketExpr != null) {
-          evaluateBucketExpr(batch, batchIndex, bucketNum);
+          try {
+            evaluateBucketExpr(batch, batchIndex, bucketNum);
+          } catch (HiveException e) {
+            throw new IOException("Failed to evaluate bucket expression", e);
+          }
         }
         hashCode = hashCode * 31 + bucketNum;
       }

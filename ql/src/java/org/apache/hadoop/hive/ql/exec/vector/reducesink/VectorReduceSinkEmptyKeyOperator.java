@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.reducesink;
 
+import java.io.IOException;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
@@ -74,7 +76,7 @@ public class VectorReduceSinkEmptyKeyOperator extends VectorReduceSinkCommonOper
   }
 
   @Override
-  protected void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes) throws HiveException {
+  protected void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes) throws IOException {
     final int size = batch.size;
     if (batch.selectedInUse) {
       final int[] selected = batch.selected;

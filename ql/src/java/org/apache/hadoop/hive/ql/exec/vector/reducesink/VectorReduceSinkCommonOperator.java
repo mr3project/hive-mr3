@@ -386,16 +386,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
     final int[] hashCodes;
     final int partitionerType = vectorShufflePartitionerType;
-    try {
-      if (partitionerType == 0) {
-        hashCodes = batchKeyHashCodes;
-        computeKeyHashCodes(batch, hashCodes);
-      } else {
-        hashCodes = batchValueHashCodes;
-        computeValueHashCodes(batch, hashCodes);
-      }
-    } catch (HiveException e) {
-      throw new IOException("Failed to compute vector shuffle batch partition hashes", e);
+    if (partitionerType == 0) {
+      hashCodes = batchKeyHashCodes;
+      computeKeyHashCodes(batch, hashCodes);
+    } else {
+      hashCodes = batchValueHashCodes;
+      computeValueHashCodes(batch, hashCodes);
     }
 
     Arrays.fill(vectorShufflePartitionCounts, 0, numUnorderedPartitions, 0);
@@ -577,7 +573,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
    * only entries for batch.selected[0..batch.size) are required to be valid.
    */
   protected abstract void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes)
-      throws HiveException;
+      throws IOException;
 
   /**
    * Computes reducer-routing value hash codes for all active rows in the batch.
@@ -588,7 +584,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
    * are required to be valid.
    */
   protected void computeValueHashCodes(VectorizedRowBatch batch, int[] hashCodes)
-      throws HiveException {
+      throws IOException {
     final boolean selectedInUse = batch.selectedInUse;
     final int[] selected = batch.selected;
     final int size = batch.size;
@@ -610,7 +606,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         hashCodes[batchIndex] = valueBytesWritable.hashCode();
       }
     } catch (Exception e) {
-      throw new HiveException(e);
+      throw new IOException("Failed to compute vector shuffle batch value hashes", e);
     }
   }
 
