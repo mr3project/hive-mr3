@@ -435,7 +435,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
   }
 
-  private void initializeVectorShuffleOutputScratch() throws IOException {
+  private void initializeVectorShuffleOutputScratch() throws HiveException {
     assert vectorShuffleBatchSerializer == null;
     assert vectorShuffleNumUnorderedPartitions >= 1;
 
@@ -461,11 +461,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       vectorShuffleRowKeyOutput = new Output();
       vectorShuffleRowKeySerializeWrite.set(vectorShuffleRowKeyOutput);
       vectorShuffleRowKeySerializeRow = new VectorSerializeRow<>(vectorShuffleRowKeySerializeWrite);
-      try {
-        vectorShuffleRowKeySerializeRow.init(reduceSinkKeyTypeInfos, reduceSinkKeyColumnMap);
-      } catch (HiveException e) {
-        throw new IOException("Failed to initialize vector shuffle row key serializer", e);
-      }
+      vectorShuffleRowKeySerializeRow.init(reduceSinkKeyTypeInfos, reduceSinkKeyColumnMap);
     }
 
     if (vectorShuffleNumUnorderedPartitions > 1) {
@@ -481,10 +477,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     if (vectorShuffleNumUnorderedPartitions > 1) {
       if (vectorShufflePartitionerType == 0) {
         batchKeyHashCodes = new int[VectorizedRowBatch.DEFAULT_SIZE];
-      } else if (vectorShufflePartitionerType == 1) {
-        batchValueHashCodes = new int[VectorizedRowBatch.DEFAULT_SIZE];
       } else {
-        throw new IOException("Unsupported partitioner type " + vectorShufflePartitionerType);
+        batchValueHashCodes = new int[VectorizedRowBatch.DEFAULT_SIZE];
       }
     }
   }

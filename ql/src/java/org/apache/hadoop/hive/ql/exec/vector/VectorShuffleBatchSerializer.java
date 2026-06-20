@@ -40,8 +40,7 @@ public final class VectorShuffleBatchSerializer {
   private final byte[] buffer = new byte[INITIAL_BUFFER_SIZE];
   private int position;
 
-  public void serialize(VectorizedRowBatch source, int[] sourceColumnMap, BytesWritable output)
-      throws IOException {
+  public void serialize(VectorizedRowBatch source, int[] sourceColumnMap, BytesWritable output) {
     int[] logicalRows = new int[source.size];
     for (int logical = 0; logical < source.size; logical++) {
       logicalRows[logical] = source.selectedInUse ? source.selected[logical] : logical;
@@ -57,7 +56,7 @@ public final class VectorShuffleBatchSerializer {
   }
 
   public void serialize(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
-      int rowOffset, int rowCount, BytesWritable output) throws IOException {
+      int rowOffset, int rowCount, BytesWritable output) {
     assert rowOffset <= rowIndices.length - rowCount;
 
     int[] logicalRows = rowIndices;
@@ -75,7 +74,7 @@ public final class VectorShuffleBatchSerializer {
     output.set(buffer, 0, position);
   }
 
-  private void writeColumn(ColumnVector column, int[] indices, int count) throws IOException {
+  private void writeColumn(ColumnVector column, int[] indices, int count) {
     final boolean repeating = column.isRepeating;
     final int valueCount = repeating ? Math.min(count, 1) : count;
     final boolean hasNulls = hasNulls(column, indices, valueCount, repeating);
@@ -111,7 +110,7 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeStructChildren(StructColumnVector struct, int[] indices, int valueCount,
-      boolean repeating, byte[] nullBitmap) throws IOException {
+      boolean repeating, byte[] nullBitmap) {
     int activeCount = 0;
     for (int logical = 0; logical < valueCount; logical++) {
       if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
@@ -133,7 +132,7 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeUnionChildren(UnionColumnVector union, int[] indices, int valueCount,
-      boolean repeating, byte[] nullBitmap) throws IOException {
+      boolean repeating, byte[] nullBitmap) {
     int[] fieldCounts = new int[union.fields.length];
     for (int logical = 0; logical < valueCount; logical++) {
       if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
@@ -170,8 +169,7 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeMultiValuedChildren(MultiValuedColumnVector parent, ColumnVector firstChild,
-      ColumnVector secondChild, int[] indices, int valueCount, boolean repeating, byte[] nullBitmap)
-      throws IOException {
+      ColumnVector secondChild, int[] indices, int valueCount, boolean repeating, byte[] nullBitmap) {
     int childCount = 0;
     for (int logical = 0; logical < valueCount; logical++) {
       if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
@@ -264,7 +262,7 @@ public final class VectorShuffleBatchSerializer {
     return repeating ? 0 : indices[logical];
   }
 
-  private void writeTypeMetadata(ColumnVector column) throws IOException {
+  private void writeTypeMetadata(ColumnVector column) {
     if (column instanceof DateColumnVector) {
       writeBoolean(((DateColumnVector) column).isUsingProlepticCalendar());
     } else if (column instanceof TimestampColumnVector) {
