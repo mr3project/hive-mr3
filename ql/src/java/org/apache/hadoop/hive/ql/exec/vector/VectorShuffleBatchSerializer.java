@@ -17,10 +17,7 @@
  */
 package org.apache.hadoop.hive.ql.exec.vector;
 
-import java.io.IOException;
-
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
-import org.apache.hadoop.io.BytesWritable;
 
 /**
  * Serializes the active rows of selected columns from a {@link VectorizedRowBatch}.
@@ -35,28 +32,28 @@ public final class VectorShuffleBatchSerializer {
   private static final int HAS_NULLS = 2;
   private static final int IS_DECIMAL_64 = 4;
 
-  private static final int INITIAL_BUFFER_SIZE = 102400;
-
-  private final byte[] buffer = new byte[INITIAL_BUFFER_SIZE];
+  private byte[] buffer;
   private int position;
 
-  public void serialize(VectorizedRowBatch source, int[] sourceColumnMap, BytesWritable output) {
+  public int serialize(VectorizedRowBatch source, int[] sourceColumnMap, byte[] buffer,
+      int position) {
     int[] logicalRows = new int[source.size];
     for (int logical = 0; logical < source.size; logical++) {
       logicalRows[logical] = source.selectedInUse ? source.selected[logical] : logical;
     }
 
-    reset();
+    reset(buffer, position);
+    final int start = position;
     writeInt(source.size);
     writeInt(sourceColumnMap.length);
     for (int sourceColumn : sourceColumnMap) {
       writeColumn(source.cols[sourceColumn], logicalRows, source.size);
     }
-    output.set(buffer, 0, position);
+    return this.position - start;
   }
 
-  public void serialize(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
-      int rowOffset, int rowCount, BytesWritable output) {
+  public int serialize(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
+      int rowOffset, int rowCount, byte[] buffer, int position) {
     assert rowOffset <= rowIndices.length - rowCount;
 
     int[] logicalRows = rowIndices;
@@ -65,13 +62,14 @@ public final class VectorShuffleBatchSerializer {
       System.arraycopy(rowIndices, rowOffset, logicalRows, 0, rowCount);
     }
 
-    reset();
+    reset(buffer, position);
+    final int start = position;
     writeInt(rowCount);
     writeInt(sourceColumnMap.length);
     for (int sourceColumn : sourceColumnMap) {
       writeColumn(source.cols[sourceColumn], logicalRows, rowCount);
     }
-    output.set(buffer, 0, position);
+    return this.position - start;
   }
 
   private void writeColumn(ColumnVector column, int[] indices, int count) {
@@ -198,8 +196,9 @@ public final class VectorShuffleBatchSerializer {
     }
   }
 
-  private void reset() {
-    position = 0;
+  private void reset(byte[] buffer, int position) {
+    this.buffer = buffer;
+    this.position = position;
   }
 
   private void writeByte(int value) {

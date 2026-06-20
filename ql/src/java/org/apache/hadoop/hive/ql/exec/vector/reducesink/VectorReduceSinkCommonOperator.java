@@ -72,6 +72,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
 
   private static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 1;
+  private static final int SERIALIZE_BUFFER_SIZE = 100 * 1024;
 
   /**
    * Information about our native vectorized reduce sink created by the Vectorizer class during
@@ -147,6 +148,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient int vectorShuffleNumUnorderedPartitions;
 
   private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
+  private transient byte[] vectorShuffleSerializeBuffer;
   private transient int[] vectorShuffleBatchColumnMap;
   private transient HiveKey vectorShuffleBatchKey;
   private transient BinarySortableSerializeWrite vectorShuffleRowKeySerializeWrite;
@@ -327,6 +329,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     batchKeyHashCodes = null;
     batchValueHashCodes = null;
     vectorShuffleBatchSerializer = null;
+    vectorShuffleSerializeBuffer = null;
     vectorShuffleBatchColumnMap = null;
     vectorShuffleBatchKey = null;
     vectorShuffleRowKeySerializeWrite = null;
@@ -370,7 +373,14 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       if (logicalRecordCount <= NUM_ROWS_THRESHOLD_FOR_BATCH) {
         collectVectorShuffleRows(batch, null, 0, logicalRecordCount, 0, tag);
       } else {
-        vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap, valueBytesWritable);
+        while (true) {
+          try {
+            serializeVectorShuffleBatch(batch);
+            break;
+          } catch (ArrayIndexOutOfBoundsException ex) {
+            growVectorShuffleSerializeBuffer();
+          }
+        }
         doCollectBatch(vectorShuffleBatchKey, valueBytesWritable, 0, logicalRecordCount);
       }
       return true;
@@ -427,9 +437,14 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
             vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
       } else {
-        vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
-            vectorShufflePartitionRowIndices, vectorShufflePartitionOffsets[partition], rowCount,
-            valueBytesWritable);
+        try {
+          serializeVectorShuffleBatch(batch, vectorShufflePartitionRowIndices,
+              vectorShufflePartitionOffsets[partition], rowCount);
+        } catch (ArrayIndexOutOfBoundsException ex) {
+          collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
+              vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
+          continue;
+        }
         doCollectBatch(vectorShuffleBatchKey, valueBytesWritable, partition, rowCount);
       }
     }
@@ -440,6 +455,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     assert vectorShuffleNumUnorderedPartitions >= 1;
 
     vectorShuffleBatchSerializer = new VectorShuffleBatchSerializer();
+    if (vectorShuffleNumUnorderedPartitions == 1) {
+      vectorShuffleSerializeBuffer = new byte[SERIALIZE_BUFFER_SIZE];
+    } else {
+      vectorShuffleSerializeBuffer = new byte[SERIALIZE_BUFFER_SIZE / 2];
+    }
 
     final int keyColumnCount = isEmptyKey ? 0 : reduceSinkKeyColumnMap.length;
     final int valueColumnCount = isEmptyValue ? 0 : reduceSinkValueColumnMap.length;
@@ -481,6 +501,28 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         batchValueHashCodes = new int[VectorizedRowBatch.DEFAULT_SIZE];
       }
     }
+  }
+
+  private void serializeVectorShuffleBatch(VectorizedRowBatch batch) {
+    int length = vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
+        vectorShuffleSerializeBuffer, 0);
+    valueBytesWritable.set(vectorShuffleSerializeBuffer, 0, length);
+  }
+
+  private void serializeVectorShuffleBatch(VectorizedRowBatch batch, int[] rowIndices,
+      int rowOffset, int rowCount) {
+    int length = vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
+        rowIndices, rowOffset, rowCount, vectorShuffleSerializeBuffer, 0);
+    valueBytesWritable.set(vectorShuffleSerializeBuffer, 0, length);
+  }
+
+  private void growVectorShuffleSerializeBuffer() throws HiveException {
+    if (vectorShuffleSerializeBuffer.length > Integer.MAX_VALUE - SERIALIZE_BUFFER_SIZE) {
+      throw new HiveException("Vector shuffle serialize buffer size overflow: "
+          + vectorShuffleSerializeBuffer.length + " + " + SERIALIZE_BUFFER_SIZE);
+    }
+    vectorShuffleSerializeBuffer = new byte[vectorShuffleSerializeBuffer.length
+        + SERIALIZE_BUFFER_SIZE];
   }
 
   private void collectVectorShuffleRows(VectorizedRowBatch batch, int[] rowIndices, int rowOffset,
