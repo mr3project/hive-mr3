@@ -342,7 +342,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   }
 
   protected boolean tryCollectVectorShuffleBatch(VectorizedRowBatch batch, int tag)
-      throws IOException {
+      throws HiveException, IOException {
     if (!vectorShuffleBatchAllowed || out == null) {
       return false;
     }
@@ -381,21 +381,17 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   }
 
   private void collectPartitionedVectorShuffleBatch(VectorizedRowBatch batch,
-      int numUnorderedPartitions, int tag) throws IOException {
+      int numUnorderedPartitions, int tag) throws HiveException, IOException {
     clearVectorShuffleRowKeyBatchCache();
 
     final int[] hashCodes;
     final int partitionerType = vectorShufflePartitionerType;
-    try {
-      if (partitionerType == 0) {
-        hashCodes = batchKeyHashCodes;
-        computeKeyHashCodes(batch, hashCodes);
-      } else {
-        hashCodes = batchValueHashCodes;
-        computeValueHashCodes(batch, hashCodes);
-      }
-    } catch (HiveException e) {
-      throw new IOException("Failed to compute vector shuffle batch partition hashes", e);
+    if (partitionerType == 0) {
+      hashCodes = batchKeyHashCodes;
+      computeKeyHashCodes(batch, hashCodes);
+    } else {
+      hashCodes = batchValueHashCodes;
+      computeValueHashCodes(batch, hashCodes);
     }
 
     Arrays.fill(vectorShufflePartitionCounts, 0, numUnorderedPartitions, 0);
@@ -577,7 +573,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
    * only entries for batch.selected[0..batch.size) are required to be valid.
    */
   protected abstract void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes)
-      throws HiveException;
+      throws HiveException, IOException;
 
   /**
    * Computes reducer-routing value hash codes for all active rows in the batch.

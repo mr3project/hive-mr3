@@ -96,6 +96,10 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
       nullBytes = new byte[nullBytesLength];
       System.arraycopy(nullKeyOutput.getData(), 0, nullBytes, 0, nullBytesLength);
       nullKeyHashCode = Murmur3.hash32(nullBytes, 0, nullBytesLength, 0);
+      serializedKeyBytesByRow = new byte[VectorizedRowBatch.DEFAULT_SIZE][];
+      serializedKeyStartsByRow = new int[VectorizedRowBatch.DEFAULT_SIZE];
+      serializedKeyLengthsByRow = new int[VectorizedRowBatch.DEFAULT_SIZE];
+      serializedKeyHashCodesByRow = new int[VectorizedRowBatch.DEFAULT_SIZE];
 
     } catch (Exception e) {
       throw new HiveException(e);
@@ -103,15 +107,8 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
   }
 
   @Override
-  protected void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes) throws HiveException {
-    try {
-      serializedKeySeries.processBatch(batch);
-    } catch (IOException e) {
-      serializedKeyCacheValid = false;
-      throw new HiveException(e);
-    }
-
-    ensureSerializedKeyCache(batch.selected.length);
+  protected void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes) throws IOException {
+    serializedKeySeries.processBatch(batch);
     serializedKeyCacheValid = true;
 
     final boolean selectedInUse = batch.selectedInUse;
@@ -134,15 +131,6 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
         serializedKeyHashCodesByRow[batchIndex] = hashCode;
       }
     } while (serializedKeySeries.next());
-  }
-
-  private void ensureSerializedKeyCache(int minimumLength) {
-    if (serializedKeyBytesByRow == null || serializedKeyBytesByRow.length < minimumLength) {
-      serializedKeyBytesByRow = new byte[minimumLength][];
-      serializedKeyStartsByRow = new int[minimumLength];
-      serializedKeyLengthsByRow = new int[minimumLength];
-      serializedKeyHashCodesByRow = new int[minimumLength];
-    }
   }
 
   @Override
