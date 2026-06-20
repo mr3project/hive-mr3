@@ -275,7 +275,7 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeValue(ColumnVector column, int[] indices, int valueCount, boolean repeating,
-      byte[] nullBitmap) throws IOException {
+      byte[] nullBitmap) {
     if (column instanceof BytesColumnVector) {
       BytesColumnVector bytes = (BytesColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {

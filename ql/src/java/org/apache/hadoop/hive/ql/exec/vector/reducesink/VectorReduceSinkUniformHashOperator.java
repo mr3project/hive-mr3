@@ -113,10 +113,11 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
 
     final boolean selectedInUse = batch.selectedInUse;
     final int[] selected = batch.selected;
+    final byte[] serializedBytes = serializedKeySeries.getSerializedBytes();
 
     do {
       final boolean isAllNull = serializedKeySeries.getCurrentIsAllNull();
-      final byte[] keyBytes = isAllNull ? nullBytes : serializedKeySeries.getSerializedBytes();
+      final byte[] keyBytes = isAllNull ? nullBytes : serializedBytes;
       final int keyStart = isAllNull ? 0 : serializedKeySeries.getSerializedStart();
       final int keyLength = isAllNull ? nullBytes.length : serializedKeySeries.getSerializedLength();
       final int hashCode = isAllNull ? nullKeyHashCode : serializedKeySeries.getCurrentHashCode();
