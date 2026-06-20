@@ -106,15 +106,9 @@ public final class VectorShuffleBatchSerializer {
       MapColumnVector map = (MapColumnVector) column;
       writeMultiValuedChildren(map, map.keys, map.values, indices, valueCount, repeating, nullBitmap);
     } else {
-      ensurePrimitiveSupported(column);
-      for (int logical = 0; logical < valueCount; logical++) {
-        if (!hasNulls || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
-          writeValue(column, physicalIndex(indices, logical, repeating));
-        }
-      }
+      writeValue(column, indices, valueCount, repeating, nullBitmap);
     }
   }
-
 
   private void writeStructChildren(StructColumnVector struct, int[] indices, int valueCount,
       boolean repeating, byte[] nullBitmap) throws IOException {
@@ -280,27 +274,59 @@ public final class VectorShuffleBatchSerializer {
     }
   }
 
-  private void writeValue(ColumnVector column, int index) throws IOException {
+  private void writeValue(ColumnVector column, int[] indices, int valueCount, boolean repeating,
+      byte[] nullBitmap) throws IOException {
     if (column instanceof BytesColumnVector) {
       BytesColumnVector bytes = (BytesColumnVector) column;
-      writeInt(bytes.length[index]);
-      writeBytes(bytes.vector[index], bytes.start[index], bytes.length[index]);
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          int index = physicalIndex(indices, logical, repeating);
+          writeInt(bytes.length[index]);
+          writeBytes(bytes.vector[index], bytes.start[index], bytes.length[index]);
+        }
+      }
     } else if (column instanceof TimestampColumnVector) {
       TimestampColumnVector timestamp = (TimestampColumnVector) column;
-      writeLong(timestamp.time[index]);
-      writeInt(timestamp.nanos[index]);
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          int index = physicalIndex(indices, logical, repeating);
+          writeLong(timestamp.time[index]);
+          writeInt(timestamp.nanos[index]);
+        }
+      }
     } else if (column instanceof IntervalDayTimeColumnVector) {
-      HiveIntervalDayTime interval =
-          ((IntervalDayTimeColumnVector) column).asScratchIntervalDayTime(index);
-      writeLong(interval.getTotalSeconds());
-      writeInt(interval.getNanos());
+      IntervalDayTimeColumnVector intervalColumn = (IntervalDayTimeColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          HiveIntervalDayTime interval =
+              intervalColumn.asScratchIntervalDayTime(physicalIndex(indices, logical, repeating));
+          writeLong(interval.getTotalSeconds());
+          writeInt(interval.getNanos());
+        }
+      }
     } else if (column instanceof DecimalColumnVector) {
-      position += ((DecimalColumnVector) column).vector[index].writeDirect(buffer, position);
+      DecimalColumnVector decimal = (DecimalColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          position += decimal.vector[physicalIndex(indices, logical, repeating)]
+              .writeDirect(buffer, position);
+        }
+      }
     } else if (column instanceof LongColumnVector) {
       // Decimal64ColumnVector extends LongColumnVector, so this branch covers it.
-      writeLong(((LongColumnVector) column).vector[index]);
+      LongColumnVector longs = (LongColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          writeLong(longs.vector[physicalIndex(indices, logical, repeating)]);
+        }
+      }
     } else if (column instanceof DoubleColumnVector) {
-      writeDouble(((DoubleColumnVector) column).vector[index]);
+      DoubleColumnVector doubles = (DoubleColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          writeDouble(doubles.vector[physicalIndex(indices, logical, repeating)]);
+        }
+      }
     } else if (column instanceof VoidColumnVector) {
       // VOID has no value payload.
     } else {
@@ -308,13 +334,8 @@ public final class VectorShuffleBatchSerializer {
     }
   }
 
-  private void ensurePrimitiveSupported(ColumnVector column) {
-    if (!(column instanceof BytesColumnVector || column instanceof TimestampColumnVector
-        || column instanceof IntervalDayTimeColumnVector || column instanceof DecimalColumnVector
-        || column instanceof LongColumnVector || column instanceof DoubleColumnVector
-        || column instanceof VoidColumnVector)) {
-      throw unsupported(column);
-    }
+  private boolean isNull(byte[] nullBitmap, int logical) {
+    return nullBitmap != null && (nullBitmap[logical >>> 3] & (1 << (logical & 7))) != 0;
   }
 
   private IllegalArgumentException unsupported(ColumnVector column) {

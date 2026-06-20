@@ -120,13 +120,7 @@ public final class VectorShuffleBatchDeserializer {
       readColumn(map.keys, childCount);
       readColumn(map.values, childCount);
     } else {
-      ensurePrimitiveSupported(column);
-      for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
-          readValue(column, destinationIndex(destinationIndices, logical, repeating),
-              sourceIsDecimal64);
-        }
-      }
+      readValue(column, destinationIndices, valueCount, repeating, nullBitmap, sourceIsDecimal64);
     }
   }
 
@@ -289,56 +283,94 @@ public final class VectorShuffleBatchDeserializer {
     }
   }
 
-  private void readValue(ColumnVector column, int index, boolean sourceIsDecimal64)
-      throws IOException {
+  private void readValue(ColumnVector column, int[] destinationIndices, int valueCount,
+      boolean repeating, byte[] nullBitmap, boolean sourceIsDecimal64) throws IOException {
     if (sourceIsDecimal64) {
-      long decimal64 = readLong();
       if (column instanceof Decimal64ColumnVector) {
-        ((Decimal64ColumnVector) column).vector[index] = decimal64;
-      } else {
+        Decimal64ColumnVector decimal64 = (Decimal64ColumnVector) column;
+        for (int logical = 0; logical < valueCount; logical++) {
+          if (!isNull(nullBitmap, logical)) {
+            decimal64.vector[destinationIndex(destinationIndices, logical, repeating)] = readLong();
+          }
+        }
+      } else if (column instanceof DecimalColumnVector) {
         DecimalColumnVector decimal = (DecimalColumnVector) column;
-        decimal.vector[index].deserialize64(decimal64, decimal.scale);
+        for (int logical = 0; logical < valueCount; logical++) {
+          if (!isNull(nullBitmap, logical)) {
+            decimal.vector[destinationIndex(destinationIndices, logical, repeating)]
+                .deserialize64(readLong(), decimal.scale);
+          }
+        }
+      } else {
+        throw unsupported(column);
       }
       return;
     }
     if (column instanceof BytesColumnVector) {
-      int length = readInt();
-      if (length < 0) {
-        throw new IOException("Negative byte-vector value length " + length);
+      BytesColumnVector bytesColumn = (BytesColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          int length = readInt();
+          if (length < 0) {
+            throw new IOException("Negative byte-vector value length " + length);
+          }
+          byte[] bytes = new byte[length];
+          readFully(bytes);
+          bytesColumn.setVal(destinationIndex(destinationIndices, logical, repeating), bytes);
+        }
       }
-      byte[] bytes = new byte[length];
-      readFully(bytes);
-      ((BytesColumnVector) column).setVal(index, bytes);
     } else if (column instanceof TimestampColumnVector) {
       TimestampColumnVector timestamp = (TimestampColumnVector) column;
-      timestamp.time[index] = readLong();
-      timestamp.nanos[index] = readInt();
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          int index = destinationIndex(destinationIndices, logical, repeating);
+          timestamp.time[index] = readLong();
+          timestamp.nanos[index] = readInt();
+        }
+      }
     } else if (column instanceof IntervalDayTimeColumnVector) {
-      ((IntervalDayTimeColumnVector) column).set(index,
-          new HiveIntervalDayTime(readLong(), readInt()));
+      IntervalDayTimeColumnVector interval = (IntervalDayTimeColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          interval.set(destinationIndex(destinationIndices, logical, repeating),
+              new HiveIntervalDayTime(readLong(), readInt()));
+        }
+      }
     } else if (column instanceof Decimal64ColumnVector) {
-      HiveDecimalWritable decimal = new HiveDecimalWritable();
-      position += decimal.readDirect(buffer, position);
-      ((Decimal64ColumnVector) column).set(index, decimal);
+      Decimal64ColumnVector decimal64 = (Decimal64ColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          HiveDecimalWritable decimal = new HiveDecimalWritable();
+          position += decimal.readDirect(buffer, position);
+          decimal64.set(destinationIndex(destinationIndices, logical, repeating), decimal);
+        }
+      }
     } else if (column instanceof DecimalColumnVector) {
-      position += ((DecimalColumnVector) column).vector[index].readDirect(buffer, position);
+      DecimalColumnVector decimal = (DecimalColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          position += decimal.vector[destinationIndex(destinationIndices, logical, repeating)]
+              .readDirect(buffer, position);
+        }
+      }
     } else if (column instanceof LongColumnVector) {
       // Decimal64ColumnVector extends LongColumnVector, so this branch covers it.
-      ((LongColumnVector) column).vector[index] = readLong();
+      LongColumnVector longs = (LongColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          longs.vector[destinationIndex(destinationIndices, logical, repeating)] = readLong();
+        }
+      }
     } else if (column instanceof DoubleColumnVector) {
-      ((DoubleColumnVector) column).vector[index] = readDouble();
+      DoubleColumnVector doubles = (DoubleColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          doubles.vector[destinationIndex(destinationIndices, logical, repeating)] = readDouble();
+        }
+      }
     } else if (column instanceof VoidColumnVector) {
       // VOID has no value payload.
     } else {
-      throw unsupported(column);
-    }
-  }
-
-  private void ensurePrimitiveSupported(ColumnVector column) {
-    if (!(column instanceof BytesColumnVector || column instanceof TimestampColumnVector
-        || column instanceof IntervalDayTimeColumnVector || column instanceof DecimalColumnVector
-        || column instanceof LongColumnVector || column instanceof DoubleColumnVector
-        || column instanceof VoidColumnVector)) {
       throw unsupported(column);
     }
   }
