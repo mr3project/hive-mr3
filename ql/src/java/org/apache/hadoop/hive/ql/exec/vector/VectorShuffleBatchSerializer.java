@@ -17,6 +17,9 @@
  */
 package org.apache.hadoop.hive.ql.exec.vector;
 
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
+
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 
 /**
@@ -210,21 +213,13 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeInt(int value) {
-    buffer[position++] = (byte) (value >>> 24);
-    buffer[position++] = (byte) (value >>> 16);
-    buffer[position++] = (byte) (value >>> 8);
-    buffer[position++] = (byte) value;
+    theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position, value);
+    position += Integer.BYTES;
   }
 
   private void writeLong(long value) {
-    buffer[position++] = (byte) (value >>> 56);
-    buffer[position++] = (byte) (value >>> 48);
-    buffer[position++] = (byte) (value >>> 40);
-    buffer[position++] = (byte) (value >>> 32);
-    buffer[position++] = (byte) (value >>> 24);
-    buffer[position++] = (byte) (value >>> 16);
-    buffer[position++] = (byte) (value >>> 8);
-    buffer[position++] = (byte) value;
+    theUnsafe.putLong(buffer, BYTE_ARRAY_BASE_OFFSET + position, value);
+    position += Long.BYTES;
   }
 
   private void writeDouble(double value) {

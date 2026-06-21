@@ -17,6 +17,9 @@
  */
 package org.apache.hadoop.hive.ql.exec.vector;
 
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
+
 import java.io.IOException;
 
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
@@ -33,11 +36,12 @@ public final class VectorShuffleBatchDeserializer {
   private int position;
   private int limit;
 
+  // The Tez shuffle layer has already verified that the right number of bytes have been received,
+  // so we usually do not expect ArrayIndexOutOfBoundsException.
+  // IOException is for handling in-transit data corruption.
   public void deserialize(BytesWritable serialized, VectorizedRowBatch destination)
       throws IOException {
-    if (serialized == null || destination == null) {
-      throw new IllegalArgumentException("Serialized batch and destination are required");
-    }
+    assert serialized != null && destination != null;
 
     buffer = serialized.getBytes();
     position = 0;
@@ -80,12 +84,6 @@ public final class VectorShuffleBatchDeserializer {
     final int flags = readUnsignedByte();
     final boolean repeating = (flags & IS_REPEATING) != 0;
     final boolean hasNulls = (flags & HAS_NULLS) != 0;
-    final boolean sourceIsDecimal64 = (flags & IS_DECIMAL_64) != 0;
-    if (sourceIsDecimal64
-        && !(column instanceof Decimal64ColumnVector || column instanceof DecimalColumnVector)) {
-      throw new IOException("Decimal64 vector payload cannot be decoded into "
-          + column.getClass().getName());
-    }
     final int valueCount = repeating ? Math.min(rowCount, 1) : rowCount;
     column.ensureSize(requiredSize(destinationIndices, valueCount, repeating), false);
 
@@ -120,6 +118,7 @@ public final class VectorShuffleBatchDeserializer {
       readColumn(map.keys, childCount);
       readColumn(map.values, childCount);
     } else {
+      final boolean sourceIsDecimal64 = (flags & IS_DECIMAL_64) != 0;
       readValue(column, destinationIndices, valueCount, repeating, nullBitmap, sourceIsDecimal64);
     }
   }
@@ -156,8 +155,7 @@ public final class VectorShuffleBatchDeserializer {
       if (!union.isNull[destinationIndex]) {
         int tag = readInt();
         if (tag < 0 || tag >= union.fields.length) {
-          throw new IOException("Invalid union tag " + tag + " for " + union.fields.length
-              + " fields");
+          throw new IOException("Invalid union tag " + tag + " for " + union.fields.length + " fields");
         }
         union.tags[destinationIndex] = tag;
         fieldCounts[tag]++;
@@ -205,51 +203,35 @@ public final class VectorShuffleBatchDeserializer {
     return childCount;
   }
 
-  private void requireAvailable(int bytes) throws IOException {
-    if (position + bytes > limit) {
-      throw new IOException("Vector shuffle batch ended while reading " + bytes + " bytes");
-    }
-  }
-
-  private int readUnsignedByte() throws IOException {
-    requireAvailable(1);
+  private int readUnsignedByte() {
     return buffer[position++] & 0xff;
   }
 
-  private boolean readBoolean() throws IOException {
+  private boolean readBoolean() {
     return readUnsignedByte() != 0;
   }
 
-  private int readInt() throws IOException {
-    requireAvailable(4);
-    return ((buffer[position++] & 0xff) << 24)
-        | ((buffer[position++] & 0xff) << 16)
-        | ((buffer[position++] & 0xff) << 8)
-        | (buffer[position++] & 0xff);
+  private int readInt() {
+    int value = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + position);
+    position += Integer.BYTES;
+    return value;
   }
 
-  private long readLong() throws IOException {
-    requireAvailable(8);
-    return ((long) (buffer[position++] & 0xff) << 56)
-        | ((long) (buffer[position++] & 0xff) << 48)
-        | ((long) (buffer[position++] & 0xff) << 40)
-        | ((long) (buffer[position++] & 0xff) << 32)
-        | ((long) (buffer[position++] & 0xff) << 24)
-        | ((long) (buffer[position++] & 0xff) << 16)
-        | ((long) (buffer[position++] & 0xff) << 8)
-        | ((long) buffer[position++] & 0xff);
+  private long readLong() {
+    long value = theUnsafe.getLong(buffer, BYTE_ARRAY_BASE_OFFSET + position);
+    position += Long.BYTES;
+    return value;
   }
 
-  private double readDouble() throws IOException {
+  private double readDouble() {
     return Double.longBitsToDouble(readLong());
   }
 
-  private void readFully(byte[] bytes) throws IOException {
+  private void readFully(byte[] bytes) {
     readFully(bytes, 0, bytes.length);
   }
 
-  private void readFully(byte[] bytes, int offset, int length) throws IOException {
-    requireAvailable(length);
+  private void readFully(byte[] bytes, int offset, int length) {
     System.arraycopy(buffer, position, bytes, offset, length);
     position += length;
   }
@@ -273,7 +255,7 @@ public final class VectorShuffleBatchDeserializer {
     return requiredSize;
   }
 
-  private void readTypeMetadata(ColumnVector column) throws IOException {
+  private void readTypeMetadata(ColumnVector column) {
     if (column instanceof DateColumnVector) {
       ((DateColumnVector) column).setUsingProlepticCalendar(readBoolean());
     } else if (column instanceof TimestampColumnVector) {
