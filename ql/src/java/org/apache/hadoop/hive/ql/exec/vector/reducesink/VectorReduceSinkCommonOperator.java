@@ -590,13 +590,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       throws IOException {
     if (null != out) {
       numRows++;
-      if (numRows == cntr) {
-        cntr = cntr * 10;
-        if (cntr < 0 || numRows < 0) {
-          cntr = 0;
-          numRows = 1;
+      if (LOG.isDebugEnabled()) {
+        if (numRows >= cntr) {
+          cntr = cntr * 10;
+          LOG.debug("{}: records written - {}", this, numRows);
         }
-        LOG.info("{}: records written - {}", this, numRows);
       }
       out.writeWithPartition(keyWritable, valueWritable, partition);
     }
@@ -693,13 +691,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     // forward is not called
     if (null != out) {
       numRows++;
-      if (numRows == cntr) {
-        cntr = cntr * 10;
-        if (cntr < 0 || numRows < 0) {
-          cntr = 0;
-          numRows = 1;
+      if (LOG.isDebugEnabled()) {
+        if (numRows >= cntr) {
+          cntr = cntr * 10;
+          LOG.info("{}: records written - {}", this, numRows);
         }
-        LOG.info("{}: records written - {}", this, numRows);
       }
 
       // BytesWritable valueBytesWritable = (BytesWritable) valueWritable;
@@ -716,9 +712,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
                               long logicalRecordCount) throws IOException {
     if (null != out) {
       numRows += logicalRecordCount;
-      if (numRows >= cntr) {
-        cntr = cntr * 10;
-        LOG.info("{}:: records written - {}", this, numRows);
+      if (LOG.isDebugEnabled()) {
+        if (numRows >= cntr) {
+          cntr = cntr * 10;
+          LOG.debug("{}:: records written - {}", this, numRows);
+        }
       }
       out.writeWithPartition(keyWritable, valueWritable, partition);
     }
