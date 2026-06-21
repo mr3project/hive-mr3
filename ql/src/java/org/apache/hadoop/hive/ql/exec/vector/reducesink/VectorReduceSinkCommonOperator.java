@@ -392,8 +392,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   private void collectPartitionedVectorShuffleBatch(VectorizedRowBatch batch,
       int numUnorderedPartitions, int tag) throws HiveException, IOException {
-    clearVectorShuffleRowKeyBatchCache();
-
     final int[] hashCodes;
     final int partitionerType = vectorShufflePartitionerType;
     if (partitionerType == 0) {
@@ -540,8 +538,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     try {
       if (isEmptyKey) {
         initializeEmptyKey(tag);
-      } else if (hasVectorShuffleRowKeyBatchCache()) {
-        serializeVectorShuffleRowKeyFromBatchCache(batchIndex, tag);
       } else {
         vectorShuffleRowKeySerializeWrite.reset();
         vectorShuffleRowKeySerializeRow.serializeWrite(batch, batchIndex);
@@ -561,16 +557,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     } catch (Exception e) {
       throw new IOException("Failed to serialize vector shuffle row", e);
     }
-  }
-
-  protected void clearVectorShuffleRowKeyBatchCache() {
-  }
-
-  protected boolean hasVectorShuffleRowKeyBatchCache() {
-    return false;
-  }
-
-  protected void serializeVectorShuffleRowKeyFromBatchCache(int batchIndex, int tag) {
   }
 
   protected void setVectorShuffleRowKey(byte[] keyBytes, int keyStart, int keyLength,

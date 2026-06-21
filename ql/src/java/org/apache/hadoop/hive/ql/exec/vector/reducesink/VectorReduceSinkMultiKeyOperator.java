@@ -21,7 +21,6 @@ package org.apache.hadoop.hive.ql.exec.vector.reducesink;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
-import org.apache.hadoop.hive.ql.exec.vector.keyseries.VectorKeySeriesMultiSerialized;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.VectorDesc;
@@ -61,11 +60,9 @@ public class VectorReduceSinkMultiKeyOperator extends VectorReduceSinkUniformHas
   protected void initializeOp(Configuration hconf) throws HiveException {
     super.initializeOp(hconf);
 
-    VectorKeySeriesMultiSerialized<BinarySortableSerializeWrite> serializedMultiKeySeries =
-        new VectorKeySeriesMultiSerialized<BinarySortableSerializeWrite>(
-            keyBinarySortableSerializeWrite);
-    serializedMultiKeySeries.init(reduceSinkKeyTypeInfos, reduceSinkKeyColumnMap);
-
-    serializedKeySeries = serializedMultiKeySeries;
+    setKeyHashCodeComputer(new VectorMultiUniformKeyHashCodeComputer(reduceSinkKeyTypeInfos,
+        reduceSinkKeyColumnMap,
+        BinarySortableSerializeWrite.with(conf.getKeySerializeInfo().getProperties(),
+            reduceSinkKeyColumnMap.length)));
   }
 }

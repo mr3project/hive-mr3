@@ -21,7 +21,6 @@ package org.apache.hadoop.hive.ql.exec.vector.reducesink;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
-import org.apache.hadoop.hive.ql.exec.vector.keyseries.VectorKeySeriesBytesSerialized;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.VectorDesc;
@@ -66,8 +65,8 @@ public class VectorReduceSinkStringOperator extends VectorReduceSinkUniformHashO
 
     singleKeyColumn = reduceSinkKeyColumnMap[0];
 
-    serializedKeySeries =
-        new VectorKeySeriesBytesSerialized<BinarySortableSerializeWrite>(
-            singleKeyColumn, keyBinarySortableSerializeWrite);
+    setKeyHashCodeComputer(new VectorBytesUniformKeyHashCodeComputer(singleKeyColumn,
+        BinarySortableSerializeWrite.with(conf.getKeySerializeInfo().getProperties(),
+            reduceSinkKeyColumnMap.length)));
   }
 }
