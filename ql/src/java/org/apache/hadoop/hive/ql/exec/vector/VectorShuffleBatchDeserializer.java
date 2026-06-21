@@ -17,6 +17,9 @@
  */
 package org.apache.hadoop.hive.ql.exec.vector;
 
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
+
 import java.io.IOException;
 
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
@@ -205,14 +208,7 @@ public final class VectorShuffleBatchDeserializer {
     return childCount;
   }
 
-  private void requireAvailable(int bytes) throws IOException {
-    if (position + bytes > limit) {
-      throw new IOException("Vector shuffle batch ended while reading " + bytes + " bytes");
-    }
-  }
-
   private int readUnsignedByte() throws IOException {
-    requireAvailable(1);
     return buffer[position++] & 0xff;
   }
 
@@ -221,23 +217,15 @@ public final class VectorShuffleBatchDeserializer {
   }
 
   private int readInt() throws IOException {
-    requireAvailable(4);
-    return ((buffer[position++] & 0xff) << 24)
-        | ((buffer[position++] & 0xff) << 16)
-        | ((buffer[position++] & 0xff) << 8)
-        | (buffer[position++] & 0xff);
+    int value = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + position);
+    position += Integer.BYTES;
+    return value;
   }
 
   private long readLong() throws IOException {
-    requireAvailable(8);
-    return ((long) (buffer[position++] & 0xff) << 56)
-        | ((long) (buffer[position++] & 0xff) << 48)
-        | ((long) (buffer[position++] & 0xff) << 40)
-        | ((long) (buffer[position++] & 0xff) << 32)
-        | ((long) (buffer[position++] & 0xff) << 24)
-        | ((long) (buffer[position++] & 0xff) << 16)
-        | ((long) (buffer[position++] & 0xff) << 8)
-        | ((long) buffer[position++] & 0xff);
+    long value = theUnsafe.getLong(buffer, BYTE_ARRAY_BASE_OFFSET + position);
+    position += Long.BYTES;
+    return value;
   }
 
   private double readDouble() throws IOException {
@@ -249,7 +237,6 @@ public final class VectorShuffleBatchDeserializer {
   }
 
   private void readFully(byte[] bytes, int offset, int length) throws IOException {
-    requireAvailable(length);
     System.arraycopy(buffer, position, bytes, offset, length);
     position += length;
   }
