@@ -34,7 +34,6 @@ public final class VectorShuffleBatchSerializer {
   private static final int IS_REPEATING = 1;
   private static final int HAS_NULLS = 2;
   private static final int IS_DECIMAL_64 = 4;
-  private static final int MAX_DECIMAL_DIRECT_BYTES = 4 + 4 + 49;
 
   private byte[] buffer;
   private int position;
@@ -312,7 +311,6 @@ public final class VectorShuffleBatchSerializer {
       DecimalColumnVector decimal = (DecimalColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
-          ensureCapacity(MAX_DECIMAL_DIRECT_BYTES);
           position += decimal.vector[physicalIndex(indices, logical, repeating)]
               .writeDirect(buffer, position);
         }
