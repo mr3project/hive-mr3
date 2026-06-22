@@ -439,7 +439,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         continue;
       }
       if (rowCount > VECTOR_SHUFFLE_ACCUMULATE_ROW_THRESHOLD) {
-        flushVectorShufflePartition(partition);
         collectVectorShuffleBatchWithPartition(batch, vectorShufflePartitionRowIndices,
             vectorShufflePartitionOffsets[partition], rowCount, partition);
       } else {
