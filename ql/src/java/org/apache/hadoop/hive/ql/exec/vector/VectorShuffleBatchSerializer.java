@@ -234,7 +234,6 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeBytes(byte[] bytes, int offset, int length) {
-    ensureCapacity(length);
     System.arraycopy(bytes, offset, buffer, position, length);
     position += length;
   }
