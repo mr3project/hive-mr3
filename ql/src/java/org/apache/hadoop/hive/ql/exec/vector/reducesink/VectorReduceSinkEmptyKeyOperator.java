@@ -74,7 +74,7 @@ public class VectorReduceSinkEmptyKeyOperator extends VectorReduceSinkCommonOper
   }
 
   @Override
-  protected void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes) throws HiveException {
+  protected void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes) {
     final int size = batch.size;
     if (batch.selectedInUse) {
       final int[] selected = batch.selected;
