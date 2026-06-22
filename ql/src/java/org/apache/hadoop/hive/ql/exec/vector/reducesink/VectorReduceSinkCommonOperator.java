@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.TerminalOperator;
 import org.apache.hadoop.hive.ql.exec.TopNHash;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.tez.TezProcessor;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContextRegion;
@@ -127,7 +128,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   protected transient TopNHash reducerHash;
 
   // Where to write our key and value pairs.
-  private transient OutputCollector out;
+  private transient TezProcessor.TezKVOutputCollector out;
 
   private transient long cntr = 1;
   private transient long logEveryNRows = 0;
@@ -418,7 +419,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   @Override
   public void setOutputCollector(OutputCollector _out) {
-    this.out = _out;
+    this.out = (TezProcessor.TezKVOutputCollector) _out;
   }
 
   @Override
