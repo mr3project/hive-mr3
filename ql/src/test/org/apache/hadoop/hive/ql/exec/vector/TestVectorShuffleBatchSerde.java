@@ -370,6 +370,58 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testCombinedPayloadDeserializesLengthDelimitedSegments() throws Exception {
+    LongColumnVector source = new LongColumnVector();
+    for (int row = 0; row < 8; row++) {
+      source.vector[row] = 100L + row;
+    }
+    VectorizedRowBatch sourceBatch = batchWithColumn(source, 8);
+    byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
+    int position = 0;
+    VectorShuffleBatchSerializer.writeInt(buffer, position, 1);
+    position += Integer.BYTES;
+
+    int firstSegmentLengthPosition = position;
+    position += Integer.BYTES;
+    int firstSegmentStart = position;
+    position += serializer.serializeSegmentBody(sourceBatch, new int[] {0},
+        new int[] {0, 2, 4}, 0, 3, buffer, position);
+    VectorShuffleBatchSerializer.writeInt(buffer, firstSegmentLengthPosition,
+        position - firstSegmentStart);
+
+    int secondSegmentLengthPosition = position;
+    position += Integer.BYTES;
+    int secondSegmentStart = position;
+    position += serializer.serializeSegmentBody(sourceBatch, new int[] {0},
+        new int[] {1, 3, 5, 7}, 0, 4, buffer, position);
+    VectorShuffleBatchSerializer.writeInt(buffer, secondSegmentLengthPosition,
+        position - secondSegmentStart);
+
+    BytesWritable combined = new BytesWritable();
+    combined.set(buffer, 0, position);
+
+    VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
+    int columnCount = deserializer.readColumnCount(combined);
+    assertEquals(1, columnCount);
+
+    byte[] bytes = combined.getBytes();
+    int offset = Integer.BYTES;
+    int firstSegmentLength = deserializer.readSegmentLength(bytes, offset, combined.getLength());
+    int firstSegmentEnd = offset + Integer.BYTES + firstSegmentLength;
+    assertEquals(firstSegmentEnd, deserializer.deserializeSegment(bytes, offset + Integer.BYTES,
+        firstSegmentEnd, columnCount, destination));
+    assertLongColumnEquals(destination, 100L, 102L, 104L);
+
+    offset = firstSegmentEnd;
+    int secondSegmentLength = deserializer.readSegmentLength(bytes, offset, combined.getLength());
+    int secondSegmentEnd = offset + Integer.BYTES + secondSegmentLength;
+    assertEquals(secondSegmentEnd, deserializer.deserializeSegment(bytes, offset + Integer.BYTES,
+        secondSegmentEnd, columnCount, destination));
+    assertLongColumnEquals(destination, 101L, 103L, 105L, 107L);
+    assertEquals(combined.getLength(), secondSegmentEnd);
+  }
+
+  @Test
   public void testExplicitRowIndicesSubset() throws Exception {
     LongColumnVector source = new LongColumnVector();
     for (int row = 0; row < 8; row++) {
@@ -1953,6 +2005,14 @@ public class TestVectorShuffleBatchSerde {
     int length = serializer.serialize(source, sourceColumnMap, buffer, 0);
     serialized.set(buffer, 0, length);
     deserializer.deserialize(serialized, destination);
+  }
+
+  private static void assertLongColumnEquals(VectorizedRowBatch batch, long... expected) {
+    assertEquals(expected.length, batch.size);
+    LongColumnVector actual = (LongColumnVector) batch.cols[0];
+    for (int row = 0; row < expected.length; row++) {
+      assertEquals(expected[row], actual.vector[row]);
+    }
   }
 
   private static void assertBytesValueEquals(byte[] expected, BytesColumnVector actual,
