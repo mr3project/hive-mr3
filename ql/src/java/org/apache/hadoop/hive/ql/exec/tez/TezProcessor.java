@@ -418,6 +418,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
    *
    */
   public static class TezKVOutputCollector implements OutputCollector<BytesWritable, BytesWritable> {
+
     private KeyValuesWriterEdge writer;
     private final LogicalOutputEdge output;
 
@@ -442,6 +443,13 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
     public void close() {
       writer.closeWriter();
+    }
+
+    // Return:
+    //   >= 0: unordered edge
+    //   -1: ordered edge
+    public int getNumUnorderedPartitions() {
+      return writer.getNumUnorderedPartitions();
     }
   }
 
