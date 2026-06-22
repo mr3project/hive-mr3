@@ -34,6 +34,7 @@ public final class VectorShuffleBatchSerializer {
   private static final int IS_REPEATING = 1;
   private static final int HAS_NULLS = 2;
   private static final int IS_DECIMAL_64 = 4;
+  private static final int MAX_DECIMAL_DIRECT_BYTES = 4 + 4 + 49;
 
   private byte[] buffer;
   private int position;
@@ -205,6 +206,7 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeByte(int value) {
+    ensureCapacity(Byte.BYTES);
     buffer[position++] = (byte) value;
   }
 
@@ -213,11 +215,13 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeInt(int value) {
+    ensureCapacity(Integer.BYTES);
     theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position, value);
     position += Integer.BYTES;
   }
 
   private void writeLong(long value) {
+    ensureCapacity(Long.BYTES);
     theUnsafe.putLong(buffer, BYTE_ARRAY_BASE_OFFSET + position, value);
     position += Long.BYTES;
   }
@@ -231,8 +235,16 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeBytes(byte[] bytes, int offset, int length) {
+    ensureCapacity(length);
     System.arraycopy(bytes, offset, buffer, position, length);
     position += length;
+  }
+
+  private void ensureCapacity(int length) {
+    if (position > buffer.length - length) {
+      throw new ArrayIndexOutOfBoundsException(
+          "position=" + position + ", length=" + length + ", limit=" + buffer.length);
+    }
   }
 
   private boolean hasNulls(ColumnVector column, int[] indices, int valueCount,
@@ -300,6 +312,7 @@ public final class VectorShuffleBatchSerializer {
       DecimalColumnVector decimal = (DecimalColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
+          ensureCapacity(MAX_DECIMAL_DIRECT_BYTES);
           position += decimal.vector[physicalIndex(indices, logical, repeating)]
               .writeDirect(buffer, position);
         }
