@@ -455,6 +455,13 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
               vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
           continue;
         }
+        // The exposed byte array can be larger than the writable value region.  Verify the
+        // serialized value length before completing the direct write.
+        if (valueLength > valueBytes.maxValueBytes) {
+          collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
+              vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
+          continue;
+        }
         out.completeWriteValueBytes(vectorShuffleBatchKey, valueLength, partition);
         recordCollectedBatch(rowCount);
       }
