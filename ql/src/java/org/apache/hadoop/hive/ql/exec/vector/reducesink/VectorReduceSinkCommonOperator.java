@@ -447,9 +447,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         }
         final int valueLength;
         try {
-          valueLength = serializeVectorShuffleBatch(batch, vectorShufflePartitionRowIndices,
-              vectorShufflePartitionOffsets[partition], rowCount, valueBytes.buffer,
-              valueBytes.offsetToValueBytes);
+          valueLength = vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
+              vectorShufflePartitionRowIndices, vectorShufflePartitionOffsets[partition], rowCount,
+              valueBytes.buffer, valueBytes.offsetToValueBytes);
         } catch (ArrayIndexOutOfBoundsException ex) {
           collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
               vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
@@ -520,15 +520,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   private void serializeVectorShuffleBatch(VectorizedRowBatch batch, int[] rowIndices,
       int rowOffset, int rowCount) {
-    int length = serializeVectorShuffleBatch(batch, rowIndices, rowOffset, rowCount,
-        vectorShuffleSerializeBuffer, 0);
+    int length = vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
+        rowIndices, rowOffset, rowCount, vectorShuffleSerializeBuffer, 0);
     valueBytesWritable.set(vectorShuffleSerializeBuffer, 0, length);
-  }
-
-  private int serializeVectorShuffleBatch(VectorizedRowBatch batch, int[] rowIndices,
-      int rowOffset, int rowCount, byte[] buffer, int offset) {
-    return vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
-        rowIndices, rowOffset, rowCount, buffer, offset);
   }
 
   private void growVectorShuffleSerializeBuffer() throws HiveException {
