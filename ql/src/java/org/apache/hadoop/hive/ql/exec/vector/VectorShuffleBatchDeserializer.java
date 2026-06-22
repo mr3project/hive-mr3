@@ -32,6 +32,28 @@ public final class VectorShuffleBatchDeserializer {
   private static final int HAS_NULLS = 2;
   private static final int IS_DECIMAL_64 = 4;
 
+  public static int readInt(byte[] bytes, int offset) {
+    return theUnsafe.getInt(bytes, BYTE_ARRAY_BASE_OFFSET + offset);
+  }
+
+  public int readColumnCount(BytesWritable serialized) throws IOException {
+    if (serialized.getLength() < Integer.BYTES) {
+      throw new IOException("Vector shuffle payload is missing column count");
+    }
+    return readInt(serialized.getBytes(), 0);
+  }
+
+  public int readSegmentLength(byte[] bytes, int offset, int payloadLimit) throws IOException {
+    if (payloadLimit - offset < Integer.BYTES) {
+      throw new IOException("Truncated vector shuffle segment length");
+    }
+    int segmentLength = readInt(bytes, offset);
+    if (segmentLength < 0) {
+      throw new IOException("Negative vector shuffle segment length " + segmentLength);
+    }
+    return segmentLength;
+  }
+
   private byte[] buffer;
   private int position;
   private int limit;
@@ -43,11 +65,57 @@ public final class VectorShuffleBatchDeserializer {
       throws IOException {
     assert serialized != null && destination != null;
 
-    buffer = serialized.getBytes();
-    position = 0;
-    limit = serialized.getLength();
-    final int rowCount = readInt();
+    byte[] bytes = serialized.getBytes();
+    int offset = 0;
+    int payloadLimit = serialized.getLength();
+    if (payloadLimit < Integer.BYTES) {
+      throw new IOException("Vector shuffle payload is missing column count");
+    }
+    buffer = bytes;
+    position = offset;
+    limit = payloadLimit;
     final int columnCount = readInt();
+    if (columnCount < 0 || columnCount > destination.cols.length) {
+      throw new IOException("Invalid vector shuffle column count: " + columnCount);
+    }
+
+    offset = position;
+    while (offset < payloadLimit) {
+      if (payloadLimit - offset < Integer.BYTES) {
+        throw new IOException("Truncated vector shuffle segment length");
+      }
+      buffer = bytes;
+      position = offset;
+      limit = payloadLimit;
+      final int segmentLength = readInt();
+      if (segmentLength < 0) {
+        throw new IOException("Negative vector shuffle segment length " + segmentLength);
+      }
+      final int segmentStart = position;
+      final int segmentEnd = segmentStart + segmentLength;
+      if (segmentEnd < segmentStart || segmentEnd > payloadLimit) {
+        throw new IOException("Invalid vector shuffle segment end " + segmentEnd
+            + " for payload limit " + payloadLimit);
+      }
+      int decodedEnd = deserializeSegment(bytes, segmentStart, segmentEnd, columnCount, destination);
+      if (decodedEnd != segmentEnd) {
+        throw new IOException("Vector shuffle segment has " + (segmentEnd - decodedEnd)
+            + " trailing bytes");
+      }
+      offset = segmentEnd;
+    }
+    if (offset != payloadLimit) {
+      throw new IOException("Vector shuffle payload ended at " + offset + " instead of "
+          + payloadLimit);
+    }
+  }
+
+  public int deserializeSegment(byte[] bytes, int offset, int segmentLimit, int columnCount,
+      VectorizedRowBatch destination) throws IOException {
+    buffer = bytes;
+    position = offset;
+    limit = segmentLimit;
+    final int rowCount = readInt();
     if (rowCount < 0 || columnCount < 0 || columnCount > destination.cols.length) {
       throw new IOException("Invalid vector shuffle batch dimensions: " + rowCount + " rows, "
           + columnCount + " columns");
@@ -70,9 +138,7 @@ public final class VectorShuffleBatchDeserializer {
       }
       readColumn(column, rowCount);
     }
-    if (position != limit) {
-      throw new IOException("Vector shuffle batch has " + (limit - position) + " trailing bytes");
-    }
+    return position;
   }
 
   private void readColumn(ColumnVector column, int rowCount) throws IOException {
@@ -212,7 +278,7 @@ public final class VectorShuffleBatchDeserializer {
   }
 
   private int readInt() {
-    int value = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + position);
+    int value = readInt(buffer, position);
     position += Integer.BYTES;
     return value;
   }

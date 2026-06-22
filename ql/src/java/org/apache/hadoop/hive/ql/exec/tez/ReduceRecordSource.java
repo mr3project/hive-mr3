@@ -606,11 +606,35 @@ public class ReduceRecordSource implements RecordSource {
 
     if (isVectorBatchKey(keyWritable)) {
       try {
-        // ArrayIndexOutOfBoundsException is covered by catch (Exception e) below
-        vectorShuffleBatchDeserializer.deserialize(valueWritable, batch);
-        reducer.process(batch, tag);
-        if (!reducer.batchNeedsClone()) {
-          batch.reset();
+        byte[] bytes = valueWritable.getBytes();
+        int limit = valueWritable.getLength();
+        int columnCount = vectorShuffleBatchDeserializer.readColumnCount(valueWritable);
+        int offset = Integer.BYTES;
+        while (offset < limit) {
+          int segmentLength = vectorShuffleBatchDeserializer.readSegmentLength(bytes, offset, limit);
+          int segmentStart = offset + Integer.BYTES;
+          int segmentEnd = segmentStart + segmentLength;
+          if (segmentEnd < segmentStart || segmentEnd > limit) {
+            throw new IOException("Invalid vector shuffle segment end " + segmentEnd
+                + " for payload limit " + limit);
+          }
+          int decodedEnd = vectorShuffleBatchDeserializer.deserializeSegment(bytes, segmentStart,
+              segmentEnd, columnCount, batch);
+          if (decodedEnd != segmentEnd) {
+            throw new IOException("Vector shuffle segment ended at " + decodedEnd
+                + " instead of " + segmentEnd);
+          }
+          reducer.process(batch, tag);
+          if (reducer.batchNeedsClone()) {
+            batch = batchContext.createVectorizedRowBatch();
+          } else {
+            batch.reset();
+          }
+          offset = segmentEnd;
+        }
+        if (offset != limit) {
+          throw new IOException("Vector shuffle payload ended at " + offset + " instead of "
+              + limit);
         }
         return;
       } catch (Exception e) {

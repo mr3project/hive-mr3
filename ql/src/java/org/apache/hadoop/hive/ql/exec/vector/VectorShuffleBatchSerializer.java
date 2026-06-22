@@ -47,38 +47,50 @@ public final class VectorShuffleBatchSerializer {
 
     reset(buffer, position);
     final int start = position;
-    writeInt(source.size);
     writeInt(sourceColumnMap.length);
-    for (int sourceColumn : sourceColumnMap) {
-      writeColumn(source.cols[sourceColumn], logicalRows, source.size);
-    }
+    final int segmentLengthPosition = this.position;
+    writeInt(0);
+    final int segmentStart = this.position;
+    serializeSegmentBody(source, sourceColumnMap, logicalRows, 0, source.size);
+    writeInt(segmentLengthPosition, this.position - segmentStart);
     return this.position - start;
   }
 
   public int serialize(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
       int rowOffset, int rowCount, byte[] buffer, int position) {
-    assert rowOffset <= rowIndices.length - rowCount;
-
-    int[] logicalRows = rowIndices;
-    if (rowOffset != 0) {
-      logicalRows = new int[rowCount];
-      System.arraycopy(rowIndices, rowOffset, logicalRows, 0, rowCount);
-    }
-
     reset(buffer, position);
     final int start = position;
-    writeInt(rowCount);
     writeInt(sourceColumnMap.length);
-    for (int sourceColumn : sourceColumnMap) {
-      writeColumn(source.cols[sourceColumn], logicalRows, rowCount);
-    }
+    final int segmentLengthPosition = this.position;
+    writeInt(0);
+    final int segmentStart = this.position;
+    serializeSegmentBody(source, sourceColumnMap, rowIndices, rowOffset, rowCount);
+    writeInt(segmentLengthPosition, this.position - segmentStart);
     return this.position - start;
   }
 
-  private void writeColumn(ColumnVector column, int[] indices, int count) {
+  public int serializeSegmentBody(VectorizedRowBatch source, int[] sourceColumnMap,
+      int[] rowIndices, int rowOffset, int rowCount, byte[] buffer, int position) {
+    reset(buffer, position);
+    final int start = position;
+    serializeSegmentBody(source, sourceColumnMap, rowIndices, rowOffset, rowCount);
+    return this.position - start;
+  }
+
+  private void serializeSegmentBody(VectorizedRowBatch source, int[] sourceColumnMap,
+      int[] rowIndices, int rowOffset, int rowCount) {
+    assert rowIndices == null || rowOffset <= rowIndices.length - rowCount;
+
+    writeInt(rowCount);
+    for (int sourceColumn : sourceColumnMap) {
+      writeColumn(source.cols[sourceColumn], rowIndices, rowOffset, rowCount);
+    }
+  }
+
+  private void writeColumn(ColumnVector column, int[] indices, int indexOffset, int count) {
     final boolean repeating = column.isRepeating;
     final int valueCount = repeating ? Math.min(count, 1) : count;
-    final boolean hasNulls = hasNulls(column, indices, valueCount, repeating);
+    final boolean hasNulls = hasNulls(column, indices, indexOffset, valueCount, repeating);
     writeByte((repeating ? IS_REPEATING : 0) | (hasNulls ? HAS_NULLS : 0)
         | (column instanceof Decimal64ColumnVector ? IS_DECIMAL_64 : 0));
 
@@ -86,7 +98,7 @@ public final class VectorShuffleBatchSerializer {
     if (hasNulls) {
       nullBitmap = new byte[(valueCount + 7) / 8];
       for (int logical = 0; logical < valueCount; logical++) {
-        if (isNull(column, indices, logical, repeating)) {
+        if (isNull(column, indices, indexOffset, logical, repeating)) {
           nullBitmap[logical >>> 3] |= 1 << (logical & 7);
         }
       }
@@ -95,22 +107,22 @@ public final class VectorShuffleBatchSerializer {
 
     writeTypeMetadata(column);
     if (column instanceof StructColumnVector) {
-      writeStructChildren((StructColumnVector) column, indices, valueCount, repeating,
+      writeStructChildren((StructColumnVector) column, indices, indexOffset, valueCount, repeating,
           nullBitmap);
     } else if (column instanceof UnionColumnVector) {
-      writeUnionChildren((UnionColumnVector) column, indices, valueCount, repeating, nullBitmap);
+      writeUnionChildren((UnionColumnVector) column, indices, indexOffset, valueCount, repeating, nullBitmap);
     } else if (column instanceof ListColumnVector) {
       ListColumnVector list = (ListColumnVector) column;
-      writeMultiValuedChildren(list, list.child, null, indices, valueCount, repeating, nullBitmap);
+      writeMultiValuedChildren(list, list.child, null, indices, indexOffset, valueCount, repeating, nullBitmap);
     } else if (column instanceof MapColumnVector) {
       MapColumnVector map = (MapColumnVector) column;
-      writeMultiValuedChildren(map, map.keys, map.values, indices, valueCount, repeating, nullBitmap);
+      writeMultiValuedChildren(map, map.keys, map.values, indices, indexOffset, valueCount, repeating, nullBitmap);
     } else {
-      writeValue(column, indices, valueCount, repeating, nullBitmap);
+      writeValue(column, indices, indexOffset, valueCount, repeating, nullBitmap);
     }
   }
 
-  private void writeStructChildren(StructColumnVector struct, int[] indices, int valueCount,
+  private void writeStructChildren(StructColumnVector struct, int[] indices, int indexOffset, int valueCount,
       boolean repeating, byte[] nullBitmap) {
     int activeCount = 0;
     for (int logical = 0; logical < valueCount; logical++) {
@@ -123,21 +135,21 @@ public final class VectorShuffleBatchSerializer {
     int activePosition = 0;
     for (int logical = 0; logical < valueCount; logical++) {
       if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
-        activeIndices[activePosition++] = physicalIndex(indices, logical, repeating);
+        activeIndices[activePosition++] = physicalIndex(indices, indexOffset, logical, repeating);
       }
     }
 
     for (ColumnVector field : struct.fields) {
-      writeColumn(field, activeIndices, activeCount);
+      writeColumn(field, activeIndices, 0, activeCount);
     }
   }
 
-  private void writeUnionChildren(UnionColumnVector union, int[] indices, int valueCount,
+  private void writeUnionChildren(UnionColumnVector union, int[] indices, int indexOffset, int valueCount,
       boolean repeating, byte[] nullBitmap) {
     int[] fieldCounts = new int[union.fields.length];
     for (int logical = 0; logical < valueCount; logical++) {
       if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
-        int tag = union.tags[physicalIndex(indices, logical, repeating)];
+        int tag = union.tags[physicalIndex(indices, indexOffset, logical, repeating)];
         validateUnionTag(tag, union.fields.length);
         writeInt(tag);
         fieldCounts[tag]++;
@@ -151,14 +163,14 @@ public final class VectorShuffleBatchSerializer {
     int[] fieldPositions = new int[union.fields.length];
     for (int logical = 0; logical < valueCount; logical++) {
       if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
-        int index = physicalIndex(indices, logical, repeating);
+        int index = physicalIndex(indices, indexOffset, logical, repeating);
         int tag = union.tags[index];
         fieldIndices[tag][fieldPositions[tag]++] = index;
       }
     }
 
     for (int tag = 0; tag < union.fields.length; tag++) {
-      writeColumn(union.fields[tag], fieldIndices[tag], fieldCounts[tag]);
+      writeColumn(union.fields[tag], fieldIndices[tag], 0, fieldCounts[tag]);
     }
   }
 
@@ -170,11 +182,11 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeMultiValuedChildren(MultiValuedColumnVector parent, ColumnVector firstChild,
-      ColumnVector secondChild, int[] indices, int valueCount, boolean repeating, byte[] nullBitmap) {
+      ColumnVector secondChild, int[] indices, int indexOffset, int valueCount, boolean repeating, byte[] nullBitmap) {
     int childCount = 0;
     for (int logical = 0; logical < valueCount; logical++) {
       if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
-        int index = physicalIndex(indices, logical, repeating);
+        int index = physicalIndex(indices, indexOffset, logical, repeating);
         int length = Math.toIntExact(parent.lengths[index]);
         writeInt(length);
         childCount = Math.addExact(childCount, length);
@@ -185,7 +197,7 @@ public final class VectorShuffleBatchSerializer {
     int childPosition = 0;
     for (int logical = 0; logical < valueCount; logical++) {
       if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
-        int index = physicalIndex(indices, logical, repeating);
+        int index = physicalIndex(indices, indexOffset, logical, repeating);
         int offset = Math.toIntExact(parent.offsets[index]);
         int length = Math.toIntExact(parent.lengths[index]);
         for (int child = 0; child < length; child++) {
@@ -193,9 +205,9 @@ public final class VectorShuffleBatchSerializer {
         }
       }
     }
-    writeColumn(firstChild, childIndices, childCount);
+    writeColumn(firstChild, childIndices, 0, childCount);
     if (secondChild != null) {
-      writeColumn(secondChild, childIndices, childCount);
+      writeColumn(secondChild, childIndices, 0, childCount);
     }
   }
 
@@ -212,9 +224,17 @@ public final class VectorShuffleBatchSerializer {
     writeByte(value ? 1 : 0);
   }
 
-  private void writeInt(int value) {
+  public static void writeInt(byte[] buffer, int position, int value) {
     theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position, value);
+  }
+
+  private void writeInt(int value) {
+    writeInt(position, value);
     position += Integer.BYTES;
+  }
+
+  private void writeInt(int position, int value) {
+    writeInt(buffer, position, value);
   }
 
   private void writeLong(long value) {
@@ -235,25 +255,26 @@ public final class VectorShuffleBatchSerializer {
     position += length;
   }
 
-  private boolean hasNulls(ColumnVector column, int[] indices, int valueCount,
+  private boolean hasNulls(ColumnVector column, int[] indices, int indexOffset, int valueCount,
       boolean repeating) {
     if (column.noNulls) {
       return false;
     }
     for (int logical = 0; logical < valueCount; logical++) {
-      if (isNull(column, indices, logical, repeating)) {
+      if (isNull(column, indices, indexOffset, logical, repeating)) {
         return true;
       }
     }
     return false;
   }
 
-  private boolean isNull(ColumnVector column, int[] indices, int logical, boolean repeating) {
-    return column.isNull[physicalIndex(indices, logical, repeating)];
+  private boolean isNull(ColumnVector column, int[] indices, int indexOffset, int logical,
+      boolean repeating) {
+    return column.isNull[physicalIndex(indices, indexOffset, logical, repeating)];
   }
 
-  private int physicalIndex(int[] indices, int logical, boolean repeating) {
-    return repeating ? 0 : indices[logical];
+  private int physicalIndex(int[] indices, int indexOffset, int logical, boolean repeating) {
+    return repeating ? 0 : indices[indexOffset + logical];
   }
 
   private void writeTypeMetadata(ColumnVector column) {
@@ -266,13 +287,13 @@ public final class VectorShuffleBatchSerializer {
     }
   }
 
-  private void writeValue(ColumnVector column, int[] indices, int valueCount, boolean repeating,
+  private void writeValue(ColumnVector column, int[] indices, int indexOffset, int valueCount, boolean repeating,
       byte[] nullBitmap) {
     if (column instanceof BytesColumnVector) {
       BytesColumnVector bytes = (BytesColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
-          int index = physicalIndex(indices, logical, repeating);
+          int index = physicalIndex(indices, indexOffset, logical, repeating);
           writeInt(bytes.length[index]);
           writeBytes(bytes.vector[index], bytes.start[index], bytes.length[index]);
         }
@@ -281,7 +302,7 @@ public final class VectorShuffleBatchSerializer {
       TimestampColumnVector timestamp = (TimestampColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
-          int index = physicalIndex(indices, logical, repeating);
+          int index = physicalIndex(indices, indexOffset, logical, repeating);
           writeLong(timestamp.time[index]);
           writeInt(timestamp.nanos[index]);
         }
@@ -291,7 +312,7 @@ public final class VectorShuffleBatchSerializer {
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
           HiveIntervalDayTime interval =
-              intervalColumn.asScratchIntervalDayTime(physicalIndex(indices, logical, repeating));
+              intervalColumn.asScratchIntervalDayTime(physicalIndex(indices, indexOffset, logical, repeating));
           writeLong(interval.getTotalSeconds());
           writeInt(interval.getNanos());
         }
@@ -300,7 +321,7 @@ public final class VectorShuffleBatchSerializer {
       DecimalColumnVector decimal = (DecimalColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
-          position += decimal.vector[physicalIndex(indices, logical, repeating)]
+          position += decimal.vector[physicalIndex(indices, indexOffset, logical, repeating)]
               .writeDirect(buffer, position);
         }
       }
@@ -309,14 +330,14 @@ public final class VectorShuffleBatchSerializer {
       LongColumnVector longs = (LongColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
-          writeLong(longs.vector[physicalIndex(indices, logical, repeating)]);
+          writeLong(longs.vector[physicalIndex(indices, indexOffset, logical, repeating)]);
         }
       }
     } else if (column instanceof DoubleColumnVector) {
       DoubleColumnVector doubles = (DoubleColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
-          writeDouble(doubles.vector[physicalIndex(indices, logical, repeating)]);
+          writeDouble(doubles.vector[physicalIndex(indices, indexOffset, logical, repeating)]);
         }
       }
     } else if (column instanceof VoidColumnVector) {

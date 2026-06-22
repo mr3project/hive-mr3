@@ -72,6 +72,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
 
   private static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 1;
+  private static final int VECTOR_SHUFFLE_ACCUMULATE_ROW_THRESHOLD = 8;
   private static final int SERIALIZE_BUFFER_SIZE = 100 * 1024;
 
   /**
@@ -163,6 +164,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient int[] vectorShufflePartitionPositions;
   private transient int[] vectorShuffleRowPartitions;
   private transient int[] vectorShufflePartitionRowIndices;
+  private transient byte[][] vectorShufflePendingBuffers;
+  private transient int[] vectorShufflePendingBytes;
+  private transient long[] vectorShufflePendingRows;
   private transient int vectorShufflePartitionerType;
 
   //---------------------------------------------------------------------------
@@ -340,6 +344,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShufflePartitionPositions = null;
     vectorShuffleRowPartitions = null;
     vectorShufflePartitionRowIndices = null;
+    vectorShufflePendingBuffers = null;
+    vectorShufflePendingBytes = null;
+    vectorShufflePendingRows = null;
     vectorShuffleNumUnorderedPartitions = -1;
     vectorShufflePartitionerType = -1;
   }
@@ -431,19 +438,16 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       if (rowCount == 0) {
         continue;
       }
-      if (rowCount <= NUM_ROWS_THRESHOLD_FOR_BATCH) {
-        collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
-            vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
+      if (rowCount > VECTOR_SHUFFLE_ACCUMULATE_ROW_THRESHOLD) {
+        flushVectorShufflePartition(partition);
+        collectVectorShuffleBatchWithPartition(batch, vectorShufflePartitionRowIndices,
+            vectorShufflePartitionOffsets[partition], rowCount, partition);
       } else {
-        try {
-          serializeVectorShuffleBatch(batch, vectorShufflePartitionRowIndices,
-              vectorShufflePartitionOffsets[partition], rowCount);
-        } catch (ArrayIndexOutOfBoundsException ex) {
-          collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
-              vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
-          continue;
+        appendVectorShuffleSegment(batch, vectorShufflePartitionRowIndices,
+            vectorShufflePartitionOffsets[partition], rowCount, partition);
+        if (vectorShufflePendingBytes[partition] >= SERIALIZE_BUFFER_SIZE) {
+          flushVectorShufflePartition(partition);
         }
-        doCollectBatch(vectorShuffleBatchKey, valueBytesWritable, partition, rowCount);
       }
     }
   }
@@ -488,6 +492,15 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       vectorShufflePartitionCounts = new int[vectorShuffleNumUnorderedPartitions];
       vectorShufflePartitionOffsets = new int[vectorShuffleNumUnorderedPartitions + 1];
       vectorShufflePartitionPositions = new int[vectorShuffleNumUnorderedPartitions];
+      vectorShufflePendingBuffers = new byte[vectorShuffleNumUnorderedPartitions][];
+      vectorShufflePendingBytes = new int[vectorShuffleNumUnorderedPartitions];
+      vectorShufflePendingRows = new long[vectorShuffleNumUnorderedPartitions];
+      for (int partition = 0; partition < vectorShuffleNumUnorderedPartitions; partition++) {
+        vectorShufflePendingBuffers[partition] = new byte[SERIALIZE_BUFFER_SIZE / 2];
+        VectorShuffleBatchSerializer.writeInt(vectorShufflePendingBuffers[partition], 0,
+            vectorShuffleBatchColumnMap.length);
+        vectorShufflePendingBytes[partition] = Integer.BYTES;
+      }
     }
 
     vectorShuffleRowPartitions = new int[VectorizedRowBatch.DEFAULT_SIZE];
@@ -512,6 +525,79 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     int length = vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
         rowIndices, rowOffset, rowCount, vectorShuffleSerializeBuffer, 0);
     valueBytesWritable.set(vectorShuffleSerializeBuffer, 0, length);
+  }
+
+  private void collectVectorShuffleBatchWithPartition(VectorizedRowBatch batch, int[] rowIndices,
+      int rowOffset, int rowCount, int partition) throws HiveException, IOException {
+    while (true) {
+      try {
+        serializeVectorShuffleBatch(batch, rowIndices, rowOffset, rowCount);
+        break;
+      } catch (ArrayIndexOutOfBoundsException ex) {
+        growVectorShuffleSerializeBuffer();
+      }
+    }
+    doCollectBatch(vectorShuffleBatchKey, valueBytesWritable, partition, rowCount);
+  }
+
+  private void appendVectorShuffleSegment(VectorizedRowBatch batch, int[] rowIndices, int rowOffset,
+      int rowCount, int partition) throws HiveException {
+    while (true) {
+      byte[] pendingBuffer = vectorShufflePendingBuffers[partition];
+      int segmentLengthPosition = vectorShufflePendingBytes[partition];
+      try {
+        ensureVectorShufflePendingCapacity(partition, segmentLengthPosition + Integer.BYTES);
+        pendingBuffer = vectorShufflePendingBuffers[partition];
+        VectorShuffleBatchSerializer.writeInt(pendingBuffer, segmentLengthPosition, 0);
+        int segmentStart = segmentLengthPosition + Integer.BYTES;
+        int segmentLength = vectorShuffleBatchSerializer.serializeSegmentBody(batch,
+            vectorShuffleBatchColumnMap, rowIndices, rowOffset, rowCount, pendingBuffer, segmentStart);
+        VectorShuffleBatchSerializer.writeInt(pendingBuffer, segmentLengthPosition, segmentLength);
+        vectorShufflePendingBytes[partition] = segmentStart + segmentLength;
+        vectorShufflePendingRows[partition] += rowCount;
+        return;
+      } catch (ArrayIndexOutOfBoundsException ex) {
+        growVectorShufflePendingBuffer(partition);
+      }
+    }
+  }
+
+  private void ensureVectorShufflePendingCapacity(int partition, int requiredCapacity)
+      throws HiveException {
+    while (vectorShufflePendingBuffers[partition].length < requiredCapacity) {
+      growVectorShufflePendingBuffer(partition);
+    }
+  }
+
+  private void growVectorShufflePendingBuffer(int partition) throws HiveException {
+    byte[] oldBuffer = vectorShufflePendingBuffers[partition];
+    if (oldBuffer.length > Integer.MAX_VALUE - SERIALIZE_BUFFER_SIZE) {
+      throw new HiveException("Vector shuffle pending buffer size overflow: "
+          + oldBuffer.length + " + " + SERIALIZE_BUFFER_SIZE);
+    }
+    vectorShufflePendingBuffers[partition] = Arrays.copyOf(oldBuffer,
+        oldBuffer.length + SERIALIZE_BUFFER_SIZE);
+  }
+
+  private void flushVectorShufflePartition(int partition) throws IOException {
+    if (vectorShufflePendingBytes == null || vectorShufflePendingBytes[partition] <= Integer.BYTES) {
+      return;
+    }
+    valueBytesWritable.set(vectorShufflePendingBuffers[partition], 0,
+        vectorShufflePendingBytes[partition]);
+    doCollectBatch(vectorShuffleBatchKey, valueBytesWritable, partition,
+        vectorShufflePendingRows[partition]);
+    vectorShufflePendingBytes[partition] = Integer.BYTES;
+    vectorShufflePendingRows[partition] = 0;
+  }
+
+  private void flushVectorShufflePendingPartitions() throws IOException {
+    if (vectorShufflePendingBytes == null) {
+      return;
+    }
+    for (int partition = 0; partition < vectorShufflePendingBytes.length; partition++) {
+      flushVectorShufflePartition(partition);
+    }
   }
 
   private void growVectorShuffleSerializeBuffer() throws HiveException {
@@ -710,6 +796,13 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   @Override
   protected void closeOp(boolean abort) throws HiveException {
+    if (!abort) {
+      try {
+        flushVectorShufflePendingPartitions();
+      } catch (IOException e) {
+        throw new HiveException("Unable to flush vector shuffle pending partitions", e);
+      }
+    }
     if (!abort && reducerHash != null) {
       reducerHash.flush();
     }
