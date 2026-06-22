@@ -17,12 +17,10 @@
  */
 package org.apache.hadoop.hive.ql.exec.vector;
 
-import java.io.IOException;
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
 
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
-import org.apache.hadoop.io.BytesWritable;
-import org.apache.hadoop.io.DataOutputBuffer;
-import org.apache.hadoop.io.WritableUtils;
 
 /**
  * Serializes the active rows of selected columns from a {@link VectorizedRowBatch}.
@@ -37,26 +35,28 @@ public final class VectorShuffleBatchSerializer {
   private static final int HAS_NULLS = 2;
   private static final int IS_DECIMAL_64 = 4;
 
-  private final DataOutputBuffer buffer = new DataOutputBuffer();
+  private byte[] buffer;
+  private int position;
 
-  public void serialize(VectorizedRowBatch source, int[] sourceColumnMap, BytesWritable output)
-      throws IOException {
+  public int serialize(VectorizedRowBatch source, int[] sourceColumnMap, byte[] buffer,
+      int position) {
     int[] logicalRows = new int[source.size];
     for (int logical = 0; logical < source.size; logical++) {
       logicalRows[logical] = source.selectedInUse ? source.selected[logical] : logical;
     }
 
-    buffer.reset();
-    WritableUtils.writeVInt(buffer, source.size);
-    WritableUtils.writeVInt(buffer, sourceColumnMap.length);
+    reset(buffer, position);
+    final int start = position;
+    writeInt(source.size);
+    writeInt(sourceColumnMap.length);
     for (int sourceColumn : sourceColumnMap) {
       writeColumn(source.cols[sourceColumn], logicalRows, source.size);
     }
-    output.set(buffer.getData(), 0, buffer.getLength());
+    return this.position - start;
   }
 
-  public void serialize(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
-      int rowOffset, int rowCount, BytesWritable output) throws IOException {
+  public int serialize(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
+      int rowOffset, int rowCount, byte[] buffer, int position) {
     assert rowOffset <= rowIndices.length - rowCount;
 
     int[] logicalRows = rowIndices;
@@ -65,20 +65,21 @@ public final class VectorShuffleBatchSerializer {
       System.arraycopy(rowIndices, rowOffset, logicalRows, 0, rowCount);
     }
 
-    buffer.reset();
-    WritableUtils.writeVInt(buffer, rowCount);
-    WritableUtils.writeVInt(buffer, sourceColumnMap.length);
+    reset(buffer, position);
+    final int start = position;
+    writeInt(rowCount);
+    writeInt(sourceColumnMap.length);
     for (int sourceColumn : sourceColumnMap) {
       writeColumn(source.cols[sourceColumn], logicalRows, rowCount);
     }
-    output.set(buffer.getData(), 0, buffer.getLength());
+    return this.position - start;
   }
 
-  private void writeColumn(ColumnVector column, int[] indices, int count) throws IOException {
+  private void writeColumn(ColumnVector column, int[] indices, int count) {
     final boolean repeating = column.isRepeating;
     final int valueCount = repeating ? Math.min(count, 1) : count;
     final boolean hasNulls = hasNulls(column, indices, valueCount, repeating);
-    buffer.writeByte((repeating ? IS_REPEATING : 0) | (hasNulls ? HAS_NULLS : 0)
+    writeByte((repeating ? IS_REPEATING : 0) | (hasNulls ? HAS_NULLS : 0)
         | (column instanceof Decimal64ColumnVector ? IS_DECIMAL_64 : 0));
 
     byte[] nullBitmap = null;
@@ -89,7 +90,7 @@ public final class VectorShuffleBatchSerializer {
           nullBitmap[logical >>> 3] |= 1 << (logical & 7);
         }
       }
-      buffer.write(nullBitmap);
+      writeBytes(nullBitmap);
     }
 
     writeTypeMetadata(column);
@@ -105,18 +106,12 @@ public final class VectorShuffleBatchSerializer {
       MapColumnVector map = (MapColumnVector) column;
       writeMultiValuedChildren(map, map.keys, map.values, indices, valueCount, repeating, nullBitmap);
     } else {
-      ensurePrimitiveSupported(column);
-      for (int logical = 0; logical < valueCount; logical++) {
-        if (!hasNulls || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
-          writeValue(column, physicalIndex(indices, logical, repeating));
-        }
-      }
+      writeValue(column, indices, valueCount, repeating, nullBitmap);
     }
   }
 
-
   private void writeStructChildren(StructColumnVector struct, int[] indices, int valueCount,
-      boolean repeating, byte[] nullBitmap) throws IOException {
+      boolean repeating, byte[] nullBitmap) {
     int activeCount = 0;
     for (int logical = 0; logical < valueCount; logical++) {
       if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
@@ -138,13 +133,13 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeUnionChildren(UnionColumnVector union, int[] indices, int valueCount,
-      boolean repeating, byte[] nullBitmap) throws IOException {
+      boolean repeating, byte[] nullBitmap) {
     int[] fieldCounts = new int[union.fields.length];
     for (int logical = 0; logical < valueCount; logical++) {
       if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
         int tag = union.tags[physicalIndex(indices, logical, repeating)];
         validateUnionTag(tag, union.fields.length);
-        WritableUtils.writeVInt(buffer, tag);
+        writeInt(tag);
         fieldCounts[tag]++;
       }
     }
@@ -175,14 +170,13 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeMultiValuedChildren(MultiValuedColumnVector parent, ColumnVector firstChild,
-      ColumnVector secondChild, int[] indices, int valueCount, boolean repeating, byte[] nullBitmap)
-      throws IOException {
+      ColumnVector secondChild, int[] indices, int valueCount, boolean repeating, byte[] nullBitmap) {
     int childCount = 0;
     for (int logical = 0; logical < valueCount; logical++) {
       if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
         int index = physicalIndex(indices, logical, repeating);
         int length = Math.toIntExact(parent.lengths[index]);
-        WritableUtils.writeVInt(buffer, length);
+        writeInt(length);
         childCount = Math.addExact(childCount, length);
       }
     }
@@ -203,6 +197,42 @@ public final class VectorShuffleBatchSerializer {
     if (secondChild != null) {
       writeColumn(secondChild, childIndices, childCount);
     }
+  }
+
+  private void reset(byte[] buffer, int position) {
+    this.buffer = buffer;
+    this.position = position;
+  }
+
+  private void writeByte(int value) {
+    buffer[position++] = (byte) value;
+  }
+
+  private void writeBoolean(boolean value) {
+    writeByte(value ? 1 : 0);
+  }
+
+  private void writeInt(int value) {
+    theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position, value);
+    position += Integer.BYTES;
+  }
+
+  private void writeLong(long value) {
+    theUnsafe.putLong(buffer, BYTE_ARRAY_BASE_OFFSET + position, value);
+    position += Long.BYTES;
+  }
+
+  private void writeDouble(double value) {
+    writeLong(Double.doubleToLongBits(value));
+  }
+
+  private void writeBytes(byte[] bytes) {
+    writeBytes(bytes, 0, bytes.length);
+  }
+
+  private void writeBytes(byte[] bytes, int offset, int length) {
+    System.arraycopy(bytes, offset, buffer, position, length);
+    position += length;
   }
 
   private boolean hasNulls(ColumnVector column, int[] indices, int valueCount,
@@ -226,37 +256,69 @@ public final class VectorShuffleBatchSerializer {
     return repeating ? 0 : indices[logical];
   }
 
-  private void writeTypeMetadata(ColumnVector column) throws IOException {
+  private void writeTypeMetadata(ColumnVector column) {
     if (column instanceof DateColumnVector) {
-      buffer.writeBoolean(((DateColumnVector) column).isUsingProlepticCalendar());
+      writeBoolean(((DateColumnVector) column).isUsingProlepticCalendar());
     } else if (column instanceof TimestampColumnVector) {
       TimestampColumnVector timestamp = (TimestampColumnVector) column;
-      buffer.writeBoolean(timestamp.isUTC());
-      buffer.writeBoolean(timestamp.usingProlepticCalendar());
+      writeBoolean(timestamp.isUTC());
+      writeBoolean(timestamp.usingProlepticCalendar());
     }
   }
 
-  private void writeValue(ColumnVector column, int index) throws IOException {
+  private void writeValue(ColumnVector column, int[] indices, int valueCount, boolean repeating,
+      byte[] nullBitmap) {
     if (column instanceof BytesColumnVector) {
       BytesColumnVector bytes = (BytesColumnVector) column;
-      WritableUtils.writeVInt(buffer, bytes.length[index]);
-      buffer.write(bytes.vector[index], bytes.start[index], bytes.length[index]);
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          int index = physicalIndex(indices, logical, repeating);
+          writeInt(bytes.length[index]);
+          writeBytes(bytes.vector[index], bytes.start[index], bytes.length[index]);
+        }
+      }
     } else if (column instanceof TimestampColumnVector) {
       TimestampColumnVector timestamp = (TimestampColumnVector) column;
-      buffer.writeLong(timestamp.time[index]);
-      buffer.writeInt(timestamp.nanos[index]);
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          int index = physicalIndex(indices, logical, repeating);
+          writeLong(timestamp.time[index]);
+          writeInt(timestamp.nanos[index]);
+        }
+      }
     } else if (column instanceof IntervalDayTimeColumnVector) {
-      HiveIntervalDayTime interval =
-          ((IntervalDayTimeColumnVector) column).asScratchIntervalDayTime(index);
-      buffer.writeLong(interval.getTotalSeconds());
-      buffer.writeInt(interval.getNanos());
+      IntervalDayTimeColumnVector intervalColumn = (IntervalDayTimeColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          HiveIntervalDayTime interval =
+              intervalColumn.asScratchIntervalDayTime(physicalIndex(indices, logical, repeating));
+          writeLong(interval.getTotalSeconds());
+          writeInt(interval.getNanos());
+        }
+      }
     } else if (column instanceof DecimalColumnVector) {
-      ((DecimalColumnVector) column).vector[index].write(buffer);
+      DecimalColumnVector decimal = (DecimalColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          position += decimal.vector[physicalIndex(indices, logical, repeating)]
+              .writeDirect(buffer, position);
+        }
+      }
     } else if (column instanceof LongColumnVector) {
       // Decimal64ColumnVector extends LongColumnVector, so this branch covers it.
-      buffer.writeLong(((LongColumnVector) column).vector[index]);
+      LongColumnVector longs = (LongColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          writeLong(longs.vector[physicalIndex(indices, logical, repeating)]);
+        }
+      }
     } else if (column instanceof DoubleColumnVector) {
-      buffer.writeDouble(((DoubleColumnVector) column).vector[index]);
+      DoubleColumnVector doubles = (DoubleColumnVector) column;
+      for (int logical = 0; logical < valueCount; logical++) {
+        if (!isNull(nullBitmap, logical)) {
+          writeDouble(doubles.vector[physicalIndex(indices, logical, repeating)]);
+        }
+      }
     } else if (column instanceof VoidColumnVector) {
       // VOID has no value payload.
     } else {
@@ -264,13 +326,8 @@ public final class VectorShuffleBatchSerializer {
     }
   }
 
-  private void ensurePrimitiveSupported(ColumnVector column) {
-    if (!(column instanceof BytesColumnVector || column instanceof TimestampColumnVector
-        || column instanceof IntervalDayTimeColumnVector || column instanceof DecimalColumnVector
-        || column instanceof LongColumnVector || column instanceof DoubleColumnVector
-        || column instanceof VoidColumnVector)) {
-      throw unsupported(column);
-    }
+  private boolean isNull(byte[] nullBitmap, int logical) {
+    return nullBitmap != null && (nullBitmap[logical >>> 3] & (1 << (logical & 7))) != 0;
   }
 
   private IllegalArgumentException unsupported(ColumnVector column) {

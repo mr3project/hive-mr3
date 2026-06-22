@@ -405,6 +405,7 @@ public class ReduceRecordSource implements RecordSource {
         vectorBatchValueWritables = null;
         return false;
       }
+      // ArrayIndexOutOfBoundsException is covered by catch (Throwable e) in pushRecord()
       vectorShuffleBatchDeserializer.deserialize(vectorBatchValueWritables.next(), batch);
       vectorBatchLogicalRow = 0;
     }
@@ -605,6 +606,7 @@ public class ReduceRecordSource implements RecordSource {
 
     if (isVectorBatchKey(keyWritable)) {
       try {
+        // ArrayIndexOutOfBoundsException is covered by catch (Exception e) below
         vectorShuffleBatchDeserializer.deserialize(valueWritable, batch);
         reducer.process(batch, tag);
         if (!reducer.batchNeedsClone()) {
