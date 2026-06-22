@@ -442,7 +442,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         collectVectorShuffleBatchWithPartition(batch, vectorShufflePartitionRowIndices,
             vectorShufflePartitionOffsets[partition], rowCount, partition);
       } else {
-        appendVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
+        appendVectorShuffleSegment(batch, vectorShufflePartitionRowIndices,
             vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
       }
     }
@@ -531,33 +531,31 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     doCollectBatch(vectorShuffleBatchKey, valueBytesWritable, partition, rowCount);
   }
 
-  private void appendVectorShuffleRows(VectorizedRowBatch batch, int[] rowIndices, int rowOffset,
+  private void appendVectorShuffleSegment(VectorizedRowBatch batch, int[] rowIndices, int rowOffset,
       int rowCount, int partition, int tag) throws HiveException, IOException {
-    for (int logical = 0; logical < rowCount; logical++) {
-      appendVectorShuffleRow(batch, rowIndices, rowOffset + logical, partition, tag);
-    }
-  }
-
-  private void appendVectorShuffleRow(VectorizedRowBatch batch, int[] rowIndices, int rowOffset,
-      int partition, int tag) throws HiveException, IOException {
     while (true) {
       byte[] pendingBuffer = vectorShufflePendingBuffers[partition];
       int segmentLengthPosition = vectorShufflePendingBytes[partition];
       try {
-        VectorShuffleBatchSerializer.writeInt(pendingBuffer, segmentLengthPosition, 0);
-        int segmentStart = segmentLengthPosition + Integer.BYTES;
-        int segmentLength = vectorShuffleBatchSerializer.serializeSegmentBody(batch,
-            vectorShuffleBatchColumnMap, rowIndices, rowOffset, 1, pendingBuffer, segmentStart);
-        VectorShuffleBatchSerializer.writeInt(pendingBuffer, segmentLengthPosition, segmentLength);
-        vectorShufflePendingBytes[partition] = segmentStart + segmentLength;
-        vectorShufflePendingRows[partition]++;
+        if (segmentLengthPosition == Integer.BYTES) {
+          vectorShufflePendingBytes[partition] = vectorShuffleBatchSerializer.serialize(batch,
+              vectorShuffleBatchColumnMap, rowIndices, rowOffset, rowCount, pendingBuffer, 0);
+        } else {
+          VectorShuffleBatchSerializer.writeInt(pendingBuffer, segmentLengthPosition, 0);
+          int segmentStart = segmentLengthPosition + Integer.BYTES;
+          int segmentLength = vectorShuffleBatchSerializer.serializeSegmentBody(batch,
+              vectorShuffleBatchColumnMap, rowIndices, rowOffset, rowCount, pendingBuffer, segmentStart);
+          VectorShuffleBatchSerializer.writeInt(pendingBuffer, segmentLengthPosition, segmentLength);
+          vectorShufflePendingBytes[partition] = segmentStart + segmentLength;
+        }
+        vectorShufflePendingRows[partition] += rowCount;
         if (vectorShufflePendingRows[partition] > VECTOR_SHUFFLE_ACCUMULATE_ROW_THRESHOLD) {
           flushVectorShufflePartition(partition);
         }
         return;
       } catch (ArrayIndexOutOfBoundsException ex) {
         if (segmentLengthPosition == Integer.BYTES) {
-          collectVectorShuffleRows(batch, rowIndices, rowOffset, 1, partition, tag);
+          collectVectorShuffleRows(batch, rowIndices, rowOffset, rowCount, partition, tag);
           return;
         }
         flushVectorShufflePartition(partition);
