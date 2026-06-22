@@ -205,6 +205,7 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeByte(int value) {
+    ensureCapacity(Byte.BYTES);
     buffer[position++] = (byte) value;
   }
 
@@ -213,11 +214,13 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeInt(int value) {
+    ensureCapacity(Integer.BYTES);
     theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position, value);
     position += Integer.BYTES;
   }
 
   private void writeLong(long value) {
+    ensureCapacity(Long.BYTES);
     theUnsafe.putLong(buffer, BYTE_ARRAY_BASE_OFFSET + position, value);
     position += Long.BYTES;
   }
@@ -233,6 +236,13 @@ public final class VectorShuffleBatchSerializer {
   private void writeBytes(byte[] bytes, int offset, int length) {
     System.arraycopy(bytes, offset, buffer, position, length);
     position += length;
+  }
+
+  private void ensureCapacity(int length) {
+    if (position > buffer.length - length) {
+      throw new ArrayIndexOutOfBoundsException(
+          "position=" + position + ", length=" + length + ", limit=" + buffer.length);
+    }
   }
 
   private boolean hasNulls(ColumnVector column, int[] indices, int valueCount,
