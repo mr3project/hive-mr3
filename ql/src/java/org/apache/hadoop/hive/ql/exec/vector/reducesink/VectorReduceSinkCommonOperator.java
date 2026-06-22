@@ -55,6 +55,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hive.common.util.Murmur3;
 import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.tez.runtime.library.api.KeyValueWriterEdge.WriteValueBytes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,6 +74,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   private static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 1;
   private static final int SERIALIZE_BUFFER_SIZE = 100 * 1024;
+  private static final int MIN_VALUE_BYTES_THRESHOLD = 128;
 
   /**
    * Information about our native vectorized reduce sink created by the Vectorizer class during
@@ -437,15 +439,24 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
             vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
       } else {
+        WriteValueBytes valueBytes = out.requestWriteValueBytes(vectorShuffleBatchKey, partition);
+        if (valueBytes == null || valueBytes.maxValueBytes <= MIN_VALUE_BYTES_THRESHOLD) {
+          collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
+              vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
+          continue;
+        }
+        final int valueLength;
         try {
-          serializeVectorShuffleBatch(batch, vectorShufflePartitionRowIndices,
-              vectorShufflePartitionOffsets[partition], rowCount);
+          valueLength = vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
+              vectorShufflePartitionRowIndices, vectorShufflePartitionOffsets[partition], rowCount,
+              valueBytes.buffer, valueBytes.offsetToValueBytes);
         } catch (ArrayIndexOutOfBoundsException ex) {
           collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
               vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
           continue;
         }
-        doCollectBatch(vectorShuffleBatchKey, valueBytesWritable, partition, rowCount);
+        out.completeWriteValueBytes(vectorShuffleBatchKey, valueLength, partition);
+        recordCollectedBatch(rowCount);
       }
     }
   }
@@ -457,8 +468,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShuffleBatchSerializer = new VectorShuffleBatchSerializer();
     if (vectorShuffleNumUnorderedPartitions == 1) {
       vectorShuffleSerializeBuffer = new byte[SERIALIZE_BUFFER_SIZE];
-    } else {
-      vectorShuffleSerializeBuffer = new byte[SERIALIZE_BUFFER_SIZE / 2];
     }
 
     final int keyColumnCount = isEmptyKey ? 0 : reduceSinkKeyColumnMap.length;
@@ -708,16 +717,20 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
   }
 
+  private void recordCollectedBatch(long logicalRecordCount) {
+    numRows += logicalRecordCount;
+    if (LOG.isDebugEnabled()) {
+      if (numRows >= cntr) {
+        cntr = cntr * 10;
+        LOG.debug("{}:: records written - {}", this, numRows);
+      }
+    }
+  }
+
   private void doCollectBatch(HiveKey keyWritable, BytesWritable valueWritable, int partition,
                               long logicalRecordCount) throws IOException {
     if (null != out) {
-      numRows += logicalRecordCount;
-      if (LOG.isDebugEnabled()) {
-        if (numRows >= cntr) {
-          cntr = cntr * 10;
-          LOG.debug("{}:: records written - {}", this, numRows);
-        }
-      }
+      recordCollectedBatch(logicalRecordCount);
       out.writeWithPartition(keyWritable, valueWritable, partition);
     }
   }
