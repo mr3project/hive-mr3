@@ -451,8 +451,8 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     }
 
     // Return:
-    //   >= 0: unordered edge
-    //   -1: ordered edge
+    //   >= 0: unordered edge and Tez shuffle
+    //   -1: ordered edge or MapReduce shuffle
     public int getNumUnorderedPartitions() {
       return writer.getNumUnorderedPartitions();
     }

@@ -80,6 +80,7 @@ public class TestVectorShuffleBatchSerde {
   private static final int MAX_STRING_LENGTH = 24;
   private static final int MAX_ARRAY_LENGTH = 16;
   private static final int MAX_MAP_LENGTH = 16;
+  private static final int SERIALIZE_BUFFER_SIZE = 1024 * 1024;
   private static final int DECIMAL_PRECISION = 20;
   private static final int DECIMAL_SCALE = 4;
   private static final int MAX_LOGGED_PROPERTY_TEST_CASES = 10;
@@ -377,8 +378,10 @@ public class TestVectorShuffleBatchSerde {
     VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
     BytesWritable serialized = new BytesWritable();
 
-    serializer.serialize(batchWithColumn(source, 8), new int[] {0}, new int[] {5, 1, 7}, 0, 3,
-        serialized);
+    byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
+    int length = serializer.serialize(batchWithColumn(source, 8), new int[] {0},
+        new int[] {5, 1, 7}, 0, 3, buffer, 0);
+    serialized.set(buffer, 0, length);
     deserializer.deserialize(serialized, destination);
 
     assertEquals(3, destination.size);
@@ -466,7 +469,7 @@ public class TestVectorShuffleBatchSerde {
     UnionColumnVector union = unionOf(new LongColumnVector());
     union.tags[0] = -1;
     assertThrows(IllegalArgumentException.class,
-        () -> serializer.serialize(batchWithColumn(union, 1), new int[] {0}, new BytesWritable()));
+        () -> serialize(batchWithColumn(union, 1)));
   }
 
   @Test
@@ -474,19 +477,29 @@ public class TestVectorShuffleBatchSerde {
     UnionColumnVector union = unionOf(new LongColumnVector());
     union.tags[0] = 1;
     assertThrows(IllegalArgumentException.class,
-        () -> serializer.serialize(batchWithColumn(union, 1), new int[] {0}, new BytesWritable()));
+        () -> serialize(batchWithColumn(union, 1)));
   }
 
   @Test
   public void testDeserializerRejectsInvalidEncodedUnionTag() {
-    BytesWritable invalid = new BytesWritable(new byte[] {1, 1, 0, 1});
+    BytesWritable invalid = new BytesWritable(new byte[] {
+        0, 0, 0, 1,  // row count
+        0, 0, 0, 1,  // column count
+        0,           // column flags
+        0, 0, 0, 1   // invalid union tag
+    });
     assertThrows(IOException.class, () -> deserializer.deserialize(invalid,
         batchWithColumn(unionOf(new LongColumnVector()), 0)));
   }
 
   @Test
   public void testDeserializerRejectsTruncatedUnionTagSequence() {
-    BytesWritable truncated = new BytesWritable(new byte[] {2, 1, 0, 0});
+    BytesWritable truncated = new BytesWritable(new byte[] {
+        0, 0, 0, 1,  // row count
+        0, 0, 0, 1,  // column count
+        0,           // column flags
+        0, 0         // truncated union tag
+    });
     assertThrows(IOException.class, () -> deserializer.deserialize(truncated,
         batchWithColumn(unionOf(new LongColumnVector()), 0)));
   }
@@ -524,8 +537,7 @@ public class TestVectorShuffleBatchSerde {
     StructColumnVector struct = structOf(new LongColumnVector());
     ((LongColumnVector) struct.fields[0]).vector[0] = 7;
     VectorizedRowBatch source = batchWithColumn(struct, 1);
-    BytesWritable serialized = new BytesWritable();
-    serializer.serialize(source, new int[] {0}, serialized);
+    BytesWritable serialized = serialize(source);
 
     byte[] trailingBytes = new byte[serialized.getLength() + 1];
     System.arraycopy(serialized.getBytes(), 0, trailingBytes, 0, serialized.getLength());
@@ -1928,14 +1940,18 @@ public class TestVectorShuffleBatchSerde {
 
   private BytesWritable serialize(VectorizedRowBatch source) throws Exception {
     BytesWritable serialized = new BytesWritable();
-    serializer.serialize(source, new int[] {0}, serialized);
+    byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
+    int length = serializer.serialize(source, new int[] {0}, buffer, 0);
+    serialized.set(buffer, 0, length);
     return serialized;
   }
 
   private void roundTrip(VectorizedRowBatch source, int[] sourceColumnMap,
       VectorizedRowBatch destination) throws Exception {
     BytesWritable serialized = new BytesWritable();
-    serializer.serialize(source, sourceColumnMap, serialized);
+    byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
+    int length = serializer.serialize(source, sourceColumnMap, buffer, 0);
+    serialized.set(buffer, 0, length);
     deserializer.deserialize(serialized, destination);
   }
 
