@@ -443,7 +443,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
             vectorShufflePartitionOffsets[partition], rowCount, partition);
       } else {
         appendVectorShuffleSegment(batch, vectorShufflePartitionRowIndices,
-            vectorShufflePartitionOffsets[partition], rowCount, partition);
+            vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
         if (vectorShufflePendingBytes[partition] >= SERIALIZE_BUFFER_SIZE) {
           flushVectorShufflePartition(partition);
         }
@@ -458,8 +458,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShuffleBatchSerializer = new VectorShuffleBatchSerializer();
     if (vectorShuffleNumUnorderedPartitions == 1) {
       vectorShuffleSerializeBuffer = new byte[SERIALIZE_BUFFER_SIZE];
-    } else {
-      vectorShuffleSerializeBuffer = new byte[SERIALIZE_BUFFER_SIZE / 2];
     }
 
     final int keyColumnCount = isEmptyKey ? 0 : reduceSinkKeyColumnMap.length;
@@ -519,34 +517,29 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     valueBytesWritable.set(vectorShuffleSerializeBuffer, 0, length);
   }
 
-  private void serializeVectorShuffleBatch(VectorizedRowBatch batch, int[] rowIndices,
-      int rowOffset, int rowCount) {
-    int length = vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
-        rowIndices, rowOffset, rowCount, vectorShuffleSerializeBuffer, 0);
-    valueBytesWritable.set(vectorShuffleSerializeBuffer, 0, length);
-  }
-
   private void collectVectorShuffleBatchWithPartition(VectorizedRowBatch batch, int[] rowIndices,
       int rowOffset, int rowCount, int partition) throws HiveException, IOException {
+    byte[] serializeBuffer = new byte[SERIALIZE_BUFFER_SIZE];
     while (true) {
       try {
-        serializeVectorShuffleBatch(batch, rowIndices, rowOffset, rowCount);
+        int length = vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
+            rowIndices, rowOffset, rowCount, serializeBuffer, 0);
+        valueBytesWritable.set(serializeBuffer, 0, length);
         break;
       } catch (ArrayIndexOutOfBoundsException ex) {
-        growVectorShuffleSerializeBuffer();
+        serializeBuffer = growVectorShuffleBuffer(serializeBuffer,
+            "Vector shuffle direct serialize buffer size overflow");
       }
     }
     doCollectBatch(vectorShuffleBatchKey, valueBytesWritable, partition, rowCount);
   }
 
   private void appendVectorShuffleSegment(VectorizedRowBatch batch, int[] rowIndices, int rowOffset,
-      int rowCount, int partition) throws HiveException {
+      int rowCount, int partition, int tag) throws HiveException, IOException {
     while (true) {
       byte[] pendingBuffer = vectorShufflePendingBuffers[partition];
       int segmentLengthPosition = vectorShufflePendingBytes[partition];
       try {
-        ensureVectorShufflePendingCapacity(partition, segmentLengthPosition + Integer.BYTES);
-        pendingBuffer = vectorShufflePendingBuffers[partition];
         VectorShuffleBatchSerializer.writeInt(pendingBuffer, segmentLengthPosition, 0);
         int segmentStart = segmentLengthPosition + Integer.BYTES;
         int segmentLength = vectorShuffleBatchSerializer.serializeSegmentBody(batch,
@@ -556,26 +549,13 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         vectorShufflePendingRows[partition] += rowCount;
         return;
       } catch (ArrayIndexOutOfBoundsException ex) {
-        growVectorShufflePendingBuffer(partition);
+        if (segmentLengthPosition == Integer.BYTES) {
+          collectVectorShuffleRows(batch, rowIndices, rowOffset, rowCount, partition, tag);
+          return;
+        }
+        flushVectorShufflePartition(partition);
       }
     }
-  }
-
-  private void ensureVectorShufflePendingCapacity(int partition, int requiredCapacity)
-      throws HiveException {
-    while (vectorShufflePendingBuffers[partition].length < requiredCapacity) {
-      growVectorShufflePendingBuffer(partition);
-    }
-  }
-
-  private void growVectorShufflePendingBuffer(int partition) throws HiveException {
-    byte[] oldBuffer = vectorShufflePendingBuffers[partition];
-    if (oldBuffer.length > Integer.MAX_VALUE - SERIALIZE_BUFFER_SIZE) {
-      throw new HiveException("Vector shuffle pending buffer size overflow: "
-          + oldBuffer.length + " + " + SERIALIZE_BUFFER_SIZE);
-    }
-    vectorShufflePendingBuffers[partition] = Arrays.copyOf(oldBuffer,
-        oldBuffer.length + SERIALIZE_BUFFER_SIZE);
   }
 
   private void flushVectorShufflePartition(int partition) throws IOException {
@@ -600,12 +580,16 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   }
 
   private void growVectorShuffleSerializeBuffer() throws HiveException {
-    if (vectorShuffleSerializeBuffer.length > Integer.MAX_VALUE - SERIALIZE_BUFFER_SIZE) {
-      throw new HiveException("Vector shuffle serialize buffer size overflow: "
-          + vectorShuffleSerializeBuffer.length + " + " + SERIALIZE_BUFFER_SIZE);
+    vectorShuffleSerializeBuffer = growVectorShuffleBuffer(vectorShuffleSerializeBuffer,
+        "Vector shuffle serialize buffer size overflow");
+  }
+
+  private byte[] growVectorShuffleBuffer(byte[] buffer, String errorMessage) throws HiveException {
+    if (buffer.length > Integer.MAX_VALUE - SERIALIZE_BUFFER_SIZE) {
+      throw new HiveException(errorMessage + ": " + buffer.length + " + "
+          + SERIALIZE_BUFFER_SIZE);
     }
-    vectorShuffleSerializeBuffer = new byte[vectorShuffleSerializeBuffer.length
-        + SERIALIZE_BUFFER_SIZE];
+    return Arrays.copyOf(buffer, buffer.length + SERIALIZE_BUFFER_SIZE);
   }
 
   private void collectVectorShuffleRows(VectorizedRowBatch batch, int[] rowIndices, int rowOffset,
