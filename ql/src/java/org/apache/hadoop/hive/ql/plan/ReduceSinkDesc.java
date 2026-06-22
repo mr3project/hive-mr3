@@ -117,6 +117,8 @@ public class ReduceSinkDesc extends AbstractOperatorDesc {
   private boolean isPTFReduceSink = false;
   private boolean skipTag; // Skip writing tags when feeding into mapjoin hashtable
   private boolean forwarding; // Whether this RS can forward records directly instead of shuffling/sorting
+  // Whether the downstream consumer can read serialized vector shuffle batches.
+  private boolean vectorShuffleBatchEnabled = true;
 
   public static enum ReducerTraits {
     UNSET(0), // unset
@@ -198,6 +200,7 @@ public class ReduceSinkDesc extends AbstractOperatorDesc {
     desc.setDeduplicated(isDeduplicated);
     desc.setHasOrderBy(hasOrderBy);
     desc.outputName = outputName;
+    desc.vectorShuffleBatchEnabled = vectorShuffleBatchEnabled;
     return desc;
   }
 
@@ -532,6 +535,14 @@ public class ReduceSinkDesc extends AbstractOperatorDesc {
 
   public boolean isForwarding() {
     return forwarding;
+  }
+
+  public void setVectorShuffleBatchEnabled(boolean vectorShuffleBatchEnabled) {
+    this.vectorShuffleBatchEnabled = vectorShuffleBatchEnabled;
+  }
+
+  public boolean isVectorShuffleBatchEnabled() {
+    return vectorShuffleBatchEnabled;
   }
 
   @Explain(displayName = "auto parallelism", explainLevels = { Level.EXTENDED })
