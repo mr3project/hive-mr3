@@ -31,6 +31,7 @@ import org.apache.hadoop.io.BytesWritable;
 import org.apache.tez.mapreduce.output.MROutput;
 import org.apache.tez.runtime.api.TaskFailureType;
 import org.apache.tez.runtime.api.events.CustomProcessorEvent;
+import org.apache.tez.runtime.library.api.KeyValueWriterEdge.WriteValueBytes;
 import org.apache.tez.runtime.library.api.KeyValuesWriterEdge;
 import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.slf4j.Logger;
@@ -444,6 +445,15 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     public void writeWithPartition(BytesWritable key, BytesWritable value, int partition)
         throws IOException {
       writer.writeWithPartition(key, value, partition);
+    }
+
+    public WriteValueBytes requestWriteValueBytes(BytesWritable key, int partition) throws IOException {
+      return writer.requestWriteValueBytes(key, partition);
+    }
+
+    public void completeWriteValueBytes(BytesWritable key, int valLen, int partition)
+        throws IOException {
+      writer.completeWriteValueBytes(key, valLen, partition);
     }
 
     public void close() {
