@@ -66,16 +66,7 @@ public class HiveIgnoreKeyTextOutputFormat<K extends WritableComparable, V exten
   public RecordWriter getHiveRecordWriter(JobConf jc, Path outPath,
       Class<? extends Writable> valueClass, boolean isCompressed,
       Properties tableProperties, Progressable progress) throws IOException {
-    int rowSeparator = 0;
-    String rowSeparatorString = tableProperties.getProperty(
-        serdeConstants.LINE_DELIM, "\n");
-    try {
-      rowSeparator = Byte.parseByte(rowSeparatorString);
-    } catch (NumberFormatException e) {
-      rowSeparator = rowSeparatorString.charAt(0);
-    }
-
-    final int finalRowSeparator = rowSeparator;
+    final int finalRowSeparator = getRowSeparator(tableProperties);
     FileSystem fs = outPath.getFileSystem(jc);
     final OutputStream outStream = Utilities.createCompressedStream(jc,
     fs.create(outPath, progress), isCompressed);
@@ -99,6 +90,16 @@ public class HiveIgnoreKeyTextOutputFormat<K extends WritableComparable, V exten
         outStream.close();
       }
     };
+  }
+
+  public static int getRowSeparator(Properties tableProperties) {
+    String rowSeparatorString = tableProperties.getProperty(
+        serdeConstants.LINE_DELIM, "\n");
+    try {
+      return Byte.parseByte(rowSeparatorString);
+    } catch (NumberFormatException e) {
+      return rowSeparatorString.charAt(0);
+    }
   }
 
   protected static class IgnoreKeyWriter<K extends WritableComparable, V extends Writable>
