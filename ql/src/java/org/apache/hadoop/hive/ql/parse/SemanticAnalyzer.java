@@ -260,6 +260,7 @@ import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.PTFDesc;
 import org.apache.hadoop.hive.ql.plan.PlanUtils;
+import org.apache.hadoop.hive.ql.plan.QueryResultDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.ScriptDesc;
 import org.apache.hadoop.hive.ql.plan.SelectDesc;
@@ -2668,9 +2669,10 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
           } else {
             // This is the only place where isQuery is set to true; it defaults to false.
             qb.setIsQuery(true);
-            Path stagingPath = getStagingDirectoryPathname(qb, conf, ctx);
-            fname = stagingPath.toString();
-            ctx.setResDir(stagingPath);
+            // QueryResultOperator does not write to a staging directory, but the destination
+            // metadata still needs a marker so planning can derive the query result schema.
+            fname = queryState.getQueryId();
+            ctx.setResDir(null);
           }
         }
 
@@ -2678,7 +2680,8 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         if (ast.getChildCount() >= 2 && ast.getChild(1).getText().toLowerCase().equals("local")) {
           isDfsFile = false;
         }
-        // Set the destination for the SELECT query inside the CTAS
+        // Set the destination metadata for CTAS and top-level SELECT queries.
+        // For top-level SELECT, QueryResultOperator uses this alias metadata for schema derivation only.
         qb.getMetaData().setDestForAlias(name, fname, isDfsFile);
 
         CreateTableDesc directoryDesc = new CreateTableDesc();
@@ -7874,34 +7877,37 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         colTypes = ct.colTypes;
         isPartitioned = false;
       }
+      assert !qb.getIsQuery() || !isPartitioned;
 
-      if (isLocal) {
-        assert !isMmTable;
-        // for local directory - we always write to map-red intermediate
-        // store and then copy to local fs
-        queryTmpdir = ctx.getMRTmpPath();
-        if (dpCtx != null && dpCtx.getSPPath() != null) {
-          queryTmpdir = new Path(queryTmpdir, dpCtx.getSPPath());
+      if (!qb.getIsQuery()) {
+        if (isLocal) {
+          assert !isMmTable;
+          // for local directory - we always write to map-red intermediate
+          // store and then copy to local fs
+          queryTmpdir = ctx.getMRTmpPath();
+          if (dpCtx != null && dpCtx.getSPPath() != null) {
+            queryTmpdir = new Path(queryTmpdir, dpCtx.getSPPath());
+          }
+        } else {
+          // otherwise write to the file system implied by the directory
+          // no copy is required. we may want to revisit this policy in future
+          try {
+            Path qPath = FileUtils.makeQualified(destinationPath, conf);
+            queryTmpdir = getTmpDir(false, isMmTable, isDirectInsert, qPath, dpCtx);
+          } catch (Exception e) {
+            throw new SemanticException("Error creating "
+                + destinationPath, e);
+          }
         }
-      } else {
-        // otherwise write to the file system implied by the directory
-        // no copy is required. we may want to revisit this policy in future
-        try {
-          Path qPath = FileUtils.makeQualified(destinationPath, conf);
-          queryTmpdir = getTmpDir(false, isMmTable, isDirectInsert, qPath, dpCtx);
-        } catch (Exception e) {
-          throw new SemanticException("Error creating "
-              + destinationPath, e);
+        // set the root of the temporary path where dynamic partition columns will populate
+        if (dpCtx != null) {
+          dpCtx.setRootPath(queryTmpdir);
         }
-      }
-      // set the root of the temporary path where dynamic partition columns will populate
-      if (dpCtx != null) {
-        dpCtx.setRootPath(queryTmpdir);
-      }
 
-      if (Utilities.FILE_OP_LOGGER.isTraceEnabled()) {
-        Utilities.FILE_OP_LOGGER.trace("Setting query directory " + queryTmpdir
-            + " from " + destinationPath + " (" + isMmTable + ")");
+        if (Utilities.FILE_OP_LOGGER.isTraceEnabled()) {
+          Utilities.FILE_OP_LOGGER.trace("Setting query directory " + queryTmpdir
+              + " from " + destinationPath + " (" + isMmTable + ")");
+        }
       }
 
       // update the create table descriptor with the resulting schema.
@@ -7918,7 +7924,8 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       }
 
       boolean isDestTempFile = true;
-      if (!ctx.isMRTmpFileURI(destinationPath.toUri().toString())
+      if (!qb.getIsQuery()
+          && !ctx.isMRTmpFileURI(destinationPath.toUri().toString())
           && !ctx.isResultCacheDir(destinationPath)) {
         // not a temp dir and not a result cache dir
         idToTableNameMap.put(String.valueOf(destTableId), destinationPath.toUri().toString());
@@ -8048,7 +8055,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         ltd.setMdTable(destinationTable);
         WriteEntity output = generateTableWriteEntity(dest, destinationTable, dpCtx.getPartSpec(), ltd, dpCtx);
         ctx.getLoadTableOutputMap().put(ltd, output);
-      } else {
+      } else if (!qb.getIsQuery()) {
         // Create LFD even for MM CTAS - it's a no-op move, but it still seems to be used for stats.
         LoadFileDesc loadFileDesc = new LoadFileDesc(tblDesc, viewDesc, queryTmpdir, destinationPath, isDfsDir, cols,
             colTypes,
@@ -8148,6 +8155,17 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     // Generate the partition columns from the parent input
     if (destType == QBMetaData.DEST_TABLE || destType == QBMetaData.DEST_PARTITION) {
       genPartnCols(dest, input, qb, tableDescriptor, destinationTable, rsCtx);
+    }
+
+    if (qb.getIsQuery()) {
+      QueryResultDesc queryResultDesc = new QueryResultDesc(null, tableDescriptor,
+          null != tableDescriptor && useBatchingSerializer(tableDescriptor.getSerdeClassName()));
+      Operator output = putOpInsertMap(OperatorFactory.getAndMakeChild(
+          queryResultDesc, fsRS, input), inputRR);
+      String resultId = queryState.getQueryId() + "_" + output.getOperatorId();
+      queryResultDesc.setResultId(resultId);
+      LOG.debug("Created QueryResultOperator {} for clause: {} row schema: {}", resultId, dest, inputRR);
+      return output;
     }
 
     FileSinkDesc fileSinkDesc = createFileSinkDesc(dest, tableDescriptor, destinationPartition,

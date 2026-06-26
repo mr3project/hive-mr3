@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.ql.exec.vector.VectorFileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.vector.VectorFilterOperator;
 import org.apache.hadoop.hive.ql.exec.vector.VectorGroupByOperator;
 import org.apache.hadoop.hive.ql.exec.vector.VectorLimitOperator;
+import org.apache.hadoop.hive.ql.exec.vector.VectorQueryResultOperator;
 import org.apache.hadoop.hive.ql.exec.vector.VectorMapJoinOperator;
 import org.apache.hadoop.hive.ql.exec.vector.VectorReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSMBMapJoinOperator;
@@ -63,6 +64,7 @@ import org.apache.hadoop.hive.ql.plan.MuxDesc;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.OrcFileMergeDesc;
 import org.apache.hadoop.hive.ql.plan.PTFDesc;
+import org.apache.hadoop.hive.ql.plan.QueryResultDesc;
 import org.apache.hadoop.hive.ql.plan.RCFileMergeDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.SMBJoinDesc;
@@ -118,6 +120,7 @@ public final class OperatorFactory {
     opvec.put(OrcFileMergeDesc.class, OrcFileMergeOperator.class);
     opvec.put(CommonMergeJoinDesc.class, CommonMergeJoinOperator.class);
     opvec.put(ListSinkDesc.class, ListSinkOperator.class);
+    opvec.put(QueryResultDesc.class, QueryResultOperator.class);
     opvec.put(TopNKeyDesc.class, TopNKeyOperator.class);
   }
 
@@ -132,6 +135,7 @@ public final class OperatorFactory {
     vectorOpvec.put(FileSinkDesc.class, VectorFileSinkOperator.class);
     vectorOpvec.put(FilterDesc.class, VectorFilterOperator.class);
     vectorOpvec.put(LimitDesc.class, VectorLimitOperator.class);
+    vectorOpvec.put(QueryResultDesc.class, VectorQueryResultOperator.class);
     vectorOpvec.put(PTFDesc.class, VectorPTFOperator.class);
     vectorOpvec.put(TopNKeyDesc.class, VectorTopNKeyOperator.class);
   }
