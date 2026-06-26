@@ -43,7 +43,10 @@ import org.apache.hadoop.io.Writable;
 import org.apache.tez.runtime.api.ProcessorContext;
 
 /**
- * QueryResultOperator stores query-result rows in memory and commits them to the
+ * QueryResultOperator is a distilled FileSinkOperator for user-visible query results.
+ *
+ * It preserves the FileSinkOperator row serialization path, but replaces the
+ * file-backed RecordWriter with an in-memory buffer that is committed to the
  * Tez/MR3 processor context when the task attempt is allowed to commit.
  */
 public class QueryResultOperator extends Operator<QueryResultDesc> {
@@ -160,11 +163,10 @@ public class QueryResultOperator extends Operator<QueryResultDesc> {
     if (writable instanceof Text) {
       Text text = (Text) writable;
       dataOut.write(text.getBytes(), 0, text.getLength());
-    } else if (writable instanceof BytesWritable) {
-      BytesWritable bytes = (BytesWritable) writable;
-      dataOut.write(bytes.getBytes(), 0, bytes.getLength());
     } else {
-      writable.write(dataOut);
+      // Binary SerDes always write out BytesWritable.
+      BytesWritable bytes = (BytesWritable) writable;
+      dataOut.write(bytes.get(), 0, bytes.getSize());
     }
     dataOut.write(rowSeparator);
     enforceMaxBytes();

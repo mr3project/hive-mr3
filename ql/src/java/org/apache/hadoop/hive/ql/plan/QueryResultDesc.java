@@ -35,7 +35,7 @@ public class QueryResultDesc extends AbstractOperatorDesc {
 
   private String resultId;
   private TableDesc tableInfo;
-  private boolean usingBatchingSerDe;
+  private boolean isUsingBatchingSerDe;
   private long maxBytes = DEFAULT_QUERY_RESULT_PER_TASK_MAX_BYTES;
 
   public QueryResultDesc() {
@@ -49,13 +49,13 @@ public class QueryResultDesc extends AbstractOperatorDesc {
       long maxBytes) {
     this.resultId = resultId;
     this.tableInfo = tableInfo;
-    this.usingBatchingSerDe = usingBatchingSerDe;
+    this.isUsingBatchingSerDe = usingBatchingSerDe;
     this.maxBytes = maxBytes;
   }
 
   @Override
   public Object clone() {
-    QueryResultDesc ret = new QueryResultDesc(resultId, tableInfo, usingBatchingSerDe, maxBytes);
+    QueryResultDesc ret = new QueryResultDesc(resultId, tableInfo, isUsingBatchingSerDe, maxBytes);
     ret.setStatistics(getStatistics());
     ret.setTraits(getTraits());
     ret.setOpProps(getOpProps());
@@ -87,11 +87,11 @@ public class QueryResultDesc extends AbstractOperatorDesc {
 
   @Explain(displayName = "using batching SerDe")
   public boolean isUsingBatchingSerDe() {
-    return usingBatchingSerDe;
+    return isUsingBatchingSerDe;
   }
 
-  public void setUsingBatchingSerDe(boolean usingBatchingSerDe) {
-    this.usingBatchingSerDe = usingBatchingSerDe;
+  public void setIsUsingBatchingSerDe(boolean isUsingBatchingSerDe) {
+    this.isUsingBatchingSerDe = isUsingBatchingSerDe;
   }
 
   @Explain(displayName = "max bytes")
@@ -111,7 +111,7 @@ public class QueryResultDesc extends AbstractOperatorDesc {
     QueryResultDesc otherDesc = (QueryResultDesc) other;
     return Objects.equals(resultId, otherDesc.resultId)
         && Objects.equals(tableInfo, otherDesc.tableInfo)
-        && usingBatchingSerDe == otherDesc.usingBatchingSerDe
+        && isUsingBatchingSerDe == otherDesc.isUsingBatchingSerDe
         && maxBytes == otherDesc.maxBytes;
   }
 }
