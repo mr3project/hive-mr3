@@ -23,17 +23,16 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.Properties;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.UnsafeByteOperations;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.tez.TezContext;
+import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.QueryResultDesc;
 import org.apache.hadoop.hive.ql.plan.api.OperatorType;
-import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -89,7 +88,8 @@ public class QueryResultOperator extends Operator<QueryResultDesc> {
     writer = new ByteArrayOutputStream();
     dataOut = new DataOutputStream(writer);
     maxBytes = hconf.getLong(QueryResultDesc.QUERY_RESULT_PER_TASK_MAX_BYTES, conf.getMaxBytes());
-    rowSeparator = getRowSeparator(conf.getTableInfo().getProperties());
+    rowSeparator =
+        HiveIgnoreKeyTextOutputFormat.getRowSeparator(conf.getTableInfo().getProperties());
 
     MapredContext mapredContext = MapredContext.get();
     if (!(mapredContext instanceof TezContext)) {
@@ -176,15 +176,6 @@ public class QueryResultOperator extends Operator<QueryResultDesc> {
     if (maxBytes >= 0 && writer.size() > maxBytes) {
       throw new HiveException("Query result for resultId=" + conf.getResultId()
           + " exceeded per-task limit " + maxBytes + " bytes");
-    }
-  }
-
-  private int getRowSeparator(Properties tableProperties) {
-    String rowSeparatorString = tableProperties.getProperty(serdeConstants.LINE_DELIM, "\n");
-    try {
-      return Byte.parseByte(rowSeparatorString);
-    } catch (NumberFormatException e) {
-      return rowSeparatorString.charAt(0);
     }
   }
 
