@@ -47,7 +47,7 @@ import org.apache.tez.runtime.api.ProcessorContext;
  * file-backed RecordWriter with an in-memory buffer that is committed to the
  * Tez/MR3 processor context when the task attempt is allowed to commit.
  */
-public class QueryResultOperator extends Operator<QueryResultDesc> {
+public class QueryResultOperator extends TerminalOperator<QueryResultDesc> {
   private static final long serialVersionUID = 1L;
 
   private transient AbstractSerDe serializer;
