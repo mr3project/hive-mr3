@@ -15719,8 +15719,8 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
   private void copyInfoToQueryProperties(QueryProperties queryProperties) {
     if (qb != null) {
       queryProperties.setQuery(qb.getIsQuery() && !forViewCreation);
-      queryProperties.setUsesQueryResultOperator(qb.getIsQuery() && !forViewCreation
-          && !qb.isMaterializedView());
+      // View definition analysis can mark the SELECT as a query, but it only needs schema derivation.
+      queryProperties.setUsesQueryResultOperator(qb.getIsQuery() && !forViewCreation);
       queryProperties.setAnalyzeCommand(qb.getParseInfo().isAnalyzeCommand());
       queryProperties.setNoScanAnalyzeCommand(qb.getParseInfo().isNoScanAnalyzeCommand());
       queryProperties.setAnalyzeRewrite(qb.isAnalyzeRewrite());
