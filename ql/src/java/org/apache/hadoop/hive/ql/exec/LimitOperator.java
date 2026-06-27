@@ -19,6 +19,9 @@
 package org.apache.hadoop.hive.ql.exec;
 
 import java.io.Serializable;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import java.util.concurrent.Callable;
 
 import org.apache.hadoop.conf.Configuration;
@@ -26,6 +29,7 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.tez.LlapObjectCache;
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor;
+import org.apache.hadoop.hive.ql.exec.vector.VectorSelectOperator;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.LimitDesc;
 import org.apache.hadoop.hive.ql.plan.api.OperatorType;
@@ -69,8 +73,7 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
     currCount = 0;
     isMap = hconf.getBoolean("mapred.task.is.map", true);
 
-    boolean isLastOperatorInVertex =
-        this.getChildOperators().stream().allMatch(op -> op instanceof TerminalOperator);
+    boolean isLastOperatorInVertex = isLastOperatorInVertexForLimitReporting();
 
     if (isLastOperatorInVertex) {
       String queryId = HiveConf.getVar(hconf, HiveConf.ConfVars.HIVE_QUERY_ID);
@@ -103,6 +106,47 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
           getOperatorId());
       this.runtimeCache = null;
     }
+  }
+
+
+  boolean isLastOperatorInVertexForLimitReporting() {
+    return this.getChildOperators().stream().allMatch(op ->
+        reachesTerminalThroughCardinalityPreservingOperators(op,
+            Collections.newSetFromMap(new IdentityHashMap<Operator<?>, Boolean>())));
+  }
+
+  private static boolean reachesTerminalThroughCardinalityPreservingOperators(
+      Operator<?> operator, Set<Operator<?>> visited) {
+    if (isTerminalForLimitReporting(operator)) {
+      return true;
+    }
+
+    if (!visited.add(operator)) {
+      return false;
+    }
+
+    if (!isCardinalityPreservingForLimitReporting(operator)) {
+      return false;
+    }
+
+    if (operator.getNumChild() == 0) {
+      return false;
+    }
+
+    boolean allChildrenReachTerminal = operator.getChildOperators().stream().allMatch(child ->
+        reachesTerminalThroughCardinalityPreservingOperators(child, visited));
+    visited.remove(operator);
+    return allChildrenReachTerminal;
+  }
+
+  private static boolean isTerminalForLimitReporting(Operator<?> operator) {
+    return operator instanceof TerminalOperator;  // includes QueryResultOperator
+  }
+
+  private static boolean isCardinalityPreservingForLimitReporting(Operator<?> operator) {
+    return operator instanceof SelectOperator ||
+        operator instanceof VectorSelectOperator ||
+        operator instanceof ForwardOperator;
   }
 
   @Override
