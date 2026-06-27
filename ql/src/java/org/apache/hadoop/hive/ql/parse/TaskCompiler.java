@@ -47,6 +47,7 @@ import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.MoveTask;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
+import org.apache.hadoop.hive.ql.exec.QueryResultOperator;
 import org.apache.hadoop.hive.ql.exec.StatsTask;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.exec.Task;
@@ -187,7 +188,7 @@ public abstract class TaskCompiler {
      * If the select is from analyze table column rewrite, don't create a fetch task. Instead create
      * a column stats task later.
      */
-    if (pCtx.getQueryProperties().isQuery() && !isCStats) {
+    if (pCtx.getQueryProperties().isQuery() && !isCStats && !hasQueryResultOperator(pCtx)) {
       if ((!loadTableWork.isEmpty()) || (loadFileWork.size() != 1)) {
         throw new SemanticException(ErrorMsg.INVALID_LOAD_TABLE_FILE_WORK.getMsg());
       }
@@ -643,6 +644,11 @@ public abstract class TaskCompiler {
         targetTask.addDependentTask(TaskFactory.get(ddlWork, conf));
       }
     }
+  }
+
+  private boolean hasQueryResultOperator(ParseContext pCtx) {
+    Collection<Operator<?>> topOps = Lists.<Operator<?>>newArrayList(pCtx.getTopOps().values());
+    return !OperatorUtils.findOperators(topOps, QueryResultOperator.class).isEmpty();
   }
 
   /**

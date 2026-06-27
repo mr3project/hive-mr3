@@ -151,10 +151,12 @@ public class QueryResultOperator extends Operator<QueryResultDesc> {
   private void writeRecord(Writable writable) throws IOException, HiveException {
     if (writable instanceof Text) {
       Text text = (Text) writable;
+      LOG.info("QueryResultOperator record resultId={}: {}", conf.getResultId(), text.toString());
       dataOut.write(text.getBytes(), 0, text.getLength());
     } else {
       // Binary SerDes always write out BytesWritable.
       BytesWritable bytes = (BytesWritable) writable;
+      LOG.info("QueryResultOperator record resultId={}: {}", conf.getResultId(), bytes.toString());
       dataOut.write(bytes.get(), 0, bytes.getSize());
     }
     dataOut.write(rowSeparator);
