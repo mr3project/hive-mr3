@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.tez.LlapObjectCache;
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor;
+import org.apache.hadoop.hive.ql.exec.vector.VectorSelectOperator;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.LimitDesc;
 import org.apache.hadoop.hive.ql.plan.api.OperatorType;
@@ -116,7 +117,7 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
 
   private static boolean reachesTerminalThroughCardinalityPreservingOperators(
       Operator<?> operator, Set<Operator<?>> visited) {
-    if (operator instanceof TerminalOperator) {
+    if (isTerminalForLimitReporting(operator)) {
       return true;
     }
 
@@ -138,8 +139,13 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
     return allChildrenReachTerminal;
   }
 
+  private static boolean isTerminalForLimitReporting(Operator<?> operator) {
+    return operator instanceof TerminalOperator || operator instanceof QueryResultOperator;
+  }
+
   private static boolean isCardinalityPreservingForLimitReporting(Operator<?> operator) {
-    return operator instanceof SelectOperator || operator instanceof ForwardOperator;
+    return operator instanceof SelectOperator || operator instanceof ForwardOperator ||
+        operator instanceof VectorSelectOperator;
   }
 
   @Override

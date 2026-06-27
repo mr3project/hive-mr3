@@ -25,6 +25,8 @@ import org.apache.hadoop.hive.llap.io.api.LlapProxy;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.tez.ObjectCache;
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor;
+import org.apache.hadoop.hive.ql.exec.vector.VectorQueryResultOperator;
+import org.apache.hadoop.hive.ql.exec.vector.VectorSelectOperator;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.LimitDesc;
 import org.apache.hadoop.hive.ql.plan.api.OperatorType;
@@ -193,6 +195,29 @@ public class TestLimitOperator {
     TestTerminalOperator terminal = new TestTerminalOperator(ctx);
     connect(limit, forward);
     connect(forward, terminal);
+
+    Assert.assertTrue(limit.isLastOperatorInVertexForLimitReporting());
+  }
+
+
+  @Test
+  public void testLastOperatorInVertexAcceptsQueryResultChild() {
+    CompilationOpContext ctx = new CompilationOpContext();
+    LimitOperator limit = new LimitOperator(ctx);
+    QueryResultOperator queryResult = new QueryResultOperator(ctx);
+    connect(limit, queryResult);
+
+    Assert.assertTrue(limit.isLastOperatorInVertexForLimitReporting());
+  }
+
+  @Test
+  public void testLastOperatorInVertexAcceptsVectorSelectBeforeVectorQueryResult() {
+    CompilationOpContext ctx = new CompilationOpContext();
+    LimitOperator limit = new LimitOperator(ctx);
+    VectorSelectOperator select = new VectorSelectOperator(ctx);
+    VectorQueryResultOperator queryResult = new VectorQueryResultOperator(ctx);
+    connect(limit, select);
+    connect(select, queryResult);
 
     Assert.assertTrue(limit.isLastOperatorInVertexForLimitReporting());
   }
