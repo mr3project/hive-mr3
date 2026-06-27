@@ -40,9 +40,6 @@ public class QueryProperties {
   boolean ctas;
   int outerQueryLimit;
 
-  // True when top-level query results are produced by QueryResultOperator
-  // instead of the legacy FileSinkOperator/FetchTask file-backed path.
-  private boolean usesQueryResultOperator;
 
   boolean hasJoin = false;
   boolean hasGroupBy = false;
@@ -86,13 +83,6 @@ public class QueryProperties {
     this.query = query;
   }
 
-  public boolean usesQueryResultOperator() {
-    return usesQueryResultOperator;
-  }
-
-  public void setUsesQueryResultOperator(boolean usesQueryResultOperator) {
-    this.usesQueryResultOperator = usesQueryResultOperator;
-  }
 
   public boolean isAnalyzeCommand() {
     return analyzeCommand;
@@ -340,7 +330,6 @@ public class QueryProperties {
     analyzeRewrite = false;
     ctas = false;
     outerQueryLimit = -1;
-    usesQueryResultOperator = false;
     isMaterializedView = false;
 
     hasJoin = false;

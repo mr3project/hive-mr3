@@ -105,7 +105,9 @@ public class SimpleFetchOptimizer extends Transform {
   @Override
   public ParseContext transform(ParseContext pctx) throws SemanticException {
     Map<String, TableScanOperator> topOps = pctx.getTopOps();
-    if ((pctx.getQueryProperties().isQuery() || pctx.getQueryProperties().isView())
+    assert !pctx.getQueryProperties().isView() || !pctx.getQueryProperties().isQuery();
+
+    if (pctx.getQueryProperties().isView()
         && !pctx.getQueryProperties().isAnalyzeCommand()
         && topOps.size() == 1) {
       // no join, no groupby, no distinct, no lateral view, no subq,
