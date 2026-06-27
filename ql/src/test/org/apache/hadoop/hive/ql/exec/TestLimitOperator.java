@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hive.ql.exec;
 
+import java.util.Arrays;
 import java.util.Random;
 
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -26,6 +27,7 @@ import org.apache.hadoop.hive.ql.exec.tez.ObjectCache;
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.LimitDesc;
+import org.apache.hadoop.hive.ql.plan.api.OperatorType;
 import org.apache.tez.runtime.common.objectregistry.ObjectRegistryImpl;
 import org.junit.Assert;
 import org.junit.Ignore;
@@ -158,6 +160,105 @@ public class TestLimitOperator {
     }
     lo2DoneExpected = numProcessedElements > limit + offset + 1;
     Assert.assertEquals(lo2DoneExpected, lo2.getDone());
+  }
+
+
+  @Test
+  public void testLastOperatorInVertexAcceptsTerminalChild() {
+    CompilationOpContext ctx = new CompilationOpContext();
+    LimitOperator limit = new LimitOperator(ctx);
+    TestTerminalOperator terminal = new TestTerminalOperator(ctx);
+    connect(limit, terminal);
+
+    Assert.assertTrue(limit.isLastOperatorInVertexForLimitReporting());
+  }
+
+  @Test
+  public void testLastOperatorInVertexAcceptsSelectBeforeTerminal() {
+    CompilationOpContext ctx = new CompilationOpContext();
+    LimitOperator limit = new LimitOperator(ctx);
+    SelectOperator select = new SelectOperator(ctx);
+    TestTerminalOperator terminal = new TestTerminalOperator(ctx);
+    connect(limit, select);
+    connect(select, terminal);
+
+    Assert.assertTrue(limit.isLastOperatorInVertexForLimitReporting());
+  }
+
+  @Test
+  public void testLastOperatorInVertexAcceptsForwardBeforeTerminal() {
+    CompilationOpContext ctx = new CompilationOpContext();
+    LimitOperator limit = new LimitOperator(ctx);
+    ForwardOperator forward = new ForwardOperator(ctx);
+    TestTerminalOperator terminal = new TestTerminalOperator(ctx);
+    connect(limit, forward);
+    connect(forward, terminal);
+
+    Assert.assertTrue(limit.isLastOperatorInVertexForLimitReporting());
+  }
+
+  @Test
+  public void testLastOperatorInVertexRejectsFilterBeforeTerminal() {
+    CompilationOpContext ctx = new CompilationOpContext();
+    LimitOperator limit = new LimitOperator(ctx);
+    FilterOperator filter = new FilterOperator(ctx);
+    TestTerminalOperator terminal = new TestTerminalOperator(ctx);
+    connect(limit, filter);
+    connect(filter, terminal);
+
+    Assert.assertFalse(limit.isLastOperatorInVertexForLimitReporting());
+  }
+
+  @Test
+  public void testLastOperatorInVertexRejectsUnsafeBranch() {
+    CompilationOpContext ctx = new CompilationOpContext();
+    LimitOperator limit = new LimitOperator(ctx);
+    SelectOperator select = new SelectOperator(ctx);
+    FilterOperator filter = new FilterOperator(ctx);
+    TestTerminalOperator safeTerminal = new TestTerminalOperator(ctx);
+    TestTerminalOperator unsafeTerminal = new TestTerminalOperator(ctx);
+
+    connect(limit, select, filter);
+    connect(select, safeTerminal);
+    connect(filter, unsafeTerminal);
+
+    Assert.assertFalse(limit.isLastOperatorInVertexForLimitReporting());
+  }
+
+  @Test
+  public void testLastOperatorInVertexRejectsCycle() {
+    CompilationOpContext ctx = new CompilationOpContext();
+    LimitOperator limit = new LimitOperator(ctx);
+    SelectOperator select = new SelectOperator(ctx);
+    ForwardOperator forward = new ForwardOperator(ctx);
+    connect(limit, select);
+    connect(select, forward);
+    connect(forward, select);
+
+    Assert.assertFalse(limit.isLastOperatorInVertexForLimitReporting());
+  }
+
+  @SafeVarargs
+  private static void connect(Operator<?> parent, Operator<?>... children) {
+    parent.setChildOperators(Arrays.asList(children));
+    for (Operator<?> child : children) {
+      child.setParentOperators(Arrays.asList(parent));
+    }
+  }
+
+  private static class TestTerminalOperator extends TerminalOperator<LimitDesc> {
+    TestTerminalOperator(CompilationOpContext ctx) {
+      super(ctx);
+    }
+
+    @Override
+    public void process(Object row, int tag) {
+    }
+
+    @Override
+    public OperatorType getType() {
+      return OperatorType.FILESINK;
+    }
   }
 
   private void processRowNTimes(LimitOperator op, int n) throws HiveException {
