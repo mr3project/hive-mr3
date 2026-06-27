@@ -182,12 +182,24 @@ public abstract class TaskCompiler {
       optimizeOperatorPlan(pCtx);
     }
 
-    /*
-     * In case of a select, use a fetch task instead of a move task.
-     * If the select is from analyze table column rewrite, don't create a fetch task. Instead create
-     * a column stats task later.
-     */
-    if (pCtx.getQueryProperties().isQuery() && !isCStats) {
+    if (pCtx.getQueryProperties().usesQueryResultOperator()) {
+      /*
+       * QueryResultOperator produces top-level query results in-memory. The legacy
+       * FetchTask/LoadFileDesc path below is only for file-backed results produced
+       * by FileSinkOperator, so do not create FetchWork, FetchTask, or MoveWork here.
+       */
+      if (outerQueryLimit == 0) {
+        // Preserve the existing LIMIT 0 shortcut without creating file-backed fetch work.
+        LOG.info("Limit 0. No query execution needed.");
+        return;
+      }
+    } else if (pCtx.getQueryProperties().isQuery() && !isCStats) {
+      /*
+       * In case of a file-backed select, use a fetch task instead of a move task.
+       * FetchTask/LoadFileDesc is only for results written by FileSinkOperator.
+       * If the select is from analyze table column rewrite, don't create a fetch task. Instead create
+       * a column stats task later.
+       */
       if ((!loadTableWork.isEmpty()) || (loadFileWork.size() != 1)) {
         throw new SemanticException(ErrorMsg.INVALID_LOAD_TABLE_FILE_WORK.getMsg());
       }

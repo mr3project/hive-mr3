@@ -15719,6 +15719,8 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
   private void copyInfoToQueryProperties(QueryProperties queryProperties) {
     if (qb != null) {
       queryProperties.setQuery(qb.getIsQuery() && !forViewCreation);
+      queryProperties.setUsesQueryResultOperator(qb.getIsQuery() && !forViewCreation
+          && !qb.isMaterializedView());
       queryProperties.setAnalyzeCommand(qb.getParseInfo().isAnalyzeCommand());
       queryProperties.setNoScanAnalyzeCommand(qb.getParseInfo().isNoScanAnalyzeCommand());
       queryProperties.setAnalyzeRewrite(qb.isAnalyzeRewrite());
