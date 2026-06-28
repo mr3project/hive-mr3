@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
+import org.apache.hadoop.hive.ql.DagOutputResultReader;
 import org.apache.hadoop.hive.ql.DriverContext;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
@@ -302,7 +303,7 @@ public class MR3Task {
     }
 
     LOG.info("Collected {} DAG output payload(s) for queryId={}", payloads.size(), queryId);
-    driverContext.addDagOutputResultPayloads(payloads);
+    driverContext.setDagOutputResultReader(new DagOutputResultReader(payloads));
   }
 
   private void collectCommitInformation(TezWork work, DAGStatus dagStatus, String dagIdStr) {

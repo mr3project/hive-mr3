@@ -19,9 +19,7 @@
 package org.apache.hadoop.hive.ql;
 
 import java.io.DataInput;
-import java.util.List;
 
-import com.google.protobuf.ByteString;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.common.ValidWriteIdList;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -220,17 +218,6 @@ public class DriverContext {
 
   public void setDagOutputResultReader(DagOutputResultReader dagOutputResultReader) {
     this.dagOutputResultReader = dagOutputResultReader;
-  }
-
-  public void addDagOutputResultPayloads(List<ByteString> payloads) {
-    if (payloads.isEmpty()) {
-      return;
-    }
-    if (dagOutputResultReader == null) {
-      dagOutputResultReader = new DagOutputResultReader(payloads);
-      return;
-    }
-    dagOutputResultReader.addPayloads(payloads);
   }
 
   public DataInput getDagOutputResultStream() {

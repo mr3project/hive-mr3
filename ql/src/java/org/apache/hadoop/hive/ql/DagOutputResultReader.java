@@ -23,6 +23,7 @@ import com.google.protobuf.ByteString;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -34,12 +35,8 @@ public class DagOutputResultReader {
   private int nextPayloadIndex;
 
   public DagOutputResultReader(List<ByteString> payloads) {
-    this.payloads = new ArrayList<>(payloads);
+    this.payloads = Collections.unmodifiableList(new ArrayList<>(payloads));
     this.nextPayloadIndex = 0;
-  }
-
-  public synchronized void addPayloads(List<ByteString> payloads) {
-    this.payloads.addAll(payloads);
   }
 
   public synchronized DataInput nextStream() {
