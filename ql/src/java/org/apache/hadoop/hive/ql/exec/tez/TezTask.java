@@ -26,6 +26,7 @@ import java.util.Map;
 import org.apache.hadoop.hive.common.metrics.common.Metrics;
 import org.apache.hadoop.hive.common.metrics.common.MetricsConstant;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.DriverContext;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Task;
@@ -93,10 +94,15 @@ public class TezTask extends Task<TezWork> {
   }
 
   private java.util.concurrent.atomic.AtomicBoolean isShutdownMr3 = new java.util.concurrent.atomic.AtomicBoolean(false);
+  private transient DriverContext driverContext;
+
+  public void setDriverContext(DriverContext driverContext) {
+    this.driverContext = driverContext;
+  }
 
   private int executeMr3() {
     org.apache.hadoop.hive.ql.exec.mr3.MR3Task mr3Task =
-      new org.apache.hadoop.hive.ql.exec.mr3.MR3Task(conf, console, isShutdownMr3);
+      new org.apache.hadoop.hive.ql.exec.mr3.MR3Task(conf, console, isShutdownMr3, driverContext);
     int returnCode = mr3Task.execute(context, this.getWork());
     // Utils.mergeTezCounters is null-safe.
     counters = Utils.mergeTezCounters(mr3Task.getTezCounters(), counters);
