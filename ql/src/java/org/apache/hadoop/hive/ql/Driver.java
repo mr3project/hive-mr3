@@ -643,8 +643,15 @@ public class Driver implements IDriver {
       }
     }
 
-    return driverContext.getPlan().getFetchTask() != null && driverContext.getPlan().getResultSchema() != null &&
-        driverContext.getPlan().getResultSchema().isSetFieldSchemas();
+    boolean hasFetchTask = driverContext.getPlan().getFetchTask() != null;
+    boolean hasResultSchema = driverContext.getPlan().getResultSchema() != null
+        && driverContext.getPlan().getResultSchema().isSetFieldSchemas();
+    boolean hasDagOutputReader = driverContext.hasDagOutputResultReader();
+    boolean hasResultSet = hasResultSchema || hasDagOutputReader;
+    LOG.error("Driver.hasResultSet called: queryId={}, hasFetchTask={}, hasResultSchema={}, "
+            + "hasDagOutputReader={}, hasResultSet={}",
+        driverContext.getQueryState().getQueryId(), hasFetchTask, hasResultSchema, hasDagOutputReader, hasResultSet);
+    return hasResultSet;
   }
 
   @Override

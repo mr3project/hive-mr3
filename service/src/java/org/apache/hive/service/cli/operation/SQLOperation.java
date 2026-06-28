@@ -206,7 +206,10 @@ public class SQLOperation extends ExecuteStatementOperation {
       if (queryState.getQueryTag() != null && queryState.getQueryId() != null) {
         parentSession.updateQueryTag(queryState.getQueryId(), queryState.getQueryTag());
       }
-      setHasResultSet(driver.hasResultSet());
+      boolean hasResultSet = driver.hasResultSet();
+      log.error("SQLOperation.prepare setting hasResultSet: queryId={}, opHandle={}, hasResultSet={}",
+          queryState.getQueryId(), getHandle(), hasResultSet);
+      setHasResultSet(hasResultSet);
     } catch (CommandProcessorException e) {
       setState(OperationState.ERROR);
       throw toSQLException("Error while compiling statement", e, queryState.getQueryId());
@@ -253,6 +256,10 @@ public class SQLOperation extends ExecuteStatementOperation {
         throw new HiveSQLException("Error running query", e, queryState.getQueryId());
       }
     }
+    boolean hasResultSet = driver.hasResultSet();
+    log.error("SQLOperation.runQuery setting hasResultSet after Driver.run: queryId={}, opHandle={}, hasResultSet={}",
+        queryState.getQueryId(), getHandle(), hasResultSet);
+    setHasResultSet(hasResultSet);
     emitCompletionMessageToOperationLog();
     setState(OperationState.FINISHED);
   }
