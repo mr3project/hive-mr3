@@ -626,7 +626,7 @@ public class Driver implements IDriver {
 
   @Override
   public boolean isFetchingTable() {
-    return driverContext.getFetchTask() != null;
+    return driverContext.getFetchTask() != null && !driverContext.hasDagOutputResultReader();
   }
 
   @Override
