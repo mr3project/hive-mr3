@@ -479,7 +479,7 @@ public class SQLOperation extends ExecuteStatementOperation {
   public RowSet getNextRowSet(FetchOrientation orientation, long maxRows)
     throws HiveSQLException {
 
-    log.debug("SQLOperation.getNextRowSet called: queryId={}, opHandle={}, orientation={}, maxRows={}, "
+    log.error("SQLOperation.getNextRowSet called: queryId={}, opHandle={}, orientation={}, maxRows={}, "
             + "fetchStarted={}, operationState={}",
         queryState.getQueryId(), getHandle(), orientation, maxRows, fetchStarted, getState());
     validateDefaultFetchOrientation(orientation);
@@ -487,7 +487,7 @@ public class SQLOperation extends ExecuteStatementOperation {
 
     FetchTask fetchTask = driver.getFetchTask();
     boolean isBlobBased = false;
-    log.debug("SQLOperation.getNextRowSet using driver: queryId={}, opHandle={}, driverClass={}, "
+    log.error("SQLOperation.getNextRowSet using driver: queryId={}, opHandle={}, driverClass={}, "
             + "hasFetchTask={}, isFetchingTable={}",
         queryState.getQueryId(), getHandle(), driver.getClass().getName(), fetchTask != null, driver.isFetchingTable());
 
@@ -502,7 +502,7 @@ public class SQLOperation extends ExecuteStatementOperation {
        * then reset the fetch position to beginning
        */
       if (orientation.equals(FetchOrientation.FETCH_FIRST) && fetchStarted) {
-        log.debug("SQLOperation.getNextRowSet resetting driver fetch: queryId={}, opHandle={}",
+        log.error("SQLOperation.getNextRowSet resetting driver fetch: queryId={}, opHandle={}",
             queryState.getQueryId(), getHandle());
         driver.resetFetch();
       }
@@ -511,22 +511,22 @@ public class SQLOperation extends ExecuteStatementOperation {
       final int capacity = Math.toIntExact(maxRows);
       convey.ensureCapacity(capacity);
       driver.setMaxRows(capacity);
-      log.debug("SQLOperation.getNextRowSet calling Driver.getResults: queryId={}, opHandle={}, capacity={}",
+      log.error("SQLOperation.getNextRowSet calling Driver.getResults: queryId={}, opHandle={}, capacity={}",
           queryState.getQueryId(), getHandle(), capacity);
       boolean hasMore = driver.getResults(convey);
-      log.debug("SQLOperation.getNextRowSet Driver.getResults returned: queryId={}, opHandle={}, "
+      log.error("SQLOperation.getNextRowSet Driver.getResults returned: queryId={}, opHandle={}, "
               + "hasMore={}, conveyedRowCount={}",
           queryState.getQueryId(), getHandle(), hasMore, convey.size());
       if (hasMore) {
         if (convey.size() == capacity) {
-          log.info("Result set buffer filled to capacity [{}]", capacity);
+          log.error("Result set buffer filled to capacity [{}]", capacity);
         }
         RowSet decodedRowSet = decode(convey, rowSet);
-        log.debug("SQLOperation.getNextRowSet returning decoded rows: queryId={}, opHandle={}, rowCount={}",
+        log.error("SQLOperation.getNextRowSet returning decoded rows: queryId={}, opHandle={}, rowCount={}",
             queryState.getQueryId(), getHandle(), decodedRowSet.numRows());
         return decodedRowSet;
       }
-      log.debug("SQLOperation.getNextRowSet returning empty row set: queryId={}, opHandle={}, rowCount={}",
+      log.error("SQLOperation.getNextRowSet returning empty row set: queryId={}, opHandle={}, rowCount={}",
           queryState.getQueryId(), getHandle(), rowSet.numRows());
       return rowSet;
     } catch (Exception e) {

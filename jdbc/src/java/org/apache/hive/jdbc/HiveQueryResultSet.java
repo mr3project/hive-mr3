@@ -345,22 +345,31 @@ public class HiveQueryResultSet extends HiveBaseResultSet {
       if (fetchedRows == null || !fetchedRowsItr.hasNext()) {
         TFetchResultsReq fetchReq = new TFetchResultsReq(stmtHandle,
             orientation, fetchSize);
-        LOG.debug("HiveQueryResultsFetchReq: {}", fetchReq);
+        LOG.error("Beeline/JDBC fetching query output: stmtHandle={}, orientation={}, fetchSize={}, "
+            + "rowsFetchedBefore={}", stmtHandle, orientation, fetchSize, rowsFetched);
         TFetchResultsResp fetchResp;
         fetchResp = client.FetchResults(fetchReq);
+        LOG.error("Beeline/JDBC query-output FetchResults returned: stmtHandle={}, hasResults={}",
+            stmtHandle, fetchResp.isSetResults());
         Utils.verifySuccessWithInfo(fetchResp.getStatus());
 
         TRowSet results = fetchResp.getResults();
         fetchedRows = RowSetFactory.create(results, protocol);
+        LOG.error("Beeline/JDBC decoded query-output RowSet: stmtHandle={}, rowCount={}, startOffset={}",
+            stmtHandle, fetchedRows.numRows(), fetchedRows.getStartOffset());
         fetchedRowsItr = fetchedRows.iterator();
       }
 
       if (!fetchedRowsItr.hasNext()) {
+        LOG.error("Beeline/JDBC has no more query-output rows: stmtHandle={}, rowsFetched={}",
+            stmtHandle, rowsFetched);
         return false;
       }
 
       row = fetchedRowsItr.next();
       rowsFetched++;
+      LOG.error("Beeline/JDBC returning query-output row to client: stmtHandle={}, rowsFetched={}",
+          stmtHandle, rowsFetched);
     } catch (SQLException eS) {
       throw eS;
     } catch (Exception ex) {

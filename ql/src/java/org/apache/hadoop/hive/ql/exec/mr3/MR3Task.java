@@ -291,29 +291,29 @@ public class MR3Task {
   @SuppressWarnings("unchecked")
   private void collectDagOutputs(DAGStatus dagStatus) {
     if (driverContext == null) {
-      LOG.debug("MR3Task.collectDagOutputs skipped: driverContext is null");
+      LOG.error("MR3Task.collectDagOutputs skipped: driverContext is null");
       return;
     }
 
     String queryId = driverContext.getQueryState().getQueryId();
     List<Tuple2<String, ByteString>> dagOutputs = JavaConverters.seqAsJavaList(dagStatus.dagOutputs());
-    LOG.debug("MR3Task.collectDagOutputs called: queryId={}, dagOutputCount={}", queryId, dagOutputs.size());
+    LOG.error("MR3Task.collectDagOutputs called: queryId={}, dagOutputCount={}", queryId, dagOutputs.size());
     List<ByteString> payloads = new ArrayList<>();
     for (Tuple2<String, ByteString> dagOutput : dagOutputs) {
       String dagOutputName = dagOutput._1();
       ByteString payload = dagOutput._2();
       boolean matchesQuery = dagOutputName.startsWith(queryId);
-      LOG.debug("MR3Task.collectDagOutputs inspecting DAG output: name={}, payloadBytes={}, matchesQuery={}",
+      LOG.error("MR3Task.collectDagOutputs inspecting DAG output: name={}, payloadBytes={}, matchesQuery={}",
           dagOutputName, payload.size(), matchesQuery);
       if (matchesQuery) {
         payloads.add(payload);
-        LOG.debug("MR3Task.collectDagOutputs added DAG output payload: name={}, payloadIndex={}, payloadBytes={}",
+        LOG.error("MR3Task.collectDagOutputs added DAG output payload: name={}, payloadIndex={}, payloadBytes={}",
             dagOutputName, payloads.size() - 1, payload.size());
       }
     }
 
-    LOG.info("Collected {} DAG output payload(s) for queryId={}", payloads.size(), queryId);
-    LOG.debug("MR3Task.collectDagOutputs setting DagOutputResultReader for queryId={} with payloadCount={}",
+    LOG.error("Collected {} DAG output payload(s) for queryId={}", payloads.size(), queryId);
+    LOG.error("MR3Task.collectDagOutputs setting DagOutputResultReader for queryId={} with payloadCount={}",
         queryId, payloads.size());
     driverContext.setDagOutputResultReader(new DagOutputResultReader(payloads));
   }

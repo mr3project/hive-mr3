@@ -227,7 +227,7 @@ public class OperationManager extends AbstractService {
       throw new HiveSQLException("Unable to run new queries as HiveServer2 is decommissioned or inactive,"
           + " state: " + getServiceState());
     }
-    LOG.info("Adding operation: {} {}", operation.getHandle(),
+    LOG.error("Adding operation: {} {}", operation.getHandle(),
         operation.getParentSession().getSessionHandle());
     queryIdOperation.put(getQueryId(operation), operation);
     handleToOperation.put(operation.getHandle(), operation);
@@ -240,7 +240,7 @@ public class OperationManager extends AbstractService {
       queryTagToIdMap.put(queryTag, queryId);
       return;
     }
-    LOG.info("Query id is missing during query tag updation");
+    LOG.error("Query id is missing during query tag updation");
   }
 
   private Operation removeOperation(OperationHandle opHandle) {
@@ -254,7 +254,7 @@ public class OperationManager extends AbstractService {
     if (queryTag != null) {
       queryTagToIdMap.remove(queryTag, queryId);
     }
-    LOG.info("Removed queryId: {} corresponding to operation: {} with tag: {}", queryId, opHandle, queryTag);
+    LOG.error("Removed queryId: {} corresponding to operation: {} with tag: {}", queryId, opHandle, queryTag);
     queryInfoCache.ifPresent(cache -> cache.removeLiveQueryInfo(operation));
     return operation;
   }
@@ -262,7 +262,7 @@ public class OperationManager extends AbstractService {
   private Operation removeTimedOutOperation(OperationHandle operationHandle) {
     Operation operation = handleToOperation.get(operationHandle);
     if (operation != null && operation.isTimedOut(System.currentTimeMillis())) {
-      LOG.info("Operation is timed out,operation=" + operation.getHandle() + ",state=" + operation.getState().toString());
+      LOG.error("Operation is timed out,operation=" + operation.getHandle() + ",state=" + operation.getState().toString());
       Metrics metrics = MetricsFactory.getInstance();
       if (metrics != null) {
         try {
@@ -293,9 +293,9 @@ public class OperationManager extends AbstractService {
     OperationState opState = operation.getState();
     if (opState.isTerminal()) {
       // Cancel should be a no-op in either cases
-      LOG.debug(opHandle + ": Operation is already aborted in state - " + opState);
+      LOG.error(opHandle + ": Operation is already aborted in state - " + opState);
     } else {
-      LOG.debug(opHandle + ": Attempting to cancel from state - " + opState);
+      LOG.error(opHandle + ": Attempting to cancel from state - " + opState);
       OperationState operationState = OperationState.CANCELED;
       operationState.setErrorMessage(errMsg);
       operation.cancel(operationState);
@@ -313,7 +313,7 @@ public class OperationManager extends AbstractService {
   }
 
   public void closeOperation(OperationHandle opHandle) throws HiveSQLException {
-    LOG.info("Closing operation: " + opHandle);
+    LOG.error("Closing operation: " + opHandle);
     Operation operation = removeOperation(opHandle);
     Metrics metrics = MetricsFactory.getInstance();
     if (metrics != null) {
@@ -334,11 +334,11 @@ public class OperationManager extends AbstractService {
   public RowSet getOperationNextRowSet(OperationHandle opHandle,
       FetchOrientation orientation, long maxRows) throws HiveSQLException {
     Operation operation = getOperation(opHandle);
-    LOG.debug("OperationManager.getOperationNextRowSet called: opHandle={}, orientation={}, maxRows={}, "
+    LOG.error("OperationManager.getOperationNextRowSet called: opHandle={}, orientation={}, maxRows={}, "
             + "operationState={}, operationClass={}",
         opHandle, orientation, maxRows, operation.getState(), operation.getClass().getName());
     RowSet rowSet = operation.getNextRowSet(orientation, maxRows);
-    LOG.debug("OperationManager.getOperationNextRowSet returning: opHandle={}, rowCount={}",
+    LOG.error("OperationManager.getOperationNextRowSet returning: opHandle={}, rowCount={}",
         opHandle, rowSet.numRows());
     return rowSet;
   }

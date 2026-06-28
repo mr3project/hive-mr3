@@ -212,13 +212,13 @@ public class DriverContext {
   }
 
   public DataInput getResStream() {
-    LOG.debug("DriverContext.getResStream called: queryId={}, contextId={}, hasResStream={}",
+    LOG.error("DriverContext.getResStream called: queryId={}, contextId={}, hasResStream={}",
         queryState.getQueryId(), System.identityHashCode(this), resStream != null);
     return resStream;
   }
 
   public void setResStream(DataInput resStream) {
-    LOG.debug("DriverContext.setResStream called: queryId={}, contextId={}, hadResStream={}, "
+    LOG.error("DriverContext.setResStream called: queryId={}, contextId={}, hadResStream={}, "
             + "hasNewResStream={}, caller={}",
         queryState.getQueryId(), System.identityHashCode(this), this.resStream != null, resStream != null,
         getCallerForDebugLog());
@@ -226,7 +226,7 @@ public class DriverContext {
   }
 
   public void setDagOutputResultReader(DagOutputResultReader dagOutputResultReader) {
-    LOG.debug("DriverContext.setDagOutputResultReader called: queryId={}, contextId={}, hadReader={}, "
+    LOG.error("DriverContext.setDagOutputResultReader called: queryId={}, contextId={}, hadReader={}, "
             + "hasNewReader={}, newPayloadCount={}, caller={}",
         queryState.getQueryId(), System.identityHashCode(this), this.dagOutputResultReader != null,
         dagOutputResultReader != null, dagOutputResultReader == null ? -1 : dagOutputResultReader.getPayloadCount(),
@@ -235,28 +235,28 @@ public class DriverContext {
   }
 
   public DataInput getDagOutputResultStream() {
-    LOG.debug("DriverContext.getDagOutputResultStream called: queryId={}, contextId={}, hasReader={}",
+    LOG.error("DriverContext.getDagOutputResultStream called: queryId={}, contextId={}, hasReader={}",
         queryState.getQueryId(), System.identityHashCode(this), dagOutputResultReader != null);
     if (dagOutputResultReader == null) {
-      LOG.debug("DriverContext.getDagOutputResultStream returning null: queryId={}, contextId={}, no reader",
+      LOG.error("DriverContext.getDagOutputResultStream returning null: queryId={}, contextId={}, no reader",
           queryState.getQueryId(), System.identityHashCode(this));
       return null;
     }
     DataInput resultStream = dagOutputResultReader.nextStream();
-    LOG.debug("DriverContext.getDagOutputResultStream returning: queryId={}, contextId={}, hasStream={}",
+    LOG.error("DriverContext.getDagOutputResultStream returning: queryId={}, contextId={}, hasStream={}",
         queryState.getQueryId(), System.identityHashCode(this), resultStream != null);
     return resultStream;
   }
 
   public boolean hasDagOutputResultReader() {
     boolean hasReader = dagOutputResultReader != null;
-    LOG.debug("DriverContext.hasDagOutputResultReader called: queryId={}, contextId={}, hasReader={}",
+    LOG.error("DriverContext.hasDagOutputResultReader called: queryId={}, contextId={}, hasReader={}",
         queryState.getQueryId(), System.identityHashCode(this), hasReader);
     return hasReader;
   }
 
   public void resetDagOutputResultReader() {
-    LOG.debug("DriverContext.resetDagOutputResultReader called: queryId={}, contextId={}, hasReader={}",
+    LOG.error("DriverContext.resetDagOutputResultReader called: queryId={}, contextId={}, hasReader={}",
         queryState.getQueryId(), System.identityHashCode(this), dagOutputResultReader != null);
     if (dagOutputResultReader != null) {
       dagOutputResultReader.reset();

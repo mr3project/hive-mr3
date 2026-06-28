@@ -41,35 +41,33 @@ public class DagOutputResultReader {
   public DagOutputResultReader(List<ByteString> payloads) {
     this.payloads = Collections.unmodifiableList(new ArrayList<>(payloads));
     this.nextPayloadIndex = 0;
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Created DagOutputResultReader with {} payload(s), payloadSizes={}",
-          this.payloads.size(), getPayloadSizes(this.payloads));
-    }
+    LOG.error("Created DagOutputResultReader with {} payload(s), payloadSizes={}",
+        this.payloads.size(), getPayloadSizes(this.payloads));
   }
 
   public synchronized DataInput nextStream() {
-    LOG.debug("DagOutputResultReader.nextStream called: nextPayloadIndex={}, payloadCount={}",
+    LOG.error("DagOutputResultReader.nextStream called: nextPayloadIndex={}, payloadCount={}",
         nextPayloadIndex, payloads.size());
     if (nextPayloadIndex >= payloads.size()) {
-      LOG.debug("DagOutputResultReader.nextStream returning null: all payloads consumed");
+      LOG.error("DagOutputResultReader.nextStream returning null: all payloads consumed");
       return null;
     }
     ByteString payload = payloads.get(nextPayloadIndex);
-    LOG.debug("DagOutputResultReader.nextStream returning payload index {} with {} byte(s)",
+    LOG.error("DagOutputResultReader.nextStream returning payload index {} with {} byte(s)",
         nextPayloadIndex, payload.size());
     nextPayloadIndex++;
     return new DataInputStream(payload.newInput());
   }
 
   public synchronized void reset() {
-    LOG.debug("DagOutputResultReader.reset called: nextPayloadIndex={}, payloadCount={}",
+    LOG.error("DagOutputResultReader.reset called: nextPayloadIndex={}, payloadCount={}",
         nextPayloadIndex, payloads.size());
     nextPayloadIndex = 0;
   }
 
   public synchronized boolean hasPayloads() {
     boolean hasPayloads = !payloads.isEmpty();
-    LOG.debug("DagOutputResultReader.hasPayloads called: hasPayloads={}, payloadCount={}",
+    LOG.error("DagOutputResultReader.hasPayloads called: hasPayloads={}, payloadCount={}",
         hasPayloads, payloads.size());
     return hasPayloads;
   }

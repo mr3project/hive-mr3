@@ -298,6 +298,9 @@ public class HiveStatement implements java.sql.Statement {
   public boolean execute(String sql) throws SQLException {
     runAsyncOnServer(sql);
     TGetOperationStatusResp status = waitForOperationToComplete();
+    LOG.error("Beeline/JDBC execute completed: stmtHandle={}, hasResultSetStatus={}, "
+        + "stmtHandleHasResultSet={}", stmtHandle.orElse(null), status.isHasResultSet(),
+        stmtHandle.isPresent() && stmtHandle.get().isHasResultSet());
 
     // The query should be completed by now
     if (!status.isHasResultSet() && stmtHandle.isPresent() && !stmtHandle.get().isHasResultSet()) {
@@ -357,18 +360,22 @@ public class HiveStatement implements java.sql.Statement {
     execReq.setConfOverlay(sessConf);
     execReq.setQueryTimeout(queryTimeout);
     try {
-      LOG.debug("Submitting statement [{}]: {}", sessHandle, sql);
+      LOG.error("Beeline/JDBC submitting statement: sessionHandle={}, sql={}", sessHandle, sql);
       TExecuteStatementResp execResp = client.ExecuteStatement(execReq);
+      LOG.error("Beeline/JDBC ExecuteStatement returned: sessionHandle={}, hasOperationHandle={}",
+          sessHandle, execResp.isSetOperationHandle());
       Utils.verifySuccessWithInfo(execResp.getStatus());
       List<String> infoMessages = execResp.getStatus().getInfoMessages();
       if (infoMessages != null) {
         for (String message : infoMessages) {
-          LOG.info(message);
+          LOG.error(message);
         }
       }
 
       stmtHandle = Optional.of(execResp.getOperationHandle());
-      LOG.debug("Running with statement handle: {}", stmtHandle.get());
+      LOG.error("Beeline/JDBC stored statement handle: sessionHandle={}, stmtHandle={}, hasResultSet={}",
+          sessHandle, stmtHandle.get(), stmtHandle.get().isHasResultSet());
+      LOG.error("Running with statement handle: {}", stmtHandle.get());
 
       if (needCancel.get()) {
         doCancel(stmtHandle.get());
@@ -391,15 +398,20 @@ public class HiveStatement implements java.sql.Statement {
     TGetOperationStatusReq statusReq = new TGetOperationStatusReq(stmtHandle.get());
     TGetOperationStatusResp statusResp = null;
 
+    LOG.error("Beeline/JDBC waiting for result-set status: stmtHandle={}", stmtHandle.get());
     while (statusResp == null || !statusResp.isSetHasResultSet()) {
       try {
         statusResp = client.GetOperationStatus(statusReq);
+        LOG.error("Beeline/JDBC result-set status response: stmtHandle={}, status={}",
+            stmtHandle.get(), statusResp);
       } catch (TException e) {
         isLogBeingGenerated = false;
         throw new SQLException("Failed to wait for result set status", "08S01", e);
       }
     }
 
+    LOG.error("Beeline/JDBC result-set status is available: stmtHandle={}, status={}",
+        stmtHandle.get(), statusResp);
     return statusResp;
   }
 
@@ -414,7 +426,7 @@ public class HiveStatement implements java.sql.Statement {
     //   inPlaceUpdateStream.get().getEventNotifier().progressBarCompleted();
     // }
 
-    LOG.debug("Waiting on operation to complete: Polling operation status");
+    LOG.error("Beeline/JDBC waiting for operation completion: stmtHandle={}", stmtHandle.get());
 
     // Poll on the operation status, till the operation is complete
     do {
@@ -428,7 +440,8 @@ public class HiveStatement implements java.sql.Statement {
          * essentially return after the HIVE_SERVER2_LONG_POLLING_TIMEOUT (a server config) expires
          */
         statusResp = client.GetOperationStatus(statusReq);
-        LOG.debug("Status response: {}", statusResp);
+        LOG.error("Beeline/JDBC operation status response: stmtHandle={}, status={}",
+            stmtHandle.get(), statusResp);
         if (!isOperationComplete && inPlaceUpdateStream.isPresent()) {
           inPlaceUpdateStream.get().update(statusResp.getProgressUpdateResponse());
         }
@@ -473,6 +486,7 @@ public class HiveStatement implements java.sql.Statement {
     if (inPlaceUpdateStream.isPresent()) {
       inPlaceUpdateStream.get().getEventNotifier().progressBarCompleted();
     }
+    LOG.error("Beeline/JDBC operation completed: stmtHandle={}, finalStatus={}", stmtHandle.get(), statusResp);
     return statusResp;
   }
 
@@ -780,7 +794,11 @@ public class HiveStatement implements java.sql.Statement {
         TFetchResultsReq tFetchResultsReq = new TFetchResultsReq(stmtHandle.get(),
             getFetchOrientation(incremental), fetchSize);
         tFetchResultsReq.setFetchType((short)1);
+        LOG.error("Beeline/JDBC fetching query log: stmtHandle={}, orientation={}, fetchSize={}",
+            stmtHandle.get(), tFetchResultsReq.getOrientation(), fetchSize);
         tFetchResultsResp = client.FetchResults(tFetchResultsReq);
+        LOG.error("Beeline/JDBC query-log FetchResults returned: stmtHandle={}, hasResults={}",
+            stmtHandle.get(), tFetchResultsResp.isSetResults());
         Utils.verifySuccessWithInfo(tFetchResultsResp.getStatus());
       } else {
         if (isQueryClosed) {

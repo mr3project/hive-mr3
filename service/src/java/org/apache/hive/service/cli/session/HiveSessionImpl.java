@@ -546,7 +546,7 @@ public class HiveSessionImpl implements HiveSession {
   private OperationHandle executeStatementInternal(String statement,
       Map<String, String> confOverlay, boolean runAsync, long queryTimeout) throws HiveSQLException {
     acquire(true, true);
-    LOG.info("executing " +  statement);
+    LOG.error("executing " +  statement);
 
     ExecuteStatementOperation operation = null;
     OperationHandle opHandle = null;
@@ -916,7 +916,7 @@ public class HiveSessionImpl implements HiveSession {
   @Override
   public RowSet fetchResults(OperationHandle opHandle, FetchOrientation orientation,
       long maxRows, FetchType fetchType) throws HiveSQLException {
-    LOG.debug("HiveSessionImpl.fetchResults called: opHandle={}, orientation={}, maxRows={}, fetchType={}",
+    LOG.error("HiveSessionImpl.fetchResults called: opHandle={}, orientation={}, maxRows={}, fetchType={}",
         opHandle, orientation, maxRows, fetchType);
     acquire(true, false);
     try {
@@ -926,7 +926,7 @@ public class HiveSessionImpl implements HiveSession {
       } else {
         rowSet = operationManager.getOperationLogRowSet(opHandle, orientation, maxRows, sessionConf);
       }
-      LOG.debug("HiveSessionImpl.fetchResults returning: opHandle={}, fetchType={}, rowCount={}",
+      LOG.error("HiveSessionImpl.fetchResults returning: opHandle={}, fetchType={}, rowCount={}",
           opHandle, fetchType, rowSet.numRows());
       return rowSet;
     } finally {
