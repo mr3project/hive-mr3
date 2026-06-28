@@ -30,11 +30,14 @@ import org.apache.hadoop.hive.ql.cache.results.QueryResultsCache.CacheEntry;
 import org.apache.hadoop.hive.ql.exec.FetchTask;
 import org.apache.hadoop.hive.ql.lockmgr.HiveTxnManager;
 import org.apache.hadoop.hive.ql.plan.mapper.StatsSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Context for the procedure managed by the Driver.
  */
 public class DriverContext {
+  private static final Logger LOG = LoggerFactory.getLogger(DriverContext.class);
   // For WebUI.  Kept alive after queryPlan is freed.
   private final QueryDisplay queryDisplay = new QueryDisplay();
 
@@ -209,29 +212,42 @@ public class DriverContext {
   }
 
   public DataInput getResStream() {
+    LOG.debug("DriverContext.getResStream called: hasResStream={}", resStream != null);
     return resStream;
   }
 
   public void setResStream(DataInput resStream) {
+    LOG.debug("DriverContext.setResStream called: hadResStream={}, hasNewResStream={}",
+        this.resStream != null, resStream != null);
     this.resStream = resStream;
   }
 
   public void setDagOutputResultReader(DagOutputResultReader dagOutputResultReader) {
+    LOG.debug("DriverContext.setDagOutputResultReader called: hadReader={}, hasNewReader={}, newPayloadCount={}",
+        this.dagOutputResultReader != null, dagOutputResultReader != null,
+        dagOutputResultReader == null ? -1 : dagOutputResultReader.getPayloadCount());
     this.dagOutputResultReader = dagOutputResultReader;
   }
 
   public DataInput getDagOutputResultStream() {
+    LOG.debug("DriverContext.getDagOutputResultStream called: hasReader={}", dagOutputResultReader != null);
     if (dagOutputResultReader == null) {
+      LOG.debug("DriverContext.getDagOutputResultStream returning null: no reader");
       return null;
     }
-    return dagOutputResultReader.nextStream();
+    DataInput resultStream = dagOutputResultReader.nextStream();
+    LOG.debug("DriverContext.getDagOutputResultStream returning: hasStream={}", resultStream != null);
+    return resultStream;
   }
 
   public boolean hasDagOutputResultReader() {
-    return dagOutputResultReader != null;
+    boolean hasReader = dagOutputResultReader != null;
+    LOG.debug("DriverContext.hasDagOutputResultReader called: hasReader={}", hasReader);
+    return hasReader;
   }
 
   public void resetDagOutputResultReader() {
+    LOG.debug("DriverContext.resetDagOutputResultReader called: hasReader={}", dagOutputResultReader != null);
     if (dagOutputResultReader != null) {
       dagOutputResultReader.reset();
     }
