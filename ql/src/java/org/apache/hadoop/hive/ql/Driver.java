@@ -626,7 +626,7 @@ public class Driver implements IDriver {
 
   @Override
   public boolean isFetchingTable() {
-    return driverContext.getFetchTask() != null && !driverContext.hasDagOutputResultReader();
+    return driverContext.getFetchTask() != null;
   }
 
   @Override
@@ -652,7 +652,11 @@ public class Driver implements IDriver {
     if (driverState.isDestroyed() || driverState.isClosed()) {
       throw new IOException("FAILED: driver has been cancelled, closed or destroyed.");
     }
-    if (isFetchingTable()) {
+    if (driverContext.hasDagOutputResultReader()) {
+      driverContext.resetDagOutputResultReader();
+      context.resetStream();
+      driverContext.setResStream(null);
+    } else if (isFetchingTable()) {
       try {
         driverContext.getFetchTask().resetFetch();
       } catch (Exception e) {
@@ -680,7 +684,7 @@ public class Driver implements IDriver {
       throw new IOException("FAILED: query has been cancelled, closed, or destroyed.");
     }
 
-    if (isFetchingTable()) {
+    if (!driverContext.hasDagOutputResultReader() && isFetchingTable()) {
       return getFetchingTableResults(results);
     }
 
