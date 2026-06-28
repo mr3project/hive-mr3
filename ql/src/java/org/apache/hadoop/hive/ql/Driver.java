@@ -652,13 +652,14 @@ public class Driver implements IDriver {
     if (driverState.isDestroyed() || driverState.isClosed()) {
       throw new IOException("FAILED: driver has been cancelled, closed or destroyed.");
     }
-    if (isFetchingTable()) {
+    if (!driverContext.hasDagOutputResultReader() && isFetchingTable()) {
       try {
         driverContext.getFetchTask().resetFetch();
       } catch (Exception e) {
         throw new IOException("Error resetting the current fetch task", e);
       }
     } else {
+      driverContext.resetDagOutputResultReader();
       context.resetStream();
       driverContext.setResStream(null);
     }
@@ -679,17 +680,16 @@ public class Driver implements IDriver {
       throw new IOException("FAILED: query has been cancelled, closed, or destroyed.");
     }
 
-    if (isFetchingTable()) {
+    if (!driverContext.hasDagOutputResultReader() && isFetchingTable()) {
       return getFetchingTableResults(results);
     }
 
     if (driverContext.getResStream() == null) {
-      // If the driver does not have a stream and neither does the context, return
-      DataInput contextStream = context.getStream();
-      if (contextStream == null) {
+      DataInput resultStream = getNextResultStream();
+      if (resultStream == null) {
         return false;
       }
-      driverContext.setResStream(contextStream);
+      driverContext.setResStream(resultStream);
     }
 
     int numRows = 0;
@@ -714,10 +714,17 @@ public class Driver implements IDriver {
       }
 
       if (streamStatus == Utilities.StreamStatus.EOF) {
-        driverContext.setResStream(context.getStream());
+        driverContext.setResStream(getNextResultStream());
       }
     }
     return true;
+  }
+
+  private DataInput getNextResultStream() {
+    if (driverContext.hasDagOutputResultReader()) {
+      return driverContext.getDagOutputResultStream();
+    }
+    return context.getStream();
   }
 
   @SuppressWarnings("rawtypes")

@@ -5969,7 +5969,7 @@ public class HiveConf extends Configuration {
     HIVE_MR3_SESSION_CONFIG_REMOVE_PREFIXES("hive.mr3.session.config.remove.prefixes", "",
       "Comma-separated list of key prefixes to remove from JobConf for MR3 session"),
 
-    HIVE_MR3_QUERY_RESULT_TASK_MAX_BYTES("hive.mr3.query.result.task.max.bytes",256 * 1024L * 1024L,
+    HIVE_MR3_QUERY_RESULT_TASK_MAX_BYTES("hive.mr3.query.result.task.max.bytes",64L * 1024L * 1024L,
       "Max number of bytes per task to keep in memory when using QueryResultOperator, -1 for no limit"),
 
     HIVE_MR3_UI_INCLUDE_OPERATOR_EXTRA("hive.mr3.ui.include.operator.extra", false,

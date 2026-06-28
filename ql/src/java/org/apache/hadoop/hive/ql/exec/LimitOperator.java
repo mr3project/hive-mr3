@@ -50,8 +50,6 @@ public class LimitOperator extends Operator<LimitDesc> implements Serializable {
   protected transient int currCount;
   protected transient boolean isMap;
 
-  // TODO: set runtimeCache only if this LimitOperator is the last operator before RS or TerminalOperator
-
   protected transient ObjectCache runtimeCache;
   protected transient String limitReachedKey;
 

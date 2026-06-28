@@ -30,7 +30,6 @@ import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.Vertex;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.session.SessionState;
-import org.apache.tez.common.counters.TaskCounter;
 import org.apache.tez.common.counters.TezCounter;
 import org.apache.tez.common.counters.TezCounters;
 
