@@ -916,12 +916,19 @@ public class HiveSessionImpl implements HiveSession {
   @Override
   public RowSet fetchResults(OperationHandle opHandle, FetchOrientation orientation,
       long maxRows, FetchType fetchType) throws HiveSQLException {
+    LOG.debug("HiveSessionImpl.fetchResults called: opHandle={}, orientation={}, maxRows={}, fetchType={}",
+        opHandle, orientation, maxRows, fetchType);
     acquire(true, false);
     try {
+      RowSet rowSet;
       if (fetchType == FetchType.QUERY_OUTPUT) {
-        return operationManager.getOperationNextRowSet(opHandle, orientation, maxRows);
+        rowSet = operationManager.getOperationNextRowSet(opHandle, orientation, maxRows);
+      } else {
+        rowSet = operationManager.getOperationLogRowSet(opHandle, orientation, maxRows, sessionConf);
       }
-      return operationManager.getOperationLogRowSet(opHandle, orientation, maxRows, sessionConf);
+      LOG.debug("HiveSessionImpl.fetchResults returning: opHandle={}, fetchType={}, rowCount={}",
+          opHandle, fetchType, rowSet.numRows());
+      return rowSet;
     } finally {
       release(true, false);
     }

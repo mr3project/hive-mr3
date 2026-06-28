@@ -212,45 +212,66 @@ public class DriverContext {
   }
 
   public DataInput getResStream() {
-    LOG.debug("DriverContext.getResStream called: hasResStream={}", resStream != null);
+    LOG.debug("DriverContext.getResStream called: queryId={}, contextId={}, hasResStream={}",
+        queryState.getQueryId(), System.identityHashCode(this), resStream != null);
     return resStream;
   }
 
   public void setResStream(DataInput resStream) {
-    LOG.debug("DriverContext.setResStream called: hadResStream={}, hasNewResStream={}",
-        this.resStream != null, resStream != null);
+    LOG.debug("DriverContext.setResStream called: queryId={}, contextId={}, hadResStream={}, "
+            + "hasNewResStream={}, caller={}",
+        queryState.getQueryId(), System.identityHashCode(this), this.resStream != null, resStream != null,
+        getCallerForDebugLog());
     this.resStream = resStream;
   }
 
   public void setDagOutputResultReader(DagOutputResultReader dagOutputResultReader) {
-    LOG.debug("DriverContext.setDagOutputResultReader called: hadReader={}, hasNewReader={}, newPayloadCount={}",
-        this.dagOutputResultReader != null, dagOutputResultReader != null,
-        dagOutputResultReader == null ? -1 : dagOutputResultReader.getPayloadCount());
+    LOG.debug("DriverContext.setDagOutputResultReader called: queryId={}, contextId={}, hadReader={}, "
+            + "hasNewReader={}, newPayloadCount={}, caller={}",
+        queryState.getQueryId(), System.identityHashCode(this), this.dagOutputResultReader != null,
+        dagOutputResultReader != null, dagOutputResultReader == null ? -1 : dagOutputResultReader.getPayloadCount(),
+        getCallerForDebugLog());
     this.dagOutputResultReader = dagOutputResultReader;
   }
 
   public DataInput getDagOutputResultStream() {
-    LOG.debug("DriverContext.getDagOutputResultStream called: hasReader={}", dagOutputResultReader != null);
+    LOG.debug("DriverContext.getDagOutputResultStream called: queryId={}, contextId={}, hasReader={}",
+        queryState.getQueryId(), System.identityHashCode(this), dagOutputResultReader != null);
     if (dagOutputResultReader == null) {
-      LOG.debug("DriverContext.getDagOutputResultStream returning null: no reader");
+      LOG.debug("DriverContext.getDagOutputResultStream returning null: queryId={}, contextId={}, no reader",
+          queryState.getQueryId(), System.identityHashCode(this));
       return null;
     }
     DataInput resultStream = dagOutputResultReader.nextStream();
-    LOG.debug("DriverContext.getDagOutputResultStream returning: hasStream={}", resultStream != null);
+    LOG.debug("DriverContext.getDagOutputResultStream returning: queryId={}, contextId={}, hasStream={}",
+        queryState.getQueryId(), System.identityHashCode(this), resultStream != null);
     return resultStream;
   }
 
   public boolean hasDagOutputResultReader() {
     boolean hasReader = dagOutputResultReader != null;
-    LOG.debug("DriverContext.hasDagOutputResultReader called: hasReader={}", hasReader);
+    LOG.debug("DriverContext.hasDagOutputResultReader called: queryId={}, contextId={}, hasReader={}",
+        queryState.getQueryId(), System.identityHashCode(this), hasReader);
     return hasReader;
   }
 
   public void resetDagOutputResultReader() {
-    LOG.debug("DriverContext.resetDagOutputResultReader called: hasReader={}", dagOutputResultReader != null);
+    LOG.debug("DriverContext.resetDagOutputResultReader called: queryId={}, contextId={}, hasReader={}",
+        queryState.getQueryId(), System.identityHashCode(this), dagOutputResultReader != null);
     if (dagOutputResultReader != null) {
       dagOutputResultReader.reset();
     }
+  }
+
+  private String getCallerForDebugLog() {
+    StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
+    for (StackTraceElement element : stackTrace) {
+      if (!element.getClassName().equals(Thread.class.getName())
+          && !element.getClassName().equals(DriverContext.class.getName())) {
+        return element.toString();
+      }
+    }
+    return "unknown";
   }
 
   public String getOperationId() {

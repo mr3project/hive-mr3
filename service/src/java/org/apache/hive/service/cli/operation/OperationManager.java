@@ -333,7 +333,14 @@ public class OperationManager extends AbstractService {
 
   public RowSet getOperationNextRowSet(OperationHandle opHandle,
       FetchOrientation orientation, long maxRows) throws HiveSQLException {
-    return getOperation(opHandle).getNextRowSet(orientation, maxRows);
+    Operation operation = getOperation(opHandle);
+    LOG.debug("OperationManager.getOperationNextRowSet called: opHandle={}, orientation={}, maxRows={}, "
+            + "operationState={}, operationClass={}",
+        opHandle, orientation, maxRows, operation.getState(), operation.getClass().getName());
+    RowSet rowSet = operation.getNextRowSet(orientation, maxRows);
+    LOG.debug("OperationManager.getOperationNextRowSet returning: opHandle={}, rowCount={}",
+        opHandle, rowSet.numRows());
+    return rowSet;
   }
 
   public RowSet getOperationLogRowSet(OperationHandle opHandle, FetchOrientation orientation,
