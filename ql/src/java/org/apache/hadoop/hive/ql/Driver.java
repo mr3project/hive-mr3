@@ -636,21 +636,31 @@ public class Driver implements IDriver {
 
   @Override
   public boolean hasResultSet() {
-    // TODO explain should use a FetchTask for reading
-    for (Task<?> task : driverContext.getPlan().getRootTasks()) {
-      if (task.getClass() == ExplainTask.class) {
-        return true;
+    QueryPlan plan = driverContext.getPlan();
+    boolean hasDagOutputReader = driverContext.hasDagOutputResultReader();
+    boolean hasFetchTask = false;
+    boolean hasResultSchema = driverContext.getSchema() != null
+        && driverContext.getSchema().isSetFieldSchemas();
+    boolean isExplainTask = false;
+
+    if (plan != null) {
+      // TODO explain should use a FetchTask for reading
+      for (Task<?> task : plan.getRootTasks()) {
+        if (task.getClass() == ExplainTask.class) {
+          isExplainTask = true;
+          break;
+        }
       }
+      hasFetchTask = plan.getFetchTask() != null;
+      hasResultSchema = plan.getResultSchema() != null
+          && plan.getResultSchema().isSetFieldSchemas();
     }
 
-    boolean hasFetchTask = driverContext.getPlan().getFetchTask() != null;
-    boolean hasResultSchema = driverContext.getPlan().getResultSchema() != null
-        && driverContext.getPlan().getResultSchema().isSetFieldSchemas();
-    boolean hasDagOutputReader = driverContext.hasDagOutputResultReader();
-    boolean hasResultSet = hasResultSchema || hasDagOutputReader;
-    LOG.error("Driver.hasResultSet called: queryId={}, hasFetchTask={}, hasResultSchema={}, "
-            + "hasDagOutputReader={}, hasResultSet={}",
-        driverContext.getQueryState().getQueryId(), hasFetchTask, hasResultSchema, hasDagOutputReader, hasResultSet);
+    boolean hasResultSet = isExplainTask || hasResultSchema || hasDagOutputReader;
+    LOG.error("Driver.hasResultSet called: queryId={}, hasPlan={}, isExplainTask={}, hasFetchTask={}, "
+            + "hasResultSchema={}, hasDagOutputReader={}, hasResultSet={}",
+        driverContext.getQueryState().getQueryId(), plan != null, isExplainTask, hasFetchTask, hasResultSchema,
+        hasDagOutputReader, hasResultSet);
     return hasResultSet;
   }
 
