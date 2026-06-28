@@ -26,6 +26,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
+import org.apache.hadoop.hive.ql.DagOutputResultReader;
+import org.apache.hadoop.hive.ql.DriverContext;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
@@ -78,6 +80,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.Tuple2;
+import scala.collection.JavaConverters;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -114,6 +118,7 @@ public class MR3Task {
   private final HiveConf conf;
   private final SessionState.LogHelper console;
   private final AtomicBoolean isShutdown;
+  private final DriverContext driverContext;
   private final DAGUtils dagUtils;
 
   private TezCounters counters;
@@ -132,9 +137,15 @@ public class MR3Task {
   private Map<BaseWork, JobConf> workToConf = null;
 
   public MR3Task(HiveConf conf, SessionState.LogHelper console, AtomicBoolean isShutdown) {
+    this(conf, console, isShutdown, null);
+  }
+
+  public MR3Task(HiveConf conf, SessionState.LogHelper console, AtomicBoolean isShutdown,
+      DriverContext driverContext) {
     this.conf = conf;
     this.console = console;
     this.isShutdown = isShutdown;
+    this.driverContext = driverContext;
     this.dagUtils = DAGUtils.getInstance();
     this.exception = null;
   }
@@ -237,6 +248,7 @@ public class MR3Task {
         }
         String dagIdStr = mr3JobRef.getDagIdStr();    // may throw MR3Exception
         collectCommitInformation(tezWork, dagStatus, dagIdStr);
+        collectDagOutputs(dagStatus);
         mr3Session.setAlreadyExecutedAnyDag();
       }
 
@@ -274,6 +286,24 @@ public class MR3Task {
     }
 
     return returnCode;
+  }
+
+  @SuppressWarnings("unchecked")
+  private void collectDagOutputs(DAGStatus dagStatus) {
+    if (driverContext == null) {
+      return;
+    }
+
+    String queryId = driverContext.getQueryState().getQueryId();
+    List<ByteString> payloads = new ArrayList<>();
+    for (Tuple2<String, ByteString> dagOutput : JavaConverters.seqAsJavaList(dagStatus.dagOutputs())) {
+      if (dagOutput._1().startsWith(queryId)) {
+        payloads.add(dagOutput._2());
+      }
+    }
+
+    LOG.info("Collected {} DAG output payload(s) for queryId={}", payloads.size(), queryId);
+    driverContext.setDagOutputResultReader(new DagOutputResultReader(payloads));
   }
 
   private void collectCommitInformation(TezWork work, DAGStatus dagStatus, String dagIdStr) {

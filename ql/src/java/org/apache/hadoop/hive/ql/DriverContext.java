@@ -77,6 +77,7 @@ public class DriverContext {
   private boolean retrial = false;
 
   private DataInput resStream;
+  private DagOutputResultReader dagOutputResultReader;
 
   // HS2 operation handle guid string
   private String operationId;
@@ -243,6 +244,27 @@ public class DriverContext {
 
   public void setResStream(DataInput resStream) {
     this.resStream = resStream;
+  }
+
+  public void setDagOutputResultReader(DagOutputResultReader dagOutputResultReader) {
+    this.dagOutputResultReader = dagOutputResultReader;
+  }
+
+  public DataInput getDagOutputResultStream() {
+    if (dagOutputResultReader == null) {
+      return null;
+    }
+    return dagOutputResultReader.nextStream();
+  }
+
+  public boolean hasDagOutputResultReader() {
+    return dagOutputResultReader != null;
+  }
+
+  public void resetDagOutputResultReader() {
+    if (dagOutputResultReader != null) {
+      dagOutputResultReader.reset();
+    }
   }
 
   public String getOperationId() {
