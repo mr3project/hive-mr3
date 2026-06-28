@@ -652,11 +652,7 @@ public class Driver implements IDriver {
     if (driverState.isDestroyed() || driverState.isClosed()) {
       throw new IOException("FAILED: driver has been cancelled, closed or destroyed.");
     }
-    if (driverContext.hasDagOutputResultReader()) {
-      driverContext.resetDagOutputResultReader();
-      context.resetStream();
-      driverContext.setResStream(null);
-    } else if (isFetchingTable()) {
+    if (!driverContext.hasDagOutputResultReader() && isFetchingTable()) {
       try {
         driverContext.getFetchTask().resetFetch();
       } catch (Exception e) {
