@@ -360,11 +360,6 @@ public class MR3JobMonitor {
         new FSCountersSummary(vertexStatusMap).print(console);
       }
       console.printInfo("");
-
-      // DagOutputResultReader is installed after monitorExecution() returns. Flush the
-      // summary output before returning so Beeline observes the execution summaries
-      // before it can fetch and print result rows from the DAG output reader.
-      console.flushConsole();
     }
   }
 

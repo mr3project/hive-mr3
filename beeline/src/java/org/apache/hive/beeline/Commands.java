@@ -1010,6 +1010,14 @@ public class Commands {
           }
         }
 
+        if (logThread != null) {
+          // Drain any summary lines emitted at the end of execution before printing
+          // result rows. Otherwise Beeline can print rows first and only fetch the
+          // remaining operation log lines when the result set is closed.
+          showRemainingLogsIfAny(stmnt);
+          logThread = null;
+        }
+
         beeLine.showWarnings();
 
         if (hasResults) {
