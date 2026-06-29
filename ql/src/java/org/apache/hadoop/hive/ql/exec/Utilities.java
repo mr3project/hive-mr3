@@ -3483,9 +3483,9 @@ public final class Utilities {
    * so we don't want to depend on scratch dir and context.
    */
   public static List<Path> getInputPathsTez(JobConf job, MapWork work) throws Exception {
-    String scratchDir = job.get(DagUtils.TEZ_TMP_DIR_KEY);
+    Path hiveScratchDir = null;
 
-    List<Path> paths = getInputPaths(job, work, new Path(scratchDir), null, true);
+    List<Path> paths = getInputPaths(job, work, hiveScratchDir, null, true);
 
     return paths;
   }
@@ -3520,6 +3520,7 @@ public final class Utilities {
    */
   public static List<Path> getInputPaths(JobConf job, MapWork work, Path hiveScratchDir,
       Context ctx, boolean skipDummy) throws Exception {
+    assert !(hiveScratchDir == null) || skipDummy;
 
     PerfLogger perfLogger = SessionState.getPerfLogger();
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.INPUT_PATHS);
