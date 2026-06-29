@@ -789,7 +789,6 @@ public class DAGUtils {
       inpFormat = CombineHiveInputFormat.class.getName();
     }
 
-    jobConf.set(DagUtils.TEZ_TMP_DIR_KEY, context.getMRTmpPath().toUri().toString());
     jobConf.set(Utilities.MAPRED_MAPPER_CLASS, ExecMapper.class.getName());
     jobConf.set("mapred.input.format.class", inpFormat);
 
