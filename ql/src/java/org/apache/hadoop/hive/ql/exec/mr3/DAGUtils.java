@@ -306,7 +306,7 @@ public class DAGUtils {
     initializeStatsPublisher(vertexJobConf, work);
 
     // If there is a fileSink, add a DataSink to the vertex
-    boolean hasFileSink = work.getAllOperators().stream().anyMatch(o -> o instanceof FileSinkOperator);
+    boolean hasFileSink = hasFileSinkOperator(work);
     // final vertices need to have at least one output
     if ((isFinal || hasFileSink) && !(work instanceof MapReduceMapWork)) {
       if (!HiveOutputFormatImpl.class.getName().equals(vertexJobConf.get("mapred.output.format.class"))) {
@@ -418,6 +418,10 @@ public class DAGUtils {
     }
   }
 
+  private boolean hasFileSinkOperator(BaseWork work) {
+    return work.getAllOperators().stream().anyMatch(o -> o instanceof FileSinkOperator);
+  }
+
   /*
    * Helper function to create Vertex from MapWork.
    */
@@ -429,8 +433,14 @@ public class DAGUtils {
     // set up the operator plan
     Utilities.cacheMapWork(vertexJobConf, mapWork, mr3ScratchDir);
 
-    // create the directories FileSinkOperators need
-    Utilities.createTmpDirs(vertexJobConf, mapWork);
+    // QueryResultOperator returns top-level query results through DAG outputs, not through
+    // FileSinkOperator output paths. Only create Hive Context scratch/staging temp
+    // directories when this work still has a real FileSinkOperator, e.g. for table writes.
+    if (hasFileSinkOperator(mapWork)) {
+      Utilities.createTmpDirs(vertexJobConf, mapWork);
+    } else {
+      LOG.debug("Skipping FileSinkOperator temp directory creation for MapWork {}", mapWork.getName());
+    }
 
     boolean groupSplitsInInputInitializer;  // use tez to combine splits???
     org.apache.tez.dag.api.DataSourceDescriptor dataSource;
@@ -579,8 +589,14 @@ public class DAGUtils {
     vertexJobConf.set(Utilities.INPUT_NAME, reduceWork.getName());
     Utilities.setReduceWork(vertexJobConf, reduceWork, mr3ScratchDir, false);
 
-    // create the directories FileSinkOperators need
-    Utilities.createTmpDirs(vertexJobConf, reduceWork);
+    // QueryResultOperator returns top-level query results through DAG outputs, not through
+    // FileSinkOperator output paths. Only create Hive Context scratch/staging temp
+    // directories when this work still has a real FileSinkOperator, e.g. for table writes.
+    if (hasFileSinkOperator(reduceWork)) {
+      Utilities.createTmpDirs(vertexJobConf, reduceWork);
+    } else {
+      LOG.debug("Skipping FileSinkOperator temp directory creation for ReduceWork {}", reduceWork.getName());
+    }
 
     ByteString userPayload = createConfPayload(vertexJobConf, commonJobConf, "reduce_processor");
     EntityDescriptor processorDescriptor = new EntityDescriptor(ReduceTezProcessor.class.getName(), userPayload);
