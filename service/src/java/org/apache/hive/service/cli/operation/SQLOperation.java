@@ -206,10 +206,7 @@ public class SQLOperation extends ExecuteStatementOperation {
       if (queryState.getQueryTag() != null && queryState.getQueryId() != null) {
         parentSession.updateQueryTag(queryState.getQueryId(), queryState.getQueryTag());
       }
-      boolean hasResultSet = driver.hasResultSet();
-      log.error("SQLOperation.prepare setting hasResultSet: queryId={}, opHandle={}, hasResultSet={}",
-          queryState.getQueryId(), getHandle(), hasResultSet);
-      setHasResultSet(hasResultSet);
+      setHasResultSet(driver.hasResultSet());
     } catch (CommandProcessorException e) {
       setState(OperationState.ERROR);
       throw toSQLException("Error while compiling statement", e, queryState.getQueryId());
@@ -256,10 +253,7 @@ public class SQLOperation extends ExecuteStatementOperation {
         throw new HiveSQLException("Error running query", e, queryState.getQueryId());
       }
     }
-    boolean hasResultSet = driver.hasResultSet();
-    log.error("SQLOperation.runQuery setting hasResultSet after Driver.run: queryId={}, opHandle={}, hasResultSet={}",
-        queryState.getQueryId(), getHandle(), hasResultSet);
-    setHasResultSet(hasResultSet);
+    setHasResultSet(driver.hasResultSet());
     emitCompletionMessageToOperationLog();
     setState(OperationState.FINISHED);
   }
@@ -486,17 +480,11 @@ public class SQLOperation extends ExecuteStatementOperation {
   public RowSet getNextRowSet(FetchOrientation orientation, long maxRows)
     throws HiveSQLException {
 
-    log.error("SQLOperation.getNextRowSet called: queryId={}, opHandle={}, orientation={}, maxRows={}, "
-            + "fetchStarted={}, operationState={}",
-        queryState.getQueryId(), getHandle(), orientation, maxRows, fetchStarted, getState());
     validateDefaultFetchOrientation(orientation);
     assertState(Collections.singleton(OperationState.FINISHED));
 
     FetchTask fetchTask = driver.getFetchTask();
     boolean isBlobBased = false;
-    log.error("SQLOperation.getNextRowSet using driver: queryId={}, opHandle={}, driverClass={}, "
-            + "hasFetchTask={}, isFetchingTable={}",
-        queryState.getQueryId(), getHandle(), driver.getClass().getName(), fetchTask != null, driver.isFetchingTable());
 
     if (fetchTask != null && fetchTask.getWork().isUsingThriftJDBCBinarySerDe()) {
       // Just fetch one blob if we've serialized thrift objects in final tasks
@@ -509,8 +497,6 @@ public class SQLOperation extends ExecuteStatementOperation {
        * then reset the fetch position to beginning
        */
       if (orientation.equals(FetchOrientation.FETCH_FIRST) && fetchStarted) {
-        log.error("SQLOperation.getNextRowSet resetting driver fetch: queryId={}, opHandle={}",
-            queryState.getQueryId(), getHandle());
         driver.resetFetch();
       }
       fetchStarted = true;
@@ -518,23 +504,12 @@ public class SQLOperation extends ExecuteStatementOperation {
       final int capacity = Math.toIntExact(maxRows);
       convey.ensureCapacity(capacity);
       driver.setMaxRows(capacity);
-      log.error("SQLOperation.getNextRowSet calling Driver.getResults: queryId={}, opHandle={}, capacity={}",
-          queryState.getQueryId(), getHandle(), capacity);
-      boolean hasMore = driver.getResults(convey);
-      log.error("SQLOperation.getNextRowSet Driver.getResults returned: queryId={}, opHandle={}, "
-              + "hasMore={}, conveyedRowCount={}",
-          queryState.getQueryId(), getHandle(), hasMore, convey.size());
-      if (hasMore) {
+      if (driver.getResults(convey)) {
         if (convey.size() == capacity) {
-          log.error("Result set buffer filled to capacity [{}]", capacity);
+          log.info("Result set buffer filled to capacity [{}]", capacity);
         }
-        RowSet decodedRowSet = decode(convey, rowSet);
-        log.error("SQLOperation.getNextRowSet returning decoded rows: queryId={}, opHandle={}, rowCount={}",
-            queryState.getQueryId(), getHandle(), decodedRowSet.numRows());
-        return decodedRowSet;
+        return decode(convey, rowSet);
       }
-      log.error("SQLOperation.getNextRowSet returning empty row set: queryId={}, opHandle={}, rowCount={}",
-          queryState.getQueryId(), getHandle(), rowSet.numRows());
       return rowSet;
     } catch (Exception e) {
       throw new HiveSQLException("Unable to get the next row set with exception: " + e.getMessage(), e, queryState.getQueryId());

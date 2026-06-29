@@ -30,14 +30,11 @@ import org.apache.hadoop.hive.ql.cache.results.QueryResultsCache.CacheEntry;
 import org.apache.hadoop.hive.ql.exec.FetchTask;
 import org.apache.hadoop.hive.ql.lockmgr.HiveTxnManager;
 import org.apache.hadoop.hive.ql.plan.mapper.StatsSource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Context for the procedure managed by the Driver.
  */
 public class DriverContext {
-  private static final Logger LOG = LoggerFactory.getLogger(DriverContext.class);
   // For WebUI.  Kept alive after queryPlan is freed.
   private final QueryDisplay queryDisplay = new QueryDisplay();
 
@@ -214,52 +211,29 @@ public class DriverContext {
   }
 
   public DataInput getResStream() {
-    LOG.error("DriverContext.getResStream called: queryId={}, contextId={}, hasResStream={}",
-        queryState.getQueryId(), System.identityHashCode(this), resStream != null);
     return resStream;
   }
 
   public void setResStream(DataInput resStream) {
-    LOG.error("DriverContext.setResStream called: queryId={}, contextId={}, hadResStream={}, "
-            + "hasNewResStream={}, caller={}",
-        queryState.getQueryId(), System.identityHashCode(this), this.resStream != null, resStream != null,
-        getCallerForDebugLog());
     this.resStream = resStream;
   }
 
   public void setDagOutputResultReader(DagOutputResultReader dagOutputResultReader) {
-    LOG.error("DriverContext.setDagOutputResultReader called: queryId={}, contextId={}, hadReader={}, "
-            + "hasNewReader={}, newPayloadCount={}, caller={}",
-        queryState.getQueryId(), System.identityHashCode(this), this.dagOutputResultReader != null,
-        dagOutputResultReader != null, dagOutputResultReader == null ? -1 : dagOutputResultReader.getPayloadCount(),
-        getCallerForDebugLog());
     this.dagOutputResultReader = dagOutputResultReader;
   }
 
   public DataInput getDagOutputResultStream() {
-    LOG.error("DriverContext.getDagOutputResultStream called: queryId={}, contextId={}, hasReader={}",
-        queryState.getQueryId(), System.identityHashCode(this), dagOutputResultReader != null);
     if (dagOutputResultReader == null) {
-      LOG.error("DriverContext.getDagOutputResultStream returning null: queryId={}, contextId={}, no reader",
-          queryState.getQueryId(), System.identityHashCode(this));
       return null;
     }
-    DataInput resultStream = dagOutputResultReader.nextStream();
-    LOG.error("DriverContext.getDagOutputResultStream returning: queryId={}, contextId={}, hasStream={}",
-        queryState.getQueryId(), System.identityHashCode(this), resultStream != null);
-    return resultStream;
+    return dagOutputResultReader.nextStream();
   }
 
   public boolean hasDagOutputResultReader() {
-    boolean hasReader = dagOutputResultReader != null;
-    LOG.error("DriverContext.hasDagOutputResultReader called: queryId={}, contextId={}, hasReader={}",
-        queryState.getQueryId(), System.identityHashCode(this), hasReader);
-    return hasReader;
+    return dagOutputResultReader != null;
   }
 
   public void resetDagOutputResultReader() {
-    LOG.error("DriverContext.resetDagOutputResultReader called: queryId={}, contextId={}, hasReader={}",
-        queryState.getQueryId(), System.identityHashCode(this), dagOutputResultReader != null);
     if (dagOutputResultReader != null) {
       dagOutputResultReader.reset();
     }
@@ -270,9 +244,6 @@ public class DriverContext {
   }
 
   public void setDagOutputResultLimit(int dagOutputResultLimit) {
-    LOG.error("DriverContext.setDagOutputResultLimit called: queryId={}, contextId={}, oldLimit={}, "
-            + "newLimit={}",
-        queryState.getQueryId(), System.identityHashCode(this), this.dagOutputResultLimit, dagOutputResultLimit);
     this.dagOutputResultLimit = dagOutputResultLimit;
     resetDagOutputRowsReturned();
   }
@@ -288,33 +259,12 @@ public class DriverContext {
     return Math.max(0, Math.min(maxRows, dagOutputResultLimit - dagOutputRowsReturned));
   }
 
-  public boolean hasReachedDagOutputResultLimit() {
-    return dagOutputResultLimit >= 0 && dagOutputRowsReturned >= dagOutputResultLimit;
-  }
-
   public void incrementDagOutputRowsReturned() {
     dagOutputRowsReturned++;
-    LOG.error("DriverContext.incrementDagOutputRowsReturned called: queryId={}, contextId={}, rowsReturned={}, "
-            + "limit={}",
-        queryState.getQueryId(), System.identityHashCode(this), dagOutputRowsReturned, dagOutputResultLimit);
   }
 
   public void resetDagOutputRowsReturned() {
-    LOG.error("DriverContext.resetDagOutputRowsReturned called: queryId={}, contextId={}, oldRowsReturned={}, "
-            + "limit={}",
-        queryState.getQueryId(), System.identityHashCode(this), dagOutputRowsReturned, dagOutputResultLimit);
     dagOutputRowsReturned = 0;
-  }
-
-  private String getCallerForDebugLog() {
-    StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
-    for (StackTraceElement element : stackTrace) {
-      if (!element.getClassName().equals(Thread.class.getName())
-          && !element.getClassName().equals(DriverContext.class.getName())) {
-        return element.toString();
-      }
-    }
-    return "unknown";
   }
 
   public String getOperationId() {

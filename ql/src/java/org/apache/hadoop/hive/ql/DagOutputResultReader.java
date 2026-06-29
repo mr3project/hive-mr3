@@ -26,61 +26,31 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
  * Presents MR3 DAG output payloads as the same DataInput streams used by the
  * legacy file-backed result reader.
  */
 public class DagOutputResultReader {
-  private static final Logger LOG = LoggerFactory.getLogger(DagOutputResultReader.class);
   private final List<ByteString> payloads;
   private int nextPayloadIndex;
 
   public DagOutputResultReader(List<ByteString> payloads) {
     this.payloads = Collections.unmodifiableList(new ArrayList<>(payloads));
     this.nextPayloadIndex = 0;
-    LOG.error("Created DagOutputResultReader with {} payload(s), payloadSizes={}",
-        this.payloads.size(), getPayloadSizes(this.payloads));
   }
 
   public synchronized DataInput nextStream() {
-    LOG.error("DagOutputResultReader.nextStream called: nextPayloadIndex={}, payloadCount={}",
-        nextPayloadIndex, payloads.size());
     if (nextPayloadIndex >= payloads.size()) {
-      LOG.error("DagOutputResultReader.nextStream returning null: all payloads consumed");
       return null;
     }
-    ByteString payload = payloads.get(nextPayloadIndex);
-    LOG.error("DagOutputResultReader.nextStream returning payload index {} with {} byte(s)",
-        nextPayloadIndex, payload.size());
-    nextPayloadIndex++;
-    return new DataInputStream(payload.newInput());
+    return new DataInputStream(payloads.get(nextPayloadIndex++).newInput());
   }
 
   public synchronized void reset() {
-    LOG.error("DagOutputResultReader.reset called: nextPayloadIndex={}, payloadCount={}",
-        nextPayloadIndex, payloads.size());
     nextPayloadIndex = 0;
   }
 
   public synchronized boolean hasPayloads() {
-    boolean hasPayloads = !payloads.isEmpty();
-    LOG.error("DagOutputResultReader.hasPayloads called: hasPayloads={}, payloadCount={}",
-        hasPayloads, payloads.size());
-    return hasPayloads;
-  }
-
-  public synchronized int getPayloadCount() {
-    return payloads.size();
-  }
-
-  private static List<Integer> getPayloadSizes(List<ByteString> payloads) {
-    List<Integer> payloadSizes = new ArrayList<>(payloads.size());
-    for (ByteString payload : payloads) {
-      payloadSizes.add(payload.size());
-    }
-    return payloadSizes;
+    return !payloads.isEmpty();
   }
 }

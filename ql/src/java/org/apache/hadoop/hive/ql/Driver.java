@@ -640,7 +640,6 @@ public class Driver implements IDriver {
   public boolean hasResultSet() {
     QueryPlan plan = driverContext.getPlan();
     boolean hasDagOutputReader = driverContext.hasDagOutputResultReader();
-    boolean hasFetchTask = false;
     boolean hasResultSchema = driverContext.getSchema() != null
         && driverContext.getSchema().isSetFieldSchemas();
     boolean isExplainTask = false;
@@ -653,23 +652,15 @@ public class Driver implements IDriver {
           break;
         }
       }
-      hasFetchTask = plan.getFetchTask() != null;
       hasResultSchema = plan.getResultSchema() != null
           && plan.getResultSchema().isSetFieldSchemas();
     }
 
-    boolean hasResultSet = isExplainTask || hasResultSchema || hasDagOutputReader;
-    LOG.error("Driver.hasResultSet called: queryId={}, hasPlan={}, isExplainTask={}, hasFetchTask={}, "
-            + "hasResultSchema={}, hasDagOutputReader={}, hasResultSet={}",
-        driverContext.getQueryState().getQueryId(), plan != null, isExplainTask, hasFetchTask, hasResultSchema,
-        hasDagOutputReader, hasResultSet);
-    return hasResultSet;
+    return isExplainTask || hasResultSchema || hasDagOutputReader;
   }
 
   @Override
   public void resetFetch() throws IOException {
-    LOG.error("Driver.resetFetch called: isDestroyed={}, isClosed={}, hasDagOutputReader={}, isFetchingTable={}",
-        driverState.isDestroyed(), driverState.isClosed(), driverContext.hasDagOutputResultReader(), isFetchingTable());
     if (driverState.isDestroyed() || driverState.isClosed()) {
       throw new IOException("FAILED: driver has been cancelled, closed or destroyed.");
     }
@@ -698,36 +689,23 @@ public class Driver implements IDriver {
   @SuppressWarnings({ "unchecked", "rawtypes" })
   @Override
   public boolean getResults(List results) throws IOException {
-    LOG.error("Driver.getResults called: currentResultsSize={}, maxRows={}, hasDagOutputReader={}, isFetchingTable={}",
-        results == null ? -1 : results.size(), maxRows, driverContext.hasDagOutputResultReader(), isFetchingTable());
     if (driverState.isDestroyed() || driverState.isClosed()) {
       throw new IOException("FAILED: query has been cancelled, closed, or destroyed.");
     }
 
     boolean hasDagOutputReader = driverContext.hasDagOutputResultReader();
     if (!hasDagOutputReader && isFetchingTable()) {
-      LOG.error("Driver.getResults using FetchTask path because DAG output reader is absent "
-          + "and query is fetching table");
       return getFetchingTableResults(results);
     }
 
     int rowsAllowed = hasDagOutputReader ? driverContext.getDagOutputRowsRemaining(maxRows) : maxRows;
-    LOG.error("Driver.getResults result limit state: queryId={}, hasDagOutputReader={}, limit={}, "
-            + "rowsReturned={}, rowsAllowedThisCall={}, maxRows={}",
-        driverContext.getQueryState().getQueryId(), hasDagOutputReader, driverContext.getDagOutputResultLimit(),
-        driverContext.getDagOutputRowsReturned(), rowsAllowed, maxRows);
     if (hasDagOutputReader && rowsAllowed <= 0) {
-      LOG.error("Driver.getResults returning false: DAG output result limit reached, queryId={}, limit={}, "
-              + "rowsReturned={}",
-          driverContext.getQueryState().getQueryId(), driverContext.getDagOutputResultLimit(),
-          driverContext.getDagOutputRowsReturned());
       return false;
     }
 
     if (driverContext.getResStream() == null) {
       DataInput resultStream = getNextResultStream();
       if (resultStream == null) {
-        LOG.error("Driver.getResults returning false: no result stream available");
         return false;
       }
       driverContext.setResStream(resultStream);
@@ -737,8 +715,6 @@ public class Driver implements IDriver {
     ByteStream.Output bos = new ByteStream.Output();
     while (numRows < rowsAllowed) {
       if (driverContext.getResStream() == null) {
-        LOG.error("Driver.getResults returning {}: result stream is null after reading {} row(s)",
-            numRows > 0, numRows);
         return (numRows > 0);
       }
 
@@ -753,9 +729,6 @@ public class Driver implements IDriver {
           if (hasDagOutputReader) {
             driverContext.incrementDagOutputRowsReturned();
           }
-          LOG.error("Driver.getResults added row {} in this batch; streamStatus={}", numRows, streamStatus);
-        } else {
-          LOG.error("Driver.getResults read no row from current stream; streamStatus={}", streamStatus);
         }
       } catch (IOException e) {
         CONSOLE.printError("FAILED: Unexpected IO exception : " + e.getMessage());
@@ -763,42 +736,28 @@ public class Driver implements IDriver {
       }
 
       if (streamStatus == Utilities.StreamStatus.EOF) {
-        LOG.error("Driver.getResults reached EOF on current stream after {} row(s); requesting next stream", numRows);
         driverContext.setResStream(getNextResultStream());
       }
     }
-    LOG.error("Driver.getResults returning true after adding {} row(s); resultsSize={}",
-        numRows, results == null ? -1 : results.size());
     return true;
   }
 
   private DataInput getNextResultStream() {
-    boolean hasDagOutputReader = driverContext.hasDagOutputResultReader();
-    LOG.error("Driver.getNextResultStream called: hasDagOutputReader={}", hasDagOutputReader);
-    if (hasDagOutputReader) {
-      DataInput dagOutputStream = driverContext.getDagOutputResultStream();
-      LOG.error("Driver.getNextResultStream returning DAG output stream: hasStream={}", dagOutputStream != null);
-      return dagOutputStream;
+    if (driverContext.hasDagOutputResultReader()) {
+      return driverContext.getDagOutputResultStream();
     }
-    DataInput contextStream = context.getStream();
-    LOG.error("Driver.getNextResultStream returning context stream: hasStream={}", contextStream != null);
-    return contextStream;
+    return context.getStream();
   }
 
   @SuppressWarnings("rawtypes")
   private boolean getFetchingTableResults(List results) throws IOException {
-    LOG.error("Driver.getFetchingTableResults called: currentResultsSize={}, maxRows={}",
-        results == null ? -1 : results.size(), maxRows);
     // If result set serialization to thrift object is enabled, and if the destination table is indeed written using
     // ThriftJDBCBinarySerDe, read one row from the output sequence file, since it is a blob of row batches.
     if (driverContext.getFetchTask().getWork().isUsingThriftJDBCBinarySerDe()) {
       maxRows = 1;
     }
     driverContext.getFetchTask().setMaxRows(maxRows);
-    boolean hasMore = driverContext.getFetchTask().fetch(results);
-    LOG.error("Driver.getFetchingTableResults returning: hasMore={}, resultsSize={}",
-        hasMore, results == null ? -1 : results.size());
-    return hasMore;
+    return driverContext.getFetchTask().fetch(results);
   }
 
   private String getRow(ByteStream.Output bos, Utilities.StreamStatus streamStatus) {
