@@ -1296,6 +1296,16 @@ public class SessionState implements ISessionAuthState{
     }
 
     /**
+     * Flush console streams used by HiveServer2/HiveCli so that log lines emitted before
+     * a result reader becomes available are visible to clients before result rows.
+     */
+    public void flushConsole() {
+      getOutStream().flush();
+      getInfoStream().flush();
+      getErrStream().flush();
+    }
+
+    /**
      * Logs warn into the log file, and if the LogHelper is not silent then into the HiveServer2 or
      * HiveCli info stream too.
      * BeeLine uses the operation log file to show the logs to the user, so depending on the
