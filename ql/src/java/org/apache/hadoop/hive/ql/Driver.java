@@ -500,6 +500,8 @@ public class Driver implements IDriver {
     Compiler compiler = new Compiler(context, driverContext, driverState);
     QueryPlan plan = compiler.compile(command, deferClose);
     driverContext.setPlan(plan);
+    int outerQueryLimit = plan.getQueryProperties() == null ? -1 : plan.getQueryProperties().getOuterQueryLimit();
+    driverContext.setDagOutputResultLimit(outerQueryLimit);
 
     compileFinished(deferClose);
 
@@ -679,6 +681,7 @@ public class Driver implements IDriver {
       }
     } else {
       driverContext.resetDagOutputResultReader();
+      driverContext.resetDagOutputRowsReturned();
       context.resetStream();
       driverContext.setResStream(null);
     }
@@ -701,10 +704,24 @@ public class Driver implements IDriver {
       throw new IOException("FAILED: query has been cancelled, closed, or destroyed.");
     }
 
-    if (!driverContext.hasDagOutputResultReader() && isFetchingTable()) {
+    boolean hasDagOutputReader = driverContext.hasDagOutputResultReader();
+    if (!hasDagOutputReader && isFetchingTable()) {
       LOG.error("Driver.getResults using FetchTask path because DAG output reader is absent "
           + "and query is fetching table");
       return getFetchingTableResults(results);
+    }
+
+    int rowsAllowed = hasDagOutputReader ? driverContext.getDagOutputRowsRemaining(maxRows) : maxRows;
+    LOG.error("Driver.getResults result limit state: queryId={}, hasDagOutputReader={}, limit={}, "
+            + "rowsReturned={}, rowsAllowedThisCall={}, maxRows={}",
+        driverContext.getQueryState().getQueryId(), hasDagOutputReader, driverContext.getDagOutputResultLimit(),
+        driverContext.getDagOutputRowsReturned(), rowsAllowed, maxRows);
+    if (hasDagOutputReader && rowsAllowed <= 0) {
+      LOG.error("Driver.getResults returning false: DAG output result limit reached, queryId={}, limit={}, "
+              + "rowsReturned={}",
+          driverContext.getQueryState().getQueryId(), driverContext.getDagOutputResultLimit(),
+          driverContext.getDagOutputRowsReturned());
+      return false;
     }
 
     if (driverContext.getResStream() == null) {
@@ -718,7 +735,7 @@ public class Driver implements IDriver {
 
     int numRows = 0;
     ByteStream.Output bos = new ByteStream.Output();
-    while (numRows < maxRows) {
+    while (numRows < rowsAllowed) {
       if (driverContext.getResStream() == null) {
         LOG.error("Driver.getResults returning {}: result stream is null after reading {} row(s)",
             numRows > 0, numRows);
@@ -733,6 +750,9 @@ public class Driver implements IDriver {
         if (row != null) {
           numRows++;
           results.add(row);
+          if (hasDagOutputReader) {
+            driverContext.incrementDagOutputRowsReturned();
+          }
           LOG.error("Driver.getResults added row {} in this batch; streamStatus={}", numRows, streamStatus);
         } else {
           LOG.error("Driver.getResults read no row from current stream; streamStatus={}", streamStatus);

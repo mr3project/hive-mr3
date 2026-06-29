@@ -77,6 +77,8 @@ public class DriverContext {
 
   private DataInput resStream;
   private DagOutputResultReader dagOutputResultReader;
+  private int dagOutputResultLimit = -1;
+  private int dagOutputRowsReturned;
 
   // HS2 operation handle guid string
   private String operationId;
@@ -261,6 +263,47 @@ public class DriverContext {
     if (dagOutputResultReader != null) {
       dagOutputResultReader.reset();
     }
+  }
+
+  public int getDagOutputResultLimit() {
+    return dagOutputResultLimit;
+  }
+
+  public void setDagOutputResultLimit(int dagOutputResultLimit) {
+    LOG.error("DriverContext.setDagOutputResultLimit called: queryId={}, contextId={}, oldLimit={}, "
+            + "newLimit={}",
+        queryState.getQueryId(), System.identityHashCode(this), this.dagOutputResultLimit, dagOutputResultLimit);
+    this.dagOutputResultLimit = dagOutputResultLimit;
+    resetDagOutputRowsReturned();
+  }
+
+  public int getDagOutputRowsReturned() {
+    return dagOutputRowsReturned;
+  }
+
+  public int getDagOutputRowsRemaining(int maxRows) {
+    if (dagOutputResultLimit < 0) {
+      return maxRows;
+    }
+    return Math.max(0, Math.min(maxRows, dagOutputResultLimit - dagOutputRowsReturned));
+  }
+
+  public boolean hasReachedDagOutputResultLimit() {
+    return dagOutputResultLimit >= 0 && dagOutputRowsReturned >= dagOutputResultLimit;
+  }
+
+  public void incrementDagOutputRowsReturned() {
+    dagOutputRowsReturned++;
+    LOG.error("DriverContext.incrementDagOutputRowsReturned called: queryId={}, contextId={}, rowsReturned={}, "
+            + "limit={}",
+        queryState.getQueryId(), System.identityHashCode(this), dagOutputRowsReturned, dagOutputResultLimit);
+  }
+
+  public void resetDagOutputRowsReturned() {
+    LOG.error("DriverContext.resetDagOutputRowsReturned called: queryId={}, contextId={}, oldRowsReturned={}, "
+            + "limit={}",
+        queryState.getQueryId(), System.identityHashCode(this), dagOutputRowsReturned, dagOutputResultLimit);
+    dagOutputRowsReturned = 0;
   }
 
   private String getCallerForDebugLog() {
