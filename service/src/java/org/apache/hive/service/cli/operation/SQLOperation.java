@@ -253,7 +253,6 @@ public class SQLOperation extends ExecuteStatementOperation {
         throw new HiveSQLException("Error running query", e, queryState.getQueryId());
       }
     }
-    setHasResultSet(driver.hasResultSet());
     emitCompletionMessageToOperationLog();
     setState(OperationState.FINISHED);
   }

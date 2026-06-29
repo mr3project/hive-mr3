@@ -639,24 +639,14 @@ public class Driver implements IDriver {
   @Override
   public boolean hasResultSet() {
     QueryPlan plan = driverContext.getPlan();
-    boolean hasDagOutputReader = driverContext.hasDagOutputResultReader();
-    boolean hasResultSchema = driverContext.getSchema() != null
-        && driverContext.getSchema().isSetFieldSchemas();
-    boolean isExplainTask = false;
-
-    if (plan != null) {
-      // TODO explain should use a FetchTask for reading
-      for (Task<?> task : plan.getRootTasks()) {
-        if (task.getClass() == ExplainTask.class) {
-          isExplainTask = true;
-          break;
-        }
+    // TODO explain should use a FetchTask for reading
+    for (Task<?> task : plan.getRootTasks()) {
+      if (task.getClass() == ExplainTask.class) {
+        return true;
       }
-      hasResultSchema = plan.getResultSchema() != null
-          && plan.getResultSchema().isSetFieldSchemas();
     }
 
-    return isExplainTask || hasResultSchema || hasDagOutputReader;
+    return plan.getResultSchema() != null && plan.getResultSchema().isSetFieldSchemas();
   }
 
   @Override
