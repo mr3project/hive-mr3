@@ -74,6 +74,8 @@ public class DriverContext {
 
   private DataInput resStream;
   private DagOutputResultReader dagOutputResultReader;
+  private int dagOutputResultLimit = -1;
+  private int dagOutputRowsReturned;
 
   // HS2 operation handle guid string
   private String operationId;
@@ -235,6 +237,26 @@ public class DriverContext {
     if (dagOutputResultReader != null) {
       dagOutputResultReader.reset();
     }
+  }
+
+  public void setDagOutputResultLimit(int dagOutputResultLimit) {
+    this.dagOutputResultLimit = dagOutputResultLimit;
+    resetDagOutputRowsReturned();
+  }
+
+  public int getDagOutputRowsRemaining(int maxRows) {
+    if (dagOutputResultLimit < 0) {
+      return maxRows;
+    }
+    return Math.max(0, Math.min(maxRows, dagOutputResultLimit - dagOutputRowsReturned));
+  }
+
+  public void incrementDagOutputRowsReturned() {
+    dagOutputRowsReturned++;
+  }
+
+  public void resetDagOutputRowsReturned() {
+    dagOutputRowsReturned = 0;
   }
 
   public String getOperationId() {

@@ -500,6 +500,8 @@ public class Driver implements IDriver {
     Compiler compiler = new Compiler(context, driverContext, driverState);
     QueryPlan plan = compiler.compile(command, deferClose);
     driverContext.setPlan(plan);
+    int outerQueryLimit = plan.getQueryProperties() == null ? -1 : plan.getQueryProperties().getOuterQueryLimit();
+    driverContext.setDagOutputResultLimit(outerQueryLimit);
 
     compileFinished(deferClose);
 
@@ -636,15 +638,15 @@ public class Driver implements IDriver {
 
   @Override
   public boolean hasResultSet() {
+    QueryPlan plan = driverContext.getPlan();
     // TODO explain should use a FetchTask for reading
-    for (Task<?> task : driverContext.getPlan().getRootTasks()) {
+    for (Task<?> task : plan.getRootTasks()) {
       if (task.getClass() == ExplainTask.class) {
         return true;
       }
     }
 
-    return driverContext.getPlan().getFetchTask() != null && driverContext.getPlan().getResultSchema() != null &&
-        driverContext.getPlan().getResultSchema().isSetFieldSchemas();
+    return plan.getResultSchema() != null && plan.getResultSchema().isSetFieldSchemas();
   }
 
   @Override
@@ -660,6 +662,7 @@ public class Driver implements IDriver {
       }
     } else {
       driverContext.resetDagOutputResultReader();
+      driverContext.resetDagOutputRowsReturned();
       context.resetStream();
       driverContext.setResStream(null);
     }
@@ -680,8 +683,14 @@ public class Driver implements IDriver {
       throw new IOException("FAILED: query has been cancelled, closed, or destroyed.");
     }
 
-    if (!driverContext.hasDagOutputResultReader() && isFetchingTable()) {
+    boolean hasDagOutputReader = driverContext.hasDagOutputResultReader();
+    if (!hasDagOutputReader && isFetchingTable()) {
       return getFetchingTableResults(results);
+    }
+
+    int rowsAllowed = hasDagOutputReader ? driverContext.getDagOutputRowsRemaining(maxRows) : maxRows;
+    if (hasDagOutputReader && rowsAllowed <= 0) {
+      return false;
     }
 
     if (driverContext.getResStream() == null) {
@@ -694,7 +703,7 @@ public class Driver implements IDriver {
 
     int numRows = 0;
     ByteStream.Output bos = new ByteStream.Output();
-    while (numRows < maxRows) {
+    while (numRows < rowsAllowed) {
       if (driverContext.getResStream() == null) {
         return (numRows > 0);
       }
@@ -707,6 +716,9 @@ public class Driver implements IDriver {
         if (row != null) {
           numRows++;
           results.add(row);
+          if (hasDagOutputReader) {
+            driverContext.incrementDagOutputRowsReturned();
+          }
         }
       } catch (IOException e) {
         CONSOLE.printError("FAILED: Unexpected IO exception : " + e.getMessage());
