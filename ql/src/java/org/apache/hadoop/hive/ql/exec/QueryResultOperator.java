@@ -114,6 +114,7 @@ public class QueryResultOperator extends TerminalOperator<QueryResultDesc> {
         recordValue = serializer.serialize(null, inputOI);
         if (recordValue != null) {
           writeRecord(recordValue);
+          numRows++;
         }
       }
 
@@ -175,7 +176,7 @@ public class QueryResultOperator extends TerminalOperator<QueryResultDesc> {
     if (payload.length > 0) {
       LOG.info("DAG output reported: {}, {} bytes", conf.getResultId(), payload.length);
       ByteString dagOutput = UnsafeByteOperations.unsafeWrap(payload);
-      DAGOutputEvent event = DAGOutputEvent.create(conf.getResultId(), dagOutput) ;
+      DAGOutputEvent event = DAGOutputEvent.create(conf.getResultId(), dagOutput, (int) numRows);
       processorContext.sendEvents(Collections.singletonList(event));
     }
   }
