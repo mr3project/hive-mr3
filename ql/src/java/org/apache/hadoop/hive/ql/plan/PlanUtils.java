@@ -99,6 +99,8 @@ public final class PlanUtils {
 
   protected static final Logger LOG = LoggerFactory.getLogger("org.apache.hadoop.hive.ql.plan.PlanUtils");
 
+  private static final ThreadLocal<Configuration> storageHandlerConf = new ThreadLocal<Configuration>();
+
   private static long countForMapJoinDumpFilePrefix = 0;
 
   /**
@@ -924,6 +926,14 @@ public final class PlanUtils {
       configureJobPropertiesForStorageHandler(false,tableDesc);
   }
 
+  public static void setStorageHandlerConf(Configuration conf) {
+    storageHandlerConf.set(conf);
+  }
+
+  public static void clearStorageHandlerConf() {
+    storageHandlerConf.remove();
+  }
+
   private static void configureJobPropertiesForStorageHandler(boolean input,
     TableDesc tableDesc) {
 
@@ -932,9 +942,13 @@ public final class PlanUtils {
     }
 
     try {
+      Configuration conf = storageHandlerConf.get();
+      if (conf == null) {
+        conf = Hive.get().getConf();
+      }
       HiveStorageHandler storageHandler =
         HiveUtils.getStorageHandler(
-          Hive.get().getConf(),
+          conf,
           tableDesc.getProperties().getProperty(
             org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_STORAGE));
       if (storageHandler != null) {

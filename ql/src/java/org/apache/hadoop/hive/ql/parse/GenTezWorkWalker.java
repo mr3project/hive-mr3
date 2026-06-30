@@ -28,8 +28,11 @@ import org.apache.hadoop.hive.ql.exec.UnionOperator;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
 import org.apache.hadoop.hive.ql.lib.Node;
+import org.apache.hadoop.hive.ql.metadata.Hive;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
+import org.apache.hadoop.hive.ql.plan.PlanUtils;
 
 /**
  * Walks the operator tree in DFS fashion.
@@ -65,14 +68,21 @@ public class GenTezWorkWalker extends DefaultGraphWalker {
   @Override
   public void startWalking(Collection<Node> startNodes,
       HashMap<Node, Object> nodeOutput) throws SemanticException {
-    toWalk.addAll(startNodes);
-    while (toWalk.size() > 0) {
-      Node nd = toWalk.remove(0);
-      setRoot(nd);
-      walk(nd);
-      if (nodeOutput != null) {
-        nodeOutput.put(nd, retMap.get(nd));
+    try {
+      PlanUtils.setStorageHandlerConf(Hive.get().getConf());
+      toWalk.addAll(startNodes);
+      while (toWalk.size() > 0) {
+        Node nd = toWalk.remove(0);
+        setRoot(nd);
+        walk(nd);
+        if (nodeOutput != null) {
+          nodeOutput.put(nd, retMap.get(nd));
+        }
       }
+    } catch (HiveException e) {
+      throw new SemanticException(e);
+    } finally {
+      PlanUtils.clearStorageHandlerConf();
     }
   }
 
