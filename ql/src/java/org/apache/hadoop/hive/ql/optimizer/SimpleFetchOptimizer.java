@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hive.common.StatsSetupConst;
@@ -144,7 +145,7 @@ public class SimpleFetchOptimizer extends Transform {
     }
     FetchData fetch = checkTree(aggressive, pctx, alias, source);
     if (fetch != null && checkThreshold(fetch, limit, pctx)) {
-      FetchWork fetchWork = fetch.convertToWork();
+      FetchWork fetchWork = fetch.convertToWork(pctx);
       FetchTask fetchTask = (FetchTask) TaskFactory.get(fetchWork);
       fetchTask.setCachingEnabled(HiveConf.getBoolVar(pctx.getConf(),
               HiveConf.ConfVars.HIVE_FETCH_TASK_CACHING));
@@ -418,14 +419,15 @@ public class SimpleFetchOptimizer extends Transform {
       this.filtered = filtered;
     }
 
-    private FetchWork convertToWork() throws HiveException {
+    private FetchWork convertToWork(ParseContext pctx) throws HiveException {
       inputs.clear();
       Utilities.addSchemaEvolutionToTableScanOperator(table, scanOp);
       TableDesc tableDesc = Utilities.getTableDesc(table);
+      Configuration conf = pctx.getConf();
       if (!table.isPartitioned() || table.hasNonNativePartitionSupport()) {
         inputs.add(new ReadEntity(table, parent, !table.isView() && parent == null));
         FetchWork work = new FetchWork(table.getPath(), tableDesc);
-        PlanUtils.configureInputJobPropertiesForStorageHandler(work.getTblDesc());
+        PlanUtils.configureInputJobPropertiesForStorageHandler(work.getTblDesc(), conf);
         work.setSplitSample(splitSample);
         return work;
       }
@@ -435,7 +437,7 @@ public class SimpleFetchOptimizer extends Transform {
       for (Partition partition : partsList.getNotDeniedPartns()) {
         inputs.add(new ReadEntity(partition, parent, parent == null));
         listP.add(partition.getDataLocation());
-        partP.add(Utilities.getPartitionDescFromTableDesc(tableDesc, partition, true));
+        partP.add(Utilities.getPartitionDescFromTableDesc(tableDesc, partition, true, conf));
       }
       Table sourceTable = partsList.getSourceTable();
       inputs.add(new ReadEntity(sourceTable, parent, parent == null));
@@ -443,7 +445,7 @@ public class SimpleFetchOptimizer extends Transform {
       FetchWork work = new FetchWork(listP, partP, table);
       if (!work.getPartDesc().isEmpty()) {
         PartitionDesc part0 = work.getPartDesc().get(0);
-        PlanUtils.configureInputJobPropertiesForStorageHandler(part0.getTableDesc());
+        PlanUtils.configureInputJobPropertiesForStorageHandler(part0.getTableDesc(), conf);
         work.setSplitSample(splitSample);
       }
       return work;
@@ -484,7 +486,7 @@ public class SimpleFetchOptimizer extends Transform {
         if (handler instanceof InputEstimator) {
           InputEstimator estimator = (InputEstimator) handler;
           TableDesc tableDesc = Utilities.getTableDesc(table);
-          PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc);
+          PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc, pctx.getConf());
           Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf);
           long len = estimator.estimate(jobConf, scanOp, threshold).getTotalLength();
           LOG.debug("Threshold {} exceeded for pseudoMR mode", len);

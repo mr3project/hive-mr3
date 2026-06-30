@@ -28,9 +28,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.exec.MapJoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
+import org.apache.hadoop.hive.ql.metadata.Hive;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.Explain.Level;
 import org.apache.hadoop.hive.ql.plan.Explain.Vectorization;
 
@@ -134,9 +137,16 @@ public class MapredLocalWork implements Serializable {
     if (bucketMapjoinContext != null) {
       bucketMapjoinContext.deriveBucketMapJoinMapping();
     }
-    for (FetchWork fetchWork : aliasToFetchWork.values()) {
-      PlanUtils.configureInputJobPropertiesForStorageHandler(
-        fetchWork.getTblDesc());
+    if (!aliasToFetchWork.isEmpty()) {
+      try {
+        Configuration conf = Hive.get().getConf();
+        for (FetchWork fetchWork : aliasToFetchWork.values()) {
+          PlanUtils.configureInputJobPropertiesForStorageHandler(
+            fetchWork.getTblDesc(), conf);
+        }
+      } catch (HiveException ex) {
+        throw new RuntimeException(ex);
+      }
     }
   }
 

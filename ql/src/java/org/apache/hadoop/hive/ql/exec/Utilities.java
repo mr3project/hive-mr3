@@ -2686,7 +2686,7 @@ public final class Utilities {
                   TableScanOperator scanOp = (TableScanOperator) aliasToWork.get(alias);
                   Utilities.setColumnNameList(jobConf, scanOp, true);
                   Utilities.setColumnTypeList(jobConf, scanOp, true);
-                  PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc);
+                  PlanUtils.configureInputJobPropertiesForStorageHandler(tableDesc, myConf);
                   Utilities.copyTableJobPropertiesToConf(tableDesc, jobConf);
                   total += estimator.estimate(jobConf, scanOp, -1).getTotalLength();
                 }

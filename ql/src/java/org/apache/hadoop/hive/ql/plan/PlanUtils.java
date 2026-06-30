@@ -911,7 +911,14 @@ public final class PlanUtils {
    * @param tableDesc table descriptor
    */
   public static void configureInputJobPropertiesForStorageHandler(TableDesc tableDesc) {
-      configureJobPropertiesForStorageHandler(true, tableDesc);
+    if (tableDesc == null) {
+      return;
+    }
+    try {
+      configureJobPropertiesForStorageHandler(true, tableDesc, Hive.get().getConf());
+    } catch (HiveException ex) {
+      throw new RuntimeException(ex);
+    }
   }
 
   /**
@@ -933,7 +940,14 @@ public final class PlanUtils {
    * @param tableDesc table descriptor
    */
   public static void configureOutputJobPropertiesForStorageHandler(TableDesc tableDesc) {
-      configureJobPropertiesForStorageHandler(false, tableDesc);
+    if (tableDesc == null) {
+      return;
+    }
+    try {
+      configureJobPropertiesForStorageHandler(false, tableDesc, Hive.get().getConf());
+    } catch (HiveException ex) {
+      throw new RuntimeException(ex);
+    }
   }
 
   /**
@@ -946,18 +960,6 @@ public final class PlanUtils {
   public static void configureOutputJobPropertiesForStorageHandler(TableDesc tableDesc,
       Configuration conf) {
       configureJobPropertiesForStorageHandler(false, tableDesc, conf);
-  }
-
-  private static void configureJobPropertiesForStorageHandler(boolean input,
-    TableDesc tableDesc) {
-    if (tableDesc == null) {
-      return;
-    }
-    try {
-      configureJobPropertiesForStorageHandler(input, tableDesc, Hive.get().getConf());
-    } catch (HiveException ex) {
-      throw new RuntimeException(ex);
-    }
   }
 
   private static void configureJobPropertiesForStorageHandler(boolean input,
