@@ -57,6 +57,7 @@ import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
 import org.apache.hadoop.hive.ql.plan.MergeJoinWork;
 import org.apache.hadoop.hive.ql.plan.PTFDesc;
 import org.apache.hadoop.hive.ql.plan.PlanUtils;
+import org.apache.hadoop.hive.ql.plan.QueryResultDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.SelectDesc;
 import org.apache.hadoop.hive.ql.plan.TableScanDesc;
@@ -917,6 +918,13 @@ public class MR3Task {
           FileSinkDesc fileSinkDesc = (FileSinkDesc) op.getConf();
           extraInfo.put("dirName", fileSinkDesc.getDirNameString());
           extraInfo.put("compressed", String.valueOf(fileSinkDesc.getCompressed()));
+          break;
+
+        case "QRO":
+          QueryResultDesc queryResultDesc = (QueryResultDesc) op.getConf();
+          extraInfo.put("resultId", String.valueOf(queryResultDesc.getResultId()));
+          extraInfo.put("usingBatchingSerDe", String.valueOf(queryResultDesc.isUsingBatchingSerDe()));
+          extraInfo.put("maxBytes", String.valueOf(queryResultDesc.getMaxBytes()));
           break;
       }
 
