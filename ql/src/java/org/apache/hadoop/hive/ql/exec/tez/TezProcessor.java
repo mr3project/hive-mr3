@@ -27,7 +27,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.io.function.IOConsumer;
 import org.apache.hadoop.hive.conf.Constants;
+import org.apache.hadoop.hive.ql.io.IOConstants;
 import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.tez.mapreduce.output.MROutput;
 import org.apache.tez.runtime.api.TaskFailureType;
 import org.apache.tez.runtime.api.events.CustomProcessorEvent;
@@ -212,8 +214,8 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
     // In MR, mapreduce.task.attempt.id is same as mapred.task.id. Go figure.
     String taskAttemptIdStr = taskAttemptIdBuilder.toString();
-    this.jobConf.set("mapred.task.id", taskAttemptIdStr);
-    this.jobConf.set("mapreduce.task.attempt.id", taskAttemptIdStr);
+    this.jobConf.set(IOConstants.MAPRED_TASK_ID, taskAttemptIdStr);
+    this.jobConf.set(MRJobConfig.TASK_ATTEMPT_ID, taskAttemptIdStr);
     this.jobConf.setInt("mapred.task.partition", processorContext.getTaskIndex());
   }
 
