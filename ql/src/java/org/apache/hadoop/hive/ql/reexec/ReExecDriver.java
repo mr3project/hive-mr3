@@ -65,6 +65,8 @@ public class ReExecDriver implements IDriver {
   private final QueryState queryState;
   private final List<IReExecutionPlugin> plugins;
 
+  private static final boolean EXPERIMENT_REEXECUTE_AFTER_SUCCESS = true;
+
   private boolean explainReOptimization;
   private String currentQuery;
   private int executionIndex;
@@ -196,7 +198,15 @@ public class ReExecDriver implements IDriver {
       boolean success = cpr != null;
       plugins.forEach(p -> p.afterExecute(oldPlanMapper, success));
 
+      boolean experimentReExecuteAfterSuccess =
+          EXPERIMENT_REEXECUTE_AFTER_SUCCESS && cpr != null && executionIndex == 1;
+      if (experimentReExecuteAfterSuccess) {
+        LOG.info("Experiment: forcing re-execution after successful execution #{} "
+            + "to test runtime-stats-based reoptimization", executionIndex);
+      }
+
       boolean shouldReExecute = explainReOptimization && executionIndex==1;
+      shouldReExecute |= experimentReExecuteAfterSuccess;
       shouldReExecute |= cpr == null && plugins.stream().anyMatch(p -> p.shouldReExecute(executionIndex));
 
       LOG.info("Re-execution decision is made according to: executionIndex: {}, maxExecutions: {}, shouldReExecute: {}",

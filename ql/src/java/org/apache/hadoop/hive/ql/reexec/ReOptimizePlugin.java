@@ -80,7 +80,7 @@ public class ReOptimizePlugin implements IReExecutionPlugin {
     coreDriver.getHookRunner().addOnFailureHook(statsReaderHook);
     coreDriver.getHookRunner().addPostHook(statsReaderHook);
     alwaysCollectStats = driver.getConf().getBoolVar(ConfVars.HIVE_QUERY_REEXECUTION_ALWAYS_COLLECT_OPERATOR_STATS);
-    statsReaderHook.setCollectOnSuccess(alwaysCollectStats);
+    statsReaderHook.setCollectOnSuccess(true);
 
     coreDriver.setStatsSource(StatsSources.getStatsSource(driver.getConf()));
   }
@@ -94,10 +94,8 @@ public class ReOptimizePlugin implements IReExecutionPlugin {
   public void prepareToReExecute() {
     statsReaderHook.setCollectOnSuccess(true);
     retryPossible = false;
-    if (!alwaysCollectStats) {
-      coreDriver.setStatsSource(
-          StatsSources.getStatsSourceContaining(coreDriver.getStatsSource(), coreDriver.getPlanMapper()));
-    }
+    coreDriver.setStatsSource(
+        StatsSources.getStatsSourceContaining(coreDriver.getStatsSource(), coreDriver.getPlanMapper()));
   }
 
   @Override
