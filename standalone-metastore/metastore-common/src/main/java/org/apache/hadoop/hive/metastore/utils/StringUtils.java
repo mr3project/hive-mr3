@@ -19,6 +19,7 @@ package org.apache.hadoop.hive.metastore.utils;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -27,18 +28,31 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.google.common.collect.Interner;
+import com.google.common.collect.Interners;
+
 public class StringUtils {
+  private static final Interner<String> STRING_INTERNER = Interners.newWeakInterner();
 
   /**
-   * Return the internalized string, or null if the given string is null.
+   * Return an internalized string, or null if the given string is null.
+   *
+   * <p>This intentionally uses a Hive-local weak interner instead of
+   * {@link String#intern()}. Metastore thrift objects call this method for many
+   * fields while deserializing and copying objects (partition parameters, field
+   * schemas, storage descriptor locations, etc). Routing every value through
+   * the JVM string pool can make {@code String.intern()} a profiling hotspot. A
+   * weak interner keeps the memory-deduplication benefit for equal live strings
+   * without paying the cost of the JVM-wide string table.</p>
+   *
    * @param str The string to intern
-   * @return The identical string cached in the string pool.
+   * @return An equal canonical string cached by the metastore interner.
    */
   public static String intern(String str) {
     if (str == null) {
       return null;
     }
-    return str.intern();
+    return STRING_INTERNER.intern(str);
   }
 
   /**
@@ -58,9 +72,15 @@ public class StringUtils {
   }
 
   /**
-   * Return an interned map with identical contents as the given map.
-   * @param map The map whose strings will be interned
-   * @return An identical map with its strings interned.
+   * Return a map with interned keys and identical values.
+   *
+   * <p>Metastore parameter maps have a small set of repeated keys, but their
+   * values are often table/partition-specific. Interning only the keys keeps the
+   * high-value deduplication while avoiding many low-value interner lookups for
+   * values.</p>
+   *
+   * @param map The map whose keys will be interned
+   * @return An identical map with its keys interned.
    */
   public static Map<String, String> intern(Map<String, String> map) {
     if (map == null) {
@@ -73,7 +93,7 @@ public class StringUtils {
     }
     Map<String, String> newMap = new HashMap<>(map.size());
     for (Map.Entry<String, String> entry : map.entrySet()) {
-      newMap.put(intern(entry.getKey()), intern(entry.getValue()));
+      newMap.put(intern(entry.getKey()), entry.getValue());
     }
     return newMap;
   }

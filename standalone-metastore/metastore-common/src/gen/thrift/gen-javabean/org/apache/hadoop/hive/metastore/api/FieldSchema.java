@@ -113,7 +113,7 @@ package org.apache.hadoop.hive.metastore.api;
     this();
     this.name = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(name);
     this.type = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(type);
-    this.comment = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(comment);
+    this.comment = comment;
   }
 
   /**
@@ -127,7 +127,7 @@ package org.apache.hadoop.hive.metastore.api;
       this.type = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other.type);
     }
     if (other.isSetComment()) {
-      this.comment = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other.comment);
+      this.comment = other.comment;
     }
   }
 
@@ -196,7 +196,7 @@ package org.apache.hadoop.hive.metastore.api;
   }
 
   public void setComment(@org.apache.thrift.annotation.Nullable java.lang.String comment) {
-    this.comment = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(comment);
+    this.comment = comment;
   }
 
   public void unsetComment() {
@@ -481,7 +481,7 @@ package org.apache.hadoop.hive.metastore.api;
             break;
           case 3: // COMMENT
             if (schemeField.type == org.apache.thrift.protocol.TType.STRING) {
-              struct.comment = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(iprot.readString());
+              struct.comment = iprot.readString();
               struct.setCommentIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
@@ -567,7 +567,7 @@ package org.apache.hadoop.hive.metastore.api;
         struct.setTypeIsSet(true);
       }
       if (incoming.get(2)) {
-        struct.comment = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(iprot.readString());
+        struct.comment = iprot.readString();
         struct.setCommentIsSet(true);
       }
     }

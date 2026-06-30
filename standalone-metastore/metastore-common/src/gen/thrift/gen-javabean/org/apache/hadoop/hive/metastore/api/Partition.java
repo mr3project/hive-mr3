@@ -436,7 +436,7 @@ package org.apache.hadoop.hive.metastore.api;
     if (this.parameters == null) {
       this.parameters = new java.util.HashMap<java.lang.String,java.lang.String>();
     }
-    this.parameters.put(org.apache.hadoop.hive.metastore.utils.StringUtils.intern(key), org.apache.hadoop.hive.metastore.utils.StringUtils.intern(val));
+    this.parameters.put(org.apache.hadoop.hive.metastore.utils.StringUtils.intern(key), val);
   }
 
   @org.apache.thrift.annotation.Nullable

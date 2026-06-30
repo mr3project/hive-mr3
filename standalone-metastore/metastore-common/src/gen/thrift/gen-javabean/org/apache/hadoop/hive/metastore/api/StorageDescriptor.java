@@ -192,7 +192,7 @@ package org.apache.hadoop.hive.metastore.api;
   {
     this();
     this.cols = cols;
-    this.location = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(location);
+    this.location = location;
     this.inputFormat = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(inputFormat);
     this.outputFormat = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(outputFormat);
     this.compressed = compressed;
@@ -218,7 +218,7 @@ package org.apache.hadoop.hive.metastore.api;
       this.cols = __this__cols;
     }
     if (other.isSetLocation()) {
-      this.location = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other.location);
+      this.location = other.location;
     }
     if (other.isSetInputFormat()) {
       this.inputFormat = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other.inputFormat);
@@ -321,7 +321,7 @@ package org.apache.hadoop.hive.metastore.api;
   }
 
   public void setLocation(@org.apache.thrift.annotation.Nullable java.lang.String location) {
-    this.location = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(location);
+    this.location = location;
   }
 
   public void unsetLocation() {
@@ -543,7 +543,7 @@ package org.apache.hadoop.hive.metastore.api;
     if (this.parameters == null) {
       this.parameters = new java.util.HashMap<java.lang.String,java.lang.String>();
     }
-    this.parameters.put(org.apache.hadoop.hive.metastore.utils.StringUtils.intern(key), org.apache.hadoop.hive.metastore.utils.StringUtils.intern(val));
+    this.parameters.put(org.apache.hadoop.hive.metastore.utils.StringUtils.intern(key), val);
   }
 
   @org.apache.thrift.annotation.Nullable
@@ -1278,7 +1278,7 @@ package org.apache.hadoop.hive.metastore.api;
             break;
           case 2: // LOCATION
             if (schemeField.type == org.apache.thrift.protocol.TType.STRING) {
-              struct.location = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(iprot.readString());
+              struct.location = iprot.readString();
               struct.setLocationIsSet(true);
             } else { 
               org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
@@ -1636,7 +1636,7 @@ package org.apache.hadoop.hive.metastore.api;
         struct.setColsIsSet(true);
       }
       if (incoming.get(1)) {
-        struct.location = org.apache.hadoop.hive.metastore.utils.StringUtils.intern(iprot.readString());
+        struct.location = iprot.readString();
         struct.setLocationIsSet(true);
       }
       if (incoming.get(2)) {

@@ -29,8 +29,8 @@ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(name);
 this\.name\ \=\ name;=this.name\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(name);
 this\.serializationLib\ \=\ serializationLib;=this.serializationLib\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(serializationLib);
 this\.type\ \=\ type;=this.type\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(type);
-this\.comment\ \=\ comment;=this.comment\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(comment);
-this\.location\ \=\ location;=this.location\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(location);
+this\.comment\ \=\ comment;=this.comment\ \=\ comment;
+this\.location\ \=\ location;=this.location\ \=\ location;
 this\.inputFormat\ \=\ inputFormat;=this.inputFormat\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(inputFormat);
 this\.outputFormat\ \=\ outputFormat;=this.outputFormat\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(outputFormat);
 this\.dbName\ \=\ dbName;=this.dbName\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(dbName);
@@ -54,8 +54,8 @@ this\.parameters\ \=\ parameters;=this.parameters\ \=\ org.apache.hadoop.hive.me
 this\.name\ \=\ other\.name;=this.name\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other.name);
 this\.serializationLib\ \=\ other\.serializationLib;=this.serializationLib\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other.serializationLib);
 this\.type\ \=\ other\.type;=this.type\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other.type);
-this\.comment\ \=\ other\.comment;=this.comment\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other.comment);
-this\.location\ \=\ other\.location;=this.location\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other.location);
+this\.comment\ \=\ other\.comment;=this.comment\ \=\ other.comment;
+this\.location\ \=\ other\.location;=this.location\ \=\ other.location;
 this\.inputFormat\ \=\ other\.inputFormat;=this.inputFormat\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other.inputFormat);
 this\.outputFormat\ \=\ other\.outputFormat;=this.outputFormat\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other.outputFormat);
 this\.dbName\ \=\ other\.dbName;=this.dbName\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other.dbName);
@@ -67,12 +67,12 @@ this\.colName\ \=\ other\.colName;=this\.colName\ \=\ org.apache.hadoop.hive.met
 this\.colType\ \=\ other\.colType;=this\.colType\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other.colType);
 
 __this__parameters_copy_key\ \=\ other_element_key;=__this__parameters_copy_key\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other_element_key);
-__this__parameters_copy_value\ \=\ other_element_value;=__this__parameters_copy_value\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other_element_value);
+__this__parameters_copy_value\ \=\ other_element_value;=__this__parameters_copy_value\ \=\ other_element_value;
 __this_values\.add(other_element);=__this_values.add(org.apache.hadoop.hive.metastore.utils.StringUtils.intern(other_element));
 
 # Fix methods in Partition.java that call Map.put(String key, String value)
 
-this\.parameters\.put\(key,\ val\);=this.parameters.put(org.apache.hadoop.hive.metastore.utils.StringUtils.intern(key),\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(val));
+this\.parameters\.put\(key,\ val\);=this.parameters.put(org.apache.hadoop.hive.metastore.utils.StringUtils.intern(key),\ val);
 
 # Fix the deserialization methods in Partitions.java: intern parameters after it's deserialized
 
@@ -86,7 +86,7 @@ struct\.tableName\ \=\ iprot\.readString\(\);=struct\.tableName\ \=\ org.apache.
 struct\.catName\ \=\ iprot\.readString\(\);=struct\.catName\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(iprot\.readString\(\));
 
 # StorageDescriptorStandardScheme - parameters are already interned above
-struct\.location\ \=\ iprot\.readString\(\);=struct\.location\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(iprot\.readString\(\));
+struct\.location\ \=\ iprot\.readString\(\);=struct\.location\ \=\ iprot.readString();
 struct\.inputFormat\ \=\ iprot\.readString\(\);=struct\.inputFormat\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(iprot\.readString\(\));
 struct\.outputFormat\ \=\ iprot\.readString\(\);=struct\.outputFormat\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(iprot\.readString\(\));
 struct\.setBucketColsIsSet\(true\);=struct\.bucketCols\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(struct.bucketCols);\ struct.setBucketColsIsSet(true);
@@ -99,7 +99,7 @@ struct\.deserializerClass\ \=\ iprot\.readString\(\);=struct\.deserializerClass\
 
 # FieldSchemaStandardScheme - name field gets automatically handled above
 struct\.type\ \=\ iprot\.readString\(\);=struct\.type\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(iprot\.readString\(\));
-struct\.comment\ \=\ iprot\.readString\(\);=struct\.comment\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(iprot\.readString\(\));
+struct\.comment\ \=\ iprot\.readString\(\);=struct\.comment\ \=\ iprot.readString();
 
 # ColumnStatisticsObjStandardScheme
 struct\.colName\ \=\ iprot\.readString\(\);=struct\.colName\ \=\ org.apache.hadoop.hive.metastore.utils.StringUtils.intern(iprot\.readString\(\));
