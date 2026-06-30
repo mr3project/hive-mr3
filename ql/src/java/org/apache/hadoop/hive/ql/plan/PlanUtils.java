@@ -911,7 +911,19 @@ public final class PlanUtils {
    * @param tableDesc table descriptor
    */
   public static void configureInputJobPropertiesForStorageHandler(TableDesc tableDesc) {
-      configureJobPropertiesForStorageHandler(true,tableDesc);
+      configureJobPropertiesForStorageHandler(true, tableDesc);
+  }
+
+  /**
+   * Loads the storage handler (if one exists) for the given table
+   * and invokes {@link HiveStorageHandler#configureInputJobProperties(TableDesc, java.util.Map)}.
+   *
+   * @param tableDesc table descriptor
+   * @param conf configuration to use while loading the storage handler
+   */
+  public static void configureInputJobPropertiesForStorageHandler(TableDesc tableDesc,
+      Configuration conf) {
+      configureJobPropertiesForStorageHandler(true, tableDesc, conf);
   }
 
   /**
@@ -921,11 +933,35 @@ public final class PlanUtils {
    * @param tableDesc table descriptor
    */
   public static void configureOutputJobPropertiesForStorageHandler(TableDesc tableDesc) {
-      configureJobPropertiesForStorageHandler(false,tableDesc);
+      configureJobPropertiesForStorageHandler(false, tableDesc);
+  }
+
+  /**
+   * Loads the storage handler (if one exists) for the given table
+   * and invokes {@link HiveStorageHandler#configureOutputJobProperties(TableDesc, java.util.Map)}.
+   *
+   * @param tableDesc table descriptor
+   * @param conf configuration to use while loading the storage handler
+   */
+  public static void configureOutputJobPropertiesForStorageHandler(TableDesc tableDesc,
+      Configuration conf) {
+      configureJobPropertiesForStorageHandler(false, tableDesc, conf);
   }
 
   private static void configureJobPropertiesForStorageHandler(boolean input,
     TableDesc tableDesc) {
+    if (tableDesc == null) {
+      return;
+    }
+    try {
+      configureJobPropertiesForStorageHandler(input, tableDesc, Hive.get().getConf());
+    } catch (HiveException ex) {
+      throw new RuntimeException(ex);
+    }
+  }
+
+  private static void configureJobPropertiesForStorageHandler(boolean input,
+    TableDesc tableDesc, Configuration conf) {
 
     if (tableDesc == null) {
       return;
@@ -934,7 +970,7 @@ public final class PlanUtils {
     try {
       HiveStorageHandler storageHandler =
         HiveUtils.getStorageHandler(
-          Hive.get().getConf(),
+          conf,
           tableDesc.getProperties().getProperty(
             org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_STORAGE));
       if (storageHandler != null) {

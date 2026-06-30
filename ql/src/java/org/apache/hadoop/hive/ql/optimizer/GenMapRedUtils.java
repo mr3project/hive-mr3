@@ -523,10 +523,11 @@ public final class GenMapRedUtils {
     // framework
     Set<Partition> parts = partsList.getPartitions();
     TableDesc tableSpec = Utilities.getTableDesc(tsOp.getConf().getTableMetadata());
+    Configuration conf = parseCtx.getConf();
     PartitionDesc aliasPartnDesc = null;
     try {
       if (!parts.isEmpty()) {
-        aliasPartnDesc = Utilities.getPartitionDesc(parts.iterator().next(), tableSpec);
+        aliasPartnDesc = Utilities.getPartitionDesc(parts.iterator().next(), tableSpec, conf);
       }
     } catch (HiveException e) {
       LOG.error("Failed getPartitionDesc", e);
@@ -691,10 +692,10 @@ public final class GenMapRedUtils {
         partDir.add(p);
         try {
           if (part.getTable().isPartitioned()) {
-            partDesc.add(Utilities.getPartitionDesc(part, tblDesc));
+            partDesc.add(Utilities.getPartitionDesc(part, tblDesc, conf));
           }
           else {
-            partDesc.add(Utilities.getPartitionDescFromTableDesc(tblDesc, part, false));
+            partDesc.add(Utilities.getPartitionDescFromTableDesc(tblDesc, part, false, conf));
           }
         } catch (HiveException e) {
           LOG.error("Failed to add partition description", e);

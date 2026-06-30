@@ -79,7 +79,12 @@ public class PartitionDesc implements Serializable, Cloneable {
   }
 
   public PartitionDesc(final Partition part, final TableDesc tableDesc) throws HiveException {
-    PartitionDescConstructorHelper(part, tableDesc, true);
+    this(part, tableDesc, null);
+  }
+
+  public PartitionDesc(final Partition part, final TableDesc tableDesc, Configuration conf)
+    throws HiveException {
+    PartitionDescConstructorHelper(part, tableDesc, true, conf);
     if (Utilities.isInputFileFormatSelfDescribing(this)) {
       // if IF is self describing no need to send column info per partition, since its not used anyway.
       Table tbl = part.getTable();
@@ -101,21 +106,31 @@ public class PartitionDesc implements Serializable, Cloneable {
   public PartitionDesc(final Partition part,final TableDesc tblDesc,
     boolean usePartSchemaProperties)
     throws HiveException {
-    PartitionDescConstructorHelper(part, tblDesc, usePartSchemaProperties);
-    //We use partition schema properties to set the partition descriptor properties
-    // if usePartSchemaProperties is set to true.
-    if (usePartSchemaProperties) {
-      setProperties(part.getMetadataFromPartitionSchema());
-    } else {
-      // each partition maintains a large properties
-      setProperties(part.getSchemaFromTableSchema(tblDesc.getProperties()));
-    }
+    this(part, tblDesc, usePartSchemaProperties, null);
   }
 
-  private void PartitionDescConstructorHelper(final Partition part,final TableDesc tblDesc, boolean setInputFileFormat)
+  public PartitionDesc(final Partition part,final TableDesc tblDesc,
+    boolean usePartSchemaProperties, Configuration conf)
+    throws HiveException {
+    PartitionDescConstructorHelper(part, tblDesc, usePartSchemaProperties, conf);
+    setProperties(part, tblDesc, usePartSchemaProperties);
+  }
+
+  private void PartitionDescConstructorHelper(final Partition part,final TableDesc tblDesc,
+    boolean setInputFileFormat)
+    throws HiveException {
+    PartitionDescConstructorHelper(part, tblDesc, setInputFileFormat, null);
+  }
+
+  private void PartitionDescConstructorHelper(final Partition part,final TableDesc tblDesc,
+    boolean setInputFileFormat, Configuration conf)
     throws HiveException {
 
-    PlanUtils.configureInputJobPropertiesForStorageHandler(tblDesc);
+    if (conf == null) {
+      PlanUtils.configureInputJobPropertiesForStorageHandler(tblDesc);
+    } else {
+      PlanUtils.configureInputJobPropertiesForStorageHandler(tblDesc, conf);
+    }
 
     this.tableDesc = tblDesc;
 
@@ -126,6 +141,18 @@ public class PartitionDesc implements Serializable, Cloneable {
       setOutputFileFormatClass(part.getInputFormatClass());
     }
     setOutputFileFormatClass(part.getOutputFormatClass());
+  }
+
+  private void setProperties(final Partition part, final TableDesc tblDesc, boolean usePartSchemaProperties)
+    throws HiveException {
+    //We use partition schema properties to set the partition descriptor properties
+    // if usePartSchemaProperties is set to true.
+    if (usePartSchemaProperties) {
+      setProperties(part.getMetadataFromPartitionSchema());
+    } else {
+      // each partition maintains a large properties
+      setProperties(part.getSchemaFromTableSchema(tblDesc.getProperties()));
+    }
   }
 
   @Explain(displayName = "", explainLevels = { Level.USER, Level.DEFAULT, Level.EXTENDED })

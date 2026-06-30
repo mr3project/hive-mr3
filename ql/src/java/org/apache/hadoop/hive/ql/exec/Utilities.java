@@ -788,9 +788,19 @@ public final class Utilities {
     return new PartitionDesc(part, tableDesc);
   }
 
+  public static PartitionDesc getPartitionDesc(Partition part, TableDesc tableDesc,
+      Configuration conf) throws HiveException {
+    return new PartitionDesc(part, tableDesc, conf);
+  }
+
   public static PartitionDesc getPartitionDescFromTableDesc(TableDesc tblDesc, Partition part,
     boolean usePartSchemaProperties) throws HiveException {
     return new PartitionDesc(part, tblDesc, usePartSchemaProperties);
+  }
+
+  public static PartitionDesc getPartitionDescFromTableDesc(TableDesc tblDesc, Partition part,
+    boolean usePartSchemaProperties, Configuration conf) throws HiveException {
+    return new PartitionDesc(part, tblDesc, usePartSchemaProperties, conf);
   }
 
   private static boolean isWhitespace(int c) {
