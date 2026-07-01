@@ -36,26 +36,56 @@ public final class SimpleAllocator implements Allocator, BuddyAllocatorMXBean {
     }
   }
 
-
   @Override
   @Deprecated
   public void allocateMultiple(MemoryBuffer[] dest, int size) {
     allocateMultiple(dest, size, null);
   }
 
+  /* All-or-nothing semantics:
+   * If ByteBuffer allocation fails, cleanupByteBuffers(bbs) cleans up and dest[] remains untouched.
+   * Only after all allocations succeed does it update dest[].
+   */
+  // MemoryBuffer in dest[] is uninitialized, i.e., with no backing ByteBuffer.
   @Override
   public void allocateMultiple(MemoryBuffer[] dest, int size, BufferObjectFactory factory) {
-    for (int i = 0; i < dest.length; ++i) {
-      LlapAllocatorBuffer buf = null;
-      if (dest[i] == null) {
-      // Note: this is backward compat only. Should be removed with createUnallocated.
-        dest[i] = buf = (factory != null)
-            ? (LlapAllocatorBuffer)factory.create() : createUnallocated();
-      } else {
-        buf = (LlapAllocatorBuffer)dest[i];
+    int len = dest.length;
+
+    // Pre-allocate the ByteBuffers for those slots
+    ByteBuffer[] bbs = new ByteBuffer[len];
+    try {
+      for (int k = 0; k < len; k++) {
+        bbs[k] = isDirect ? ByteBuffer.allocateDirect(size) : ByteBuffer.allocate(size);
       }
-      ByteBuffer bb = isDirect ? ByteBuffer.allocateDirect(size) : ByteBuffer.allocate(size);
-      buf.initialize(bb, 0, size);
+    } catch (OutOfMemoryError | RuntimeException e) {
+      cleanupByteBuffers(bbs); // frees only the ones actually created
+      throw e;
+    }
+
+    // Success → initialize and publish
+    for (int k = 0; k < len; k++) {
+      LlapAllocatorBuffer buf = (LlapAllocatorBuffer)dest[k];
+      buf.initialize(bbs[k], 0, size);
+    }
+  }
+
+  /**
+   * Helper method to cleanup partially allocated ByteBuffers
+   */
+  private void cleanupByteBuffers(ByteBuffer[] byteBuffers) {
+    for (int i = 0; i < byteBuffers.length; ++i) {
+      ByteBuffer bb = byteBuffers[i];
+      if (bb == null) continue; // This and subsequent buffers were not allocated
+
+      // Only cleanup direct buffers as heap buffers will be GC'd
+      if (bb.isDirect() && CleanerUtil.UNMAP_SUPPORTED) {
+        try {
+          CleanerUtil.getCleaner().freeBuffer(bb);
+        } catch (Throwable t) {
+          LlapIoImpl.LOG.warn("Error cleaning up DirectByteBuffer during allocation failure", t);
+        }
+      }
+      byteBuffers[i] = null; // Help GC
     }
   }
 
