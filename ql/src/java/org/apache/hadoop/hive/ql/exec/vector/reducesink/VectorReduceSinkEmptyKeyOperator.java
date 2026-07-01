@@ -74,6 +74,21 @@ public class VectorReduceSinkEmptyKeyOperator extends VectorReduceSinkCommonOper
   }
 
   @Override
+  protected void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes) {
+    final int size = batch.size;
+    if (batch.selectedInUse) {
+      final int[] selected = batch.selected;
+      for (int logical = 0; logical < size; logical++) {
+        hashCodes[selected[logical]] = 0;
+      }
+    } else {
+      for (int batchIndex = 0; batchIndex < size; batchIndex++) {
+        hashCodes[batchIndex] = 0;
+      }
+    }
+  }
+
+  @Override
   public void process(Object row, int tag) throws HiveException {
 
     try {
@@ -100,6 +115,10 @@ public class VectorReduceSinkEmptyKeyOperator extends VectorReduceSinkCommonOper
         for (VectorExpression ve : reduceSinkValueExpressions) {
           ve.evaluate(batch);
         }
+      }
+
+      if (tryCollectVectorShuffleBatch(batch, tag)) {
+        return;
       }
 
       final int size = batch.size;
