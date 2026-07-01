@@ -25,10 +25,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.commons.io.function.IOConsumer;
 import org.apache.hadoop.hive.conf.Constants;
+import org.apache.hadoop.hive.ql.io.IOConstants;
+import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.tez.mapreduce.output.MROutput;
 import org.apache.tez.runtime.api.TaskFailureType;
 import org.apache.tez.runtime.api.events.CustomProcessorEvent;
+import org.apache.tez.runtime.library.api.KeyValueWriterEdge.WriteValueBytes;
+import org.apache.tez.runtime.library.api.KeyValuesWriterEdge;
+import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -38,7 +45,6 @@ import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.tez.common.TezUtils;
 import org.apache.tez.mapreduce.processor.MRTaskReporter;
 import org.apache.tez.runtime.api.AbstractLogicalIOProcessor;
 import org.apache.tez.runtime.api.Event;
@@ -46,9 +52,18 @@ import org.apache.tez.runtime.api.ExecutionContext;
 import org.apache.tez.runtime.api.LogicalInput;
 import org.apache.tez.runtime.api.LogicalOutput;
 import org.apache.tez.runtime.api.ProcessorContext;
-import org.apache.tez.runtime.library.api.KeyValueWriter;
 
 import com.google.common.base.Throwables;
+
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.llap.counters.FragmentCountersMap;
+import org.apache.hadoop.hive.llap.tezplugins.LlapTezUtils;
+import org.apache.hadoop.hive.ql.exec.ObjectCacheFactory;
+import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.io.IOContextMap;
+import org.apache.hadoop.hive.ql.io.orc.OrcFile;
+import org.apache.tez.mapreduce.input.MRInput;
+import org.apache.tez.runtime.api.events.ProcessorHandlerSetupCloseEvent;
 
 /**
  * Hive processor for Tez that forms the vertices in Tez and processes the data.
@@ -65,7 +80,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
    * This provides the ability to pass things into TezProcessor, which is normally impossible
    * because of how Tez APIs are structured. Piggyback on ExecutionContext.
    */
-  public static interface Hook {
+  private interface Hook {
     void initializeHook(TezProcessor source);
   }
 
@@ -80,64 +95,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
   private static final String CLASS_NAME = TezProcessor.class.getName();
   private final PerfLogger perfLogger = SessionState.getPerfLogger();
 
-  // TODO: Replace with direct call to ProgressHelper, when reliably available.
-  private static class ReflectiveProgressHelper {
-
-    Configuration conf;
-    Class<?> progressHelperClass = null;
-    Object progressHelper = null;
-
-    ReflectiveProgressHelper(Configuration conf,
-                             Map<String, LogicalInput> inputs,
-                             ProcessorContext processorContext,
-                             String processorName) {
-      this.conf = conf;
-      try {
-        progressHelperClass = this.conf.getClassByName("org.apache.tez.common.ProgressHelper");
-        progressHelper = progressHelperClass.getDeclaredConstructor(Map.class, ProcessorContext.class, String.class)
-                            .newInstance(inputs, processorContext, processorName);
-        LOG.debug("ProgressHelper initialized!");
-      }
-      catch(Exception ex) {
-        LOG.warn("Could not find ProgressHelper. " + ex);
-      }
-    }
-
-    private boolean isValid() {
-      return progressHelperClass != null && progressHelper != null;
-    }
-
-    void scheduleProgressTaskService(long delay, long period) {
-      if (!isValid()) {
-        LOG.warn("ProgressHelper uninitialized. Bailing on scheduleProgressTaskService()");
-        return;
-      }
-      try {
-        progressHelperClass.getDeclaredMethod("scheduleProgressTaskService", long.class, long.class)
-            .invoke(progressHelper, delay, period);
-        LOG.debug("scheduleProgressTaskService() called!");
-      } catch (Exception exception) {
-        LOG.warn("Could not scheduleProgressTaskService.", exception);
-      }
-    }
-
-    void shutDownProgressTaskService() {
-      if (!isValid()) {
-        LOG.warn("ProgressHelper uninitialized. Bailing on scheduleProgressTaskService()");
-        return;
-      }
-      try {
-        progressHelperClass.getDeclaredMethod("shutDownProgressTaskService").invoke(progressHelper);
-        LOG.debug("shutDownProgressTaskService() called!");
-      }
-      catch (Exception exception) {
-        LOG.warn("Could not shutDownProgressTaskService.", exception);
-      }
-    }
-  }
-
   protected ProcessorContext processorContext;
-  private ReflectiveProgressHelper progressHelper;
 
   protected static final NumberFormat taskIdFormat = NumberFormat.getInstance();
   protected static final NumberFormat jobIdFormat = NumberFormat.getInstance();
@@ -150,7 +108,8 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
   public TezProcessor(ProcessorContext context) {
     super(context);
-    ObjectCache.setupObjectRegistry(context.getObjectRegistry());
+    ObjectCache.setupObjectRegistry(context);
+    OrcFile.setupOrcMemoryManager(context.getTotalMemoryAvailableToTask());
   }
 
   @Override
@@ -159,43 +118,77 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     // we have to close in the processor's run method, because tez closes inputs
     // before calling close (TEZ-955) and we might need to read inputs
     // when we flush the pipeline.
-      if (progressHelper != null) {
-        progressHelper.shutDownProgressTaskService();
-      }
+
+    IOContextMap.clearThreadAttempt(getContext().getUniqueIdentifier());
   }
 
   @Override
   public void handleEvents(List<Event> arg0) {
-    // As of now only used for Bucket MapJoin, there is exactly one event in the list.
+    // As of now only used for ProcessorHandlerSetupCloseEvent and Bucket MapJoin, there is exactly one event in the list.
     assert arg0.size() <= 1;
     for (Event event : arg0) {
-      CustomProcessorEvent cpEvent = (CustomProcessorEvent) event;
-      ByteBuffer buffer = cpEvent.getPayload();
-      // Get int view of the buffer
-      IntBuffer intBuffer = buffer.asIntBuffer();
-      jobConf.setInt(Constants.LLAP_NUM_BUCKETS, intBuffer.get(0));
-      jobConf.setInt(Constants.LLAP_BUCKET_ID, intBuffer.get(1));
+      if (event instanceof ProcessorHandlerSetupCloseEvent) {
+        ProcessorHandlerSetupCloseEvent phEvent = (ProcessorHandlerSetupCloseEvent) event;
+        boolean setup = phEvent.getSetup();
+        if (setup) {
+          IOContextMap.setThreadAttemptId(processorContext.getUniqueIdentifier());
+        } else {
+          IOContextMap.cleanThreadAttemptId(processorContext.getUniqueIdentifier());
+        }
+      } else if (event instanceof CustomProcessorEvent) {
+        CustomProcessorEvent cpEvent = (CustomProcessorEvent) event;
+        ByteBuffer buffer = cpEvent.getPayload();
+        // Get int view of the buffer
+        IntBuffer intBuffer = buffer.asIntBuffer();
+        jobConf.setInt(Constants.LLAP_NUM_BUCKETS, intBuffer.get(0));
+        jobConf.setInt(Constants.LLAP_BUCKET_ID, intBuffer.get(1));
+      } else {
+        LOG.error("Ignoring unknown Event: " + event);
+      }
     }
   }
 
   @Override
   public void initialize() throws IOException {
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.TEZ_INITIALIZE_PROCESSOR);
-    Configuration conf = TezUtils.createConfFromUserPayload(getContext().getUserPayload());
+    Configuration conf = getContext().getConfigurationFromUserPayload(false);
     this.jobConf = new JobConf(conf);
     this.jobConf.getCredentials().mergeAll(UserGroupInformation.getCurrentUser().getCredentials());
     this.processorContext = getContext();
+    int dagIdId = processorContext.getDagIdentifier();
+    HiveConf.setIntVar(this.jobConf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID, dagIdId);
     initTezAttributes();
+
     ExecutionContext execCtx = processorContext.getExecutionContext();
     if (execCtx instanceof Hook) {
       ((Hook)execCtx).initializeHook(this);
     }
     setupMRLegacyConfigs(processorContext);
+
+    // use the implementation of IOContextMap for LLAP
+    IOContextMap.setThreadAttemptId(processorContext.getUniqueIdentifier());
+
+    if (HiveConf.getVar(this.jobConf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
+      String queryId = HiveConf.getVar(this.jobConf, HiveConf.ConfVars.HIVE_QUERY_ID);
+      processorContext.setDagShutdownHook(dagIdId,
+          new Runnable() {
+            public void run() {
+              ObjectCacheFactory.removeLlapQueryCache(queryId, dagIdId);
+            }
+          },
+          new org.apache.tez.runtime.api.TaskContext.VertexShutdown() {
+            public void run(int vertexIdId) {
+              ObjectCacheFactory.removeLlapQueryVertexCache(queryId, dagIdId, vertexIdId);
+            }
+          });
+    }
+
     perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.TEZ_INITIALIZE_PROCESSOR);
   }
 
 
   private void initTezAttributes() {
+    // HIVE_TEZ_VERTEX_NAME to be read in LimitOperator.onLimitReached()
     jobConf.set(HIVE_TEZ_VERTEX_NAME, processorContext.getTaskVertexName());
     jobConf.setInt(HIVE_TEZ_VERTEX_INDEX, processorContext.getTaskVertexIndex());
     jobConf.setInt(HIVE_TEZ_TASK_INDEX, processorContext.getTaskIndex());
@@ -221,17 +214,17 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
 
     // In MR, mapreduce.task.attempt.id is same as mapred.task.id. Go figure.
     String taskAttemptIdStr = taskAttemptIdBuilder.toString();
-    this.jobConf.set("mapred.task.id", taskAttemptIdStr);
-    this.jobConf.set("mapreduce.task.attempt.id", taskAttemptIdStr);
+    this.jobConf.set(IOConstants.MAPRED_TASK_ID, taskAttemptIdStr);
+    this.jobConf.set(MRJobConfig.TASK_ATTEMPT_ID, taskAttemptIdStr);
     this.jobConf.setInt("mapred.task.partition", processorContext.getTaskIndex());
   }
 
   @Override
-  public void run(Map<String, LogicalInput> inputs, Map<String, LogicalOutput> outputs)
+  public scala.Tuple2<java.lang.Integer, java.lang.Integer> run(Map<String, LogicalInput> inputs, Map<String, LogicalOutput> outputs)
       throws Exception {
 
     if (aborted.get()) {
-      return;
+      return null;
     }
 
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.TEZ_RUN_PROCESSOR);
@@ -243,23 +236,11 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
     }
 
     synchronized (this) {
-      boolean limitReached = LimitOperator.checkLimitReached(jobConf);
-      if (limitReached) {
-        LOG.info(
-            "TezProcessor exits early as query limit already reached, vertex: {}, task: {}, attempt: {}",
-            jobConf.get(HIVE_TEZ_VERTEX_NAME), jobConf.get(HIVE_TEZ_TASK_INDEX),
-            jobConf.get(HIVE_TEZ_TASK_ATTEMPT_NUMBER));
-        aborted.set(true);
-      }
-
       // This check isn't absolutely mandatory, given the aborted check outside of the
       // Processor creation.
       if (aborted.get()) {
-        return;
+        return null;
       }
-
-      // leverage TEZ-3437: Improve synchronization and the progress report behavior.
-      progressHelper = new ReflectiveProgressHelper(jobConf, inputs, getContext(), this.getClass().getSimpleName());
 
       // There should be no blocking operation in RecordProcessor creation,
       // otherwise the abort operation will not register since they are synchronized on the same
@@ -271,19 +252,43 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       }
     }
 
-    progressHelper.scheduleProgressTaskService(0, 100);
     if (!aborted.get()) {
       initializeAndRunProcessor(inputs, outputs);
     }
     // TODO HIVE-14042. In case of an abort request, throw an InterruptedException
+    // Implement HIVE-14042 in initializeAndRunProcessor(), not here
+
+    String queryId = HiveConf.getVar(jobConf, HiveConf.ConfVars.HIVE_QUERY_ID);
+    int dagIdId = processorContext.getDagIdentifier();
+    String vertexName = processorContext.getTaskVertexName();
+    scala.Tuple2<java.lang.Integer, java.lang.Integer> limitRecords =
+      LimitOperator.getLimitRecords(jobConf, queryId, dagIdId, vertexName);
+    if (limitRecords != null) {
+      LOG.info("Reporting query limit and # of records: {}, {}, {}",
+          processorContext.getTaskAttemptIdStr(), limitRecords._1(), limitRecords._2());
+      return limitRecords;
+    } else {
+      return null;
+    }
   }
 
   protected void initializeAndRunProcessor(Map<String, LogicalInput> inputs,
       Map<String, LogicalOutput> outputs)
       throws Exception {
     Throwable originalThrowable = null;
-    try {
 
+    boolean setLlapCacheCounters = isMap &&
+        HiveConf.getVar(this.jobConf, HiveConf.ConfVars.HIVE_EXECUTION_MODE).equals("llap")
+        && HiveConf.getBoolVar(this.jobConf, HiveConf.ConfVars.LLAP_CLIENT_CONSISTENT_SPLITS);
+    String fragmentId = null;
+    if (setLlapCacheCounters) {
+      // should be consistent with setting in MRInputBase.initialize()
+      jobConf.set(MRInput.TEZ_MAPREDUCE_TASK_ATTEMPT_ID, getContext().getTaskAttemptIdStr());
+      fragmentId = LlapTezUtils.getFragmentId(this.jobConf);
+      FragmentCountersMap.registerCountersForFragment(fragmentId, this.processorContext.getCounters());
+    }
+
+    try {
       MRTaskReporter mrReporter = new MRTaskReporter(getContext());
       // Init and run are both potentially long, and blocking operations. Synchronization
       // with the 'abort' operation will not work since if they end up blocking on a monitor
@@ -292,16 +297,22 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       rproc.init(mrReporter, inputs, outputs);
       rproc.run();
 
-      perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.TEZ_RUN_PROCESSOR);
     } catch (Throwable t) {
       rproc.setAborted(true);
       originalThrowable = t;
+
     } finally {
       if (originalThrowable != null && (originalThrowable instanceof Error ||
-        Throwables.getRootCause(originalThrowable) instanceof Error)) {
+          Throwables.getRootCause(originalThrowable) instanceof Error)) {
         LOG.error("Cannot recover from this FATAL error", originalThrowable);
-        getContext().reportFailure(TaskFailureType.FATAL, originalThrowable,
-                      "Cannot recover from this error");
+        getContext().reportFailure(TaskFailureType.FATAL, originalThrowable, "Cannot recover from this error");
+
+        ObjectCache.clearObjectRegistry();  // clear thread-local cache which may contain MAP/REDUCE_PLAN
+        Utilities.clearWork(jobConf);       // clear thread-local gWorkMap which may contain MAP/REDUCE_PLAN
+        if (setLlapCacheCounters) {
+          FragmentCountersMap.unregisterCountersForFragment(fragmentId);
+        }
+
         throw new RuntimeException(originalThrowable);
       }
 
@@ -309,61 +320,85 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
         if (rproc != null) {
           rproc.close();
         }
+        if (originalThrowable == null) {
+          closeOutputTasks(outputs, MROutput::commit);
+          perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.TEZ_RUN_PROCESSOR);
+        }
       } catch (Throwable t) {
         if (originalThrowable == null) {
           originalThrowable = t;
         }
       }
 
-      // commit the output tasks
-      try {
-        for (LogicalOutput output : outputs.values()) {
-          if (output instanceof MROutput) {
-            MROutput mrOutput = (MROutput) output;
-            if (mrOutput.isCommitRequired()) {
-              mrOutput.commit();
-            }
-          }
-        }
-      } catch (Throwable t) {
-        if (originalThrowable == null) {
-          originalThrowable = t;
-        }
+      if (setLlapCacheCounters) {
+        FragmentCountersMap.unregisterCountersForFragment(fragmentId);
+      }
+
+      // Invariant: calls to abort() eventually lead to clearing thread-local cache exactly once.
+      // 1.
+      // rproc.run()/close() may return normally even after abort() is called and rProcLocal.abort() is
+      // executed. In such a case, thread-local cache may be in a corrupted state. Hence, we should raise
+      // InterruptedException by setting originalThrowable to InterruptedException. In this way, we clear
+      // thread-local cache and fail the current TaskAttempt.
+      // 2.
+      // We set this.aborted to true, so that from now on, abort() is ignored to avoid corrupting thread-local
+      // cache (MAP_PLAN/REDUCE_PLAN).
+
+      // 2. set aborted to true
+      boolean prevAborted = aborted.getAndSet(true);
+      LOG.info("RecordProcessor cleaning up: {}, prevAborted={}", processorContext.getTaskAttemptIdStr(), prevAborted);
+
+      // 1. raise InterruptedException if necessary
+      if (prevAborted && originalThrowable == null) {
+        originalThrowable = new InterruptedException("abort() was called, but RecordProcessor successfully returned");
       }
 
       if (originalThrowable != null) {
-        LOG.error("Failed initializeAndRunProcessor", originalThrowable);
-        // abort the output tasks
-        for (LogicalOutput output : outputs.values()) {
-          if (output instanceof MROutput) {
-            MROutput mrOutput = (MROutput) output;
-            if (mrOutput.isCommitRequired()) {
-              mrOutput.abort();
-            }
-          }
-        }
+        LOG.error("Failed initializeAndRunProcessor: {}", originalThrowable, processorContext.getTaskAttemptIdStr());
+        closeOutputTasks(outputs, MROutput::abort);
+
+        ObjectCache.clearObjectRegistry();  // clear thread-local cache which may contain MAP/REDUCE_PLAN
+        Utilities.clearWork(jobConf);       // clear thread-local gWorkMap which may contain MAP/REDUCE_PLAN
+
         if (originalThrowable instanceof InterruptedException) {
           throw (InterruptedException) originalThrowable;
-        } else {
-          throw new RuntimeException(originalThrowable);
         }
+        throw new RuntimeException(originalThrowable);
       }
     }
   }
 
+  private static void closeOutputTasks(
+      Map<String, LogicalOutput> outputs, IOConsumer<MROutput> committer) throws IOException {
+    for (LogicalOutput output : outputs.values()) {
+      if (output instanceof MROutput) {
+        MROutput mrOutput = (MROutput) output;
+        if (mrOutput.isCommitRequired()) {
+          committer.accept(mrOutput);
+         }
+       }
+     }
+  }
+
+  // abort() can be called after run() has returned without throwing Exception.
+  // Calling ObjectCache.clearObjectRegistry() and Utilities.clearWork(jobConf) inside abort() does not make
+  // sense because the caller thread is not the same thread that calls run().
   @Override
   public void abort() {
-    RecordProcessor rProcLocal;
+    RecordProcessor rProcLocal = null;
     synchronized (this) {
-      LOG.info("Received abort");
-      aborted.set(true);
-      rProcLocal = rproc;
+      LOG.info("Received abort: {}", processorContext.getTaskAttemptIdStr());
+      boolean prevAborted = aborted.getAndSet(true);
+      if (!prevAborted) {
+        rProcLocal = rproc;
+      }
     }
     if (rProcLocal != null) {
-      LOG.info("Forwarding abort to RecordProcessor");
+      LOG.info("Forwarding abort to RecordProcessor: {}", processorContext.getTaskAttemptIdStr());
       rProcLocal.abort();
     } else {
-      LOG.info("RecordProcessor not yet setup. Abort will be ignored");
+      LOG.info("RecordProcessor not yet setup or already completed. Abort will be ignored: {}",
+          processorContext.getTaskAttemptIdStr());
     }
   }
 
@@ -372,22 +407,59 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
    * Must be initialized before it is used.
    *
    */
-  @SuppressWarnings("rawtypes")
-  static class TezKVOutputCollector implements OutputCollector {
-    private KeyValueWriter writer;
-    private final LogicalOutput output;
+  public static class TezKVOutputCollector implements OutputCollector<BytesWritable, BytesWritable> {
 
-    TezKVOutputCollector(LogicalOutput logicalOutput) {
+    private KeyValuesWriterEdge writer;
+    private final LogicalOutputEdge output;
+
+    TezKVOutputCollector(LogicalOutputEdge logicalOutput) {
       this.output = logicalOutput;
     }
 
     void initialize() throws Exception {
-      this.writer = (KeyValueWriter) output.getWriter();
+      this.writer = output.getWriter();
     }
 
+    // Invariant:
+    //   1. close() must be called and is called only after the last call of collect().
+    //   2. collect()/close() are called from the same thread (thus never concurrently).
+
+    // TODO: provide and exploit collect(key, values)
+
     @Override
-    public void collect(Object key, Object value) throws IOException {
+    public void collect(BytesWritable key, BytesWritable value) throws IOException {
       writer.write(key, value);
+    }
+
+    public void writeWithPartition(BytesWritable key, BytesWritable value, int partition)
+        throws IOException {
+      writer.writeWithPartition(key, value, partition);
+    }
+
+    public WriteValueBytes requestWriteValueBytes(BytesWritable key, int partition) throws IOException {
+      return writer.requestWriteValueBytes(key, partition);
+    }
+
+    public void completeWriteValueBytes(BytesWritable key, int valLen, int partition)
+        throws IOException {
+      writer.completeWriteValueBytes(key, valLen, partition);
+    }
+
+    public void close() {
+      writer.closeWriter();
+    }
+
+    // Return:
+    //   >= 0: unordered edge and Tez shuffle
+    //   -1: ordered edge or MapReduce shuffle
+    public int getNumUnorderedPartitions() {
+      return writer.getNumUnorderedPartitions();
+    }
+
+    // return value = 0: use key hash to get partition
+    // return value = 1: use value hash to get partition
+    public int getPartitionerType() {
+      return writer.getPartitionerType();
     }
   }
 

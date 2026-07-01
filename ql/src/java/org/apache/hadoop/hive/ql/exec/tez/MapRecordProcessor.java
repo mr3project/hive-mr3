@@ -31,6 +31,7 @@ import org.apache.hadoop.hive.llap.LlapUtil;
 import org.apache.hadoop.hive.ql.plan.PartitionDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.txn.compactor.CompactorUtil;
+import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -100,11 +101,15 @@ public class MapRecordProcessor extends RecordProcessor {
   public MapRecordProcessor(final JobConf jconf, final ProcessorContext context) throws Exception {
     super(jconf, context);
     String queryId = HiveConf.getVar(jconf, HiveConf.ConfVars.HIVE_QUERY_ID);
-    if (LlapProxy.isDaemon()) {
+    if (LlapProxy.isDaemon()) {   // this is not about LLAP_IO_ENABLED
       setLlapOfFragmentId(context);
     }
-    cache = ObjectCacheFactory.getCache(jconf, queryId, true);
-    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, false, true);
+    String prefixes = jconf.get(DagUtils.TEZ_MERGE_WORK_FILE_PREFIXES);
+    int dagIdId = context.getDagIdentifier();
+    cache = (prefixes == null) ?    // if MergeWork does not exists
+      ObjectCacheFactory.getCache(jconf, queryId, dagIdId, true) :
+      ObjectCacheFactory.getPerTaskMrCache(queryId, dagIdId);
+    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, dagIdId, false, true);
     execContext = new ExecMapperContext(jconf);
     execContext.setJc(jconf);
     isInCompaction = CompactorUtil.COMPACTOR.equalsIgnoreCase(
@@ -186,7 +191,9 @@ public class MapRecordProcessor extends RecordProcessor {
     for (Entry<String, LogicalOutput> outputEntry : outputs.entrySet()) {
       LOG.debug("Starting Output: " + outputEntry.getKey());
       outputEntry.getValue().start();
-      ((TezKVOutputCollector) outMap.get(outputEntry.getKey())).initialize();
+      if (outputEntry.getValue() instanceof LogicalOutputEdge) {
+        ((TezKVOutputCollector) outMap.get(outputEntry.getKey())).initialize();
+      }
     }
     checkAbortCondition();
 
@@ -287,15 +294,18 @@ public class MapRecordProcessor extends RecordProcessor {
       checkAbortCondition();
       mapOp.setChildren(jconf);
       mapOp.passExecContext(execContext);
-      LOG.info(mapOp.dump(0));
+      if (LOG.isDebugEnabled()) { LOG.debug(mapOp.dump(0)); }
 
       // set memory available for operators
       long memoryAvailableToTask = processorContext.getTotalMemoryAvailableToTask();
+      int estimateNumExecutors = processorContext.getEstimateNumExecutors();
       if (mapOp.getConf() != null) {
         mapOp.getConf().setMaxMemoryAvailable(memoryAvailableToTask);
-        LOG.info("Memory available for operators set to {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask));
+        mapOp.getConf().setEstimateNumExecutors(estimateNumExecutors);
+        if (LOG.isDebugEnabled()) { LOG.debug("Memory available for operators set to {} {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask), estimateNumExecutors); }
       }
       OperatorUtils.setMemoryAvailable(mapOp.getChildOperators(), memoryAvailableToTask);
+      OperatorUtils.setEstimateNumExecutors(mapOp.getChildOperators(), estimateNumExecutors);
 
       mapOp.initializeLocalWork(jconf);
 
@@ -337,6 +347,7 @@ public class MapRecordProcessor extends RecordProcessor {
       mapOp.setReporter(reporter);
       MapredContext.get().setReporter(reporter);
 
+      processorContext.notifyPerVertexCacheLoaded();
     } catch (Throwable e) {
       setAborted(true);
       if (e instanceof OutOfMemoryError) {
@@ -485,6 +496,12 @@ public class MapRecordProcessor extends RecordProcessor {
     } finally {
       Utilities.clearWorkMap(jconf);
       MapredContext.close();
+
+      for (Entry<String, LogicalOutput> outputEntry : outputs.entrySet()) {
+        if (outputEntry.getValue() instanceof LogicalOutputEdge) {
+          ((TezKVOutputCollector) outMap.get(outputEntry.getKey())).close();
+        }
+      }
     }
   }
 
