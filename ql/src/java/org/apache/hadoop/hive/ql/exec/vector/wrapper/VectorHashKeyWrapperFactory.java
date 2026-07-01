@@ -41,10 +41,31 @@ public class VectorHashKeyWrapperFactory {
           return new VectorHashKeyWrapperSingleLong();
         } else if (longValuesCount == 2) {
           return new VectorHashKeyWrapperTwoLong();
+        } else if (longValuesCount == 3) {
+          return new VectorHashKeyWrapperThreeLong();
         } else if (longValuesCount == 0) {
           return VectorHashKeyWrapperEmpty.EMPTY_KEY_WRAPPER;
         }
+      } else if (byteValuesCount == 1) {
+        if (longValuesCount == 0) {
+          return new VectorHashKeyWrapperSingleString(ctx);
+        } else if (longValuesCount == 1) {
+          return new VectorHashKeyWrapperSingleLongSingleString(ctx);
+        } else if (longValuesCount == 2) {
+          return new VectorHashKeyWrapperTwoLongSingleString(ctx);
+        }
+      } else if (byteValuesCount == 2) {
+        if (longValuesCount == 0) {
+          return new VectorHashKeyWrapperTwoString(ctx);
+        } else if (longValuesCount == 1) {
+          return new VectorHashKeyWrapperSingleLongTwoString(ctx);
+        }
+      } else if (byteValuesCount == 3) {
+        if (longValuesCount == 0) {
+          return new VectorHashKeyWrapperThreeString(ctx);
+        }
       }
+      return new VectorHashKeyWrapperGeneralLongString(ctx, longValuesCount, byteValuesCount, keyCount);
     }
 
     // Fall through to use the general wrapper.

@@ -420,7 +420,7 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
 
   @Override
   public void assignString(int index, byte[] bytes, int start, int length) {
-    Preconditions.checkState(bytes != null);
+    assert (bytes != null);
     byteValues[index] = bytes;
     byteStarts[index] = start;
     byteLengths[index] = length;
@@ -749,8 +749,8 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
   @Override
   public int getVariableSize() {
     int variableSize = 0;
+    JavaDataModel model = JavaDataModel.get();
     for (int i=0; i<byteLengths.length; ++i) {
-      JavaDataModel model = JavaDataModel.get();
       variableSize += model.lengthForByteArrayOfSize(byteLengths[i]);
     }
     return variableSize;
