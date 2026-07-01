@@ -66,8 +66,6 @@ import org.slf4j.LoggerFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 
-import org.apache.hadoop.hive.ql.exec.mr3.MR3Task;
-
 /**
  * Compiles and executes HQL commands.
  */
@@ -500,16 +498,8 @@ public class Driver implements IDriver {
     Compiler compiler = new Compiler(context, driverContext, driverState);
     QueryPlan plan = compiler.compile(command, deferClose);
     driverContext.setPlan(plan);
-    int outerQueryLimit = plan.getQueryProperties() == null ? -1 : plan.getQueryProperties().getOuterQueryLimit();
-    driverContext.setDagOutputResultLimit(outerQueryLimit);
 
     compileFinished(deferClose);
-
-    // Before resetting SessionState.PerfLogger, we store compile start/end times in SessionState's HiveConf.
-    PerfLogger currentPerfLogger = SessionState.getPerfLogger(false);
-    HiveConf sessionConf = SessionState.get().getConf();
-    sessionConf.setLong(MR3Task.HIVE_CONF_COMPILE_START_TIME, currentPerfLogger.getStartTime(PerfLogger.COMPILE));
-    sessionConf.setLong(MR3Task.HIVE_CONF_COMPILE_END_TIME, currentPerfLogger.getEndTime(PerfLogger.COMPILE));
   }
 
   private void prepareForCompile(boolean resetTaskIds) throws CommandProcessorException {
@@ -638,15 +628,15 @@ public class Driver implements IDriver {
 
   @Override
   public boolean hasResultSet() {
-    QueryPlan plan = driverContext.getPlan();
     // TODO explain should use a FetchTask for reading
-    for (Task<?> task : plan.getRootTasks()) {
+    for (Task<?> task : driverContext.getPlan().getRootTasks()) {
       if (task.getClass() == ExplainTask.class) {
         return true;
       }
     }
 
-    return plan.getResultSchema() != null && plan.getResultSchema().isSetFieldSchemas();
+    return driverContext.getPlan().getFetchTask() != null && driverContext.getPlan().getResultSchema() != null &&
+        driverContext.getPlan().getResultSchema().isSetFieldSchemas();
   }
 
   @Override
@@ -654,15 +644,13 @@ public class Driver implements IDriver {
     if (driverState.isDestroyed() || driverState.isClosed()) {
       throw new IOException("FAILED: driver has been cancelled, closed or destroyed.");
     }
-    if (!driverContext.hasDagOutputResultReader() && isFetchingTable()) {
+    if (isFetchingTable()) {
       try {
         driverContext.getFetchTask().resetFetch();
       } catch (Exception e) {
         throw new IOException("Error resetting the current fetch task", e);
       }
     } else {
-      driverContext.resetDagOutputResultReader();
-      driverContext.resetDagOutputRowsReturned();
       context.resetStream();
       driverContext.setResStream(null);
     }
@@ -683,27 +671,22 @@ public class Driver implements IDriver {
       throw new IOException("FAILED: query has been cancelled, closed, or destroyed.");
     }
 
-    boolean hasDagOutputReader = driverContext.hasDagOutputResultReader();
-    if (!hasDagOutputReader && isFetchingTable()) {
+    if (isFetchingTable()) {
       return getFetchingTableResults(results);
     }
 
-    int rowsAllowed = hasDagOutputReader ? driverContext.getDagOutputRowsRemaining(maxRows) : maxRows;
-    if (hasDagOutputReader && rowsAllowed <= 0) {
-      return false;
-    }
-
     if (driverContext.getResStream() == null) {
-      DataInput resultStream = getNextResultStream();
-      if (resultStream == null) {
+      // If the driver does not have a stream and neither does the context, return
+      DataInput contextStream = context.getStream();
+      if (contextStream == null) {
         return false;
       }
-      driverContext.setResStream(resultStream);
+      driverContext.setResStream(contextStream);
     }
 
     int numRows = 0;
     ByteStream.Output bos = new ByteStream.Output();
-    while (numRows < rowsAllowed) {
+    while (numRows < maxRows) {
       if (driverContext.getResStream() == null) {
         return (numRows > 0);
       }
@@ -716,9 +699,6 @@ public class Driver implements IDriver {
         if (row != null) {
           numRows++;
           results.add(row);
-          if (hasDagOutputReader) {
-            driverContext.incrementDagOutputRowsReturned();
-          }
         }
       } catch (IOException e) {
         CONSOLE.printError("FAILED: Unexpected IO exception : " + e.getMessage());
@@ -726,17 +706,10 @@ public class Driver implements IDriver {
       }
 
       if (streamStatus == Utilities.StreamStatus.EOF) {
-        driverContext.setResStream(getNextResultStream());
+        driverContext.setResStream(context.getStream());
       }
     }
     return true;
-  }
-
-  private DataInput getNextResultStream() {
-    if (driverContext.hasDagOutputResultReader()) {
-      return driverContext.getDagOutputResultStream();
-    }
-    return context.getStream();
   }
 
   @SuppressWarnings("rawtypes")
@@ -799,7 +772,6 @@ public class Driver implements IDriver {
       DriverState.removeDriverState();
     }
     destroy();
-    LOG.info("Driver closed");
   }
 
   // TaskQueue could be released in the query and close processes at same

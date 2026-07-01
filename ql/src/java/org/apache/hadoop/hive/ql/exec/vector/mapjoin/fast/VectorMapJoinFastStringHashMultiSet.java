@@ -38,7 +38,7 @@ public class VectorMapJoinFastStringHashMultiSet extends VectorMapJoinFastBytesH
   @Override
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
-    if (!stringCommon.adaptPutRow(this, currentKey, currentValue, hashCode)) {  // glad
+    if (!stringCommon.adaptPutRow(this, currentKey, currentValue, hashCode)) {
 
       // Ignore NULL keys, except for FULL OUTER.
       if (isFullOuter) {

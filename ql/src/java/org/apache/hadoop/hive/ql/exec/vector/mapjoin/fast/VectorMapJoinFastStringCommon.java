@@ -41,10 +41,10 @@ public class VectorMapJoinFastStringCommon {
 
   public boolean adaptPutRow(VectorMapJoinFastBytesHashTable hashTable,
       BytesWritable currentKey, BytesWritable currentValue, long hashCode) throws HiveException, IOException {
-    byte[] keyBytes = currentKey.getBytesRaw();  // glad
-    int keyOffset = currentKey.getOffset();
+
+    byte[] keyBytes = currentKey.getBytes();
     int keyLength = currentKey.getLength();
-    keyBinarySortableDeserializeRead.set(keyBytes, keyOffset, keyLength);
+    keyBinarySortableDeserializeRead.set(keyBytes, 0, keyLength);
     try {
       if (!keyBinarySortableDeserializeRead.readNextField()) {
         return false;

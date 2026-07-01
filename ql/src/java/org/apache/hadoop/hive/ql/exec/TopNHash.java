@@ -106,19 +106,20 @@ public class TopNHash {
     }
 
     final boolean isTez = HiveConf.getVar(hconf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("tez");
+    final boolean isLlap = LlapDaemonInfo.INSTANCE.isLlap();
+    final int numExecutors = isLlap ? LlapDaemonInfo.INSTANCE.getNumExecutors() : 1;
 
-    long totalFreeMemory;
+    // Used Memory = totalMemory() - freeMemory();
+    // Total Free Memory = maxMemory() - Used Memory;
+    long totalFreeMemory = Runtime.getRuntime().maxMemory() -
+      Runtime.getRuntime().totalMemory() + Runtime.getRuntime().freeMemory();
+
     if (isTez) {
       MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
-      final int numExecutors = conf.getEstimateNumExecutors();
+      // TODO: For LLAP, assumption is off-heap cache.
       final long memoryUsedPerExecutor = (memoryMXBean.getHeapMemoryUsage().getUsed() / numExecutors);
       // this is total free memory available per executor in case of LLAP
       totalFreeMemory = conf.getMaxMemoryAvailable() - memoryUsedPerExecutor;
-    } else {
-      // Used Memory = totalMemory() - freeMemory();
-      // Total Free Memory = maxMemory() - Used Memory;
-      totalFreeMemory = Runtime.getRuntime().maxMemory() -
-          Runtime.getRuntime().totalMemory() + Runtime.getRuntime().freeMemory();
     }
 
     // limit * 64 : compensation of arrays for key/value/hashcodes

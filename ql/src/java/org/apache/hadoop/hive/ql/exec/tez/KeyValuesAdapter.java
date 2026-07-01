@@ -18,8 +18,6 @@
 
 package org.apache.hadoop.hive.ql.exec.tez;
 
-import org.apache.hadoop.io.BytesWritable;
-
 import java.io.IOException;
 
 /**
@@ -31,14 +29,14 @@ public interface KeyValuesAdapter {
    * @return
    * @throws IOException
    */
-  BytesWritable getCurrentKey() throws IOException;
+  Object getCurrentKey() throws IOException;
 
   /**
    * Get the values for the current record
    * @return
    * @throws IOException
    */
-  Iterable<? extends BytesWritable> getCurrentValues() throws IOException;
+  Iterable<Object> getCurrentValues() throws IOException;
 
   /**
    * Move to the next record

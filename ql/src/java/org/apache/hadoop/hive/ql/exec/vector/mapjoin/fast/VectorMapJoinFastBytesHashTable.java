@@ -47,10 +47,9 @@ public abstract class VectorMapJoinFastBytesHashTable
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
     // No deserialization of key(s) here -- just get reference to bytes.
-    byte[] keyBytes = currentKey.getBytesRaw();   // glad
-    int keyOffset = currentKey.getOffset();
+    byte[] keyBytes = currentKey.getBytes();
     int keyLength = currentKey.getLength();
-    add(keyBytes, keyOffset, keyLength, currentValue, hashCode);
+    add(keyBytes, 0, keyLength, currentValue, hashCode);
   }
 
   @Override
@@ -59,7 +58,6 @@ public abstract class VectorMapJoinFastBytesHashTable
     throw new RuntimeException("Not supported yet!");
   }
 
-  // glad
   public abstract void add(byte[] keyBytes, int keyStart, int keyLength,
       BytesWritable currentValue, long hashCode);
 

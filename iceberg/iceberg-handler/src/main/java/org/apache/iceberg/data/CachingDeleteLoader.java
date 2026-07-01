@@ -35,14 +35,8 @@ public class CachingDeleteLoader extends BaseDeleteLoader {
   public CachingDeleteLoader(Function<DeleteFile, InputFile> loadInputFile, Configuration conf) {
     super(loadInputFile);
 
-    // return per-query cache
     String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_QUERY_ID);
-    int dagIdId = HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID);
-    if (dagIdId == HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID.defaultIntVal) {
-      this.cache = null;
-    } else {
-      this.cache = ObjectCacheFactory.getCache(conf, queryId, dagIdId, false, true);   // use per-query cache
-    }
+    this.cache = ObjectCacheFactory.getCache(conf, queryId, false);
   }
 
   @Override

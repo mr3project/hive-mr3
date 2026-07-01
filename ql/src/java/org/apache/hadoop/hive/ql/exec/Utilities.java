@@ -251,7 +251,7 @@ public final class Utilities {
   public static final String HAS_REDUCE_WORK = "has.reduce.work";
   public static final String MAPRED_MAPPER_CLASS = "mapred.mapper.class";
   public static final String MAPRED_REDUCER_CLASS = "mapred.reducer.class";
-  // public static final String HIVE_ADDED_JARS = "hive.added.jars";
+  public static final String HIVE_ADDED_JARS = "hive.added.jars";
   public static final String VECTOR_MODE = "VECTOR_MODE";
   public static final String USE_VECTORIZED_INPUT_FILE_FORMAT = "USE_VECTORIZED_INPUT_FILE_FORMAT";
   public static final String MAPNAME = "Map ";
@@ -1930,8 +1930,13 @@ public final class Utilities {
     }
     HashMap<String, FileStatus> taskIdToFile = new HashMap<String, FileStatus>();
 
-    // Do not check speculative execution because we undo HIVE-23354 in compareTempOrDuplicateFiles()
-    // which is called from ponderRemovingTempOrDuplicateFile()
+    // This method currently does not support speculative execution due to
+    // compareTempOrDuplicateFiles not being able to de-duplicate speculative
+    // execution created files
+    if (isSpeculativeExecution(conf)) {
+      String engine = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+      throw new IOException("Speculative execution is not supported for engine " + engine);
+    }
 
     for (FileStatus one : files) {
       if (isTempPath(one)) {
@@ -1986,11 +1991,18 @@ public final class Utilities {
 
   private static FileStatus compareTempOrDuplicateFiles(FileSystem fs,
       FileStatus file, FileStatus existingFile, Configuration conf) throws IOException {
-    // Use the approach of Hive 3 on MR3 which compares only the size of output files and picks up the largest one
-    // Undo the logic in HIVE-23354
+    // Pick the one with newest attempt ID. Previously, this function threw an
+    // exception when the file size of the newer attempt was less than the
+    // older attempt. This was an incorrect assumption due to various
+    // techniques like file compression and no guarantee that the new task will
+    // write values in the same order.
     FileStatus toDelete = null, toRetain = null;
 
-    // Do not check speculative execution because we undo HIVE-23354
+    // This method currently does not support speculative execution
+    if (isSpeculativeExecution(conf)) {
+      String engine = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE);
+      throw new IOException("Speculative execution is not supported for engine " + engine);
+    }
 
     // "LOAD .. INTO" and "INSERT INTO" commands will generate files with
     // "_copy_x" suffix. These files are usually read by map tasks and the
@@ -2010,15 +2022,20 @@ public final class Utilities {
       return existingFile;
     }
 
-    // for Hive on MR3, do not call getFileSizeRecursively()
-    if (existingFile.getLen() >= file.getLen()) {
+    int existingFileAttemptId = getAttemptIdFromFilename(existingFile.getPath().getName());
+    int fileAttemptId = getAttemptIdFromFilename(file.getPath().getName());
+    // Files may come in any order irrespective of their attempt IDs
+    if (existingFileAttemptId > fileAttemptId) {
       // keep existing
       toRetain = existingFile;
       toDelete = file;
-    } else {
+    } else if (existingFileAttemptId < fileAttemptId) {
       // keep file
       toRetain = file;
       toDelete = existingFile;
+    } else {
+      throw new IOException(filePath + " has same attempt ID " + fileAttemptId + " as "
+          + existingFile.getPath());
     }
 
     if (!fs.delete(toDelete.getPath(), true)) {
@@ -2026,8 +2043,9 @@ public final class Utilities {
           + ". Existing file: " + toRetain.getPath());
     }
 
-    LOG.warn("Duplicate taskid file removed: {} with length {}. Existing file: {} with length {}",
-        toDelete.getPath(), toDelete.getLen(), toRetain.getPath(), toRetain.getLen());
+    LOG.warn("Duplicate taskid file removed: " + toDelete.getPath() + " with length "
+        + toDelete.getLen() + ". Existing file: " + toRetain.getPath() + " with length "
+        + toRetain.getLen());
     return toRetain;
   }
 
@@ -3463,9 +3481,9 @@ public final class Utilities {
    * so we don't want to depend on scratch dir and context.
    */
   public static List<Path> getInputPathsTez(JobConf job, MapWork work) throws Exception {
-    Path hiveScratchDir = null;
+    String scratchDir = job.get(DagUtils.TEZ_TMP_DIR_KEY);
 
-    List<Path> paths = getInputPaths(job, work, hiveScratchDir, null, true);
+    List<Path> paths = getInputPaths(job, work, new Path(scratchDir), null, true);
 
     return paths;
   }
@@ -3500,7 +3518,6 @@ public final class Utilities {
    */
   public static List<Path> getInputPaths(JobConf job, MapWork work, Path hiveScratchDir,
       Context ctx, boolean skipDummy) throws Exception {
-    assert !(hiveScratchDir == null) || skipDummy;
 
     PerfLogger perfLogger = SessionState.getPerfLogger();
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.INPUT_PATHS);

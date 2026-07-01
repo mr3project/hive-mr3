@@ -18,9 +18,6 @@
 
 package org.apache.hive.common.util;
 
-import sun.misc.Unsafe;
-import java.lang.reflect.Field;
-
 /**
  * Murmur3 is successor to Murmur2 fast non-crytographic hash algorithms.
  *
@@ -34,20 +31,6 @@ import java.lang.reflect.Field;
  * to their code."
  */
 public class Murmur3 {
-
-  private static final Unsafe unsafe = getUnsafe();
-  private static final long BASE_OFFSET = unsafe.arrayBaseOffset(byte[].class);
-
-  private static Unsafe getUnsafe() {
-    try {
-      Field f = Unsafe.class.getDeclaredField("theUnsafe");
-      f.setAccessible(true);
-      return (Unsafe) f.get(null);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
   // from 64-bit linear congruential generator
   public static final long NULL_HASHCODE = 2862933555777941757L;
 
@@ -467,152 +450,99 @@ public class Murmur3 {
   }
 
   public static class IncrementalHash32 {
-    // XXHash constants
-    private static final int PRIME1 = 0x9E3779B1; // 2654435761U
-    private static final int PRIME2 = 0x85EBCA77; // 2246822519U
-    private static final int PRIME3 = 0xC2B2AE3D; // 3266489917U
-    private static final int PRIME4 = 0x27D4EB2F; //  668265263U
-    private static final int PRIME5 = 0x165667B1; //  374761393U
+    byte[] tail = new byte[3];
+    int tailLen;
+    int totalLen;
+    int hash;
 
-    // State variables
-    private byte[] tail = new byte[16]; // Buffer for remaining bytes (XXHash block size is 16)
-    private int tailLen;
-    private int totalLen;
-
-    // Internal state variables
-    private int seed;        // Initial seed value
-    private int v1;          // State accumulators
-    private int v2;
-    private int v3;
-    private int v4;
-
-    public final void start(int seed) {
-      this.seed = seed;
-      this.tailLen = 0;
-      this.totalLen = 0;
-
-      // Initialize internal state
-      v1 = seed + PRIME1 + PRIME2;
-      v2 = seed + PRIME2;
-      v3 = seed;
-      v4 = seed - PRIME1;
+    public final void start(int hash) {
+      tailLen = totalLen = 0;
+      this.hash = hash;
     }
 
     public final void add(byte[] data, int offset, int length) {
-      if (data == null || length == 0) {
+      if (length == 0) return;
+      totalLen += length;
+      if (tailLen + length < 4) {
+        System.arraycopy(data, offset, tail, tailLen, length);
+        tailLen += length;
         return;
       }
-
-      totalLen += length;
-
-      // If we have data stored in tail, try to fill a complete block
+      int offset2 = 0;
       if (tailLen > 0) {
-        // How many bytes we need to fill a complete block
-        int neededBytes = 16 - tailLen;
-
-        // If we cannot fill a block, just store in tail
-        if (length < neededBytes) {
-          System.arraycopy(data, offset, tail, tailLen, length);
-          tailLen += length;
-          return;
+        offset2 = (4 - tailLen);
+        int k = -1;
+        switch (tailLen) {
+        case 1:
+          k = orBytes(tail[0], data[offset], data[offset + 1], data[offset + 2]);
+          break;
+        case 2:
+          k = orBytes(tail[0], tail[1], data[offset], data[offset + 1]);
+          break;
+        case 3:
+          k = orBytes(tail[0], tail[1], tail[2], data[offset]);
+          break;
+        default: throw new AssertionError(tailLen);
         }
+        // mix functions
+        k *= C1_32;
+        k = Integer.rotateLeft(k, R1_32);
+        k *= C2_32;
+        hash ^= k;
+        hash = Integer.rotateLeft(hash, R2_32) * M_32 + N_32;
+      }
+      int length2 = length - offset2;
+      offset += offset2;
+      final int nblocks = length2 >> 2;
 
-        // We can fill a block. First, fill the tail.
-        System.arraycopy(data, offset, tail, tailLen, neededBytes);
+      for (int i = 0; i < nblocks; i++) {
+        int i_4 = (i << 2) + offset;
+        int k = orBytes(data[i_4], data[i_4 + 1], data[i_4 + 2], data[i_4 + 3]);
 
-        // Process the now-full block in tail
-        processBlock(tail, 0);
-
-        // Update offset and length to account for consumed bytes
-        offset += neededBytes;
-        length -= neededBytes;
-
-        // Reset tail
-        tailLen = 0;
+        // mix functions
+        k *= C1_32;
+        k = Integer.rotateLeft(k, R1_32);
+        k *= C2_32;
+        hash ^= k;
+        hash = Integer.rotateLeft(hash, R2_32) * M_32 + N_32;
       }
 
-      // Process 16-byte blocks directly from input
-      final int limit = offset + length;
-      final int limitMinusBlock = limit - 16; // Process blocks of 16 bytes
-
-      int currentOffset = offset;
-      while (currentOffset <= limitMinusBlock) {
-        processBlock(data, currentOffset);
-        currentOffset += 16;
-      }
-
-      // Store remaining bytes in tail
-      if (currentOffset < limit) {
-        int remaining = limit - currentOffset;
-        System.arraycopy(data, currentOffset, tail, 0, remaining);
-        tailLen = remaining;
-      }
+      int consumed = (nblocks << 2);
+      tailLen = length2 - consumed;
+      if (consumed == length2) return;
+      System.arraycopy(data, offset + consumed, tail, 0, tailLen);
     }
 
-    private void processBlock(byte[] data, int offset) {
-      int k1 = unsafe.getInt(data, BASE_OFFSET + offset);
-      int k2 = unsafe.getInt(data, BASE_OFFSET + offset + 4);
-      int k3 = unsafe.getInt(data, BASE_OFFSET + offset + 8);
-      int k4 = unsafe.getInt(data, BASE_OFFSET + offset + 12);
-
-      v1 = round(v1, k1);
-      v2 = round(v2, k2);
-      v3 = round(v3, k3);
-      v4 = round(v4, k4);
-    }
-
-    private int round(int acc, int input) {
-      acc += input * PRIME2;
-      acc = Integer.rotateLeft(acc, 13);
-      acc *= PRIME1;
-      return acc;
-    }
-
+    @SuppressFBWarnings(value = {"SF_SWITCH_FALLTHROUGH", "SF_SWITCH_NO_DEFAULT"}, justification = "Expected")
     public final int end() {
-      int h32;
+      int k1 = 0;
+      switch (tailLen) {
+        case 3:
+          k1 ^= tail[2] << 16;
+        case 2:
+          k1 ^= tail[1] << 8;
+        case 1:
+          k1 ^= tail[0];
 
-      // If data length is >= 16 bytes, merge accumulator lanes
-      if (totalLen >= 16) {
-        h32 = Integer.rotateLeft(v1, 1) +
-              Integer.rotateLeft(v2, 7) +
-              Integer.rotateLeft(v3, 12) +
-              Integer.rotateLeft(v4, 18);
-      } else {
-        // For small inputs, the hash is based on the seed and PRIME5
-        h32 = seed + PRIME5;
+          // mix functions
+          k1 *= C1_32;
+          k1 = Integer.rotateLeft(k1, R1_32);
+          k1 *= C2_32;
+          hash ^= k1;
       }
 
-      // Add the total length of the input to the hash
-      h32 += totalLen;
-
-      // Process remaining bytes in the tail (0 to 15 bytes)
-      int idx = 0;
-
-      // Process 4-byte chunks from the tail
-      while (idx + 4 <= tailLen) {
-        int k1 = unsafe.getInt(tail, BASE_OFFSET + idx);
-        h32 += k1 * PRIME3;
-        h32 = Integer.rotateLeft(h32, 17);
-        h32 *= PRIME4;
-        idx += 4;
-      }
-
-      // Process remaining 1 to 3 bytes from the tail
-      while (idx < tailLen) {
-        h32 += (tail[idx] & 0xFF) * PRIME5; // Process byte by byte
-        h32 = Integer.rotateLeft(h32, 11);
-        h32 *= PRIME1;
-        idx++;
-      }
-
-      // Final mixing (avalanche effect)
-      h32 ^= h32 >>> 15;
-      h32 *= PRIME2;
-      h32 ^= h32 >>> 13;
-      h32 *= PRIME3;
-      h32 ^= h32 >>> 16;
-
-      return h32;
+      // finalization
+      hash ^= totalLen;
+      hash ^= (hash >>> 16);
+      hash *= 0x85ebca6b;
+      hash ^= (hash >>> 13);
+      hash *= 0xc2b2ae35;
+      hash ^= (hash >>> 16);
+      return hash;
     }
+  }
+
+  private static int orBytes(byte b1, byte b2, byte b3, byte b4) {
+    return (b1 & 0xff) | ((b2 & 0xff) << 8) | ((b3 & 0xff) << 16) | ((b4 & 0xff) << 24);
   }
 }

@@ -28,7 +28,7 @@
   <modules>
     <module>metastore-common</module>
     <module>metastore-server</module>
-    <!-- <module>metastore-tools</module> -->
+    <module>metastore-tools</module>
   </modules>
   <properties>
     <hive.version>4.0.0</hive.version>
@@ -37,8 +37,8 @@
     <!-- Build properties -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <maven.compiler.source>11</maven.compiler.source>
-    <maven.compiler.target>11</maven.compiler.target>
+    <maven.compiler.source>1.8</maven.compiler.source>
+    <maven.compiler.target>1.8</maven.compiler.target>
     <maven.compiler.useIncrementalCompilation>false</maven.compiler.useIncrementalCompilation>
     <maven.cyclonedx.plugin.version>2.7.10</maven.cyclonedx.plugin.version>
     <maven.repo.local>${settings.localRepository}</maven.repo.local>
@@ -81,7 +81,7 @@
     <guava.version>22.0</guava.version>
     <hadoop.version>3.3.6</hadoop.version>
     <hikaricp.version>4.0.3</hikaricp.version>
-    <jackson.version>2.18.0</jackson.version>
+    <jackson.version>2.16.1</jackson.version>
     <jexl.version>3.3</jexl.version>
     <javolution.version>5.5.1</javolution.version>
     <junit.version>4.13.2</junit.version>
@@ -91,7 +91,7 @@
     <libthrift.version>0.16.0</libthrift.version>
     <log4j2.version>2.18.0</log4j2.version>
     <mockito-core.version>3.4.4</mockito-core.version>
-    <orc.version>2.0.3</orc.version>
+    <orc.version>1.9.4</orc.version>
     <protobuf.version>3.24.4</protobuf.version>
     <io.grpc.version>1.51.0</io.grpc.version>
     <sqlline.version>1.9.0</sqlline.version>
@@ -128,12 +128,6 @@
         <groupId>org.apache.orc</groupId>
         <artifactId>orc-core</artifactId>
         <version>${orc.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-client-api</artifactId>
-          </exclusion>
-        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson</groupId>
@@ -508,14 +502,6 @@
   <build>
     <pluginManagement>
       <plugins>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.8.1</version>
-          <configuration>
-            <release>11</release>
-          </configuration>
-        </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-assembly-plugin</artifactId>

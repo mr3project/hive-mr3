@@ -25,7 +25,6 @@ import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveJoin;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveProject;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveSortLimit;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveTableScan;
-import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.jdbc.HiveJdbcConverter;
 
 /**
  * Visitor that has methods for the common logical relational expressions.
@@ -40,7 +39,6 @@ public interface HiveRelShuttle extends RelShuttle {
     RelNode visit(HiveAggregate aggregate);
     RelNode visit(HiveSortLimit hiveSortLimit);
     RelNode visit(HiveTableScan scan);
-    RelNode visit(HiveJdbcConverter conv);
 }
 
 // End RelShuttle.java

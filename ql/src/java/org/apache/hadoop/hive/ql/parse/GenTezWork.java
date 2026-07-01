@@ -87,8 +87,8 @@ public class GenTezWork implements SemanticNodeProcessor {
     // packing into a vertex, typically a table scan, union or join
     Operator<?> root = context.currentRootOperator;
 
-    LOG.debug("Root operator: {}", root);
-    LOG.debug("Leaf operator: {}", operator);
+    LOG.debug("Root operator: " + root);
+    LOG.debug("Leaf operator: " + operator);
 
     if (context.clonedReduceSinks.contains(operator)) {
       // if we're visiting a terminal we've created ourselves,
@@ -240,7 +240,7 @@ public class GenTezWork implements SemanticNodeProcessor {
           }
         }
 
-        LOG.debug("Processing map join: {}", mj);
+        LOG.debug("Processing map join: " + mj);
         // remember the mapping in case we scan another branch of the
         // mapjoin later
         if (!context.mapJoinWorkMap.containsKey(mj)) {
@@ -281,7 +281,7 @@ public class GenTezWork implements SemanticNodeProcessor {
             }
             for (Entry<BaseWork,TezEdgeProperty> parentWorkMap : linkWorkMap.entrySet()) {
               BaseWork parentWork = parentWorkMap.getKey();
-              LOG.debug("connecting {} with {}", parentWork.getName(), work.getName());
+              LOG.debug("connecting "+parentWork.getName()+" with "+work.getName());
               TezEdgeProperty edgeProp = parentWorkMap.getValue();
               tezWork.connect(parentWork, work, edgeProp);
               if (edgeProp.getEdgeType() == EdgeType.CUSTOM_EDGE) {
@@ -299,7 +299,7 @@ public class GenTezWork implements SemanticNodeProcessor {
                   continue;
                 }
                 if (r.getConf().getOutputName() != null) {
-                  LOG.debug("Cloning reduce sink {} for multi-child broadcast edge", r);
+                  LOG.debug("Cloning reduce sink " + r + " for multi-child broadcast edge");
                   // we've already set this one up. Need to clone for the next work.
                   r = (ReduceSinkOperator) OperatorFactory.getAndMakeChild(
                       r.getCompilationOpContext(), (ReduceSinkDesc)r.getConf().clone(),
@@ -374,8 +374,8 @@ public class GenTezWork implements SemanticNodeProcessor {
       BaseWork followingWork = context.leafOperatorToFollowingWork.get(operator);
       long bytesPerReducer = context.conf.getLongVar(HiveConf.ConfVars.BYTES_PER_REDUCER);
 
-      LOG.debug("Second pass. Leaf operator: {} has common downstream work: {}",
-          operator, followingWork);
+      LOG.debug("Second pass. Leaf operator: "+operator
+        +" has common downstream work: "+followingWork);
 
       if (operator instanceof DummyStoreOperator) {
         // this is the small table side.
@@ -472,7 +472,7 @@ public class GenTezWork implements SemanticNodeProcessor {
         }
       }
     } else {
-      LOG.debug("First pass. Leaf operator: {}", operator);
+      LOG.debug("First pass. Leaf operator: "+operator);
     }
 
     // No children means we're at the bottom. If there are more operators to scan
@@ -509,9 +509,8 @@ public class GenTezWork implements SemanticNodeProcessor {
 
   private void connectUnionWorkWithWork(UnionWork unionWork, BaseWork work, TezWork tezWork,
       GenTezProcContext context) {
-    LOG.debug("Connecting union work ({}) with work ({})", unionWork, work);
+    LOG.debug("Connecting union work (" + unionWork + ") with work (" + work + ")");
     TezEdgeProperty edgeProp = new TezEdgeProperty(EdgeType.CONTAINS);
-    edgeProp.setFixed();  // set isFixed because edgeProperty.isAutoReduce == false (for MR3)
     tezWork.connect(unionWork, work, edgeProp);
     unionWork.addUnionOperators(context.currentUnionOperators);
     context.workWithUnionOperators.add(work);

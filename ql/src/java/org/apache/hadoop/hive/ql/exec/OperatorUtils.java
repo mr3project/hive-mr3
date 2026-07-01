@@ -41,7 +41,6 @@ import org.apache.hadoop.hive.ql.plan.ExprNodeDescUtils;
 import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
 import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
-import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -130,7 +129,7 @@ public class OperatorUtils {
     return found.size() >= 1 ? found.iterator().next(): null;
   }
 
-  public static <T> Set<T> findOperatorsUpstream(Collection<Operator<? extends OperatorDesc>> starts, Class<T> clazz) {
+  public static <T> Set<T> findOperatorsUpstream(Collection<Operator<?>> starts, Class<T> clazz) {
     Set<T> found = new HashSet<T>();
     for (Operator<?> start : starts) {
       findOperatorsUpstream(start, clazz, found);
@@ -220,8 +219,7 @@ public class OperatorUtils {
     return limit < 0;
   }
 
-  public static void setChildrenCollector(List<Operator<? extends OperatorDesc>> childOperators,
-                                          OutputCollector<? extends BytesWritable, BytesWritable> out) {
+  public static void setChildrenCollector(List<Operator<? extends OperatorDesc>> childOperators, OutputCollector out) {
     if (childOperators == null) {
       return;
     }
@@ -234,8 +232,7 @@ public class OperatorUtils {
     }
   }
 
-  public static void setChildrenCollector(List<Operator<? extends OperatorDesc>> childOperators,
-                                          Map<String, OutputCollector<? extends BytesWritable, BytesWritable>> outMap) {
+  public static void setChildrenCollector(List<Operator<? extends OperatorDesc>> childOperators, Map<String, OutputCollector> outMap) {
     if (childOperators == null) {
       return;
     }
@@ -717,21 +714,5 @@ public class OperatorUtils {
       op = parents.size() == 1 ? parents.get(0) : null;
     }
     return op;
-  }
-
-  public static void setEstimateNumExecutors(final List<Operator<? extends OperatorDesc>> operators,
-                                             final int estimateNumExecutors) {
-    if (operators == null) {
-      return;
-    }
-
-    for (Operator<? extends OperatorDesc> op : operators) {
-      if (op.getConf() != null) {
-        op.getConf().setEstimateNumExecutors(estimateNumExecutors);
-      }
-      if (op.getChildOperators() != null && !op.getChildOperators().isEmpty()) {
-        setEstimateNumExecutors(op.getChildOperators(), estimateNumExecutors);
-      }
-    }
   }
 }

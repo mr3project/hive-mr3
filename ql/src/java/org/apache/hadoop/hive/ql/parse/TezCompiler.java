@@ -57,7 +57,6 @@ import org.apache.hadoop.hive.ql.exec.JoinOperator;
 import org.apache.hadoop.hive.ql.exec.MapJoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
-import org.apache.hadoop.hive.ql.exec.QueryResultOperator;
 import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.SelectOperator;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
@@ -663,9 +662,6 @@ public class TezCompiler extends TaskCompiler {
         FileSinkOperator.getOperatorName() + "%"),
         new CompositeProcessor(new FileSinkProcessor(), genTezWork));
 
-    opRules.put(new RuleRegExp("Split Work - QueryResult",
-        QueryResultOperator.getOperatorName() + "%"), genTezWork);
-
     opRules.put(new RuleRegExp("Split work - DummyStore", DummyStoreOperator.getOperatorName()
         + "%"), genTezWork);
 
@@ -843,7 +839,7 @@ public class TezCompiler extends TaskCompiler {
     }
 
     if ("llap".equalsIgnoreCase(conf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_MODE))) {
-      LlapClusterStateForCompile llapInfo = null;
+      LlapClusterStateForCompile llapInfo = LlapClusterStateForCompile.getClusterInfo(conf);
       physicalCtx = new LlapDecider(llapInfo).resolve(physicalCtx);
     } else {
       LOG.debug("Skipping llap decider");
@@ -1882,37 +1878,6 @@ public class TezCompiler extends TaskCompiler {
 
     // Scale down stats for tables with DPP
     Map<FilterOperator, Statistics> adjustedStatsMap = new HashMap<>();
-    for (Operator<?> op: procCtx.parseContext.getAllOps()) {
-      if (op.getConf() instanceof DynamicPruningEventDesc) {
-        DynamicPruningEventDesc dped = (DynamicPruningEventDesc) op.getConf();
-        AppMasterEventOperator eventOp = (AppMasterEventOperator) op;
-        if (eventOp.getStatistics() == null) {
-          continue;
-        }
-
-        TableScanOperator ts = dped.getTableScan();
-        if (ts.getChildOperators().get(0) instanceof FilterOperator) {
-          FilterOperator fil = (FilterOperator) ts.getChildOperators().get(0);
-          if (fil.getStatistics() == null) {
-            continue;
-          }
-
-          long numEstimatedPart = eventOp.getStatistics().getNumRows();
-          long numPart = procCtx.parseContext.getPrunedPartitions(ts).getPartitions().size();
-
-          if (numEstimatedPart < numPart) {
-            Statistics filterStats = fil.getStatistics().clone();
-            double reduceFactor = (double) numEstimatedPart / numPart;
-            long newNumRows = (long) (reduceFactor * filterStats.getNumRows());
-
-            // TODO: affected columns?
-            StatsUtils.updateStats(filterStats, newNumRows, true, fil);
-            adjustedStatsMap.put(fil, filterStats);
-          }
-        }
-      }
-    }
-
     List<ReduceSinkOperator> semijoinRsToRemove = new ArrayList<>();
     double semijoinReductionThreshold = procCtx.conf.getFloatVar(
         HiveConf.ConfVars.TEZ_DYNAMIC_SEMIJOIN_REDUCTION_THRESHOLD);
@@ -2006,7 +1971,7 @@ public class TezCompiler extends TaskCompiler {
       for (SemijoinOperatorInfo roi : reductionFactorMap.values()) {
         // This semijoin will be kept
         // We are going to adjust the filter statistics
-        long newNumRows = (long) ((1.0 - roi.reductionFactor) * roi.filterStats.getNumRows());
+        long newNumRows = (long) (1.0 - roi.reductionFactor) * roi.filterStats.getNumRows();
         if (LOG.isDebugEnabled()) {
           LOG.debug("Old stats for {}: {}", roi.filterOperator, roi.filterStats);
           LOG.debug("Number of rows reduction: {}/{}", newNumRows, roi.filterStats.getNumRows());

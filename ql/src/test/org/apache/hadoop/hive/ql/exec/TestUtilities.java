@@ -81,7 +81,6 @@ import org.apache.hadoop.mapreduce.MRJobConfig;
 import com.google.common.io.Files;
 import org.junit.Assert;
 import org.junit.Rule;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
@@ -192,13 +191,13 @@ public class TestUtilities {
     assertEquals(0, paths.size());
   }
 
-  @Ignore   // ignore because execution engine is assumed MR3
+  @Test
   public void testRemoveTempOrDuplicateFilesOnMrNoDp() throws Exception {
     List<Path> paths = runRemoveTempOrDuplicateFilesTestCase("mr", false);
     assertEquals(NUM_BUCKETS, paths.size());
   }
 
-  @Ignore   // ignore because execution engine is assumed MR3
+  @Test
   public void testRemoveTempOrDuplicateFilesOnMrWithDp() throws Exception {
     List<Path> paths = runRemoveTempOrDuplicateFilesTestCase("mr", true);
     assertEquals(NUM_BUCKETS, paths.size());

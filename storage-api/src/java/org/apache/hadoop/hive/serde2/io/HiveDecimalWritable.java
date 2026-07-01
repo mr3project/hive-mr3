@@ -386,69 +386,6 @@ public final class HiveDecimalWritable extends FastHiveDecimal
   }
 
   /**
-   * Serialize this object directly to a byte array using fixed-width integers.
-   *
-   * @return the number of bytes written
-   */
-  @HiveDecimalWritableVersionV1
-  public int writeDirect(byte[] output, int offset) {
-    if (!isSet()) {
-      throw new RuntimeException("no value set");
-    }
-
-    if (internalScratchLongs == null) {
-      internalScratchLongs = new long[FastHiveDecimal.FAST_SCRATCH_LONGS_LEN];
-      internalScratchBuffer = new byte[FastHiveDecimal.FAST_SCRATCH_BUFFER_LEN_BIG_INTEGER_BYTES];
-    }
-
-    int position = offset;
-    int scale = fastScale();
-    output[position++] = (byte) (scale >>> 24);
-    output[position++] = (byte) (scale >>> 16);
-    output[position++] = (byte) (scale >>> 8);
-    output[position++] = (byte) scale;
-
-    int byteLength = fastBigIntegerBytes(internalScratchLongs, internalScratchBuffer);
-    if (byteLength == 0) {
-      throw new RuntimeException("Couldn't convert decimal to binary");
-    }
-
-    output[position++] = (byte) (byteLength >>> 24);
-    output[position++] = (byte) (byteLength >>> 16);
-    output[position++] = (byte) (byteLength >>> 8);
-    output[position++] = (byte) byteLength;
-    System.arraycopy(internalScratchBuffer, 0, output, position, byteLength);
-    position += byteLength;
-    return position - offset;
-  }
-
-  /**
-   * Deserialize this object directly from a byte array using fixed-width integers.
-   *
-   * @return the number of bytes read
-   */
-  @HiveDecimalWritableVersionV1
-  public int readDirect(byte[] input, int offset) throws IOException {
-    int position = offset;
-    int scale = ((input[position++] & 0xff) << 24)
-        | ((input[position++] & 0xff) << 16)
-        | ((input[position++] & 0xff) << 8)
-        | (input[position++] & 0xff);
-    int byteArrayLen = ((input[position++] & 0xff) << 24)
-        | ((input[position++] & 0xff) << 16)
-        | ((input[position++] & 0xff) << 8)
-        | (input[position++] & 0xff);
-
-    fastReset();
-    if (!fastSetFromBigIntegerBytesAndScale(input, position, byteArrayLen, scale)) {
-      throw new IOException("Couldn't convert decimal");
-    }
-    position += byteArrayLen;
-    isSet = true;
-    return position - offset;
-  }
-
-  /**
    * Standard Writable method that deserialize the fields of this object from a DataInput.
    * 
    */

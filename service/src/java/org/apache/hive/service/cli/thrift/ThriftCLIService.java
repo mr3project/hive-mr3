@@ -124,7 +124,6 @@ import org.apache.thrift.server.ServerContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.hive.service.cli.MR3ProgressMonitorStatusMapper;
 
 /**
  * ThriftCLIService.
@@ -812,7 +811,7 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       JobProgressUpdate progressUpdate = operationStatus.jobProgressUpdate();
       ProgressMonitorStatusMapper mapper = ProgressMonitorStatusMapper.DEFAULT;
       if ("tez".equals(sessionConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE))) {
-        mapper = new MR3ProgressMonitorStatusMapper();
+        mapper = new TezProgressMonitorStatusMapper();
       }
       TJobExecutionStatus executionStatus =
           mapper.forStatus(progressUpdate.status);

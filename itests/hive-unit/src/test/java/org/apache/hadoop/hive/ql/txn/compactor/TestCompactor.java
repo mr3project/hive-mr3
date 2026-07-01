@@ -938,7 +938,6 @@ public class TestCompactor extends TestCompactorBase {
   public void majorCompactDuringFetchTaskConvertedRead() throws Exception {
     driver.close();
     driver = DriverFactory.newDriver(conf);
-    HiveConf.setLoadHiveServer2Config(true);
     String dbName = "default";
     String tblName = "cws";
     dropTables(tblName);

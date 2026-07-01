@@ -21,8 +21,9 @@ package org.apache.hadoop.hive.ql.exec;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.llap.LlapUtil;
+import org.apache.hadoop.hive.ql.exec.tez.DagUtils;
 import org.apache.hadoop.hive.ql.optimizer.physical.LlapClusterStateForCompile;
-import org.apache.hadoop.mapreduce.MRJobConfig;
+import org.apache.tez.mapreduce.hadoop.MRJobConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +42,7 @@ public class MemoryInfo {
   public MemoryInfo(Configuration conf) {
     this.isTez = "tez".equalsIgnoreCase(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE));
     this.isLlap = "llap".equalsIgnoreCase(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_MODE));
-    if (false) {
+    if (isLlap) {
       LlapClusterStateForCompile llapInfo = LlapClusterStateForCompile.getClusterInfo(conf);
       llapInfo.initClusterInfo();
       if (llapInfo.hasClusterInfo()) {
@@ -55,8 +56,8 @@ public class MemoryInfo {
         this.maxExecutorMemory = (memPerInstanceMb * 1024L * 1024L) / numExecutors;
       }
     } else if (isTez) {
-        long containerSizeMb = HiveConf.getIntVar(conf, HiveConf.ConfVars.MR3_MAP_TASK_MEMORY_MB);
-        float heapFraction = HiveConf.getFloatVar(conf, HiveConf.ConfVars.MR3_CONTAINER_MAX_JAVA_HEAP_FRACTION);
+        long containerSizeMb = DagUtils.getContainerResource(conf).getMemorySize();
+        float heapFraction = HiveConf.getFloatVar(conf, HiveConf.ConfVars.TEZ_CONTAINER_MAX_JAVA_HEAP_FRACTION);
         this.maxExecutorMemory = (long) ((containerSizeMb * 1024L * 1024L) * heapFraction);
     } else {
       long executorMemoryFromConf =

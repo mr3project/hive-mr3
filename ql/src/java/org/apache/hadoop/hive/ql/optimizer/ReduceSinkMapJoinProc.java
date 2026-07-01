@@ -140,10 +140,6 @@ public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
 
   public static Object processReduceSinkToHashJoin(ReduceSinkOperator parentRS, MapJoinOperator mapJoinOp,
       GenTezProcContext context) throws SemanticException {
-    // Map-join hash-table loaders consume ordinary key/value records rather than vector batches.
-    // Mark every map-join input explicitly because map-join inputs can use several edge types.
-    parentRS.getConf().setVectorShuffleBatchEnabled(false);
-
     // remove the tag for in-memory side of mapjoin
     parentRS.getConf().setSkipTag(true);
     parentRS.setSkipTag(true);
@@ -224,9 +220,9 @@ public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
     if (tableSize == 0) {
       tableSize = 1;
     }
-    LOG.info("Mapjoin {}(bucket map join = {}), pos: {} --> {} ({} keys estimated from {} rows, {} buckets)",
-        mapJoinOp, joinConf.isBucketMapJoin(),
-        pos, parentWork.getName(), keyCount, rowCount, bucketCount);
+    LOG.info("Mapjoin " + mapJoinOp + "(bucket map join = " + joinConf.isBucketMapJoin()
+    + "), pos: " + pos + " --> " + parentWork.getName() + " (" + keyCount
+    + " keys estimated from " + rowCount + " rows, " + bucketCount + " buckets)");
     joinConf.getParentToInput().put(pos, parentWork.getName());
     if (keyCount != Long.MAX_VALUE) {
       joinConf.getParentKeyCounts().put(pos, keyCount);
@@ -281,13 +277,12 @@ public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
         edgeType = EdgeType.CUSTOM_SIMPLE_EDGE;
       }
     }
-    TezEdgeProperty edgeProp = new TezEdgeProperty(null, edgeType, numBuckets);
     if (edgeType == EdgeType.CUSTOM_EDGE || (edgeType == EdgeType.CUSTOM_SIMPLE_EDGE && !mapJoinOp.getConf()
         .isDynamicPartitionHashJoin())) {
       // disable auto parallelism for bucket map joins
       parentRS.getConf().setReducerTraits(EnumSet.of(FIXED));
-      edgeProp.setFixed();
     }
+    TezEdgeProperty edgeProp = new TezEdgeProperty(null, edgeType, numBuckets);
 
     if (mapJoinWork != null) {
       for (BaseWork myWork: mapJoinWork) {

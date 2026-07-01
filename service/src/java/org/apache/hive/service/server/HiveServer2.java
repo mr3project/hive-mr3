@@ -150,13 +150,6 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import javax.servlet.jsp.JspFactory;
 
-import org.apache.curator.framework.api.CuratorWatcher;
-import org.apache.curator.framework.recipes.locks.InterProcessMutex;
-import org.apache.hadoop.hive.ql.exec.mr3.MR3ZooKeeperUtils;
-import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
-import org.apache.tez.common.counters.Limits;
-import org.apache.tez.dag.api.TezConfiguration;
-
 /**
  * HiveServer2.
  *
@@ -189,12 +182,6 @@ public class HiveServer2 extends CompositeService {
   private Hive sessionHive;
   private String wmQueue;
   private AtomicBoolean isLeader = new AtomicBoolean(false);
-
-  // used only for MR3
-  private CuratorFramework zooKeeperClient;
-  private SessionState parentSession;
-  private ExecutorService watcherThreadExecutor;
-
   // used for testing
   private SettableFuture<Boolean> isLeaderTestFuture = SettableFuture.create();
   private SettableFuture<Boolean> notLeaderTestFuture = SettableFuture.create();
@@ -323,6 +310,12 @@ public class HiveServer2 extends CompositeService {
     // Initialize metadata provider class and trimmer
     CalcitePlanner.warmup();
 
+    try {
+      sessionHive = Hive.get(hiveConf);
+    } catch (HiveException e) {
+      throw new RuntimeException("Failed to get metastore connection", e);
+    }
+
     // Create views registry
     HiveMaterializedViewsRegistry.get().init();
 
@@ -368,10 +361,6 @@ public class HiveServer2 extends CompositeService {
           leaderActionsExecutorService = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setDaemon(true)
             .setNameFormat("Leader Actions Handler Thread").build());
           hs2HARegistry = HS2ActivePassiveHARegistry.create(hiveConf, false);
-
-          if (hiveConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
-            watcherThreadExecutor = Executors.newSingleThreadExecutor();
-          }
         }
       }
     } catch (Exception e) {
@@ -532,43 +521,6 @@ public class HiveServer2 extends CompositeService {
       otelExporter.start();
 
       LOG.info("Started OTEL exporter with frequency {}", otelExporterFrequency);
-    }
-
-    if (serviceDiscovery && activePassiveHA) {
-      try {
-        // In Hive 4.0.1 and 4.1.0, setUpZooKeeperAuth() is not called here.
-        // This seems to be a bug which is fixed in HIVE-29138.
-        setUpZooKeeperAuth(hiveConf);
-        zooKeeperClient = hiveConf.getZKConfig().startZookeeperClient(zooKeeperAclProvider, false);
-      } catch (Exception e) {
-        LOG.error("Error in creating ZooKeeper Client", e);
-        throw new ServiceException(e);
-      }
-    }
-
-    // Limits.COUNTERS_MAX should be the same in both HiveServer2 and DAGAppMaster
-    TezConfiguration tezConf = new TezConfiguration(hiveConf);
-    Limits.setConfiguration(tezConf);
-
-    if (hiveConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
-      // must call before server.start() because server.start() may start LeaderWatcher which can then be
-      // triggered even before server.start() returns
-      try {
-        MR3SessionManagerImpl.getInstance().setup(hiveConf, zooKeeperClient);
-      } catch (Exception e) {
-        LOG.error("Error in setting up MR3SessionManager", e);
-        throw new ServiceException(e);
-      }
-      //   1. serviceDiscovery == true && activePassiveHA == true: multiple HS2 instances, leader exists
-      //      - use service discovery and share ApplicationID
-      //      - ApplicationConnectionWatcher has been created
-      //      - LeaderWatcher is created when isLeader() is called
-      //   2. serviceDiscovery == true && activePassiveHA == false: multiple HS2 instances, no leader exists
-      //      - only for using service discovery (without sharing ApplicationID)
-      //      - ApplicationConnectionWatcher is not created
-      ///     - isLeader() is never called
-      //   3. serviceDiscovery == false: no ZooKeeper
-      //      - same as in case 2
     }
 
     // Add a shutdown hook for catching SIGTERM & SIGINT
@@ -803,10 +755,7 @@ public class HiveServer2 extends CompositeService {
     // If we're supporting dynamic service discovery, we'll add the service uri for this
     // HiveServer2 instance to Zookeeper as a znode.
     HiveConf hiveConf = getHiveConf();
-    String engine = hiveConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE);
-    if (engine.equals("tez")) {
-      allowClientSessions();
-    } else if (!serviceDiscovery || !activePassiveHA) {
+    if (!serviceDiscovery || !activePassiveHA) {
       allowClientSessions();
     }
     if (serviceDiscovery) {
@@ -815,38 +764,28 @@ public class HiveServer2 extends CompositeService {
           hs2HARegistry.registerLeaderLatchListener(leaderLatchListener, leaderActionsExecutorService);
           hs2HARegistry.start();
           LOG.info("HS2 HA registry started");
-          if (engine.equals("tez")) {
-            parentSession = SessionState.get();
-            invokeApplicationConnectionWatcher();
-          }
-        }
-
-        // In the original Hive, if activePassiveHA == true, only the Leader HS2 receives all the traffic.
-        // In contrast, in the case of Hive-MR3, 'activePassiveHA == true' means that all HS2 instances
-        // share the traffic from Beeline connections in order to take advantage of a common MR3 DAGAppMaster.
-        //
-        // We always call addServerInstanceToZooKeeper() so that ZooKeeper can find all HS2 instances.
-        boolean publishConfigs =
-                hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ZOOKEEPER_PUBLISH_CONFIGS);
-        String instanceURI = getServerInstanceURI();
-        String znodeData;
-        if (publishConfigs) {
-          // HiveServer2 configs that this instance will publish to ZooKeeper,
-          // so that the clients can read these and configure themselves properly.
-          addConfsToPublish(hiveConf, confsToPublish, getServerInstanceURI());
-          znodeData = Joiner.on(';').withKeyValueSeparator("=").join(confsToPublish);
         } else {
-          znodeData = instanceURI;
+          boolean publishConfigs =
+                  hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ZOOKEEPER_PUBLISH_CONFIGS);
+          String instanceURI = getServerInstanceURI();
+          String znodeData;
+          if (publishConfigs) {
+            // HiveServer2 configs that this instance will publish to ZooKeeper,
+            // so that the clients can read these and configure themselves properly.
+            addConfsToPublish(hiveConf, confsToPublish, getServerInstanceURI());
+            znodeData = Joiner.on(';').withKeyValueSeparator("=").join(confsToPublish);
+          } else {
+            znodeData = instanceURI;
+          }
+
+          // Add a Znode to the specified ZooKeeper with name: serverUri=host:port;
+          // version=versionInfo; sequence=sequenceNumber
+          zooKeeperHelper = hiveConf.getZKConfig();
+          String znodePathPrefix = "serverUri=" + instanceURI + ";" +
+                  "version=" + HiveVersionInfo.getVersion() + ";" + "sequence=";
+          zooKeeperHelper.addServerInstanceToZooKeeper(znodePathPrefix, znodeData,
+                  zooKeeperAclProvider, new DeRegisterWatcher(zooKeeperHelper));
         }
-
-        // Add a Znode to the specified ZooKeeper with name: serverUri=host:port;
-        // version=versionInfo; sequence=sequenceNumber
-        zooKeeperHelper = hiveConf.getZKConfig();
-        String znodePathPrefix = "serverUri=" + instanceURI + ";" +
-                "version=" + HiveVersionInfo.getVersion() + ";" + "sequence=";
-        zooKeeperHelper.addServerInstanceToZooKeeper(znodePathPrefix, znodeData,
-                zooKeeperAclProvider, new DeRegisterWatcher(zooKeeperHelper));
-
       } catch (Exception e) {
         LOG.error("Error adding this HiveServer2 instance to ZooKeeper: ", e);
         throw new ServiceException(e);
@@ -870,9 +809,15 @@ public class HiveServer2 extends CompositeService {
       }
     }
 
-    if (engine.equals("tez")) {
+    if (hiveConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
       if (!activePassiveHA) {
-        LOG.info("HS2 interactive HA not enabled. Starting sessions..");
+        LOG.info("HS2 interactive HA not enabled. Starting tez sessions..");
+        try {
+          startOrReconnectTezSessions();
+        } catch (Exception e) {
+          LOG.error("Error starting  Tez sessions: ", e);
+          throw new ServiceException(e);
+        }
       } else {
         LOG.info("HS2 interactive HA enabled. Tez sessions will be started/reconnected by the leader.");
       }
@@ -899,12 +844,9 @@ public class HiveServer2 extends CompositeService {
       if (parentSession != null) {
         SessionState.setCurrentSessionState(parentSession);
       }
-      if (hiveServer2.getHiveConf().getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
-        hiveServer2.invokeLeaderWatcher();
-      } else {
-        hiveServer2.allowClientSessions();
-      }
-      // For MR3, do not call hiveServer2.allowClientSessions() because it is always allowed.
+      hiveServer2.startOrReconnectTezSessions();
+      LOG.info("Started/Reconnected tez sessions.");
+      hiveServer2.allowClientSessions();
 
       // resolve futures used for testing
       if (HiveConf.getBoolVar(hiveServer2.getHiveConf(), ConfVars.HIVE_IN_TEST)) {
@@ -916,11 +858,10 @@ public class HiveServer2 extends CompositeService {
     @Override
     public void notLeader() {
       LOG.info("HS2 instance {} LOST LEADERSHIP. Stopping/Disconnecting tez sessions..", hiveServer2.serviceUri);
-      // do not call hiveServer2.closeHiveSessions() because there is no need to close active Beeline connections
       hiveServer2.isLeader.set(false);
-      if (!hiveServer2.getHiveConf().getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
-        hiveServer2.closeAndDisallowHiveSessions();
-      }
+      hiveServer2.closeAndDisallowHiveSessions();
+      hiveServer2.stopOrDisconnectTezSessions();
+      LOG.info("Stopped/Disconnected tez sessions.");
 
       // resolve futures used for testing
       if (HiveConf.getBoolVar(hiveServer2.getHiveConf(), ConfVars.HIVE_IN_TEST)) {
@@ -1095,12 +1036,6 @@ public class HiveServer2 extends CompositeService {
     LOG.info("Shutting down HiveServer2");
     HiveConf hiveConf = this.getHiveConf();
     super.stop();
-
-    String engine = hiveConf != null ? hiveConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE) : "";
-    if (serviceDiscovery && activePassiveHA && engine.equals("tez")) {
-      watcherThreadExecutor.shutdown();
-    }
-
     if (scheduledQueryService != null) {
       try {
         scheduledQueryService.close();
@@ -1144,21 +1079,8 @@ public class HiveServer2 extends CompositeService {
       }
     }
 
-    if (engine.equals("tez")) {
-      try {
-        MR3SessionManagerImpl.getInstance().shutdown();
-      } catch(Exception ex) {
-        LOG.error("MR3 session pool manager failed to stop during HiveServer2 shutdown.", ex);
-      }
-    }
+    stopOrDisconnectTezSessions();
 
-    if (cliService != null) {
-      cliService.closeStartupAuthorizationSessionState();
-    }
-
-    if (zooKeeperClient != null) {
-      zooKeeperClient.close();
-    }
     if (zKClientForPrivSync != null) {
       zKClientForPrivSync.close();
     }
@@ -1783,277 +1705,5 @@ public class HiveServer2 extends CompositeService {
       }
       System.exit(0);
     }
-  }
-
-  private void invokeApplicationConnectionWatcher() {
-    ApplicationConnectionWatcher watcher = new ApplicationConnectionWatcher();
-    watcher.process(new WatchedEvent(Watcher.Event.EventType.NodeDataChanged,
-            Watcher.Event.KeeperState.SyncConnected, ""));
-  }
-
-  private void invokeLeaderWatcher() {
-    LeaderWatcher leaderWatcher = new LeaderWatcher();
-    leaderWatcher.process(new WatchedEvent(Watcher.Event.EventType.NodeDataChanged,
-            Watcher.Event.KeeperState.SyncConnected, ""));
-  }
-
-  private abstract class ApplicationWatcher implements CuratorWatcher {
-    private static final String appIdPath = MR3ZooKeeperUtils.APP_ID_PATH;
-    private static final String appIdLockPath = MR3ZooKeeperUtils.APP_ID_LOCK_PATH;
-    private static final String appIdCheckRequestPath = MR3ZooKeeperUtils.APP_ID_CHECK_REQUEST_PATH;
-
-    private InterProcessMutex appIdLock;
-    private String namespace;
-
-    ApplicationWatcher() {
-      this.namespace = "/" + HiveServer2.this.getHiveConf().getVar(HiveConf.ConfVars.MR3_ZOOKEEPER_APPID_NAMESPACE);
-      this.appIdLock = new InterProcessMutex(HiveServer2.this.zooKeeperClient, this.namespace + appIdLockPath);
-    }
-
-    @Override
-    public void process(WatchedEvent watchedEvent) {
-      HiveServer2.this.watcherThreadExecutor.execute(() -> this.run(watchedEvent));
-    }
-
-    public abstract void run(WatchedEvent watchedEvent);
-
-    protected void lockAppId() throws Exception {
-      appIdLock.acquire();
-    }
-
-    protected void unlockAppId() throws Exception {
-      if (appIdLock.isAcquiredInThisProcess()) {
-        appIdLock.release();
-      }
-    }
-
-    protected String readAppId() throws Exception {
-      if (!appIdLock.isAcquiredInThisProcess()) {
-        throw new RuntimeException("appIdLock is not acquired before reading appId");
-      }
-      return new String(HiveServer2.this.zooKeeperClient.getData().forPath(namespace + appIdPath));
-    }
-
-    protected void updateAppId(String newAppId) throws Exception {
-      if (!appIdLock.isAcquiredInThisProcess()) {
-        throw new RuntimeException("appIdLock is not acquired before updating appId");
-      }
-      if (HiveServer2.this.zooKeeperClient.checkExists().forPath(namespace + appIdPath) == null) {
-        HiveServer2.this.zooKeeperClient.create().forPath(namespace + appIdPath, newAppId.getBytes());
-      } else {
-        HiveServer2.this.zooKeeperClient.setData().forPath(namespace + appIdPath, newAppId.getBytes());
-      }
-    }
-
-    protected void registerWatcher(CuratorWatcher watcher, boolean isLeaderWatcher) throws Exception {
-      if (isLeaderWatcher) {
-        HiveServer2.this.zooKeeperClient.checkExists().usingWatcher(watcher).forPath(namespace + appIdCheckRequestPath);
-      } else {
-        HiveServer2.this.zooKeeperClient.checkExists().usingWatcher(watcher).forPath(namespace + appIdPath);
-      }
-    }
-
-    // 1. return a non-empty string if readAppId() succeeds
-    // 2. return "" if readAppId() reads nothing
-    // 3. return null if ZooKeeper operation fails
-    // 4. raise InterruptedException if interrupted
-    // potentially creates an infinite loop if releaseLock == true
-    protected String getSharedAppIdStr(boolean releaseLock) throws InterruptedException {
-      String sharedAppIdStr;
-
-      try {
-        lockAppId();
-        sharedAppIdStr = readAppId();
-      } catch (KeeperException.NoNodeException ex) {
-        sharedAppIdStr = "";
-      } catch (InterruptedException ie) {
-        throw new InterruptedException("Interrupted while reading ApplicationId");
-      } catch (Exception ex) {
-        LOG.error("Failed to connect to ZooKeeper while trying to read ApplicationId", ex);
-        return null;
-      } finally {
-        if (releaseLock) {
-          releaseAppIdLock();
-        }
-      }
-
-      return sharedAppIdStr;
-    }
-
-    // potentially creates an infinite loop
-    protected void releaseAppIdLock() throws InterruptedException {
-      boolean unlockedAppId = false;
-      while (!unlockedAppId) {
-        try {
-          unlockAppId();
-          unlockedAppId = true;
-        } catch (InterruptedException ie) {
-          throw new InterruptedException("Interrupted while releasing lock for ApplicationId");
-        } catch (Exception ex) {
-          LOG.warn("Failed to release lock for ApplicationId, retrying in 10 seconds", ex);
-          Thread.sleep(10000L);
-        }
-      }
-    }
-
-    // return true if successful
-    // return false if interrupted
-    // potentially creates an infinite loop
-    protected boolean registerNextWatcher(boolean isLeaderWatcher) {
-      boolean registeredNewWatcher = false;
-      while (!registeredNewWatcher) {
-        try {
-          registerWatcher(this, isLeaderWatcher);
-          LOG.info("New ApplicationConnectionWatcher registered");
-          registeredNewWatcher = true;
-        } catch (InterruptedException ie) {
-          LOG.error("Interrupted while registering ApplicationConnectionWatcher, giving up");
-          return false;
-        } catch (Exception ex) {
-          LOG.warn("Failed to register ApplicationConnectionWatcher, retrying in 10 seconds", ex);
-          try {
-            Thread.sleep(10000L);
-            // TODO: in the case of isLeaderWatcher == true, we could give up after a certain number of
-            // retries by calling HiveServer.this.stop()
-          } catch (InterruptedException ie) {
-            LOG.error("Interrupted while registering ApplicationConnectionWatcher, giving up");
-            return false;
-          }
-        }
-      }
-      LOG.info("Registered the next Watcher: isLeaderWatcher = " + isLeaderWatcher);
-      return true;
-    }
-  }
-
-  private class ApplicationConnectionWatcher extends ApplicationWatcher {
-    private Logger LOG = LoggerFactory.getLogger(ApplicationConnectionWatcher.class);
-
-    ApplicationConnectionWatcher() {
-      super();
-    }
-
-    public void run(WatchedEvent watchedEvent) {
-      LOG.info("ApplicationConnectionWatcher triggered from " + watchedEvent.getPath());
-
-      SessionState.setCurrentSessionState(parentSession);
-
-      if (!registerNextWatcher(false)) {
-        return;
-      }
-      // now we have the next ApplicationConnectionWatcher running
-
-      String sharedAppIdStr;
-      try {
-        sharedAppIdStr = getSharedAppIdStr(true);
-      } catch (InterruptedException ie) {
-        LOG.error("ApplicationConnectionWatcher interrupted", ie);
-        return;
-      }
-      if (sharedAppIdStr == null) {
-        return;
-      }
-      if (sharedAppIdStr.isEmpty()) {
-        // called in the first ApplicationConnectionWatcher of the first HiveServer2
-        return;
-      }
-
-      try {
-        LOG.info("Setting active Application: " + sharedAppIdStr);
-        MR3SessionManagerImpl.getInstance().setActiveApplication(sharedAppIdStr);
-      } catch (HiveException ex) {
-        LOG.info("Error in setting active Application ", ex);
-        // no need to take further action because Beeline will keep complaining about connecting to the
-        // current MR3Session, which will in turn trigger ApplicationConnectionWatcher
-      }
-    }
-  }
-
-  private class LeaderWatcher extends ApplicationWatcher {
-    private Logger LOG = LoggerFactory.getLogger(LeaderWatcher.class);
-
-    LeaderWatcher() {
-      super();
-    }
-
-    public void run(WatchedEvent watchedEvent) {
-      LOG.info("LeaderWatcher triggered from " + watchedEvent.getPath());
-
-      SessionState.setCurrentSessionState(parentSession);
-
-      if (!HiveServer2.this.isLeader())
-        return;
-
-      boolean stopHiveServer2 = false;
-      boolean tryReleaseLock = true;
-      try {
-        String sharedAppIdStr;
-        try {
-          sharedAppIdStr = getSharedAppIdStr(false);
-        } catch (InterruptedException ie) {
-          LOG.error("LeaderWatcher interrupted", ie);
-          return;
-        }
-        if (sharedAppIdStr == null) {
-          // take no action because we only have register the next Watcher
-        } else {
-          String finalAppIdStr = null;
-          boolean createdNewApplication = false;
-          try {
-            if (sharedAppIdStr.isEmpty()) {
-              finalAppIdStr = createNewApplication();
-              createdNewApplication = true;
-            } else {
-              if (MR3SessionManagerImpl.getInstance().checkIfValidApplication(sharedAppIdStr)) {
-                finalAppIdStr = sharedAppIdStr;
-                createdNewApplication = false;  // unnecessary
-              } else  {
-                MR3SessionManagerImpl.getInstance().closeApplication(sharedAppIdStr);
-                LOG.info("closed Application " + sharedAppIdStr);
-                finalAppIdStr = createNewApplication();
-                createdNewApplication = true;
-              }
-            }
-            updateAppId(finalAppIdStr);
-          } catch (InterruptedException ie) {
-            LOG.error("LeaderWatcher interrupted", ie);
-            return;
-          } catch (HiveException e) {
-            LOG.error("Failed to create MR3 Application, killing HiveServer2", e);
-            stopHiveServer2 = true;
-          } catch (Exception e) {
-            // MR3SessionManager worked okay, but ZooKeeper failed somehow
-            if (createdNewApplication) {
-              assert finalAppIdStr != null;
-              MR3SessionManagerImpl.getInstance().closeApplication(finalAppIdStr);
-            }
-            stopHiveServer2 = true;
-            tryReleaseLock = false;   // because trying to release lock is likely to end up with an infinite loop in releaseAppIdLock()
-          }
-        }
-      } finally {
-        if (tryReleaseLock) {
-          try {
-            releaseAppIdLock();
-          } catch (InterruptedException ie) {
-            LOG.error("LeaderWatcher interrupted", ie);
-            return;
-          }
-        }
-      }
-
-      if (stopHiveServer2)  {
-        HiveServer2.this.closeAndDisallowHiveSessions();
-        HiveServer2.this.stop();
-      } else {
-        registerNextWatcher(true);
-      }
-    }
-  }
-
-  private String createNewApplication() throws HiveException {
-    String newAppIdStr = MR3SessionManagerImpl.getInstance().createNewApplication();
-    LOG.info("created new Application " + newAppIdStr);
-    return newAppIdStr;
   }
 }

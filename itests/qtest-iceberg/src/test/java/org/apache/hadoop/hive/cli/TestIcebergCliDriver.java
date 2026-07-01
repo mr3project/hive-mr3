@@ -21,7 +21,6 @@ import java.io.File;
 import java.util.List;
 import org.apache.hadoop.hive.cli.control.CliAdapter;
 import org.apache.hadoop.hive.cli.control.CliConfigs;
-import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.tez.ObjectCache;
 import org.apache.tez.runtime.common.objectregistry.ObjectRegistryImpl;
 import org.junit.ClassRule;
@@ -58,8 +57,7 @@ public class TestIcebergCliDriver {
 
   @Test
   public void testCliDriver() throws Exception {
-    ObjectCache.setupObjectRegistryDummy();
-    HiveConf.setLoadHiveServer2Config(true);
+    ObjectCache.setupObjectRegistry(new ObjectRegistryImpl());
     adapter.runTest(name, qfile);
   }
 }

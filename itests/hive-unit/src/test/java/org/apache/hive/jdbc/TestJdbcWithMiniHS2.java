@@ -85,7 +85,6 @@ import org.datanucleus.AbstractNucleusContext;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Before;
 import org.junit.Test;
 import static org.apache.hadoop.hive.common.repl.ReplConst.SOURCE_OF_REPLICATION;
 
@@ -103,8 +102,8 @@ public class TestJdbcWithMiniHS2 {
   private static String testUdfClassName =
       "org.apache.hadoop.hive.contrib.udf.example.UDFExampleAdd";
 
-  @Before
-  public void setupBeforeClass() throws Exception {
+  @BeforeClass
+  public static void setupBeforeClass() throws Exception {
     MiniHS2.cleanupLocalDir();
     HiveConf conf = getNewHiveConf();
     dataFileDir = conf.get("test.data.files").replace('\\', '/').replace("c:", "");

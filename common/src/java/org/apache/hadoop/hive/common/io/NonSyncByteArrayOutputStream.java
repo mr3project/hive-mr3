@@ -25,9 +25,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Arrays;
 
-import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
-import static org.apache.tez.util.FastByteComparisons.theUnsafe;
-
 /**
  * A thread-not-safe version of ByteArrayOutputStream, which removes all
  * synchronized modifiers.
@@ -87,42 +84,6 @@ public class NonSyncByteArrayOutputStream extends ByteArrayOutputStream {
     count += 1;
   }
 
-  public void writeInt(long offset, int value) {
-    value = Integer.reverseBytes(value);  // required for correctness (sort order in BinarySortableSerDe)
-    theUnsafe.putInt(buf, BYTE_ARRAY_BASE_OFFSET + offset, value);
-  }
-
-  public void serializeBytes(byte[] data, int offset, int length, boolean invert) {
-    enLargeBuffer(length * 2 + 1);
-
-    final int end = offset + length;
-    int position = count;
-    if (invert) {
-      for (int i = offset; i < end; i++) {
-        byte value = data[i];
-        if (value == 0 || value == 1) {
-          buf[position++] = (byte) 0xfe;
-          buf[position++] = (byte) (0xff ^ (value + 1));
-        } else {
-          buf[position++] = (byte) (0xff ^ value);
-        }
-      }
-      buf[position++] = (byte) 0xff;
-    } else {
-      for (int i = offset; i < end; i++) {
-        byte value = data[i];
-        if (value == 0 || value == 1) {
-          buf[position++] = (byte) 1;
-          buf[position++] = (byte) (value + 1);
-        } else {
-          buf[position++] = value;
-        }
-      }
-      buf[position++] = (byte) 0;
-    }
-    count = position;
-  }
-
   private void enLargeBuffer(final int increment) {
     final int requestCapacity = Math.addExact(count, increment);
     final int currentCapacity = buf.length;
@@ -145,16 +106,11 @@ public class NonSyncByteArrayOutputStream extends ByteArrayOutputStream {
    * {@inheritDoc}
    */
   @Override
-  public void write(byte b[]) {
-    write(b, 0, b.length);
-  }
-
-  /**
-   * {@inheritDoc}
-   */
-  @Override
   public void write(byte b[], int off, int len) {
-    // skip sanity check for off and len
+    if ((off < 0) || (off > b.length) || (len < 0) || ((off + len) > b.length)
+        || ((off + len) < 0)) {
+      throw new IndexOutOfBoundsException();
+    }
     if (len == 0) {
       return;
     }
@@ -169,19 +125,5 @@ public class NonSyncByteArrayOutputStream extends ByteArrayOutputStream {
   @Override
   public void writeTo(OutputStream out) throws IOException {
     out.write(buf, 0, count);
-  }
-
-  public void appendInt(int value) {
-    enLargeBuffer(Integer.BYTES);
-    value = Integer.reverseBytes(value);  // required for correctness (sort order in BinarySortableSerDe)
-    theUnsafe.putInt(buf, BYTE_ARRAY_BASE_OFFSET + count, value);
-    count += Integer.BYTES;
-  }
-
-  public void appendLong(long value) {
-    enLargeBuffer(Long.BYTES);
-    value = Long.reverseBytes(value);  // required for correctness (sort order in BinarySortableSerDe)
-    theUnsafe.putLong(buf, BYTE_ARRAY_BASE_OFFSET + count, value);
-    count += Long.BYTES;
   }
 }

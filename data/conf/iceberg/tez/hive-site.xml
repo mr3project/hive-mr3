@@ -315,44 +315,8 @@
   <name>hive.txn.xlock.ctas</name>
   <value>false</value>
 </property>
-
 <property>
   <name>hive.lock.sleep.between.retries</name>
   <value>2</value>
 </property>
-
-<property>
-  <name>hive.mr3.containergroup.scheme</name>
-  <value>all-in-one</value>
-</property>
-
-<property>
-  <name>hive.mr3.all-in-one.containergroup.memory.mb</name>
-  <value>2048</value>
-  <description>
-    llap_cache_disabled.q enables LLAP IO, adding extra 2GB to ContainerGroup memory.
-    Since 4GB is the max memory allowed, we set ContainerGroup memory to 2GB.
-  </description>
-</property>
-
-<property>
-  <name>hive.mr3.all-in-one.containergroup.vcores</name>
-  <value>2</value>
-</property>
-
-<property>
-  <name>hive.mr3.map.task.memory.mb</name>
-  <value>1024</value>
-</property>
-
-<property>
-  <name>hive.mr3.reduce.task.memory.mb</name>
-  <value>1024</value>
-</property>
-
-<property>
-  <name>hive.mr3.use.daemon.shufflehandler</name>
-  <value>1</value>
-</property>
-
 </configuration>

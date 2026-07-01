@@ -27,9 +27,6 @@ import java.util.Set;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hive.llap.LlapUtil;
-import org.apache.tez.runtime.api.ReaderEdge;
-import org.apache.tez.runtime.library.api.LogicalInputEdge;
-import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -41,7 +38,6 @@ import org.apache.hadoop.hive.ql.exec.ObjectCacheFactory;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
 import org.apache.hadoop.hive.ql.exec.Utilities;
-import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
 import org.apache.hadoop.hive.ql.exec.mr.ExecMapper.ReportStats;
 import org.apache.hadoop.hive.ql.exec.tez.DynamicValueRegistryTez.RegistryConfTez;
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor.TezKVOutputCollector;
@@ -57,6 +53,7 @@ import org.apache.tez.runtime.api.Input;
 import org.apache.tez.runtime.api.LogicalInput;
 import org.apache.tez.runtime.api.LogicalOutput;
 import org.apache.tez.runtime.api.ProcessorContext;
+import org.apache.tez.runtime.api.Reader;
 
 import com.google.common.collect.Lists;
 
@@ -90,12 +87,8 @@ public class ReduceRecordProcessor extends RecordProcessor {
     super(jconf, context);
 
     String queryId = HiveConf.getVar(jconf, HiveConf.ConfVars.HIVE_QUERY_ID);
-    String prefixes = jconf.get(DagUtils.TEZ_MERGE_WORK_FILE_PREFIXES);
-    int dagIdId = context.getDagIdentifier();
-    cache = (prefixes == null) ?    // if MergeWork does not exists
-      ObjectCacheFactory.getCache(jconf, queryId, dagIdId, true) :
-      ObjectCacheFactory.getPerTaskMrCache(queryId, dagIdId);
-    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, dagIdId, false, true);
+    cache = ObjectCacheFactory.getCache(jconf, queryId, true);
+    dynamicValueCache = ObjectCacheFactory.getCache(jconf, queryId, false, true);
 
     String cacheKey = processorContext.getTaskVertexName() + REDUCE_PLAN_KEY;
     cacheKeys = Lists.newArrayList(cacheKey);
@@ -112,7 +105,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
     super.init(mrReporter, inputs, outputs);
 
     MapredContext.init(false, new JobConf(jconf));
-    List<LogicalInputEdge> shuffleInputs = getShuffleInputs(inputs);
+    List<LogicalInput> shuffleInputs = getShuffleInputs(inputs);
     // TODO HIVE-14042. Move to using a loop and a timed wait once TEZ-3302 is fixed.
     checkAbortCondition();
     if (shuffleInputs != null) {
@@ -157,14 +150,11 @@ public class ReduceRecordProcessor extends RecordProcessor {
     checkAbortCondition();
     // set memory available for operators
     long memoryAvailableToTask = processorContext.getTotalMemoryAvailableToTask();
-    int estimateNumExecutors = processorContext.getEstimateNumExecutors();
     if (reducer.getConf() != null) {
       reducer.getConf().setMaxMemoryAvailable(memoryAvailableToTask);
-      reducer.getConf().setEstimateNumExecutors(estimateNumExecutors);
-      if (LOG.isDebugEnabled()) { LOG.debug("Memory available for operators set to {} {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask), estimateNumExecutors); }
+      LOG.info("Memory available for operators set to {}", LlapUtil.humanReadableByteCount(memoryAvailableToTask));
     }
     OperatorUtils.setMemoryAvailable(reducer.getChildOperators(), memoryAvailableToTask);
-    OperatorUtils.setEstimateNumExecutors(reducer.getChildOperators(), estimateNumExecutors);
 
     // Setup values registry
     String valueRegistryKey = DynamicValue.DYNAMIC_VALUE_REGISTRY_CACHE_KEY;
@@ -191,7 +181,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
         // Check immediately after reducer is assigned, in cae the abort came in during
         checkAbortCondition();
         initializeSourceForTag(redWork, i, mainWorkOIs, sources, redWork.getTagToValueDesc().get(0),
-            redWork.getTagToInput().get(0), 0);
+            redWork.getTagToInput().get(0));
         reducer.initializeLocalWork(jconf);
       }
       reducer = reduceWork.getReducer();
@@ -216,7 +206,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
 
     // initialize reduce operator tree
     try {
-      LOG.debug(reducer.dump(0));
+      LOG.info(reducer.dump(0));
 
       // Initialization isn't finished until all parents of all operators
       // are initialized. For broadcast joins that means initializing the
@@ -238,7 +228,6 @@ public class ReduceRecordProcessor extends RecordProcessor {
       reducer.setReporter(reporter);
       MapredContext.get().setReporter(reporter);
 
-      processorContext.notifyPerVertexCacheLoaded();
     } catch (Throwable e) {
       super.setAborted(true);
       if (e instanceof OutOfMemoryError) {
@@ -263,31 +252,25 @@ public class ReduceRecordProcessor extends RecordProcessor {
       }
       checkAbortCondition();
       initializeSourceForTag(redWork, tag, ois, sources, redWork.getTagToValueDesc().get(tag),
-          redWork.getTagToInput().get(tag), tag);
+          redWork.getTagToInput().get(tag));
     }
   }
 
   private void initializeSourceForTag(ReduceWork redWork, int tag, ObjectInspector[] ois, ReduceRecordSource[] sources,
-      TableDesc valueTableDesc, String inputName, int inputDescTag) throws Exception {
+      TableDesc valueTableDesc, String inputName) throws Exception {
     reducer = redWork.getReducer();
     reducer.getParentOperators().clear();
     reducer.setParentOperators(null); // clear out any parents as reducer is the root
 
     TableDesc keyTableDesc = redWork.getKeyDesc();
-    LogicalInputEdge input = (LogicalInputEdge)inputs.get(inputName);
-    ReaderEdge reader = input.getReader();
+    Reader reader = inputs.get(inputName).getReader();
 
     sources[tag] = new ReduceRecordSource();
     // Only the big table input source should be vectorized (if applicable)
     // Note this behavior may have to change if we ever implement a vectorized merge join
     boolean vectorizedRecordSource = (tag == bigTablePosition) && redWork.getVectorMode();
-    // MergeJoinWork stores each input in a separate ReduceWork at descriptor index 0, while a
-    // multi-tag ReduceWork uses the input tag as its descriptor index.
-    VectorizedRowBatchCtx batchContext =
-        vectorizedRecordSource ? redWork.getVectorizedRowBatchCtx()
-            : redWork.getTagToVectorizedRowBatchCtx().get(inputDescTag);
     sources[tag].init(jconf, redWork.getReducer(), vectorizedRecordSource, keyTableDesc, valueTableDesc, reader,
-        tag == bigTablePosition, (byte) tag, batchContext, redWork.getVectorizedVertexNum(),
+        tag == bigTablePosition, (byte) tag, redWork.getVectorizedRowBatchCtx(), redWork.getVectorizedVertexNum(),
         redWork.getVectorizedTestingReducerBatchSize());
     ois[tag] = sources[tag].getObjectInspector();
   }
@@ -299,26 +282,14 @@ public class ReduceRecordProcessor extends RecordProcessor {
       LOG.info("Starting Output: " + outputEntry.getKey());
       if (!isAborted()) {
         outputEntry.getValue().start();
-        if (outputEntry.getValue() instanceof LogicalOutputEdge) {
-          ((TezKVOutputCollector) outMap.get(outputEntry.getKey())).initialize();
-        }
+        ((TezKVOutputCollector) outMap.get(outputEntry.getKey())).initialize();
       }
     }
 
     // run the operator pipeline
     startAbortChecks();
-    ReduceRecordSource bigTableSource = sources[bigTablePosition];
-    if (bigTableSource.canConsumeAllUnordered()) {
-      bigTableSource.consumeAllUnordered(new ReduceRecordSource.RecordProgress() {
-        @Override
-        public void onRecord() throws InterruptedException {
-          addRowAndMaybeCheckAbort();
-        }
-      });
-    } else {
-      while (bigTableSource.pushRecord()) {
-        addRowAndMaybeCheckAbort();
-      }
+    while (sources[bigTablePosition].pushRecord()) {
+      addRowAndMaybeCheckAbort();
     }
   }
 
@@ -343,36 +314,17 @@ public class ReduceRecordProcessor extends RecordProcessor {
    * @return
    * @throws Exception
    */
-  private List<LogicalInputEdge> getShuffleInputs(Map<String, LogicalInput> inputs) throws Exception {
+  private List<LogicalInput> getShuffleInputs(Map<String, LogicalInput> inputs) throws Exception {
     // the reduce plan inputs have tags, add all inputs that have tags
-    ArrayList<LogicalInputEdge> shuffleInputs = new ArrayList<LogicalInputEdge>();
-
-    for (String inputName : reduceWork.getTagToInput().values()) {
-      LogicalInputEdge input = (LogicalInputEdge)inputs.get(inputName);
-      if (input == null) {
-        throw new AssertionError("Could not find input: " + inputName);
+    Map<Integer, String> tagToinput = reduceWork.getTagToInput();
+    ArrayList<LogicalInput> shuffleInputs = new ArrayList<LogicalInput>();
+    for (String inpStr : tagToinput.values()) {
+      if (inputs.get(inpStr) == null) {
+        throw new AssertionError("Cound not find input: " + inpStr);
       }
-      input.start();
-      shuffleInputs.add(input);
+      inputs.get(inpStr).start();
+      shuffleInputs.add(inputs.get(inpStr));
     }
-
-    if (mergeWorkList != null) {
-      for (BaseWork mergedWork: mergeWorkList) {
-        ReduceWork mergedReduceWork = (ReduceWork) mergedWork;
-        for (String inputName: mergedReduceWork.getTagToInput().values()) {
-          LogicalInputEdge input = (LogicalInputEdge)inputs.get(inputName);
-          if (input == null) {
-            throw new AssertionError("Could not find input: " + inputName);
-          }
-          if (shuffleInputs.contains(input)) {
-            throw new AssertionError("Input " + inputName + " is contained in more than one work");
-          }
-          input.start();
-          shuffleInputs.add(input);
-        }
-      }
-    }
-
     return shuffleInputs;
   }
 
@@ -429,12 +381,6 @@ public class ReduceRecordProcessor extends RecordProcessor {
     } finally {
       Utilities.clearWorkMap(jconf);
       MapredContext.close();
-
-      for (Entry<String, LogicalOutput> outputEntry : outputs.entrySet()) {
-        if (outputEntry.getValue() instanceof LogicalOutputEdge) {
-          ((TezKVOutputCollector) outMap.get(outputEntry.getKey())).close();
-        }
-      }
     }
   }
 

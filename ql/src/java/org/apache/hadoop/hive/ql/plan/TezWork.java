@@ -89,8 +89,7 @@ public class TezWork extends AbstractOperatorDesc {
   public TezWork(String queryId, Configuration conf) {
     this.dagId = queryId + ":" + counter.getAndIncrement();
     String queryName = (conf != null) ? DagUtils.getUserSpecifiedDagName(conf) : null;
-    // queryName can be "" if Driver.execute() calls conf.set(MRJobConfig.JOB_NAME, "")
-    if (queryName == null || queryName.length() == 0) {
+    if (queryName == null) {
       queryName = this.dagId;
     }
     this.queryName = queryName;

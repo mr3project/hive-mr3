@@ -32,7 +32,6 @@ import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
-import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Writable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -149,10 +148,6 @@ public abstract class AbstractSerDe implements Deserializer, Serializer {
   @Override
   public Object deserialize(Writable blob) throws SerDeException {
     throw new SerDeException("Deserialize is not implemented");
-  }
-
-  public Object deserializeBytesWritable(BytesWritable blob) throws SerDeException {
-    throw new SerDeException("DeserializeBytesWritable is not implemented");
   }
 
   /**

@@ -84,6 +84,15 @@ public class ByteStream {
     }
 
     @Override
+    public void writeInt(long offset, int value) {
+      int i = (int) offset;
+      buf[i + 0] = (byte) (value >> 24);
+      buf[i + 1] = (byte) (value >> 16);
+      buf[i + 2] = (byte) (value >> 8);
+      buf[i + 3] = (byte) (value);
+    }
+
+    @Override
     public void writeByte(long offset, byte value) {
       buf[(int) offset] = value;
     }
@@ -119,20 +128,17 @@ public class ByteStream {
   }
 
   public static interface RandomAccessOutput {
-    // random access overwrite, so NO write-position advance
     public void writeByte(long offset, byte value);
+
     public void writeInt(long offset, int value);
 
     public void reserve(int byteCount);
 
-    // append with write-position advance
     public void write(int b);
-    public void write(byte b[]);
-    public void write(byte b[], int off, int len);
 
-    // append with write-position advance
-    public void appendInt(int value);
-    public void appendLong(long value);
+    public void write(byte b[]) throws IOException;
+
+    public void write(byte b[], int off, int len);
 
     public int getLength();
   }

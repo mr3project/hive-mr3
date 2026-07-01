@@ -28,7 +28,6 @@ import java.util.Set;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.Operator;
-import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
 import org.apache.hadoop.hive.ql.plan.Explain.Level;
 import org.apache.hadoop.hive.ql.plan.Explain.Vectorization;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -60,7 +59,6 @@ public class ReduceWork extends BaseWork {
 
   // schema of the map-reduce 'value' object - this is heterogeneous
   private List<TableDesc> tagToValueDesc = new ArrayList<TableDesc>();
-  private Map<Integer, VectorizedRowBatchCtx> tagToVectorizedRowBatchCtx = new HashMap<>();
 
   // first operator of the reduce task. (not the reducesinkoperator, but the
   // operator that handles the output of these, e.g.: JoinOperator).
@@ -126,15 +124,6 @@ public class ReduceWork extends BaseWork {
 
   public void setTagToValueDesc(final List<TableDesc> tagToValueDesc) {
     this.tagToValueDesc = tagToValueDesc;
-  }
-
-  public Map<Integer, VectorizedRowBatchCtx> getTagToVectorizedRowBatchCtx() {
-    return tagToVectorizedRowBatchCtx;
-  }
-
-  public void setTagToVectorizedRowBatchCtx(
-      Map<Integer, VectorizedRowBatchCtx> tagToVectorizedRowBatchCtx) {
-    this.tagToVectorizedRowBatchCtx = tagToVectorizedRowBatchCtx;
   }
 
   @Explain(displayName = "Execution mode", explainLevels = { Level.USER, Level.DEFAULT, Level.EXTENDED },

@@ -138,7 +138,6 @@ import org.apache.hadoop.hive.ql.plan.MapredWork;
 import org.apache.hadoop.hive.ql.plan.MergeJoinWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.PTFDesc;
-import org.apache.hadoop.hive.ql.plan.QueryResultDesc;
 import org.apache.hadoop.hive.ql.plan.SelectDesc;
 import org.apache.hadoop.hive.ql.plan.TopNKeyDesc;
 import org.apache.hadoop.hive.ql.plan.VectorAppMasterEventDesc;
@@ -146,7 +145,6 @@ import org.apache.hadoop.hive.ql.plan.VectorDesc;
 import org.apache.hadoop.hive.ql.plan.VectorFileSinkDesc;
 import org.apache.hadoop.hive.ql.plan.VectorFilterDesc;
 import org.apache.hadoop.hive.ql.plan.VectorPTFDesc;
-import org.apache.hadoop.hive.ql.plan.VectorQueryResultDesc;
 import org.apache.hadoop.hive.ql.plan.VectorPTFInfo;
 import org.apache.hadoop.hive.ql.plan.VectorPTFDesc.SupportedFunctionType;
 import org.apache.hadoop.hive.ql.plan.VectorTableScanDesc;
@@ -1056,7 +1054,6 @@ public class Vectorizer implements PhysicalPlanResolver {
 
             // Always set the EXPLAIN conditions.
             setReduceWorkExplainConditions(reduceWork);
-            setReduceWorkInputVectorizedRowBatchCtxs(reduceWork);
 
             // We are only vectorizing Reduce under Tez.
             if (isReduceVectorizationEnabled) {
@@ -1069,7 +1066,6 @@ public class Vectorizer implements PhysicalPlanResolver {
 
             // Always set the EXPLAIN conditions.
             setMergeJoinWorkExplainConditions(mergeJoinWork);
-            setMergeJoinWorkInputVectorizedRowBatchCtxs(mergeJoinWork);
 
             logMergeJoinWorkExplainVectorization(mergeJoinWork);
           }
@@ -1105,68 +1101,6 @@ public class Vectorizer implements PhysicalPlanResolver {
       reduceWork.setReduceVectorizationEnabled(isReduceVectorizationEnabled);
       reduceWork.setVectorReduceEngine(
           HiveConf.getVar(hiveConf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE));
-    }
-
-    private void setReduceWorkInputVectorizedRowBatchCtxs(ReduceWork reduceWork)
-        throws SemanticException {
-      Map<Integer, VectorizedRowBatchCtx> tagToBatchCtx = reduceWork.getTagToVectorizedRowBatchCtx();
-      tagToBatchCtx.clear();
-      for (int tag = 0; tag < reduceWork.getTagToValueDesc().size(); tag++) {
-        TableDesc valueTableDesc = reduceWork.getTagToValueDesc().get(tag);
-        if (valueTableDesc != null) {
-          tagToBatchCtx.put(tag, createReduceInputVectorizedRowBatchCtx(reduceWork.getKeyDesc(),
-              valueTableDesc));
-        }
-      }
-    }
-
-    private void setMergeJoinWorkInputVectorizedRowBatchCtxs(MergeJoinWork mergeJoinWork)
-        throws SemanticException {
-      BaseWork mainWork = mergeJoinWork.getMainWork();
-      if (mainWork instanceof ReduceWork) {
-        setReduceWorkInputVectorizedRowBatchCtxs((ReduceWork) mainWork);
-      }
-      for (BaseWork mergeWork : mergeJoinWork.getBaseWorkList()) {
-        if (mergeWork instanceof ReduceWork) {
-          setReduceWorkInputVectorizedRowBatchCtxs((ReduceWork) mergeWork);
-        }
-      }
-    }
-
-    private VectorizedRowBatchCtx createReduceInputVectorizedRowBatchCtx(
-        TableDesc keyTableDesc, TableDesc valueTableDesc) throws SemanticException {
-      ArrayList<String> columnNames = new ArrayList<>();
-      ArrayList<TypeInfo> typeInfos = new ArrayList<>();
-      ArrayList<DataTypePhysicalVariation> dataTypePhysicalVariations = new ArrayList<>();
-      try {
-        addReduceInputColumns(keyTableDesc, Utilities.ReduceField.KEY, false, columnNames, typeInfos,
-            dataTypePhysicalVariations);
-        addReduceInputColumns(valueTableDesc, Utilities.ReduceField.VALUE, true, columnNames, typeInfos,
-            dataTypePhysicalVariations);
-      } catch (Exception e) {
-        throw new SemanticException(e);
-      }
-      return new VectorizedRowBatchCtx(columnNames.toArray(new String[0]), typeInfos.toArray(new TypeInfo[0]),
-          dataTypePhysicalVariations.toArray(new DataTypePhysicalVariation[0]), null, 0, 0, null,
-          new String[0], new DataTypePhysicalVariation[0]);
-    }
-
-    private void addReduceInputColumns(TableDesc tableDesc, Utilities.ReduceField reduceField,
-        boolean useDecimal64, List<String> columnNames, List<TypeInfo> typeInfos,
-        List<DataTypePhysicalVariation> dataTypePhysicalVariations) throws Exception {
-      AbstractSerDe deserializer = ReflectionUtils.newInstance(tableDesc.getSerDeClass(), null);
-      deserializer.initialize(null, tableDesc.getProperties(), null);
-      StructObjectInspector structObjectInspector =
-          (StructObjectInspector) deserializer.getObjectInspector();
-      for (StructField field : structObjectInspector.getAllStructFieldRefs()) {
-        columnNames.add(reduceField + "." + field.getFieldName());
-        TypeInfo typeInfo =
-            TypeInfoUtils.getTypeInfoFromTypeString(field.getFieldObjectInspector().getTypeName());
-        typeInfos.add(typeInfo);
-        dataTypePhysicalVariations.add(useDecimal64 && typeInfo instanceof DecimalTypeInfo
-            && HiveDecimalWritable.isPrecisionDecimal64(((DecimalTypeInfo) typeInfo).getPrecision())
-            ? DataTypePhysicalVariation.DECIMAL_64 : DataTypePhysicalVariation.NONE);
-      }
     }
 
     private void setMergeJoinWorkExplainConditions(MergeJoinWork mergeJoinWork) {
@@ -5346,15 +5280,6 @@ public class Vectorizer implements PhysicalPlanResolver {
 
     boolean isNative;
     try {
-      if (op instanceof QueryResultOperator) {
-        QueryResultDesc queryResultDesc = (QueryResultDesc) op.getConf();
-        VectorQueryResultDesc vectorQueryResultDesc = new VectorQueryResultDesc();
-        vectorOp = OperatorFactory.getVectorOperator(
-            op.getCompilationOpContext(), queryResultDesc, vContext, vectorQueryResultDesc);
-        isNative = false;
-        return vectorOp;
-      }
-
       switch (op.getType()) {
         case MAPJOIN:
           {

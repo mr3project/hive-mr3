@@ -34,7 +34,6 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.LimitDesc;
 import org.apache.hadoop.hive.ql.plan.VectorLimitDesc;
 import org.apache.tez.runtime.common.objectregistry.ObjectRegistryImpl;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -59,7 +58,7 @@ public class TestVectorLimitOperator {
     validateVectorLimitOperator(5, 0, 0);
   }
 
-  @Ignore
+  @Test
   public void testGlobalLimitReached() throws HiveException {
     // no offset
     testGlobalLimitReachedInDaemonOrContainer(true, 0, 2);
@@ -83,13 +82,12 @@ public class TestVectorLimitOperator {
     int actualNumberOfElements = 4; // from FakeVectorRowBatchFromObjectIterables
 
     LlapProxy.setDaemon(isDaemon);
-    /* if (!isDaemon) {// init tez object registry
-      ObjectCache.setupObjectRegistryDummy();
-    } */
+    if (!isDaemon) {// init tez object registry
+      ObjectCache.setupObjectRegistry(new ObjectRegistryImpl());
+    }
 
     HiveConf conf = new HiveConf();
     HiveConf.setVar(conf, HiveConf.ConfVars.HIVE_QUERY_ID, "query-" + random.nextInt(10000));
-    HiveConf.setIntVar(conf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID, 1);
     HiveConf.setVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE, "tez");
     conf.set(TezProcessor.HIVE_TEZ_VERTEX_NAME, "Map 1");
 
@@ -114,7 +112,7 @@ public class TestVectorLimitOperator {
     // number of processed rows properly set to global cache and is equal to limit+offset or equal
     // to batch size if limit+offset > batch size (because the operator cannot read through the
     // current batch obviously)
-    Assert.assertEquals(Math.min(limit + offset, actualNumberOfElements), -1);  // no getCurrentCount(), so dummy
+    Assert.assertEquals(Math.min(limit + offset, actualNumberOfElements), lo1.getCurrentCount().get());
 
     // if lo1 already processed enough rows, lo2 will turn to done without processing any elements
     lo2.process(getBatch(500).produceNextBatch(), 0);
@@ -128,8 +126,6 @@ public class TestVectorLimitOperator {
   private void validateVectorLimitOperator(int limit, int batchSize, int expectedBatchSize)
       throws HiveException {
 
-    HiveConf.setLoadHiveServer2Config(true);
-
     FakeVectorRowBatchFromObjectIterables frboi = getBatch(batchSize);
 
     // Get next batch
@@ -141,13 +137,8 @@ public class TestVectorLimitOperator {
     VectorLimitOperator lo = new VectorLimitOperator(
         new CompilationOpContext(), ld, null, vectorDesc);
     // make sure an object registry is present for the test
-    HiveConf conf = new HiveConf();
-    int seed = limit * 100 + batchSize * 10 + expectedBatchSize;
-    HiveConf.setVar(conf, HiveConf.ConfVars.HIVE_QUERY_ID, "query-" + seed);
-    HiveConf.setIntVar(conf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID, seed);
-    HiveConf.setVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE, "tez");
-    conf.set(TezProcessor.HIVE_TEZ_VERTEX_NAME, "Map 1");
-    lo.initialize(conf, null);
+    ObjectCache.setupObjectRegistry(new ObjectRegistryImpl());
+    lo.initialize(new Configuration(), null);
 
     // Process the batch
     lo.process(vrb, 0);

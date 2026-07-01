@@ -59,7 +59,7 @@ import org.apache.hadoop.hive.ql.io.orc.OrcInputFormat;
 import org.apache.hadoop.hive.ql.io.orc.Reader;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.orc.OrcProto;
-import org.apache.hadoop.mapreduce.MRJobConfig;
+import org.apache.tez.mapreduce.hadoop.MRJobConfig;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;

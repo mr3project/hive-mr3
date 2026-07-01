@@ -60,10 +60,9 @@ public class VectorMapJoinFastMultiKeyHashMultiSetContainer
 
   @Override
   public long getHashCode(BytesWritable currentKey) throws HiveException, IOException {
-    byte[] keyBytes = currentKey.getBytesRaw();
-    int keyOffset = currentKey.getOffset();
+    byte[] keyBytes = currentKey.getBytes();
     int keyLength = currentKey.getLength();
-    return HashCodeUtil.murmurHash(keyBytes, keyOffset, keyLength);
+    return HashCodeUtil.murmurHash(keyBytes, 0, keyLength);
   }
 
   @Override

@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 
-import org.apache.tez.runtime.library.api.LogicalOutputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -90,15 +89,12 @@ public class MergeFileRecordProcessor extends RecordProcessor {
     // Start all the Outputs.
     for (Map.Entry<String, LogicalOutput> outputEntry : outputs.entrySet()) {
       outputEntry.getValue().start();
-      if (outputEntry.getValue() instanceof LogicalOutputEdge) {
-        ((TezProcessor.TezKVOutputCollector) outMap.get(outputEntry.getKey())).initialize();
-      }
+      ((TezProcessor.TezKVOutputCollector) outMap.get(outputEntry.getKey()))
+          .initialize();
     }
 
     String queryId = HiveConf.getVar(jconf, HiveConf.ConfVars.HIVE_QUERY_ID);
-    int dagIdId = processorContext.getDagIdentifier();
-    // do not consider ObjectCacheFactory.getPerTaskMrCache() because there is no MergeWork
-    cache = ObjectCacheFactory.getCache(jconf, queryId, dagIdId, true);
+    cache = ObjectCacheFactory.getCache(jconf, queryId, true);
 
     try {
       execContext.setJc(jconf);
@@ -132,8 +128,6 @@ public class MergeFileRecordProcessor extends RecordProcessor {
       OperatorUtils.setChildrenCollector(mergeOp.getChildOperators(), outMap);
       mergeOp.setReporter(reporter);
       MapredContext.get().setReporter(reporter);
-
-      processorContext.notifyPerVertexCacheLoaded();  // TODO: perhaps unnecessary
     } catch (Throwable e) {
       if (e instanceof OutOfMemoryError) {
         // will this be true here?

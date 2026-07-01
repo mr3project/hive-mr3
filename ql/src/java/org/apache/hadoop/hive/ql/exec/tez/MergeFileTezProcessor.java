@@ -36,10 +36,9 @@ public class MergeFileTezProcessor extends TezProcessor {
   }
 
   @Override
-  public scala.Tuple2<java.lang.Integer, java.lang.Integer> run(Map<String, LogicalInput> inputs,
+  public void run(Map<String, LogicalInput> inputs,
       Map<String, LogicalOutput> outputs) throws Exception {
     rproc = new MergeFileRecordProcessor(jobConf, getContext());
     initializeAndRunProcessor(inputs, outputs);
-    return null;
   }
 }

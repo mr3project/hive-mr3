@@ -68,11 +68,11 @@ public class HivePreWarmProcessor extends AbstractLogicalIOProcessor {
   }
 
   @Override
-  public scala.Tuple2<java.lang.Integer, java.lang.Integer> run(Map<String, LogicalInput> inputs,
+  public void run(Map<String, LogicalInput> inputs,
                   Map<String, LogicalOutput> outputs) throws Exception {
     if(prewarmed) {
       /* container reuse */
-      return null;
+      return;
     }
     for (LogicalInput input : inputs.values()) {
       input.start();
@@ -109,8 +109,6 @@ public class HivePreWarmProcessor extends AbstractLogicalIOProcessor {
       hivejar.close();
     }
     prewarmed = true;
-
-    return null;
   }
 
   @Override

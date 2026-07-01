@@ -20,8 +20,10 @@ package org.apache.hadoop.hive.ql.parse;
 
 import com.google.common.collect.Interner;
 import com.google.common.collect.Interners;
+import com.google.common.collect.Lists;
 
 import org.apache.commons.collections.*;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.HiveStatsUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -30,6 +32,7 @@ import org.apache.hadoop.hive.metastore.Warehouse;
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.ql.Context;
+import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.ddl.DDLDesc;
 import org.apache.hadoop.hive.ql.ddl.DDLDescWithTableProperties;
@@ -40,8 +43,10 @@ import org.apache.hadoop.hive.ql.ddl.view.create.CreateMaterializedViewDesc;
 import org.apache.hadoop.hive.ql.ddl.view.materialized.alter.rewrite.AlterMaterializedViewRewriteDesc;
 import org.apache.hadoop.hive.ql.ddl.view.materialized.update.MaterializedViewUpdateDesc;
 import org.apache.hadoop.hive.ql.exec.FetchTask;
+import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.MoveTask;
 import org.apache.hadoop.hive.ql.exec.Operator;
+import org.apache.hadoop.hive.ql.exec.OperatorUtils;
 import org.apache.hadoop.hive.ql.exec.StatsTask;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.exec.Task;
@@ -74,8 +79,10 @@ import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.ql.session.SessionState.LogHelper;
 import org.apache.hadoop.hive.ql.stats.BasicStatsNoJobTask;
+import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.DefaultFetchFormatter;
 import org.apache.hadoop.hive.serde2.Deserializer;
+import org.apache.hadoop.hive.serde2.NoOpFetchFormatter;
 import org.apache.hadoop.hive.serde2.SerDeUtils;
 import org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe;
 import org.apache.hadoop.hive.serde2.thrift.ThriftFormatter;
@@ -85,6 +92,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -173,14 +182,96 @@ public abstract class TaskCompiler {
       optimizeOperatorPlan(pCtx);
     }
 
-    if (pCtx.getQueryProperties().isQuery()) {
-      /*
-       * QueryResultOperator produces top-level query results in-memory. The legacy
-       * FetchTask/LoadFileDesc path below is only for file-backed results produced
-       * by FileSinkOperator, so do not create FetchWork, FetchTask, or MoveWork here.
-       */
+    /*
+     * In case of a select, use a fetch task instead of a move task.
+     * If the select is from analyze table column rewrite, don't create a fetch task. Instead create
+     * a column stats task later.
+     */
+    if (pCtx.getQueryProperties().isQuery() && !isCStats) {
+      if ((!loadTableWork.isEmpty()) || (loadFileWork.size() != 1)) {
+        throw new SemanticException(ErrorMsg.INVALID_LOAD_TABLE_FILE_WORK.getMsg());
+      }
+
+      LoadFileDesc loadFileDesc = loadFileWork.get(0);
+
+      String cols = loadFileDesc.getColumns();
+      String colTypes = loadFileDesc.getColumnTypes();
+
+      TableDesc resultTab = pCtx.getFetchTableDesc();
+      boolean shouldSetOutputFormatter = false;
+      if (resultTab == null) {
+        ResultFileFormat resFileFormat = conf.getResultFileFormat();
+        String fileFormat;
+        Class<? extends Deserializer> serdeClass;
+        if (SessionState.get().getIsUsingThriftJDBCBinarySerDe()
+            && resFileFormat == ResultFileFormat.SEQUENCEFILE) {
+          fileFormat = resFileFormat.toString();
+          serdeClass = ThriftJDBCBinarySerDe.class;
+          shouldSetOutputFormatter = true;
+        } else if (resFileFormat == ResultFileFormat.SEQUENCEFILE) {
+          // file format is changed so that IF file sink provides list of files to fetch from (instead
+          // of whole directory) list status is done on files (which is what HiveSequenceFileInputFormat does)
+          fileFormat = "HiveSequenceFile";
+          serdeClass = LazySimpleSerDe.class;
+        } else {
+          // All other cases we use the defined file format and LazySimpleSerde
+          fileFormat = resFileFormat.toString();
+          serdeClass = LazySimpleSerDe.class;
+        }
+        resultTab = PlanUtils.getDefaultQueryOutputTableDesc(cols, colTypes, fileFormat, serdeClass);
+      } else {
+        shouldSetOutputFormatter = resultTab.getProperties().getProperty(serdeConstants.SERIALIZATION_LIB)
+          .equalsIgnoreCase(ThriftJDBCBinarySerDe.class.getName());
+      }
+
+      if (shouldSetOutputFormatter) {
+        // Set the fetch formatter to be a no-op for the ListSinkOperator, since we will
+        // read formatted thrift objects from the output SequenceFile written by Tasks.
+        conf.set(SerDeUtils.LIST_SINK_OUTPUT_FORMATTER, NoOpFetchFormatter.class.getName());
+      }
+
+      FetchWork fetch = new FetchWork(loadFileDesc.getSourcePath(), resultTab, outerQueryLimit);
+      boolean isHiveServerQuery = SessionState.get().isHiveServerQuery();
+      fetch.setHiveServerQuery(isHiveServerQuery);
+      fetch.setSource(pCtx.getFetchSource());
+      fetch.setSink(pCtx.getFetchSink());
+      if (isHiveServerQuery &&
+        null != resultTab &&
+        resultTab.getSerdeClassName().equalsIgnoreCase(ThriftJDBCBinarySerDe.class.getName()) &&
+        HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_SERVER2_THRIFT_RESULTSET_SERIALIZE_IN_TASKS)) {
+          fetch.setIsUsingThriftJDBCBinarySerDe(true);
+      } else {
+          fetch.setIsUsingThriftJDBCBinarySerDe(false);
+      }
+
+      // The idea here is to keep an object reference both in FileSink and in FetchTask for list of files
+      // to be fetched. During Job close file sink will populate the list and fetch task later will use it
+      // to fetch the results.
+      Collection<Operator<?>> tableScanOps =
+          Lists.<Operator<?>>newArrayList(pCtx.getTopOps().values());
+      Set<FileSinkOperator> fsOps = OperatorUtils.findOperators(tableScanOps, FileSinkOperator.class);
+      if(fsOps != null && fsOps.size() == 1) {
+        FileSinkOperator op = fsOps.iterator().next();
+        Set<FileStatus> filesToFetch =  new HashSet<>();
+        op.getConf().setFilesToFetch(filesToFetch);
+        fetch.setFilesToFetch(filesToFetch);
+      }
+
+      pCtx.setFetchTask((FetchTask) TaskFactory.get(fetch));
+
+      // For the FetchTask, the limit optimization requires we fetch all the rows
+      // in memory and count how many rows we get. It's not practical if the
+      // limit factor is too big
+      int fetchLimit = HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVE_LIMIT_OPT_MAX_FETCH);
+      if (globalLimitCtx.isEnable() && globalLimitCtx.getGlobalLimit() > fetchLimit) {
+        LOG.info("For FetchTask, LIMIT " + globalLimitCtx.getGlobalLimit() + " > " + fetchLimit
+            + ". Doesn't qualify limit optimization.");
+        globalLimitCtx.disableOpt();
+
+      }
       if (outerQueryLimit == 0) {
-        // Preserve the existing LIMIT 0 shortcut without creating file-backed fetch work.
+        // Believe it or not, some tools do generate queries with limit 0 and than expect
+        // query to run quickly. Let's meet their requirement.
         LOG.info("Limit 0. No query execution needed.");
         return;
       }

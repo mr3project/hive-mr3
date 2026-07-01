@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.Context;
@@ -128,20 +127,8 @@ public class AlterTableConcatenateOperation extends DDLOperation<AlterTableConca
 
   private int executeTask(Context generalContext, Task<?> task) {
     TaskQueue taskQueue = new TaskQueue();
-
-    // Disable speculative execution
-    HiveConf hiveConf = context.getQueryState().getConf();
-    float concurrentRunThreshold = hiveConf.getFloatVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT);
-    if (concurrentRunThreshold < 100.0f) {
-      LOG.info("Disable speculative execution for MergeFileTask: {}", concurrentRunThreshold);
-      hiveConf.setFloatVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100.0f);
-    }
-
     task.initialize(context.getQueryState(), context.getQueryPlan(), taskQueue, generalContext);
     int ret = task.execute();
-
-    // TODO: Restore speculative execution if necessary (when context.getQueryState().getConf() is shared)
-
     if (task.getException() != null) {
       context.getTask().setException(task.getException());
     }

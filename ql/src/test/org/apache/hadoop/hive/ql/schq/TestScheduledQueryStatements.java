@@ -38,7 +38,6 @@ import org.hamcrest.Matchers;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
@@ -225,7 +224,7 @@ public class TestScheduledQueryStatements {
     }
   }
 
-  @Ignore
+  @Test
   public void testImpersonation() throws ParseException, Exception {
     HiveConf conf = env_setup.getTestCtx().hiveConf;
     IDriver driver = createDriver();
@@ -241,7 +240,7 @@ public class TestScheduledQueryStatements {
     HiveConf conf = env_setup.getTestCtx().hiveConf;
     conf.set("hive.test.authz.sstd.hs2.mode", "true");
     conf.set("hive.security.authorization.manager",
-        "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLStdHiveAuthorizerFactory");
+        "org.apache.hadoop.hive.ql.security.authorization.plugin.sqlstd.SQLStdHiveAuthorizerFactoryForTest");
     conf.set("hive.security.authenticator.manager",
         "org.apache.hadoop.hive.ql.security.SessionStateConfigUserAuthenticator");
     conf.set("hive.security.authorization.enabled", "true");

@@ -19,7 +19,9 @@
 package org.apache.hadoop.hive.serde2.binarysortable.fast;
 
 import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Deque;
 import java.util.List;
 import java.util.Properties;
 
@@ -112,12 +114,8 @@ public final class BinarySortableDeserializeRead extends DeserializeRead {
 
   private InputByteBuffer inputByteBuffer = new InputByteBuffer();
 
-  private static final int INITIAL_STACK_SIZE = 16;
-
   private Field root;
-  private Field[] stack;
-  private int stackDepth;
-  private int currentGeneration;
+  private Deque<Field> stack;
 
   private class Field {
     Field[] children;
@@ -130,7 +128,6 @@ public final class BinarySortableDeserializeRead extends DeserializeRead {
     int count;
     int start;
     int tag;
-    int generation;
   }
 
   public BinarySortableDeserializeRead(TypeInfo[] typeInfos, boolean useExternalBuffer,
@@ -148,7 +145,7 @@ public final class BinarySortableDeserializeRead extends DeserializeRead {
     root.category = Category.STRUCT;
     root.children = createFields(typeInfos);
     root.count = count;
-    stack = new Field[INITIAL_STACK_SIZE];
+    stack = new ArrayDeque<>();
     this.columnSortOrderIsDesc = columnSortOrderIsDesc;
     this.columnNullMarker = columnNullMarker;
     this.columnNotNullMarker = columnNotNullMarker;
@@ -169,55 +166,20 @@ public final class BinarySortableDeserializeRead extends DeserializeRead {
     start = offset;
     end = offset + length;
     inputByteBuffer.reset(bytes, start, end);
-    nextGeneration();
-    prepareField(root);
-    resetStack();
+    root.index = -1;
+    stack.clear();
+    stack.push(root);
+    clearIndex(root);
   }
 
-  private void nextGeneration() {
-    currentGeneration++;
-    if (currentGeneration == 0) {
-      clearGeneration(root);
-      currentGeneration = 1;
-    }
-  }
-
-  private void clearGeneration(Field field) {
-    field.generation = 0;
+  private void clearIndex(Field field) {
+    field.index = -1;
     if (field.children == null) {
       return;
     }
     for (Field child : field.children) {
-      clearGeneration(child);
+      clearIndex(child);
     }
-  }
-
-  private void prepareField(Field field) {
-    if (field.generation != currentGeneration) {
-      field.generation = currentGeneration;
-      field.index = -1;
-      field.tag = 0;
-    }
-  }
-
-  private void resetStack() {
-    stackDepth = 1;
-    stack[0] = root;
-  }
-
-  private Field peekStack() {
-    return stack[stackDepth - 1];
-  }
-
-  private void pushStack(Field field) {
-    if (stackDepth == stack.length) {
-      stack = Arrays.copyOf(stack, stack.length * 2);
-    }
-    stack[stackDepth++] = field;
-  }
-
-  private void popStack() {
-    stackDepth--;
   }
 
   /*
@@ -331,7 +293,9 @@ public final class BinarySortableDeserializeRead extends DeserializeRead {
           tempTimestampBytes = new byte[TimestampWritableV2.BINARY_SORTABLE_LENGTH];
         }
         final boolean invert = columnSortOrderIsDesc[fieldIndex];
-        inputByteBuffer.readFully(tempTimestampBytes, 0, tempTimestampBytes.length, invert);
+        for (int i = 0; i < tempTimestampBytes.length; i++) {
+          tempTimestampBytes[i] = inputByteBuffer.read(invert);
+        }
         currentTimestampWritable.setBinarySortable(tempTimestampBytes, 0);
       }
       return true;
@@ -494,7 +458,9 @@ public final class BinarySortableDeserializeRead extends DeserializeRead {
         }
 
         inputByteBuffer.seek(decimalStart);
-        inputByteBuffer.readFully(tempDecimalBuffer, 0, length, positive ? invert : !invert);
+        for (int i = 0; i < length; ++i) {
+          tempDecimalBuffer[i] = inputByteBuffer.read(positive ? invert : !invert);
+        }
 
         // read the null byte again
         inputByteBuffer.read(positive ? invert : !invert);
@@ -535,8 +501,7 @@ public final class BinarySortableDeserializeRead extends DeserializeRead {
    * Designed for skipping columns that are not included.
    */
   public void skipNextField() throws IOException {
-    final Field current = peekStack();
-    prepareField(current);
+    final Field current = stack.peek();
     current.index++;
 
     if (root.index >= root.count) {
@@ -562,8 +527,7 @@ public final class BinarySortableDeserializeRead extends DeserializeRead {
     if (child.category == Category.PRIMITIVE) {
       readPrimitive(child);
     } else {
-      prepareField(child);
-      pushStack(child);
+      stack.push(child);
       switch (child.category) {
       case LIST:
       case MAP:
@@ -694,8 +658,7 @@ public final class BinarySortableDeserializeRead extends DeserializeRead {
 
   @Override
   public boolean readComplexField() throws IOException {
-    final Field current = peekStack();
-    prepareField(current);
+    final Field current = stack.peek();
     current.index++;
 
     if (root.index >= root.count) {
@@ -725,8 +688,7 @@ public final class BinarySortableDeserializeRead extends DeserializeRead {
     if (child.category == Category.PRIMITIVE) {
       isNull = !readPrimitive(child);
     } else {
-      prepareField(child);
-      pushStack(child);
+      stack.push(child);
     }
     return !isNull;
   }
@@ -750,16 +712,18 @@ public final class BinarySortableDeserializeRead extends DeserializeRead {
     }
 
     if (isEnded) {
-      popStack();
+      stack.pop();
+      stack.peek();
     }
     return !isEnded;
   }
 
   @Override
   public void finishComplexVariableFieldsType() {
-    popStack();
-    if (stackDepth == 0) {
+    stack.pop();
+    if (stack.peek() == null) {
       throw new RuntimeException();
     }
+    stack.peek();
   }
 }

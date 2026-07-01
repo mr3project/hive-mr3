@@ -129,7 +129,6 @@ public class HiveSplitGenerator extends InputInitializer {
     this.numSplits = Optional.ofNullable(numSplits);
   }
 
-  // this is the constructor called from TezInputInitializer.getInputInitializer() in MR3 DAGAppMaster
   public HiveSplitGenerator(InputInitializerContext initializerContext) {
     super(initializerContext);
     Preconditions.checkNotNull(initializerContext);
@@ -138,18 +137,11 @@ public class HiveSplitGenerator extends InputInitializer {
   }
 
   private void prepare(InputInitializerContext initializerContext) throws IOException, SerDeException {
-    userPayloadProto = MRInputHelpers.parseMRInputPayload(initializerContext.getInputUserPayload());
+    userPayloadProto =
+        MRInputHelpers.parseMRInputPayload(initializerContext.getInputUserPayload());
 
-    com.datamonad.mr3.DAGAPI.ConfigurationProto commonJobConf = initializerContext.getCommonJobConf();
-    if (commonJobConf != null) {
-      this.conf = new Configuration(false);
-      for (com.datamonad.mr3.DAGAPI.KeyValueProto kv : commonJobConf.getConfKeyValuesList()) {
-        this.conf.set(kv.getKey(), kv.getValue());
-      }
-      this.conf.addResource(TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes()));
-    } else {
-      this.conf = TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes());
-    }
+    this.conf = TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes());
+    
     this.jobConf = new JobConf(conf);
 
     // Read all credentials into the credentials instance stored in JobConf.
@@ -158,8 +150,8 @@ public class HiveSplitGenerator extends InputInitializer {
     this.work = Utilities.getMapWork(jobConf);
 
     this.splitLocationProvider =
-        Utils.getSplitLocationProvider(conf, work.getCacheAffinity(), initializerContext, LOG);
-    LOG.info("{}/{}: {}", initializerContext.getDAGName(), initializerContext.getInputName(), splitLocationProvider);
+        Utils.getSplitLocationProvider(conf, work.getCacheAffinity(), LOG);
+    LOG.info("SplitLocationProvider: " + splitLocationProvider);
   }
 
   @SuppressWarnings("unchecked")
@@ -198,10 +190,12 @@ public class HiveSplitGenerator extends InputInitializer {
 
         if (HiveConf.getLongVar(conf, HiveConf.ConfVars.MAPRED_MIN_SPLIT_SIZE, 1) <= 1) {
           // broken configuration from mapred-default.xml
-          // Hive-MR3: we do not use DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT because Hive-MR3 targets S3 as well.
-          final long preferredSplitSize = conf.getLong(
-              TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_MIN_SIZE,
-              TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_MIN_SIZE_DEFAULT);
+          final long blockSize = conf.getLongBytes(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,
+            DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT);
+          final long minGrouping = conf.getLong(
+            TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_MIN_SIZE,
+            TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_MIN_SIZE_DEFAULT);
+          final long preferredSplitSize = Math.min(blockSize / 2, minGrouping);
           HiveConf.setLongVar(jobConf, HiveConf.ConfVars.MAPRED_MIN_SPLIT_SIZE, preferredSplitSize);
           LOG.info("The preferred split size is " + preferredSplitSize);
         }
@@ -211,13 +205,15 @@ public class HiveSplitGenerator extends InputInitializer {
         if (numSplits.isPresent()) {
           waves = numSplits.get().floatValue() / availableSlots;
         } else {
-          waves = conf.getFloat(TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_WAVES,
-              TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_WAVES_DEFAULT);
+          waves =
+              conf.getFloat(TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_WAVES,
+                  TezMapReduceSplitsGrouper.TEZ_GROUPING_SPLIT_WAVES_DEFAULT);
+
         }
 
         InputSplit[] splits;
         if (generateSingleSplit &&
-            conf.get(HiveConf.ConfVars.HIVE_TEZ_INPUT_FORMAT.varname).equals(HiveInputFormat.class.getName())) {
+          conf.get(HiveConf.ConfVars.HIVE_TEZ_INPUT_FORMAT.varname).equals(HiveInputFormat.class.getName())) {
           MapWork mapWork = Utilities.getMapWork(jobConf);
           List<Path> paths = Utilities.getInputPathsTez(jobConf, mapWork);
           FileSystem fs = paths.get(0).getFileSystem(jobConf);
@@ -249,7 +245,7 @@ public class HiveSplitGenerator extends InputInitializer {
           }
         } else {
           // Raw splits
-          splits = inputFormat.getSplits(jobConf, numSplits.orElse((int) (availableSlots * waves)));
+          splits = inputFormat.getSplits(jobConf, numSplits.orElse(Math.multiplyExact(availableSlots, (int)waves)));
         }
         // Sort the splits, so that subsequent grouping is consistent.
         Arrays.sort(splits, new InputSplitComparator());
@@ -265,7 +261,7 @@ public class HiveSplitGenerator extends InputInitializer {
         if (inputInitializerContext != null) {
           try {
             tezCounters = new TezCounters();
-            groupName = HiveInputCounters.class.getSimpleName();
+            groupName = HiveInputCounters.class.getName();
             vertexName = jobConf.get(Operator.CONTEXT_NAME_KEY, "");
             counterName = Utilities.getVertexCounterName(HiveInputCounters.RAW_INPUT_SPLITS.name(), vertexName);
             tezCounters.findCounter(groupName, counterName).increment(splits.length);

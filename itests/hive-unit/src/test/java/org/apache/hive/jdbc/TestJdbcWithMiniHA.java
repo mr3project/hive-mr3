@@ -75,7 +75,6 @@ public class TestJdbcWithMiniHA {
     dataFilePath = new Path(dataFileDir, "kv1.txt");
     DriverManager.setLoginTimeout(0);
     conf.setBoolVar(HiveConf.ConfVars.HIVE_SUPPORT_CONCURRENCY, false);
-    conf.unset("dfs.namenode.name.dir");
     miniHS2 = new MiniHS2.Builder().withConf(conf).withMiniMR().withHA().build();
     Map<String, String> overlayProps = new HashMap<String, String>();
     overlayProps.put(ConfVars.HIVE_SERVER2_SESSION_HOOK.varname,

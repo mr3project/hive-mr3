@@ -40,7 +40,6 @@ public class QueryProperties {
   boolean ctas;
   int outerQueryLimit;
 
-
   boolean hasJoin = false;
   boolean hasGroupBy = false;
   boolean hasOrderBy = false;
@@ -82,7 +81,6 @@ public class QueryProperties {
   public void setQuery(boolean query) {
     this.query = query;
   }
-
 
   public boolean isAnalyzeCommand() {
     return analyzeCommand;

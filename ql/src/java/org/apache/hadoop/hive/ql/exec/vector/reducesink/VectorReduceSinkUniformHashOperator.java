@@ -18,8 +18,6 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.reducesink;
 
-import java.io.IOException;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
@@ -58,13 +56,6 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
   // The object that determines equal key series.
   protected transient VectorKeySeriesSerialized serializedKeySeries;
 
-  // Cached serialized keys from the most recent computeKeyHashCodes call, indexed by physical row.
-  private transient byte[][] serializedKeyBytesByRow;
-  private transient int[] serializedKeyStartsByRow;
-  private transient int[] serializedKeyLengthsByRow;
-  private transient int[] serializedKeyHashCodesByRow;
-  private transient boolean serializedKeyCacheValid;
-
 
   /** Kryo ctor. */
   protected VectorReduceSinkUniformHashOperator() {
@@ -96,58 +87,9 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
       nullBytes = new byte[nullBytesLength];
       System.arraycopy(nullKeyOutput.getData(), 0, nullBytes, 0, nullBytesLength);
       nullKeyHashCode = Murmur3.hash32(nullBytes, 0, nullBytesLength, 0);
-      serializedKeyBytesByRow = new byte[VectorizedRowBatch.DEFAULT_SIZE][];
-      serializedKeyStartsByRow = new int[VectorizedRowBatch.DEFAULT_SIZE];
-      serializedKeyLengthsByRow = new int[VectorizedRowBatch.DEFAULT_SIZE];
-      serializedKeyHashCodesByRow = new int[VectorizedRowBatch.DEFAULT_SIZE];
-
     } catch (Exception e) {
       throw new HiveException(e);
     }
-  }
-
-  @Override
-  protected void computeKeyHashCodes(VectorizedRowBatch batch, int[] hashCodes) throws IOException {
-    serializedKeySeries.processBatch(batch);
-    serializedKeyCacheValid = true;
-
-    final boolean selectedInUse = batch.selectedInUse;
-    final int[] selected = batch.selected;
-    final byte[] serializedBytes = serializedKeySeries.getSerializedBytes();
-
-    do {
-      final boolean isAllNull = serializedKeySeries.getCurrentIsAllNull();
-      final byte[] keyBytes = isAllNull ? nullBytes : serializedBytes;
-      final int keyStart = isAllNull ? 0 : serializedKeySeries.getSerializedStart();
-      final int keyLength = isAllNull ? nullBytes.length : serializedKeySeries.getSerializedLength();
-      final int hashCode = isAllNull ? nullKeyHashCode : serializedKeySeries.getCurrentHashCode();
-      final int end = serializedKeySeries.getCurrentLogical()
-          + serializedKeySeries.getCurrentDuplicateCount();
-      for (int logical = serializedKeySeries.getCurrentLogical(); logical < end; logical++) {
-        final int batchIndex = selectedInUse ? selected[logical] : logical;
-        hashCodes[batchIndex] = hashCode;
-        serializedKeyBytesByRow[batchIndex] = keyBytes;
-        serializedKeyStartsByRow[batchIndex] = keyStart;
-        serializedKeyLengthsByRow[batchIndex] = keyLength;
-        serializedKeyHashCodesByRow[batchIndex] = hashCode;
-      }
-    } while (serializedKeySeries.next());
-  }
-
-  @Override
-  protected void clearVectorShuffleRowKeyBatchCache() {
-    serializedKeyCacheValid = false;
-  }
-
-  @Override
-  protected boolean hasVectorShuffleRowKeyBatchCache() {
-    return serializedKeyCacheValid;
-  }
-
-  @Override
-  protected void serializeVectorShuffleRowKeyFromBatchCache(int batchIndex, int tag) {
-    setVectorShuffleRowKey(serializedKeyBytesByRow[batchIndex], serializedKeyStartsByRow[batchIndex],
-        serializedKeyLengthsByRow[batchIndex], serializedKeyHashCodesByRow[batchIndex], tag);
   }
 
   @Override
@@ -177,10 +119,6 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
         for (VectorExpression ve : reduceSinkValueExpressions) {
           ve.evaluate(batch);
         }
-      }
-
-      if (tryCollectVectorShuffleBatch(batch, tag)) {
-        return;
       }
 
       serializedKeySeries.processBatch(batch);

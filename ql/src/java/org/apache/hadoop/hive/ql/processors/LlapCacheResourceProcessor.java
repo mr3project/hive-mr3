@@ -18,37 +18,47 @@
 
 package org.apache.hadoop.hive.ql.processors;
 
-import static org.apache.hadoop.hive.serde.serdeConstants.STRING_TYPE_NAME;
 import static org.apache.hadoop.hive.serde.serdeConstants.SERIALIZATION_NULL_FORMAT;
 import static org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe.defaultNullString;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
-import com.google.protobuf.ByteString;
+import javax.net.SocketFactory;
+
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.VariableSubstitution;
-import org.apache.hadoop.hive.llap.daemon.rpc.MR3LlapDaemonProtocolProtos.MR3LlapDaemonProcessorEventProto;
-import org.apache.hadoop.hive.llap.daemon.rpc.MR3LlapDaemonProtocolProtos.MR3LlapDaemonProcessorEventType;
+import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos;
+import org.apache.hadoop.hive.llap.impl.LlapManagementProtocolClientImpl;
+import org.apache.hadoop.hive.llap.registry.LlapServiceInstance;
+import org.apache.hadoop.hive.llap.registry.impl.LlapRegistryService;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
-import org.apache.hadoop.hive.ql.exec.mr3.llap.LLAPDaemonProcessor;
-import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
-import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde.serdeConstants;
-
+import org.apache.hadoop.io.retry.RetryPolicies;
+import org.apache.hadoop.io.retry.RetryPolicy;
+import org.apache.hadoop.net.NetUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 
 public class LlapCacheResourceProcessor implements CommandProcessor {
@@ -96,7 +106,8 @@ public class LlapCacheResourceProcessor implements CommandProcessor {
         return authErrResp;
       }
       try {
-        llapCachePurge(ss);
+        LlapRegistryService llapRegistryService = LlapRegistryService.getClient(ss.getConf());
+        llapCachePurge(ss, llapRegistryService);
         return new CommandProcessorResponse(getSchema(), null);
       } catch (Exception e) {
         LOG.error("Error while purging LLAP IO Cache. err: ", e);
@@ -112,25 +123,57 @@ public class LlapCacheResourceProcessor implements CommandProcessor {
 
   private Schema getSchema() {
     Schema sch = new Schema();
-    sch.addToFieldSchemas(new FieldSchema("hostName", STRING_TYPE_NAME, ""));
-    sch.addToFieldSchemas(new FieldSchema("purgedMemoryBytes", STRING_TYPE_NAME, ""));
+    sch.addToFieldSchemas(new FieldSchema("hostName", serdeConstants.STRING_TYPE_NAME, ""));
+    sch.addToFieldSchemas(new FieldSchema("purgedMemoryBytes", serdeConstants.STRING_TYPE_NAME, ""));
     sch.putToProperties(SERIALIZATION_NULL_FORMAT, defaultNullString);
     return sch;
   }
 
-  private void llapCachePurge(final SessionState ss) throws Exception {
-    MR3Session mr3Session = ss.getMr3Session();
-    if (mr3Session == null) {
-      LOG.warn("Skip LLAP cache purge as MR3Session is not ready.");
-      return;
+  private void llapCachePurge(final SessionState ss, final LlapRegistryService llapRegistryService) throws Exception {
+    ExecutorService executorService = Executors.newCachedThreadPool();
+    List<Future<Long>> futures = new ArrayList<>();
+    Collection<LlapServiceInstance> instances = llapRegistryService.getInstances().getAll();
+    for (LlapServiceInstance instance : instances) {
+      futures.add(executorService.submit(new PurgeCallable(ss.getConf(), instance)));
     }
 
-    MR3LlapDaemonProcessorEventProto eventProto = MR3LlapDaemonProcessorEventProto.newBuilder()
-        .setType(MR3LlapDaemonProcessorEventType.PURGE)
-        .build();
-    ByteString payload = eventProto.toByteString();
+    int i = 0;
+    for (LlapServiceInstance instance : instances) {
+      Future<Long> future = futures.get(i);
+      ss.out.println(Joiner.on("\t").join(instance.getHost(), future.get()));
+      i++;
+    }
+  }
 
-    mr3Session.sendDaemonMessage(LLAPDaemonProcessor.daemonVertexName, payload);
+  private static class PurgeCallable implements Callable<Long> {
+    public static final Logger LOG = LoggerFactory.getLogger(PurgeCallable.class);
+    private Configuration conf;
+    private LlapServiceInstance instance;
+    private SocketFactory socketFactory;
+    private RetryPolicy retryPolicy;
+
+    PurgeCallable(Configuration conf, LlapServiceInstance llapServiceInstance) {
+      this.conf = conf;
+      this.instance = llapServiceInstance;
+      this.socketFactory = NetUtils.getDefaultSocketFactory(conf);
+      //not making this configurable, best effort
+      this.retryPolicy = RetryPolicies.retryUpToMaximumTimeWithFixedSleep(
+        10000, 2000L, TimeUnit.MILLISECONDS);
+    }
+
+    @Override
+    public Long call() {
+      try {
+        LlapManagementProtocolClientImpl client = new LlapManagementProtocolClientImpl(conf, instance.getHost(),
+          instance.getManagementPort(), retryPolicy, socketFactory);
+        LlapDaemonProtocolProtos.PurgeCacheResponseProto resp = client.purgeCache(null, LlapDaemonProtocolProtos
+          .PurgeCacheRequestProto.newBuilder().build());
+        return resp.getPurgedMemoryBytes();
+      } catch (Exception e) {
+        LOG.warn("Exception while purging cache.", e);
+        return 0L;
+      }
+    }
   }
 
   private String getUsageAsString() {

@@ -32,6 +32,7 @@
     <iceberg.avro.version>1.11.4</iceberg.avro.version>
     <iceberg.kryo.version>5.5.0</iceberg.kryo.version>
     <iceberg.checkstyle.plugin.version>3.5.0</iceberg.checkstyle.plugin.version>
+    <spotless.maven.plugin.version>2.5.0</spotless.maven.plugin.version>
     <google.errorprone.javac.version>9+181-r4173-1</google.errorprone.javac.version>
     <google.errorprone.version>2.5.1</google.errorprone.version>
     <assertj.version>3.24.2</assertj.version>
@@ -228,19 +229,41 @@
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.8.1</version>
-        <configuration>
-          <release>11</release>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
         <executions>
           <execution>
             <goals>
               <goal>test-jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <version>${spotless.maven.plugin.version}</version>
+        <configuration>
+          <skip>${validate.skip}</skip>
+          <java>
+            <removeUnusedImports/>
+            <importOrder>
+              <!-- normal imports, static imports -->
+              <order>,\# </order>
+            </importOrder>
+            <trimTrailingWhitespace/>
+            <endWithNewline/>
+            <indent>
+              <spaces>true</spaces>
+              <spacesPerTab>2</spacesPerTab>
+            </indent>
+          </java>
+        </configuration>
+        <executions>
+          <execution>
+            <id>validate</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>check</goal>
             </goals>
           </execution>
         </executions>
@@ -280,9 +303,7 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-compiler-plugin</artifactId>
-            <version>3.8.1</version>
             <configuration>
-              <release>11</release>
               <fork>true</fork>
               <showWarnings>true</showWarnings>
               <compilerArgs>

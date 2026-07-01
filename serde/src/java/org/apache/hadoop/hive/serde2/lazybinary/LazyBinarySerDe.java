@@ -159,21 +159,6 @@ public class LazyBinarySerDe extends AbstractSerDe {
     return cachedLazyBinaryStruct;
   }
 
-  @Override
-  public Object deserializeBytesWritable(BytesWritable b) {
-    if (byteArrayRef == null) {
-      byteArrayRef = new ByteArrayRef();
-    }
-    if (b.getLength() == 0) {
-      return null;
-    }
-    byteArrayRef.setData(b.getBytesRaw());
-    cachedLazyBinaryStruct.init(byteArrayRef, b.getOffset(), b.getLength());
-    lastOperationSerialize = false;
-    lastOperationDeserialize = true;
-    return cachedLazyBinaryStruct;
-  }
-
   /**
    * The reusable output buffer and serialize byte buffer.
    */

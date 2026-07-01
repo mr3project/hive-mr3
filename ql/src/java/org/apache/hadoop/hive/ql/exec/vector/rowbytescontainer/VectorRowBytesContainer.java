@@ -76,7 +76,7 @@ public class VectorRowBytesContainer {
   private final String spillLocalDirs;
 
   public VectorRowBytesContainer(String spillLocalDirs) {
-    output = new Output(OUTPUT_SIZE);
+    output = new Output();
     readBuffer = new byte[INPUT_SIZE];
     readNextBytes = new byte[MAX_READS][];
     readNextOffsets = new int[MAX_READS];

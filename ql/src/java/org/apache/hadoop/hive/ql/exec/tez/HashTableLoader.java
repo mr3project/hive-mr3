@@ -29,10 +29,7 @@ import org.apache.hadoop.hive.ql.exec.MemoryMonitorInfo;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionError;
-import org.apache.tez.common.counters.TaskCounter;
 import org.apache.tez.common.counters.TezCounter;
-import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
-import org.apache.tez.runtime.library.api.LogicalInputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -169,14 +166,16 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
     if (memoryMonitorInfo != null) {
       effectiveThreshold = memoryMonitorInfo.getEffectiveThreshold(desc.getMaxMemoryAvailable());
 
+      // hash table loading happens in server side, LlapDecider could kick out some fragments to run outside of LLAP.
+      // Flip the flag at runtime in case if we are running outside of LLAP
+      if (!LlapDaemonInfo.INSTANCE.isLlap()) {
+        memoryMonitorInfo.setLlap(false);
+      }
       if (memoryMonitorInfo.doMemoryMonitoring()) {
         doMemCheck = true;
         LOG.info("Memory monitoring for hash table loader enabled. {}", memoryMonitorInfo);
       }
     }
-
-    long interruptCheckInterval = HiveConf.getLongVar(hconf, HiveConf.ConfVars.MR3_MAPJOIN_INTERRUPT_CHECK_INTERVAL);
-    LOG.info("MapJoin interruptCheckInterval = " + interruptCheckInterval);
 
     if (!doMemCheck) {
       LOG.info("Not doing hash table memory monitoring. {}", memoryMonitorInfo);
@@ -188,7 +187,7 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
 
       long numEntries = 0;
       String inputName = parentToInput.get(pos);
-      LogicalInputEdge input = (LogicalInputEdge)tezContext.getInput(inputName);
+      LogicalInput input = tezContext.getInput(inputName);
 
       try {
         input.start();
@@ -199,7 +198,7 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
       }
 
       try {
-        KeyValueReaderEdge kvReader = (KeyValueReaderEdge) input.getReader();
+        KeyValueReader kvReader = (KeyValueReader) input.getReader();
         MapJoinObjectSerDeContext keyCtx = mapJoinTableSerdes[pos].getKeyContext(),
           valCtx = mapJoinTableSerdes[pos].getValueContext();
         if (useOptimizedTables) {
@@ -221,9 +220,11 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
 
         long inputRecords = -1;
         try {
-          inputRecords = ((AbstractLogicalInput) input).getContext().getCounters()
-            .findCounter(TaskCounter.APPROXIMATE_INPUT_RECORDS)
-            .getValue();
+          //TODO : Need to use class instead of string.
+          // https://issues.apache.org/jira/browse/HIVE-23981
+          inputRecords = ((AbstractLogicalInput) input).getContext().getCounters().
+                  findCounter("org.apache.tez.common.counters.TaskCounter",
+                          "APPROXIMATE_INPUT_RECORDS").getValue();
         } catch (Exception e) {
           LOG.debug("Failed to get value for counter APPROXIMATE_INPUT_RECORDS", e);
         }
@@ -257,11 +258,8 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
         tableContainer.setSerde(keyCtx, valCtx);
         long startTime = System.currentTimeMillis();
         while (kvReader.next()) {
-          tableContainer.putRow(kvReader.getCurrentKey(), kvReader.getCurrentValue());
+          tableContainer.putRow((Writable) kvReader.getCurrentKey(), (Writable) kvReader.getCurrentValue());
           numEntries++;
-          if ((numEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
-            throw new InterruptedException("Hash table loading interrupted");
-          }
           if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
             final long estMemUsage = tableContainer.getEstimatedMemorySize();
             if (estMemUsage > effectiveThreshold) {
@@ -271,10 +269,10 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
               LOG.error(msg);
               throw new MapJoinMemoryExhaustionError(msg);
             } else {
-              if (LOG.isDebugEnabled()) { LOG.debug(
+              LOG.info(
                   "Checking hash table loader memory usage for input: {} numEntries: {} "
                       + "estimatedMemoryUsage: {} effectiveThreshold: {}",
-                  inputName, numEntries, estMemUsage, effectiveThreshold); }
+                  inputName, numEntries, estMemUsage, effectiveThreshold);
             }
           }
         }

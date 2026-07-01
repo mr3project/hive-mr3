@@ -163,14 +163,6 @@ public class UnionColumnVector extends ColumnVector {
   }
 
   @Override
-  public void resetInit() {
-    super.resetInit();
-    for(int i =0; i < fields.length; ++i) {
-      fields[i].resetInit();
-    }
-  }
-
-  @Override
   public void unFlatten() {
     super.unFlatten();
     for(int i=0; i < fields.length; ++i) {

@@ -142,7 +142,7 @@ public class VectorMapJoinFastLongHashMap
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
 
-    if (!adaptPutRow(hashCode, currentKey, currentValue)) {   // glad
+    if (!adaptPutRow(hashCode, currentKey, currentValue)) {
 
       // Ignore NULL keys, except for FULL OUTER.
       if (isFullOuter) {
@@ -174,18 +174,17 @@ public class VectorMapJoinFastLongHashMap
   @Override
   public void assignSlot(int slot, long key, boolean isNewKey, BytesWritable currentValue) {
 
-    byte[] valueBytes = currentValue.getBytesRaw();   // glad
-    int valueOffset = currentValue.getOffset();
+    byte[] valueBytes = currentValue.getBytes();
     int valueLength = currentValue.getLength();
 
     int pairIndex = 2 * slot;
     if (isNewKey) {
       // First entry.
-      slotPairs[pairIndex] = valueStore.addFirst(valueBytes, valueOffset, valueLength);
+      slotPairs[pairIndex] = valueStore.addFirst(valueBytes, 0, valueLength);
       slotPairs[pairIndex + 1] = key;
     } else {
       // Add another value.
-      slotPairs[pairIndex] = valueStore.addMore(slotPairs[pairIndex], valueBytes, valueOffset, valueLength);
+      slotPairs[pairIndex] = valueStore.addMore(slotPairs[pairIndex], valueBytes, 0, valueLength);
     }
   }
 
@@ -243,17 +242,16 @@ public class VectorMapJoinFastLongHashMap
 
   public void addFullOuterNullKeyValue(BytesWritable currentValue) {
 
-    byte[] valueBytes = currentValue.getBytes();  // glad
-    int valueOffset = currentValue.getOffset();
+    byte[] valueBytes = currentValue.getBytes();
     int valueLength = currentValue.getLength();
 
     if (fullOuterNullKeyValueRef == 0) {
-      fullOuterNullKeyValueRef = valueStore.addFirst(valueBytes, valueOffset, valueLength);
+      fullOuterNullKeyValueRef = valueStore.addFirst(valueBytes, 0, valueLength);
     } else {
 
       // Add another value.
       fullOuterNullKeyValueRef =
-          valueStore.addMore(fullOuterNullKeyValueRef, valueBytes, valueOffset, valueLength);
+          valueStore.addMore(fullOuterNullKeyValueRef, valueBytes, 0, valueLength);
     }
   }
 

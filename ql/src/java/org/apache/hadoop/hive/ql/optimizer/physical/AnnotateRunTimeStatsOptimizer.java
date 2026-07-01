@@ -66,7 +66,7 @@ public class AnnotateRunTimeStatsOptimizer implements PhysicalPlanResolver {
     public Object dispatch(Node nd, Stack<Node> stack, Object... nodeOutputs)
         throws SemanticException {
       Task<?> currTask = (Task<?>) nd;
-      Set<Operator<?>> ops = new HashSet<>();
+      Set<Operator<? extends OperatorDesc>> ops = new HashSet<>();
 
       if (currTask instanceof MapRedTask) {
         MapRedTask mr = (MapRedTask) currTask;

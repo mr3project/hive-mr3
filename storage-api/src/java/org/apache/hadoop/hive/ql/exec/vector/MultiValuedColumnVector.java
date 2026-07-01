@@ -148,12 +148,6 @@ public abstract class MultiValuedColumnVector extends ColumnVector {
   }
 
   @Override
-  public void resetInit() {
-    super.resetInit();
-    childCount = 0;
-  }
-
-  @Override
   public void shallowCopyTo(ColumnVector otherCv) {
     MultiValuedColumnVector other = (MultiValuedColumnVector)otherCv;
     super.shallowCopyTo(other);

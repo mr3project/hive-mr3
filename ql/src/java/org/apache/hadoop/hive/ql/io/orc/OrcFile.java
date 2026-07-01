@@ -25,7 +25,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.llap.LlapDaemonInfo;
 import org.apache.hadoop.hive.llap.LlapUtil;
+import org.apache.hadoop.hive.llap.io.api.LlapProxy;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
@@ -61,27 +63,6 @@ public final class OrcFile extends org.apache.orc.OrcFile {
     ReaderOptions opts = new ReaderOptions(new Configuration());
     opts.filesystem(fs);
     return new ReaderImpl(path, opts);
-  }
-
-  private static final ThreadLocal<Long> staticOrcMemory =
-      new ThreadLocal<Long>(){
-        @Override
-        protected synchronized Long initialValue() {
-          return null;
-        }
-      };
-
-  // Currently we assume that a thread (which belongs to a specific DAG) does not change its memory size.
-  // Hence, setupOrcMemoryManager() sets staticOrcMemory only once when the first Task is executed.
-  // This may change in the future when the same thread can execute Tasks of different memory size.
-
-  @VisibleForTesting
-  public static void setupOrcMemoryManager(long availableMemory) {
-    Long currentOrcMemory = staticOrcMemory.get();
-    if (currentOrcMemory == null) {
-      staticOrcMemory.set(new Long(availableMemory));
-      LOG.info("Set Orc memory size: {}", availableMemory);
-    }
   }
 
   public static class ReaderOptions extends org.apache.orc.OrcFile.ReaderOptions {
@@ -133,16 +114,14 @@ public final class OrcFile extends org.apache.orc.OrcFile {
 
   @VisibleForTesting
   static class LlapAwareMemoryManager extends MemoryManagerImpl {
-    private final double maxLoad;   // currently not used
+    private final double maxLoad;
     private final long totalMemoryPool;
 
-    public LlapAwareMemoryManager(double maxLoad, long memPerExecutor, long totalMemoryPool) {
-      // do not call super(conf) because MemoryManagerImpl sets its own totalMemoryPool
-      // call super(totalMemoryPool) so that MemoryManagerImpl.getAllocationScale() 
-      // can read totalMemoryPool in a consistent way
-      super(totalMemoryPool);
-      this.maxLoad = maxLoad;
-      this.totalMemoryPool = totalMemoryPool; 
+    public LlapAwareMemoryManager(Configuration conf) {
+      super(conf);
+      maxLoad = OrcConf.MEMORY_POOL.getDouble(conf);
+      long memPerExecutor = LlapDaemonInfo.INSTANCE.getMemoryPerExecutor();
+      totalMemoryPool = (long) (memPerExecutor * maxLoad);
       if (LOG.isDebugEnabled()) {
         LOG.debug("Using LLAP memory manager for orc writer. memPerExecutor: {} maxLoad: {} totalMemPool: {}",
           LlapUtil.humanReadableByteCount(memPerExecutor), maxLoad, LlapUtil.humanReadableByteCount(totalMemoryPool));
@@ -159,22 +138,9 @@ public final class OrcFile extends org.apache.orc.OrcFile {
 
   private static synchronized MemoryManager getThreadLocalOrcLlapMemoryManager(final Configuration conf) {
     if (threadLocalOrcLlapMemoryManager == null) {
-      threadLocalOrcLlapMemoryManager = ThreadLocal.withInitial(() -> getLlapAwareMemoryManager(conf));
+      threadLocalOrcLlapMemoryManager = ThreadLocal.withInitial(() -> new LlapAwareMemoryManager(conf));
     }
     return threadLocalOrcLlapMemoryManager.get();
-  }
-
-  private static LlapAwareMemoryManager getLlapAwareMemoryManager(final Configuration conf) {
-    double maxLoad = OrcConf.MEMORY_POOL.getDouble(conf);
-    Long orcMemory = staticOrcMemory.get();
-    long memPerExecutor =
-        orcMemory != null ? orcMemory.longValue() :   // TezProcessor thread
-        HiveConf.getIntVar(conf, HiveConf.ConfVars.MR3_LLAP_ORC_MEMORY_PER_THREAD_MB) * 1024L * 1024L;   // LLAP I/O thread
-    if (orcMemory == null) {
-      LOG.info("Memory for Orc manager in a low-level LLAP I/O thread: {}", memPerExecutor);
-    }
-    long totalMemoryPool = (long) (memPerExecutor * maxLoad);
-    return new LlapAwareMemoryManager(maxLoad, memPerExecutor, totalMemoryPool);
   }
 
   /**
@@ -194,7 +160,8 @@ public final class OrcFile extends org.apache.orc.OrcFile {
     WriterOptions(Properties tableProperties, Configuration conf) {
       super(tableProperties, conf);
       useUTCTimestamp(true);
-      if (conf.getBoolean(HiveConf.ConfVars.HIVE_ORC_WRITER_LLAP_MEMORY_MANAGER_ENABLED.varname, true)) {
+      if (conf.getBoolean(HiveConf.ConfVars.HIVE_ORC_WRITER_LLAP_MEMORY_MANAGER_ENABLED.varname, true) &&
+        LlapProxy.isDaemon()) {
         memory(getThreadLocalOrcLlapMemoryManager(conf));
       }
       isCompaction = AcidUtils.isCompactionTable(tableProperties);

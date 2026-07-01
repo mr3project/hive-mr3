@@ -280,8 +280,7 @@ public class QTestMiniClusters {
           .of(MiniClusterType.LLAP, MiniClusterType.LLAP_LOCAL, MiniClusterType.DRUID_LOCAL,
               MiniClusterType.DRUID_KAFKA, MiniClusterType.DRUID, MiniClusterType.KAFKA)
           .contains(clusterType)) {
-        // llapCluster = LlapItUtils.startAndGetMiniLlapCluster(conf, setup.zooKeeperCluster, confDir);
-        mr = shims.getLocalMiniTezCluster(conf, true);
+        llapCluster = LlapItUtils.startAndGetMiniLlapCluster(conf, setup.zooKeeperCluster, confDir);
       }
       if (EnumSet
           .of(MiniClusterType.LLAP_LOCAL, MiniClusterType.TEZ_LOCAL, MiniClusterType.DRUID_LOCAL)
@@ -302,7 +301,7 @@ public class QTestMiniClusters {
 
     if (testArgs.isWithLlapIo() && (clusterType == MiniClusterType.NONE)) {
       LOG.info("initializing llap IO");
-      // LlapProxy.initializeLlapIo(conf);  // ignore in MR3
+      LlapProxy.initializeLlapIo(conf);
     }
   }
 
@@ -338,7 +337,7 @@ public class QTestMiniClusters {
 
     if (testArgs.isWithLlapIo() && (clusterType == MiniClusterType.NONE)) {
       LOG.info("initializing llap IO");
-      // LlapProxy.initializeLlapIo(conf);  // ignore in MR3
+      LlapProxy.initializeLlapIo(conf);
     }
   }
 

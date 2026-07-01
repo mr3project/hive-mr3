@@ -22,12 +22,12 @@ import org.apache.hadoop.hive.conf.HiveConf;
 
 public class TezEdgeProperty {
 
-  public enum EdgeType {
-    SIMPLE_EDGE,          // SORT_PARTITION_EDGE
+  public enum EdgeType {//todo: HIVE-15549
+    SIMPLE_EDGE,//SORT_PARTITION_EDGE
     BROADCAST_EDGE,
-    CONTAINS,             // used for union (all?)
-    CUSTOM_EDGE,          // CO_PARTITION_EDGE
-    CUSTOM_SIMPLE_EDGE,   // PARTITION_EDGE
+    CONTAINS,//used for union (all?)
+    CUSTOM_EDGE,//CO_PARTITION_EDGE
+    CUSTOM_SIMPLE_EDGE,//PARTITION_EDGE
     ONE_TO_ONE_EDGE,
     XPROD_EDGE
   }
@@ -44,8 +44,6 @@ public class TezEdgeProperty {
   private float minSrcFraction;
   private float maxSrcFraction;
   private Integer bufferSize;
-
-  private boolean isFixed;  // isFixed == true iff auto parallelism should not be used (for MR3), false by default
 
   public TezEdgeProperty(HiveConf hiveConf, EdgeType edgeType,
       int buckets) {
@@ -91,14 +89,6 @@ public class TezEdgeProperty {
 
   public boolean isAutoReduce() {
     return isAutoReduce;
-  }
-
-  public void setFixed() {
-    this.isFixed = true;
-  }
-
-  public boolean isFixed() {
-    return this.isFixed;
   }
 
   public int getMinReducer() {

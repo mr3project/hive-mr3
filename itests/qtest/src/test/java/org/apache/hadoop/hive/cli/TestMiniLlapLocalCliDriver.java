@@ -23,7 +23,6 @@ import java.util.List;
 import org.apache.hadoop.hive.cli.control.CliAdapter;
 import org.apache.hadoop.hive.cli.control.CliConfigs;
 import org.apache.hadoop.hive.cli.control.SplitSupport;
-import org.apache.hadoop.hive.conf.HiveConf;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
@@ -56,7 +55,6 @@ public class TestMiniLlapLocalCliDriver {
   public TestMiniLlapLocalCliDriver(String name, File qfile) {
     this.name = name;
     this.qfile = qfile;
-    HiveConf.setLoadHiveServer2Config(true);
   }
 
   @Test

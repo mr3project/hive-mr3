@@ -362,7 +362,8 @@ public class VectorizedRowBatch implements Writable, MutableFilterContext {
     endOfFile = false;
     for (ColumnVector vc : columns) {
       if (vc != null) {
-        vc.resetInit();
+        vc.reset();
+        vc.init();
       }
     }
   }

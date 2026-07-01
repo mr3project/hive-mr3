@@ -42,7 +42,7 @@ import org.apache.hadoop.io.WritableComparator;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.OutputCollector;
 
-public class PartitionKeySampler implements OutputCollector<HiveKey, BytesWritable> {
+public class PartitionKeySampler implements OutputCollector<HiveKey, Object> {
 
   private static final Logger LOG = LoggerFactory.getLogger(PartitionKeySampler.class);
 
@@ -70,7 +70,7 @@ public class PartitionKeySampler implements OutputCollector<HiveKey, BytesWritab
   }
 
   // keys from FetchSampler are collected here
-  public void collect(HiveKey key, BytesWritable value) throws IOException {
+  public void collect(HiveKey key, Object value) throws IOException {
     sampled.add(Arrays.copyOfRange(key.getBytes(), 0, key.getLength()));
   }
 

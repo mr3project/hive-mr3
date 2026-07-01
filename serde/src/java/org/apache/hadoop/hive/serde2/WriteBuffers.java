@@ -24,11 +24,10 @@ import java.util.ArrayList;
 import org.apache.hadoop.hive.common.MemoryEstimate;
 import org.apache.hadoop.hive.ql.util.JavaDataModel;
 import org.apache.hadoop.hive.serde2.ByteStream.RandomAccessOutput;
+import org.apache.hadoop.hive.serde2.lazybinary.LazyBinaryUtils;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.hive.common.util.HashCodeUtil;
-import org.apache.tez.util.FastByteComparisons;
 
-import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
-import static org.apache.tez.util.FastByteComparisons.theUnsafe;
 
 /**
  * The structure storing arbitrary amount of data as a set of fixed-size byte buffers.
@@ -79,16 +78,11 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
 
   /** THIS METHOD IS NOT THREAD-SAFE. Use only at load time (or be mindful of thread safety). */
   public int unsafeReadVInt() {
-    return readVInt(unsafeReadPos);
+    return (int) readVLong(unsafeReadPos);
   }
 
   public int readVInt(Position readPos) {
-    if (isAllInOneReadBuffer(Integer.BYTES, readPos)) {
-      int value = theUnsafe.getInt(readPos.buffer, BYTE_ARRAY_BASE_OFFSET + readPos.offset);
-      readPos.offset += Integer.BYTES;
-      return Integer.reverseBytes(value);
-    }
-    return (int) readNByteLong(Integer.BYTES, readPos);
+    return (int) readVLong(readPos);
   }
 
   /** THIS METHOD IS NOT THREAD-SAFE. Use only at load time (or be mindful of thread safety). */
@@ -97,12 +91,24 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
   }
 
   public long readVLong(Position readPos) {
-    if (isAllInOneReadBuffer(Long.BYTES, readPos)) {
-      long value = theUnsafe.getLong(readPos.buffer, BYTE_ARRAY_BASE_OFFSET + readPos.offset);
-      readPos.offset += Long.BYTES;
-      return Long.reverseBytes(value);
+    ponderNextBufferToRead(readPos);
+    byte firstByte = readPos.buffer[readPos.offset++];
+    int length = (byte) WritableUtils.decodeVIntSize(firstByte) - 1;
+    if (length == 0) {
+      return firstByte;
     }
-    return readNByteLong(Long.BYTES, readPos);
+    long i = 0;
+    if (isAllInOneReadBuffer(length, readPos)) {
+      for (int idx = 0; idx < length; idx++) {
+        i = (i << 8) | (readPos.buffer[readPos.offset + idx] & 0xFF);
+      }
+      readPos.offset += length;
+    } else {
+      for (int idx = 0; idx < length; idx++) {
+        i = (i << 8) | (readNextByte(readPos) & 0xFF);
+      }
+    }
+    return (WritableUtils.isNegativeVInt(firstByte) ? (i ^ -1L) : i);
   }
 
   /** THIS METHOD IS NOT THREAD-SAFE. Use only at load time (or be mindful of thread safety). */
@@ -111,7 +117,19 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
   }
 
   public void skipVLong(Position readPos) {
-    skipBytes(Long.BYTES, readPos);
+    ponderNextBufferToRead(readPos);
+    byte firstByte = readPos.buffer[readPos.offset++];
+    int length = (byte) WritableUtils.decodeVIntSize(firstByte);
+    if (length > 1) {
+      readPos.offset += (length - 1);
+    }
+    int diff = readPos.offset - wbSize;
+    while (diff >= 0) {
+      ++readPos.bufferIndex;
+      readPos.buffer = writeBuffers.get(readPos.bufferIndex);
+      readPos.offset = diff;
+      diff = readPos.offset - wbSize;
+    }
   }
 
   /** THIS METHOD IS NOT THREAD-SAFE. Use only at load time (or be mindful of thread safety). */
@@ -162,17 +180,6 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
       ++readPos.bufferIndex;
       readPos.buffer = writeBuffers.get(readPos.bufferIndex);
       readPos.offset = 0;
-    }
-  }
-
-  private void skipBytes(int byteCount, Position readPos) {
-    readPos.offset += byteCount;
-    int diff = readPos.offset - wbSize;
-    while (diff >= 0) {
-      ++readPos.bufferIndex;
-      readPos.buffer = writeBuffers.get(readPos.bufferIndex);
-      readPos.offset = diff;
-      diff = readPos.offset - wbSize;
     }
   }
 
@@ -233,46 +240,6 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
   }
 
   @Override
-  public void appendInt(int value) {
-    if (writePos.bufferIndex == -1) {
-      nextBufferToWrite();
-    }
-    if (wbSize - writePos.offset >= Integer.BYTES) {
-      value = Integer.reverseBytes(value);
-      theUnsafe.putInt(writePos.buffer, BYTE_ARRAY_BASE_OFFSET + writePos.offset, value);
-      writePos.offset += Integer.BYTES;
-      if (writePos.offset == wbSize) {
-        nextBufferToWrite();
-      }
-      return;
-    }
-
-    for (int i = 0; i < Integer.BYTES; ++i) {
-      write((byte) (value >>> (24 - (i << 3))));
-    }
-  }
-
-  @Override
-  public void appendLong(long value) {
-    if (writePos.bufferIndex == -1) {
-      nextBufferToWrite();
-    }
-    if (wbSize - writePos.offset >= Long.BYTES) {
-      value = Long.reverseBytes(value);
-      theUnsafe.putLong(writePos.buffer, BYTE_ARRAY_BASE_OFFSET + writePos.offset, value);
-      writePos.offset += Long.BYTES;
-      if (writePos.offset == wbSize) {
-        nextBufferToWrite();
-      }
-      return;
-    }
-
-    for (int i = 0; i < Long.BYTES; ++i) {
-      write((byte) (value >>> (56 - (i << 3))));
-    }
-  }
-
-  @Override
   public int getLength() {
     return (int)getWritePoint();
   }
@@ -307,11 +274,14 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
         leftFrom = getOffset(leftOffset), rightFrom = getOffset(rightOffset);
     byte[] leftBuffer = writeBuffers.get(leftIndex), rightBuffer = writeBuffers.get(rightIndex);
     if (leftFrom + leftLength <= wbSize && rightFrom + rightLength <= wbSize) {
-      return FastByteComparisons.compareEqual(
-          leftBuffer, leftFrom, leftLength, rightBuffer, rightFrom, rightLength);
+      for (int i = 0; i < leftLength; ++i) {
+        if (leftBuffer[leftFrom + i] != rightBuffer[rightFrom + i]) {
+          return false;
+        }
+      }
+      return true;
     }
-    int length = leftLength;
-    while (length > 0) {
+    for (int i = 0; i < leftLength; ++i) {
       if (leftFrom == wbSize) {
         ++leftIndex;
         leftBuffer = writeBuffers.get(leftIndex);
@@ -322,14 +292,9 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
         rightBuffer = writeBuffers.get(rightIndex);
         rightFrom = 0;
       }
-      int chunkLength = Math.min(length, Math.min(wbSize - leftFrom, wbSize - rightFrom));
-      if (!FastByteComparisons.compareEqual(
-          leftBuffer, leftFrom, chunkLength, rightBuffer, rightFrom, chunkLength)) {
+      if (leftBuffer[leftFrom++] != rightBuffer[rightFrom++]) {
         return false;
       }
-      leftFrom += chunkLength;
-      rightFrom += chunkLength;
-      length -= chunkLength;
     }
     return true;
   }
@@ -342,22 +307,27 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
     // rightOffset is within the buffers
     byte[] rightBuffer = writeBuffers.get(rightIndex);
     if (rightFrom + length <= wbSize) {
-      return FastByteComparisons.compareEqual(left, leftOffset, length, rightBuffer, rightFrom, length);
+      // TODO: allow using unsafe optionally.
+      // bounds check first, to trigger bugs whether the first byte matches or not
+      if (left[leftOffset + length - 1] != rightBuffer[rightFrom + length - 1]) {
+        return false;
+      }
+      for (int i = 0; i < length; ++i) {
+        if (left[leftOffset + i] != rightBuffer[rightFrom + i]) {
+          return false;
+        }
+      }
+      return true;
     }
-    int remaining = length;
-    while (remaining > 0) {
+    for (int i = 0; i < length; ++i) {
       if (rightFrom == wbSize) {
         ++rightIndex;
         rightBuffer = writeBuffers.get(rightIndex);
         rightFrom = 0;
       }
-      int chunkLength = Math.min(remaining, wbSize - rightFrom);
-      if (!FastByteComparisons.compareEqual(left, leftOffset, chunkLength, rightBuffer, rightFrom, chunkLength)) {
+      if (left[leftOffset + i] != rightBuffer[rightFrom++]) {
         return false;
       }
-      leftOffset += chunkLength;
-      rightFrom += chunkLength;
-      remaining -= chunkLength;
     }
     return true;
   }
@@ -429,11 +399,11 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
   }
 
   public void writeVInt(int value) {
-    appendInt(value);
+    LazyBinaryUtils.writeVInt(this, value);
   }
 
   public void writeVLong(long value) {
-    appendLong(value);
+    LazyBinaryUtils.writeVLong(this, value);
   }
 
   /** Reads some bytes from the buffer and writes them again at current write point. */
@@ -670,6 +640,7 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
       writePos.buffer[writePos.offset + 1] = (byte)(v >> 16);
       writePos.buffer[writePos.offset + 2] = (byte)(v >> 8);
       writePos.buffer[writePos.offset + 3] = (byte)(v);
+      writePos.offset += 4;
     } else {
       setByte(offset++, (byte)(v >>> 24));
       setByte(offset++, (byte)(v >>> 16));

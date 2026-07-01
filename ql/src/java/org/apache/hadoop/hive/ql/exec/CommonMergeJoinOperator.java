@@ -428,8 +428,7 @@ public class CommonMergeJoinOperator extends AbstractMapJoinOperator<CommonMerge
 
   private void putDummyOrEmpty(Byte i) {
     // put a empty list or null
-    boolean isRightOfAntiJoin = (i != 0 && condn[i-1].getType() == JoinDesc.ANTI_JOIN);
-    if (noOuterJoin || isRightOfAntiJoin) {
+    if (noOuterJoin) {
       storage[i] = emptyList;
     } else {
       storage[i] = dummyObjVectors[i];

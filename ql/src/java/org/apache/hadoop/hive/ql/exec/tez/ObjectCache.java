@@ -28,7 +28,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.tez.runtime.api.ObjectRegistry;
-import org.apache.tez.runtime.api.ProcessorContext;
 
 import com.google.common.base.Preconditions;
 
@@ -44,74 +43,26 @@ public class ObjectCache implements org.apache.hadoop.hive.ql.exec.ObjectCache {
   // This is setup as part of the Tez Processor construction, so that it is available whenever an
   // instance of the ObjectCache is created. The assumption is that Tez will initialize the Processor
   // before anything else.
+  private volatile static ObjectRegistry staticRegistry;
 
-  static class ObjectRegistryVertexIndex {
-    public ObjectRegistry registry;
-    public int vertexIndex;
-
-    public ObjectRegistryVertexIndex(ObjectRegistry registry, int vertexIndex) {
-      this.registry = registry;
-      this.vertexIndex = vertexIndex;
-    }
-  }
-
-  private static final ThreadLocal<ObjectRegistryVertexIndex> staticRegistryIndex =
-    new ThreadLocal<ObjectRegistryVertexIndex>(){
-      @Override
-      protected synchronized ObjectRegistryVertexIndex initialValue() {
-        return null;
-      }
-    };
-
-  private static final ExecutorService staticPool = Executors.newCachedThreadPool();
+  private static ExecutorService staticPool;
 
   private final ObjectRegistry registry;
 
   public ObjectCache() {
-    Preconditions.checkNotNull(staticRegistryIndex.get(),
+    Preconditions.checkNotNull(staticRegistry,
         "Object registry not setup yet. This should have been setup by the TezProcessor");
-    registry = staticRegistryIndex.get().registry;
+    registry = staticRegistry;
   }
 
   public static boolean isObjectRegistryConfigured() {
-    return (staticRegistryIndex.get() != null);
+    return (staticRegistry != null);
   }
 
-  public static void setupObjectRegistry(ProcessorContext context) {
-    ObjectRegistryVertexIndex currentRegistryIndex = staticRegistryIndex.get();
-    if (currentRegistryIndex == null) {
-      // context.getObjectRegistry() in MR3 returns a fresh ObjectRegistry, so each thread has its own
-      // ObjectRegistry, which is necessary because ObjectRegistry keeps MapWork.
-      int vertexIndex = context.getTaskVertexIndex();
-      staticRegistryIndex.set(new ObjectRegistryVertexIndex(context.getObjectRegistry(), vertexIndex));
-      if (LOG.isDebugEnabled()) { LOG.debug(
-          "ObjectRegistry created from ProcessorContext: {} {} {}", vertexIndex, context.getTaskIndex(), context.getTaskAttemptNumber()); }
-    } else {
-      int currentVertexIndex = currentRegistryIndex.vertexIndex;
-      int newVertexIndex = context.getTaskVertexIndex();
-      if (currentVertexIndex != newVertexIndex) {
-        currentRegistryIndex.registry = context.getObjectRegistry();
-        currentRegistryIndex.vertexIndex = newVertexIndex;
-        if (LOG.isDebugEnabled()) { LOG.debug(
-            "ObjectRegistry reset from ProcessorContext: {} {} {}", newVertexIndex, context.getTaskIndex(), context.getTaskAttemptNumber()); }
-      }
-    }
-  }
 
-  @com.google.common.annotations.VisibleForTesting
-  public static void setupObjectRegistryDummy() {
-    staticRegistryIndex.set(new ObjectRegistryVertexIndex(new org.apache.tez.runtime.common.objectregistry.ObjectRegistryImpl(), 0));
-  }
-
-  public static void clearObjectRegistry() {
-    LOG.info("Clearing ObjectRegistry");
-    staticRegistryIndex.set(null);
-  }
-
-  public static int getCurrentVertexIndex() {
-    ObjectRegistryVertexIndex currentRegistryIndex = staticRegistryIndex.get();
-    assert currentRegistryIndex != null;
-    return currentRegistryIndex.vertexIndex;
+  public static void setupObjectRegistry(ObjectRegistry objectRegistry) {
+    staticRegistry = objectRegistry;
+    staticPool = Executors.newCachedThreadPool(new ThreadFactoryBuilder().setNameFormat("Tez-object-cache %d").build());
   }
 
   @Override
@@ -144,10 +95,10 @@ public class ObjectCache implements org.apache.hadoop.hive.ql.exec.ObjectCache {
       value = (T) registry.get(key);
       if (value == null) {
         value = fn.call();
-        LOG.debug("Caching key: {}", key);
+        LOG.info("Caching key: " + key);
         registry.cacheForVertex(key, value);
       } else {
-        LOG.debug("Found {} in cache with value: {}", key, value);
+        LOG.info("Found " + key + " in cache with value: " + value);
       }
     } catch (Exception e) {
       throw new HiveException(e);

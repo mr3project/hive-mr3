@@ -299,9 +299,7 @@ public class OrcRawRecordMerger implements AcidInputFormat.RawReader<OrcStruct>{
             OrcRecordUpdater.getOperation(nextRecord()) == OrcRecordUpdater.DELETE_OPERATION);
         // if this record is larger than maxKey, we need to stop
         if (getMaxKey() != null && getKey().compareRow(getMaxKey()) > 0) {
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("key " + getKey() + " > maxkey " + getMaxKey());
-          }
+          LOG.debug("key " + getKey() + " > maxkey " + getMaxKey());
           nextRecord = null;
           getRecordReader().close();
         }

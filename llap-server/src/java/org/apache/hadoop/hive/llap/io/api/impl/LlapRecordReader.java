@@ -152,8 +152,13 @@ class LlapRecordReader implements RecordReader<NullWritable, VectorizedRowBatch>
 
     this.sarg = ConvertAstToSearchArg.createFromConf(job);
     final String fragmentId = LlapTezUtils.getFragmentId(job);
+    final String dagId = LlapTezUtils.getDagId(job);
+    final String queryId = HiveConf.getVar(job, HiveConf.ConfVars.HIVE_QUERY_ID);
+    MDC.put("dagId", dagId);
+    MDC.put("queryId", queryId);
     TezCounters taskCounters = null;
     if (fragmentId != null) {
+      MDC.put("fragmentId", fragmentId);
       taskCounters = FragmentCountersMap.getCountersForFragment(fragmentId);
       LOG.info("Received fragment id: {}", fragmentId);
     } else {
@@ -592,6 +597,7 @@ class LlapRecordReader implements RecordReader<NullWritable, VectorizedRowBatch>
     feedback.stop();
     isClosed = true;
     rethrowErrorIfAny(pendingError.get());
+    MDC.clear();
   }
 
   private static void rethrowErrorIfAny(Throwable pendingError) throws IOException {

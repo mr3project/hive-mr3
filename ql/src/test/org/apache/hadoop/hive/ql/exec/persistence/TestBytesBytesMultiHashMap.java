@@ -158,12 +158,12 @@ public class TestBytesBytesMultiHashMap {
 
     @Override
     public void writeKey(RandomAccessOutput dest) throws SerDeException {
-
+      try {
         dest.write(key);
-
-
-
-
+      } catch (IOException e) {
+        e.printStackTrace();
+        fail("Thrown " + e.getMessage());
+      }
     }
   }
 
@@ -186,12 +186,12 @@ public class TestBytesBytesMultiHashMap {
     }
 
     private void writeLastBuffer(RandomAccessOutput dest) {
-
+      try {
         dest.write(lastBuffer);
-
-
-
-
+      } catch (IOException e) {
+        e.printStackTrace();
+        fail("Thrown " + e.getMessage());
+      }
     }
 
     @Override
@@ -233,12 +233,12 @@ public class TestBytesBytesMultiHashMap {
     protected byte[] write(RandomAccessOutput dest) {
       byte[] bytes = new byte[minLength + rdm.nextInt(maxLength - minLength + 1)];
       rdm.nextBytes(bytes);
-
+      try {
         dest.write(bytes);
-
-
-
-
+      } catch (IOException e) {
+        e.printStackTrace();
+        fail("Thrown " + e.getMessage());
+      }
       return bytes;
     }
 

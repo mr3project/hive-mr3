@@ -29,7 +29,6 @@ import java.io.IOException;
  */
 public abstract class VectorMapJoinFastHashTableContainerBase implements VectorMapJoinHashTable {
 
-  // glad
   public abstract void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException;
 

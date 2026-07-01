@@ -18,7 +18,6 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.hadoop.hive.ql.io.IOConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -62,7 +61,7 @@ public class ParquetRecordWriterWrapper implements RecordWriter<NullWritable, Pa
           IOException {
     try {
       // create a TaskInputOutputContext
-      TaskAttemptID taskAttemptID = TaskAttemptID.forName(jobConf.get(IOConstants.MAPRED_TASK_ID));
+      TaskAttemptID taskAttemptID = TaskAttemptID.forName(jobConf.get("mapred.task.id"));
       if (taskAttemptID == null) {
         taskAttemptID = new TaskAttemptID();
       }

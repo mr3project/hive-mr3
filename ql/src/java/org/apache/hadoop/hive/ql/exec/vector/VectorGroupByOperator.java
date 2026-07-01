@@ -52,7 +52,6 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates.VectorAggreg
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneral;
-import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneralLongString;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.GroupByDesc;
@@ -454,9 +453,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       computeMemoryLimits();
       LOG.debug("using hash aggregation processing mode");
 
-      VectorHashKeyWrapperBase firstKeyWrapper = keyWrappersBatch.getVectorHashKeyWrappers()[0];
-      if (firstKeyWrapper instanceof VectorHashKeyWrapperGeneral ||
-          firstKeyWrapper instanceof VectorHashKeyWrapperGeneralLongString) {
+      if (keyWrappersBatch.getVectorHashKeyWrappers()[0] instanceof VectorHashKeyWrapperGeneral) {
         reusableKeyWrapperBuffer = new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
       }
     }
@@ -607,7 +604,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     }
 
     private KeyWrapper cloneKeyWrapper(VectorHashKeyWrapperBase from) {
-      if (reusableKeyWrapperBuffer != null && !reusableKeyWrapperBuffer.isEmpty()) {
+      if (reusableKeyWrapperBuffer != null && reusableKeyWrapperBuffer.size() > 0) {
         KeyWrapper keyWrapper = reusableKeyWrapperBuffer.poll();
         from.copyKey(keyWrapper);
         return keyWrapper;
@@ -627,7 +624,8 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
           keyWrappersBatch.getKeysFixedSize() +
           aggregationBatchInfo.getAggregatorsFixedSize();
 
-      maxMemory = getConf().getMaxMemoryAvailable();    // assume MR3, so do not use MemoryMXBean. Cf. HIVE-20648
+      MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
+      maxMemory = isLlap ? getConf().getMaxMemoryAvailable() : memoryMXBean.getHeapMemoryUsage().getMax();
       memoryThreshold = conf.getMemoryThreshold();
       // Tests may leave this unitialized, so better set it to 1
       if (memoryThreshold == 0.0f) {
@@ -653,8 +651,8 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         return 0;
       }
       int avgAccess = (int) (totalAccessCount / numEntriesHashTable);
-      /* if (LOG.isDebugEnabled()) { LOG.debug("totalAccessCount:{}, numEntries:{}, avgAccess:{}",
-          totalAccessCount, numEntriesHashTable, avgAccess); } */
+      LOG.debug("totalAccessCount:{}, numEntries:{}, avgAccess:{}",
+          totalAccessCount, numEntriesHashTable, avgAccess);
       return avgAccess;
     }
 
@@ -1129,6 +1127,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
   @Override
   protected void initializeOp(Configuration hconf) throws HiveException {
     super.initializeOp(hconf);
+    isLlap = LlapProxy.isDaemon();
     VectorExpression.doTransientInit(keyExpressions, hconf);
 
     List<ObjectInspector> objectInspectors = new ArrayList<>();

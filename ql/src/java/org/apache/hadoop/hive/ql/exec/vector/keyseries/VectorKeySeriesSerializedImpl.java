@@ -45,11 +45,10 @@ public abstract class VectorKeySeriesSerializedImpl<T extends SerializeWrite>
 
   protected final int[] serializedKeyLengths;
 
-  public VectorKeySeriesSerializedImpl(T serializeWrite, int estimatedSerializedKeyLength) {
+  public VectorKeySeriesSerializedImpl(T serializeWrite) {
     super();
-    Preconditions.checkArgument(estimatedSerializedKeyLength > 0);
     this.serializeWrite = serializeWrite;
-    output = new Output(VectorizedRowBatch.DEFAULT_SIZE * estimatedSerializedKeyLength);
+    output = new Output();
     serializedKeyLengths = new int[VectorizedRowBatch.DEFAULT_SIZE];
   }
 

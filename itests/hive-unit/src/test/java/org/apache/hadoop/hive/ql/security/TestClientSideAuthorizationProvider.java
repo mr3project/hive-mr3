@@ -96,7 +96,7 @@ public class TestClientSideAuthorizationProvider {
     driver = DriverFactory.newDriver(clientHiveConf);
 
     // this test involves limit operator which needs an object cache
-    ObjectCache.setupObjectRegistryDummy();
+    ObjectCache.setupObjectRegistry(new ObjectRegistryImpl());
   }
 
   @After
@@ -124,7 +124,6 @@ public class TestClientSideAuthorizationProvider {
 
   @Test
   public void testSimplePrivileges() throws Exception {
-    HiveConf.setLoadHiveServer2Config(true);
     String dbName = getTestDbName();
     String tblName = getTestTableName();
 

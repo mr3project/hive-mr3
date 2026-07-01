@@ -66,10 +66,9 @@ public abstract class VectorMapJoinFastLongHashTable
 
   public boolean adaptPutRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
-    byte[] keyBytes = currentKey.getBytesRaw();   // glad
-    int keyOffset = currentKey.getOffset();
+    byte[] keyBytes = currentKey.getBytes();
     int keyLength = currentKey.getLength();
-    keyBinarySortableDeserializeRead.set(keyBytes, keyOffset, keyLength);
+    keyBinarySortableDeserializeRead.set(keyBytes, 0, keyLength);
     try {
       if (!keyBinarySortableDeserializeRead.readNextField()) {
         return false;
@@ -83,12 +82,11 @@ public abstract class VectorMapJoinFastLongHashTable
     return true;
   }
 
-  // glad
   protected abstract void assignSlot(int slot, long key, boolean isNewKey, BytesWritable currentValue);
 
   public void add(long hashCode, long key, BytesWritable currentValue) {
 
-    if (checkResize()) {  // glad
+    if (checkResize()) {
       expandAndRehash();
     }
 

@@ -506,20 +506,10 @@ public class HiveSubQueryRemoveRule extends RelOptRule {
     }
     switch (logic) {
     case TRUE:
-      if (!variablesSet.isEmpty()) {
-        // This is correlated. Use SemiJoin.
-        builder.join(JoinRelType.SEMI, builder.and(conditions), variablesSet);
-      } else {
-        builder.join(JoinRelType.INNER, builder.and(conditions), variablesSet);
-      }
+      builder.join(JoinRelType.SEMI, builder.and(conditions), variablesSet);
       return builder.literal(true);
     case FALSE:
-      if (!variablesSet.isEmpty()) {
-        // This is correlated. Use AntiJoin.
-        builder.join(JoinRelType.ANTI, builder.and(conditions), variablesSet);
-      } else {
-        builder.join(JoinRelType.LEFT, builder.and(conditions), variablesSet);
-      }
+      builder.join(JoinRelType.ANTI, builder.and(conditions), variablesSet);
       return builder.literal(false);
     }
     builder.join(JoinRelType.LEFT, builder.and(conditions), variablesSet);

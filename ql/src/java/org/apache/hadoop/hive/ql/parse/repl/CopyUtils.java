@@ -34,8 +34,7 @@ import org.apache.hadoop.hive.ql.exec.repl.util.ReplUtils;
 import org.apache.hadoop.hive.ql.exec.util.Retryable;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.metadata.HiveFatalException;
-import org.apache.hadoop.hive.ql.session.SessionState;
-import org.apache.hadoop.hive.ql.util.MR3FileUtils;
+import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
@@ -130,7 +129,7 @@ public class CopyUtils {
     retryableFxn(() -> {
       boolean preserveXAttrs = FileUtils.shouldPreserveXAttrs(hiveConf, srcFS, dstFS, paths[0]);
       FileUtils.copy(srcFS, paths, dstFS, dst, deleteSource, overwrite, preserveXAttrs, hiveConf,
-          copyStatistics);  // no need to use MR3FileUtils.copy() because this is a regular copy
+          copyStatistics);
       return null;
     });
   }
@@ -185,11 +184,8 @@ public class CopyUtils {
               executorService = getExecutorService();
             }
             List<Callable<Void>> copyList = new ArrayList<>();
-            SessionState parentState = SessionState.get();
             for (Map.Entry<Path, List<ReplChangeManager.FileInfo>> destMapEntry : destMap.entrySet()) {
               copyList.add(() -> {
-                // MR3 distCp needs SessionState.
-                SessionState.setCurrentSessionState(parentState);
                 DataCopyStatistics copyStatistics = new DataCopyStatistics();
                 doCopy(destMapEntry, proxyUser, regularCopy(sourceFs, destMapEntry.getValue()), overwrite, copyStatistics);
                 incrementTotalBytesCopied(copyStatistics.getBytesCopied());
@@ -482,14 +478,15 @@ public class CopyUtils {
           RAW_RESERVED_VIRTUAL_PATH + destinationUri.getPath());
     }
 
-    if (!MR3FileUtils.distCp(
+    if (!FileUtils.distCp(
         sourceFs, // source file system
         srcList,  // list of source paths
         destination,
         false,
         proxyUser,
-        hiveConf)) {
-      LOG.error("Distcp failed to copy files: {} to destination: {}", srcList, destination);
+        hiveConf,
+        ShimLoader.getHadoopShims())) {
+      LOG.error("Distcp failed to copy files: " + srcList + " to destination: " + destination);
       throw new IOException("Distcp operation failed.");
     }
     // increment bytes copied counter by the file length in each path of filesystem

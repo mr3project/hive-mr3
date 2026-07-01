@@ -158,10 +158,9 @@ public class VectorMapJoinFastLongHashMapContainer extends VectorMapJoinFastHash
   }
 
   public long getHashCode(BytesWritable currentKey) throws HiveException, IOException {
-    byte[] keyBytes = currentKey.getBytesRaw();
-    int keyOffset = currentKey.getOffset();
+    byte[] keyBytes = currentKey.getBytes();
     int keyLength = currentKey.getLength();
-    keyBinarySortableDeserializeRead.set(keyBytes, keyOffset, keyLength);
+    keyBinarySortableDeserializeRead.set(keyBytes, 0, keyLength);
     try {
       if (!keyBinarySortableDeserializeRead.readNextField()) {
         return 0;
@@ -177,7 +176,6 @@ public class VectorMapJoinFastLongHashMapContainer extends VectorMapJoinFastHash
   @Override
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
-    // glad
     vectorMapJoinFastLongHashMaps[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey, currentValue);
   }
 

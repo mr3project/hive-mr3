@@ -25,11 +25,9 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 public class ObjectCacheWrapper implements ObjectCache {
   private final String queryId;
   private final ObjectCache globalCache;
-  private final int dagIdId;
-  public ObjectCacheWrapper(ObjectCache globalCache, String queryId, int dagIdId) {
+  public ObjectCacheWrapper(ObjectCache globalCache, String queryId) {
     this.queryId = queryId;
     this.globalCache = globalCache;
-    this.dagIdId = dagIdId;
   }
 
   @Override
@@ -59,6 +57,6 @@ public class ObjectCacheWrapper implements ObjectCache {
   }
 
   private String makeKey(String key) {
-    return queryId + "_" + dagIdId + "_" + key;
+    return queryId + "_" + key;
   }
 }

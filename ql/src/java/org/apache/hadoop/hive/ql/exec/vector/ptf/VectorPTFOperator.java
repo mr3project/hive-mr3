@@ -409,7 +409,7 @@ public class VectorPTFOperator extends Operator<PTFDesc>
     if (allEvaluatorsAreStreaming) {
       // We can process this batch immediately.
       groupBatches.evaluateStreamingGroupBatch(batch, isLastGroupBatch);
-      vectorForward(batch);
+      forward(batch, null);
     } else {
       // only collecting the batch for later evaluation
       groupBatches.bufferGroupBatch(batch, isLastGroupBatch);

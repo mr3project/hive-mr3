@@ -33,8 +33,6 @@ public interface OperatorDesc extends Serializable, Cloneable {
   public void setMemoryNeeded(long memoryNeeded);
   public long getMaxMemoryAvailable();
   public void setMaxMemoryAvailable(long memoryAvailable);
-  public int getEstimateNumExecutors();
-  public void setEstimateNumExecutors(int estimateNumExecutors);
   public String getRuntimeStatsTmpDir();
   public void setRuntimeStatsTmpDir(String runtimeStatsTmpDir);
 

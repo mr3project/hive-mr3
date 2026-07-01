@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hive.llap;
 
+import java.io.IOException;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -25,19 +27,25 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import javax.net.SocketFactory;
 
-import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.TableName;
 import org.apache.hadoop.hive.common.io.CacheTag;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos;
-import org.apache.hadoop.hive.llap.daemon.rpc.MR3LlapDaemonProtocolProtos.MR3LlapDaemonProcessorEventProto;
-import org.apache.hadoop.hive.llap.daemon.rpc.MR3LlapDaemonProtocolProtos.MR3LlapDaemonProcessorEventType;
-import org.apache.hadoop.hive.ql.exec.mr3.llap.LLAPDaemonProcessor;
-import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
-import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
-import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hadoop.hive.llap.impl.LlapManagementProtocolClientImpl;
+import org.apache.hadoop.hive.llap.registry.LlapServiceInstance;
+import org.apache.hadoop.hive.llap.registry.impl.LlapRegistryService;
+import org.apache.hadoop.io.retry.RetryPolicies;
+import org.apache.hadoop.io.retry.RetryPolicy;
+import org.apache.hadoop.net.NetUtils;
+import org.apache.hive.common.util.ShutdownHookManager;
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +57,20 @@ import org.slf4j.LoggerFactory;
 public final class ProactiveEviction {
 
   private static final Logger LOG = LoggerFactory.getLogger(ProactiveEviction.class);
+
+  static {
+    ShutdownHookManager.addShutdownHook(new Runnable() {
+      @Override
+      public void run() {
+        if (EXECUTOR != null) {
+          EXECUTOR.shutdownNow();
+        }
+      }
+    });
+  }
+
+  private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor(
+      new ThreadFactoryBuilder().setNameFormat("Proactive-Eviction-Requester").setDaemon(true).build());
 
   private ProactiveEviction() {
     // Not to be used;
@@ -64,32 +86,68 @@ public final class ProactiveEviction {
       return;
     }
 
-    if (request.isEmpty()) {
-      return;
-    }
-
     try {
-      LOG.info("Requesting proactive LLAP cache eviction.");
-      LOG.debug("Request: {}", request);
-
-      // Calling SessionState.get() in new thread always creates a new SessionState. We are in driver thread
-      // at this point, so we may have a chance to reuse SessionState and MR3Session.
-      SessionState ss = SessionState.get();
-      MR3Session mr3Session = ss.getMr3Session();
-      if (mr3Session == null) {
-        LOG.warn("Skip proactive LLAP cache eviction as MR3Session is not ready.");
+      LlapRegistryService llapRegistryService = LlapRegistryService.getClient(conf);
+      Collection<LlapServiceInstance> instances = llapRegistryService.getInstances().getAll();
+      if (instances.size() == 0) {
+        // Not in LLAP mode.
         return;
       }
+      LOG.info("Requesting proactive LLAP cache eviction.");
+      LOG.debug("Request: {}", request);
+      // Fire and forget - requests are enqueued on the single threaded executor and this (caller) thread won't wait.
+      for (LlapServiceInstance instance : instances) {
+        EvictionRequestTask task = new EvictionRequestTask(conf, instance, request);
+        EXECUTOR.execute(task);
+      }
 
-      MR3LlapDaemonProcessorEventProto eventProto = MR3LlapDaemonProcessorEventProto.newBuilder()
-          .setType(MR3LlapDaemonProcessorEventType.PROACTIVE_EVICTION)
-          .addAllEvictedEntities(request.toProtoRequests())
-          .build();
-      ByteString payload = eventProto.toByteString();
-
-      mr3Session.sendDaemonMessage(LLAPDaemonProcessor.daemonVertexName, payload);
-    } catch (Exception e) {
+    } catch (IOException e) {
       throw new RuntimeException(e);
+    }
+  }
+
+  /**
+   * The executable task to carry out request sending.
+   */
+  public static class EvictionRequestTask implements Runnable {
+    private final Request request;
+    private Configuration conf;
+    private LlapServiceInstance instance;
+    private SocketFactory socketFactory;
+    private RetryPolicy retryPolicy;
+
+    EvictionRequestTask(Configuration conf, LlapServiceInstance llapServiceInstance, Request request) {
+      this.conf = conf;
+      this.instance = llapServiceInstance;
+      this.socketFactory = NetUtils.getDefaultSocketFactory(conf);
+      //not making this configurable, best effort
+      this.retryPolicy = RetryPolicies.retryUpToMaximumTimeWithFixedSleep(
+          10000, 2000L, TimeUnit.MILLISECONDS);
+      this.request = request;
+    }
+
+    @Override
+    public void run() {
+      if (request.isEmpty()) {
+        throw new IllegalArgumentException("No entities set to trigger eviction on.");
+      }
+      try {
+        LlapManagementProtocolClientImpl client = new LlapManagementProtocolClientImpl(conf, instance.getHost(),
+            instance.getManagementPort(), retryPolicy, socketFactory);
+
+        List<LlapDaemonProtocolProtos.EvictEntityRequestProto> protoRequests = request.toProtoRequests();
+
+        long evictedBytes = 0;
+        for (LlapDaemonProtocolProtos.EvictEntityRequestProto protoRequest : protoRequests) {
+          LOG.debug("Requesting proactive eviction for entities in database {}", protoRequest.getDbName());
+          LlapDaemonProtocolProtos.EvictEntityResponseProto response = client.evictEntity(null, protoRequest);
+          evictedBytes += response.getEvictedBytes();
+          LOG.debug("Proactively evicted {} bytes", response.getEvictedBytes());
+        }
+        LOG.debug("Proactive eviction freed {} bytes on LLAP daemon {} in total", evictedBytes, instance);
+      } catch (Exception e) {
+        LOG.warn("Exception while requesting proactive eviction.", e);
+      }
     }
   }
 
