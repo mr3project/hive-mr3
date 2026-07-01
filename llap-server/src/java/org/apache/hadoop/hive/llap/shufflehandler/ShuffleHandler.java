@@ -933,7 +933,7 @@ public class ShuffleHandler implements AttemptRegistrationListener {
         }
         ShuffleHeader header =
             new ShuffleHeader(mapId, outputInfo.indexRecord.getPartLength(),
-                outputInfo.indexRecord.getRawLength(), reduce);
+                outputInfo.indexRecord.getRawLength(), reduce, null);
         DataOutputBuffer dob = new DataOutputBuffer();
         header.write(dob);
 
@@ -1016,7 +1016,7 @@ public class ShuffleHandler implements AttemptRegistrationListener {
         throws IOException {
       final TezIndexRecord info = mapOutputInfo.indexRecord;
       final ShuffleHeader header =
-        new ShuffleHeader(mapId, info.getPartLength(), info.getRawLength(), reduce);
+        new ShuffleHeader(mapId, info.getPartLength(), info.getRawLength(), reduce, null);
       final DataOutputBuffer dob = new DataOutputBuffer();
       header.write(dob);
       ch.write(wrappedBuffer(dob.getData(), 0, dob.getLength()));
@@ -1070,7 +1070,7 @@ public class ShuffleHandler implements AttemptRegistrationListener {
           new DefaultFullHttpResponse(response.getProtocolVersion(), response.getStatus());
       fullResponse.headers().set(response.headers());
 
-      ShuffleHeader header = new ShuffleHeader(message, -1, -1, -1);
+      ShuffleHeader header = new ShuffleHeader(message, -1, -1, -1, null);
       DataOutputBuffer out = new DataOutputBuffer();
       header.write(out);
 
