@@ -845,8 +845,7 @@ public class VectorMapOperator extends AbstractMapOperator {
 
   private void resetColumnVector(ColumnVector columnVector) {
     if (columnVector != null) {
-      columnVector.reset();
-      columnVector.init();
+      columnVector.resetInit();
     }
   }
 
