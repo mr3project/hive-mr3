@@ -327,7 +327,7 @@ public class QueryTracker extends AbstractService {
         removeQuerySpecificLock(queryIdentifier);
       }
       if (savedQueryId != null) {
-        ObjectCacheFactory.removeLlapQueryCache(savedQueryId);
+        ObjectCacheFactory.removeLlapQueryCache(savedQueryId, 0);
       }
       return queryInfo;
     } finally {
