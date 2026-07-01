@@ -57,6 +57,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.hadoop.hive.ql.ErrorMsg.CLIENT_POLLING_OPSTATUS_INTERRUPTED;
 
@@ -111,6 +112,11 @@ public class HiveStatement implements java.sql.Statement {
   private boolean isCancelled = false;
 
   /**
+   * Keep state in order to prevent performing cancel operation more than once.
+   */
+  private AtomicBoolean needCancel = new AtomicBoolean(false);
+
+  /**
    * Keep this state so we can know whether the query in this statement is closed.
    */
   private boolean isQueryClosed = false;
@@ -152,22 +158,28 @@ public class HiveStatement implements java.sql.Statement {
   @Override
   public void cancel() throws SQLException {
     checkConnection("cancel");
-    if (isCancelled) {
-      return;
-    }
 
-    try {
+    boolean isCancelCalledFirstTime = needCancel.compareAndSet(false, true);
+    if (isCancelCalledFirstTime) {
       if (stmtHandle.isPresent()) {
-        TCancelOperationReq cancelReq = new TCancelOperationReq(stmtHandle.get());
+        doCancel(stmtHandle.get());
+      }
+    }
+  }
+
+  private synchronized void doCancel(TOperationHandle handle) throws SQLException {
+    if (!isCancelled) {
+      try {
+        TCancelOperationReq cancelReq = new TCancelOperationReq(handle);
         TCancelOperationResp cancelResp = client.CancelOperation(cancelReq);
         Utils.verifySuccessWithInfo(cancelResp.getStatus());
+      } catch (SQLException e) {
+        throw e;
+      } catch (Exception e) {
+        throw new SQLException("Failed to cancel statement", "08S01", e);
       }
-    } catch (SQLException e) {
-      throw e;
-    } catch (Exception e) {
-      throw new SQLException("Failed to cancel statement", "08S01", e);
+      isCancelled = true;
     }
-    isCancelled = true;
   }
 
   @Override
@@ -330,7 +342,9 @@ public class HiveStatement implements java.sql.Statement {
   private void runAsyncOnServer(String sql) throws SQLException {
     checkConnection("execute");
 
-    reInitState();
+    synchronized (this) {
+      reInitState();
+    }
 
     TExecuteStatementReq execReq = new TExecuteStatementReq(sessHandle, sql);
     /**
@@ -352,8 +366,13 @@ public class HiveStatement implements java.sql.Statement {
           LOG.info(message);
         }
       }
+
       stmtHandle = Optional.of(execResp.getOperationHandle());
       LOG.debug("Running with statement handle: {}", stmtHandle.get());
+
+      if (needCancel.get()) {
+        doCancel(stmtHandle.get());
+      }
     } catch (SQLException eS) {
       isLogBeingGenerated = false;
       throw eS;
@@ -391,9 +410,9 @@ public class HiveStatement implements java.sql.Statement {
     statusReq.setGetProgressUpdate(inPlaceUpdateStream.isPresent());
 
     // Progress bar is completed if there is nothing to request
-    if (inPlaceUpdateStream.isPresent()) {
-      inPlaceUpdateStream.get().getEventNotifier().progressBarCompleted();
-    }
+    // if (inPlaceUpdateStream.isPresent()) {
+    //   inPlaceUpdateStream.get().getEventNotifier().progressBarCompleted();
+    // }
 
     LOG.debug("Waiting on operation to complete: Polling operation status");
 
@@ -475,6 +494,7 @@ public class HiveStatement implements java.sql.Statement {
       isQueryClosed = false;
       isLogBeingGenerated = true;
       isOperationComplete = false;
+      needCancel.set(false);
     }
   }
 
