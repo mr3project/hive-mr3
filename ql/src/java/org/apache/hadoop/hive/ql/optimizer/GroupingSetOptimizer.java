@@ -202,6 +202,13 @@ public class GroupingSetOptimizer extends Transform {
         return null;
       }
 
+      Map<String, ExprNodeDesc> columnExprMap = parentOp.getColumnExprMap();
+      if (columnExprMap == null) {
+        LOG.debug("Skip grouping-set optimization as the parent operator {} does not provide column expression map",
+            parentOp);
+        return null;
+      }
+
       List<String> colNamesInSignature = new ArrayList<>();
       for (ColumnInfo pColInfo: parentOp.getSchema().getSignature()) {
         colNamesInSignature.add(pColInfo.getInternalName());
@@ -227,7 +234,7 @@ public class GroupingSetOptimizer extends Transform {
       String partitionCol = null;
       for (ColStatistics col: columnStatistics) {
         String colName = col.getColumnName();
-        if (parentOp.getColumnExprMap().containsKey(colName) && candidates.contains(colName)) {
+        if (columnExprMap.containsKey(colName) && candidates.contains(colName)) {
           partitionCol = colName;
           break;
         }
@@ -376,4 +383,3 @@ public class GroupingSetOptimizer extends Transform {
     return pCtx;
   }
 }
-
