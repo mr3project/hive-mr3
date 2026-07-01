@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.wrapper;
 
+import org.apache.hadoop.hive.ql.exec.KeyWrapper;
 import org.apache.hadoop.hive.ql.exec.vector.VectorColumnSetInfo;
 import org.apache.hive.common.util.HashCodeUtil;
 
@@ -52,10 +53,20 @@ public class VectorHashKeyWrapperSingleLong extends VectorHashKeyWrapperSingleBa
   @Override
   protected Object clone() {
     VectorHashKeyWrapperSingleLong clone = new VectorHashKeyWrapperSingleLong();
+    copyInto(clone);
+    return clone;
+  }
+
+  @Override
+  public void copyKey(KeyWrapper oldWrapper) {
+    VectorHashKeyWrapperSingleLong clone = (VectorHashKeyWrapperSingleLong) oldWrapper;
+    copyInto(clone);
+  }
+
+  private void copyInto(VectorHashKeyWrapperSingleLong clone) {
     clone.isNull0 = isNull0;
     clone.longValue0 = longValue0;
     clone.hashcode = hashcode;
-    return clone;
   }
 
   public void assignLong(int keyIndex, int index, long v) {
