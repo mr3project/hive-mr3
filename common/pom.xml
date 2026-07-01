@@ -35,6 +35,11 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.apache.avro</groupId>
+      <artifactId>avro</artifactId>
+      <version>${avro.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.apache.hive</groupId>
       <artifactId>hive-shims</artifactId>
       <version>${project.version}</version>
@@ -69,6 +74,12 @@
     <dependency>
       <groupId>org.apache.orc</groupId>
       <artifactId>orc-core</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-client-api</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>jline</groupId>
@@ -351,33 +362,6 @@
         </plugins>
       </build>
     </profile>
-    <profile>
-      <id>dist</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-antrun-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>generate-template</id>
-                <phase>package</phase>
-                <configuration>
-                  <target>
-                    <property name="compile.classpath" refid="maven.runtime.classpath"/>
-                    <taskdef name="templategen" classname="org.apache.hadoop.hive.ant.GenHiveTemplate" classpath="${compile.classpath}"/>
-                    <templategen templateFile="${basedir}/../conf/hive-default.xml.template"/>
-                  </target>
-                </configuration>
-                <goals>
-                  <goal>run</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
   </profiles>
   <build>
     <sourceDirectory>${basedir}/src/java</sourceDirectory>
@@ -446,6 +430,14 @@
             </configuration>
           </execution>
         </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <source>11</source>
+          <target>11</target>
+        </configuration>
       </plugin>
     </plugins>
   </build>
