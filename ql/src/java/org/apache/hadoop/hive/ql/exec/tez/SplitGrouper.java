@@ -71,8 +71,8 @@ public class SplitGrouper {
 
   // TODO This needs to be looked at. Map of Map to Map... Made concurrent for now since split generation
   // can happen in parallel.
-  private static final Map<Map<Path, PartitionDesc>, Map<Path, PartitionDesc>> cache =
-      new ConcurrentHashMap<>();
+  private final Map<Map<Path, PartitionDesc>, Map<Path, PartitionDesc>> cache =
+      new HashMap<>();
 
   private final TezMapredSplitsGrouper tezGrouper = new TezMapredSplitsGrouper();
 
@@ -108,8 +108,8 @@ public class SplitGrouper {
           tezGrouper.getGroupedSplits(conf, rawSplits, bucketTaskMap.get(bucketId),
                   inputFormatClass.getName(), new ColumnarSplitSizeEstimator(), splitLocationProvider);
 
-      LOG.info("Original split count is " + rawSplits.length + " grouped split count is "
-          + groupedSplits.length + ", for bucket: " + bucketId);
+      LOG.info("Original split count is {}, grouped split count is {} for bucket: {}",
+          rawSplits.length, groupedSplits.length, bucketId);
 
       for (InputSplit inSplit : groupedSplits) {
         bucketGroupedSplitMultimap.put(bucketId, inSplit);

@@ -41,6 +41,7 @@ import org.apache.hadoop.hive.ql.exec.TaskFactory;
 import org.apache.hadoop.hive.ql.exec.TaskResult;
 import org.apache.hadoop.hive.ql.exec.TaskRunner;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.tez.TezTask;
 import org.apache.hadoop.hive.ql.history.HiveHistory.Keys;
 import org.apache.hadoop.hive.ql.hooks.HookContext;
 import org.apache.hadoop.hive.ql.hooks.PrivateHookContext;
@@ -343,6 +344,9 @@ public class Executor {
     }
 
     task.initialize(driverContext.getQueryState(), driverContext.getPlan(), taskQueue, context);
+    if (task instanceof TezTask) {
+      ((TezTask) task).setDriverContext(driverContext);
+    }
     TaskRunner taskRun = new TaskRunner(task, taskQueue);
     taskQueue.launching(taskRun);
 

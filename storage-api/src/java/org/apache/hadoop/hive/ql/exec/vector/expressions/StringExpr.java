@@ -21,6 +21,7 @@ package org.apache.hadoop.hive.ql.exec.vector.expressions;
 import java.util.Arrays;
 
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
+import org.apache.tez.util.FastByteComparisons;
 
 /**
  * String expression evaluation helper functions.
@@ -35,66 +36,12 @@ public class StringExpr {
    * positive if arg1 > arg2.
    */
   public static int compare(byte[] arg1, int start1, int len1, byte[] arg2, int start2, int len2) {
-    for (int i = 0; i < len1 && i < len2; i++) {
-      // Note the "& 0xff" is just a way to convert unsigned bytes to signed integer.
-      int b1 = arg1[i + start1] & 0xff;
-      int b2 = arg2[i + start2] & 0xff;
-      if (b1 != b2) {
-        return b1 - b2;
-      }
-    }
-    return len1 - len2;
+    return FastByteComparisons.compareTo(arg1, start1, len1, arg2, start2, len2);
   }
 
-  /* Determine if two strings are equal from two byte arrays each
-   * with their own start position and length.
-   * Use lexicographic unsigned byte value order.
-   * This is what's used for UTF-8 sort order.
-   */
-  public static boolean equal(byte[] arg1, final int start1, final int len1,
-      byte[] arg2, final int start2, final int len2) {
-    if (len1 != len2) {
-      return false;
-    }
-    if (len1 == 0) {
-      return true;
-    }
-
-    // do bounds check for OOB exception
-    if (arg1[start1] != arg2[start2]
-        || arg1[start1 + len1 - 1] != arg2[start2 + len2 - 1]) {
-      return false;
-    }
-
-    if (len1 == len2) {
-      // prove invariant to the compiler: len1 = len2
-      // all array access between (start1, start1+len1) 
-      // and (start2, start2+len2) are valid
-      // no more OOB exceptions are possible
-      final int step = 8;
-      final int remainder = len1 % step;
-      final int wlen = len1 - remainder;
-      // suffix first
-      for (int i = wlen; i < len1; i++) {
-        if (arg1[start1 + i] != arg2[start2 + i]) {
-          return false;
-        }
-      }
-      // SIMD loop
-      for (int i = 0; i < wlen; i += step) {
-        final int s1 = start1 + i;
-        final int s2 = start2 + i;
-        boolean neq = false;
-        for (int j = 0; j < step; j++) {
-          neq = (arg1[s1 + j] != arg2[s2 + j]) || neq;
-        }
-        if (neq) {
-          return false;
-        }
-      }
-    }
-
-    return true;
+  public static boolean equal(byte[] arg1, final int s1, final int len1,
+                              byte[] arg2, final int s2, final int len2) {
+    return FastByteComparisons.compareEqual(arg1, s1, len1, arg2, s2, len2);
   }
 
   public static int characterCount(byte[] bytes) {

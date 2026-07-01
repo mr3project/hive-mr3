@@ -20,6 +20,9 @@ package org.apache.hadoop.hive.serde2.binarysortable;
 import java.io.EOFException;
 import java.io.IOException;
 
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
+
 /**
  * This class is much more efficient than ByteArrayInputStream because none of
  * the methods are synchronized.
@@ -58,6 +61,47 @@ public class InputByteBuffer {
     } else {
       return data[start++];
     }
+  }
+
+  /**
+   * Read eight bytes as a long from the buffer and optionally invert all bits.
+   */
+  public final long readLong(boolean invert) throws IOException {
+    if (start + Long.BYTES > end) {
+      throw new EOFException();
+    }
+    long v = theUnsafe.getLong(data, BYTE_ARRAY_BASE_OFFSET + start);
+    start += Long.BYTES;
+    long r = Long.reverseBytes(v);
+    return invert ? ~r : r;
+  }
+
+  public final int readInt(boolean invert) throws IOException {
+    if (start + Integer.BYTES > end) {
+      throw new EOFException();
+    }
+    int v = theUnsafe.getInt(data, BYTE_ARRAY_BASE_OFFSET + start);
+    start += Integer.BYTES;
+    int r = Integer.reverseBytes(v);
+    return invert ? ~r : r;
+  }
+
+  /**
+   * Read bytes into the given array and optionally invert all bits.
+   */
+  public final void readFully(byte[] dest, int offset, int length, boolean invert) throws IOException {
+    if (start + length > end) {
+      throw new EOFException();
+    }
+    if (!invert) {
+      System.arraycopy(data, start, dest, offset, length);
+      start += length;
+      return;
+    }
+    for (int i = 0; i < length; i++) {
+      dest[offset + i] = (byte) (0xff ^ data[start + i]);
+    }
+    start += length;
   }
 
   /**

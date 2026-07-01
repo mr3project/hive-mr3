@@ -58,6 +58,7 @@ import org.apache.hadoop.hive.ql.stats.fs.FSStatsPublisher;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
@@ -227,7 +228,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
   protected transient Map<String, LongWritable> statsMap = new HashMap<String, LongWritable>();
   @SuppressWarnings("rawtypes")
-  protected transient OutputCollector out;
+  protected transient OutputCollector<? extends BytesWritable, BytesWritable> out;
   protected transient final Logger LOG = LoggerFactory.getLogger(getClass().getName());
   protected transient String alias;
   protected transient Reporter reporter;
@@ -257,7 +258,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
   }
 
   @SuppressWarnings("rawtypes")
-  public void setOutputCollector(OutputCollector out) {
+  public void setOutputCollector(OutputCollector<? extends BytesWritable, BytesWritable> out) {
     this.out = out;
 
     for (Operator<? extends OperatorDesc> op : childOperators) {
@@ -510,6 +511,9 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
   public void abort() {
     LOG.info("Received Abort in Operator: {}", this);
     abortOp.set(true);
+    for (Operator<? extends OperatorDesc> op : childOperators) {
+      op.abort();
+    }
   }
 
   /**

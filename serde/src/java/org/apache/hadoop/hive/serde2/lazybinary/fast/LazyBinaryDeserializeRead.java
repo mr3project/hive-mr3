@@ -20,9 +20,7 @@ package org.apache.hadoop.hive.serde2.lazybinary.fast;
 
 import java.io.EOFException;
 import java.io.IOException;
-import java.util.ArrayDeque;
 import java.util.Arrays;
-import java.util.Deque;
 import java.util.List;
 
 import org.apache.hadoop.hive.common.type.DataTypePhysicalVariation;
@@ -73,7 +71,11 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
   private VInt tempVInt;
   private VLong tempVLong;
 
-  private Deque<Field> stack = new ArrayDeque<>();
+  private static final int INITIAL_STACK_SIZE = 16;
+
+  private Field[] stack;
+  private int stackDepth;
+  private int currentGeneration;
   private Field root;
 
   private class Field {
@@ -91,6 +93,7 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
     int nullByteStart;
     byte nullByte;
     byte tag;
+    int generation;
   }
 
   public LazyBinaryDeserializeRead(TypeInfo[] typeInfos, boolean useExternalBuffer) {
@@ -103,6 +106,8 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
     tempVInt = new VInt();
     tempVLong = new VLong();
     currentExternalBufferNeeded = false;
+
+    stack = new Field[INITIAL_STACK_SIZE];
 
     root = new Field();
     root.category = Category.STRUCT;
@@ -162,19 +167,60 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
     start = offset;
     end = offset + length;
 
-    stack.clear();
-    stack.push(root);
-    clearIndex(root);
+    nextGeneration();
+    prepareField(root);
+    resetStack();
   }
 
-  private void clearIndex(Field field) {
-    field.index = 0;
+  private void nextGeneration() {
+    currentGeneration++;
+    if (currentGeneration == 0) {
+      clearGeneration(root);
+      currentGeneration = 1;
+    }
+  }
+
+  private void clearGeneration(Field field) {
+    field.generation = 0;
     if (field.children == null) {
       return;
     }
     for (Field child : field.children) {
-      clearIndex(child);
+      clearGeneration(child);
     }
+  }
+
+  private void prepareField(Field field) {
+    if (field.generation != currentGeneration) {
+      field.generation = currentGeneration;
+      field.index = 0;
+      field.tag = 0;
+      field.nullByte = 0;
+    }
+  }
+
+  private void resetStack() {
+    stackDepth = 1;
+    stack[0] = root;
+  }
+
+  private Field peekStack() {
+    return stack[stackDepth - 1];
+  }
+
+  private void pushStack(Field field) {
+    if (stackDepth == stack.length) {
+      stack = Arrays.copyOf(stack, stack.length * 2);
+    }
+    stack[stackDepth++] = field;
+  }
+
+  private Field popStack() {
+    stackDepth--;
+    if (stackDepth == 0) {
+      throw new RuntimeException();
+    }
+    return stack[stackDepth - 1];
   }
 
   /*
@@ -415,7 +461,8 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
    * Designed for skipping columns that are not included.
    */
   public void skipNextField() throws IOException {
-    final Field current = stack.peek();
+    final Field current = peekStack();
+    prepareField(current);
     final boolean isNull = isNull(current);
 
     if (isNull) {
@@ -435,7 +482,8 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
       current.index++;
     } else {
       parseHeader(child);
-      stack.push(child);
+      prepareField(child);
+      pushStack(child);
 
       for (int i = 0; i < child.count; i++) {
         skipNextField();
@@ -464,21 +512,19 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
   }
 
   private boolean isNull(Field field) {
-    final byte b = (byte) (1 << (field.index % 8));
+    final int bit = 1 << (field.index & 7);
     switch (field.category) {
     case PRIMITIVE:
+    case UNION:
       return false;
     case LIST:
     case MAP:
-      final byte nullByte = bytes[field.nullByteStart + (field.index / 8)];
-      return (nullByte & b) == 0;
+      return (bytes[field.nullByteStart + (field.index >>> 3)] & bit) == 0;
     case STRUCT:
-      if (field.index % 8 == 0) {
+      if ((field.index & 7) == 0) {
         field.nullByte = bytes[offset++];
       }
-      return (field.nullByte & b) == 0;
-    case UNION:
-      return false;
+      return (field.nullByte & bit) == 0;
     default:
       throw new RuntimeException();
     }
@@ -549,7 +595,8 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
   // Push or next
   @Override
   public boolean readComplexField() throws IOException {
-    final Field current = stack.peek();
+    final Field current = peekStack();
+    prepareField(current);
     boolean isNull = isNull(current);
 
     if (isNull) {
@@ -569,7 +616,8 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
       current.index++;
     } else {
       parseHeader(child);
-      stack.push(child);
+      prepareField(child);
+      pushStack(child);
     }
 
     if (offset > end) {
@@ -581,11 +629,11 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
   // Pop (list, map)
   @Override
   public boolean isNextComplexMultiValue() {
-    Field current = stack.peek();
+    Field current = peekStack();
+    prepareField(current);
     final boolean isNext = current.index < current.count;
     if (!isNext) {
-      stack.pop();
-      stack.peek().index++;
+      popStack().index++;
     }
     return isNext;
   }
@@ -593,10 +641,6 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
   // Pop (struct, union)
   @Override
   public void finishComplexVariableFieldsType() {
-    stack.pop();
-    if (stack.peek() == null) {
-      throw new RuntimeException();
-    }
-    stack.peek().index++;
+    popStack().index++;
   }
 }

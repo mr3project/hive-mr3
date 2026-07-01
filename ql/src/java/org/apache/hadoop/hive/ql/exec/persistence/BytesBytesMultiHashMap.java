@@ -1054,10 +1054,10 @@ public final class BytesBytesMultiHashMap implements MemoryEstimate {
   }
 
   public void debugDumpMetrics() {
-    LOG.info("Map metrics: keys allocated " + this.refs.length +", keys assigned " + keysAssigned
+    if (LOG.isDebugEnabled()) { LOG.debug("Map metrics: keys allocated " + this.refs.length +", keys assigned " + keysAssigned
         + ", write conflict " + metricPutConflict  + ", write max dist " + largestNumberOfSteps
         + ", read conflict " + metricGetConflict
-        + ", expanded " + metricExpands + " times in " + metricExpandsMs + "ms");
+        + ", expanded " + metricExpands + " times in " + metricExpandsMs + "ms"); }
   }
 
   private void debugDumpKeyProbe(long keyOffset, int keyLength, int hashCode, int finalSlot) {

@@ -59,9 +59,11 @@ import org.apache.tez.mapreduce.common.MRInputSplitDistributor;
 import org.apache.tez.mapreduce.hadoop.InputSplitInfo;
 import org.apache.tez.mapreduce.output.MROutput;
 import org.apache.tez.mapreduce.protos.MRRuntimeProtos;
-import org.apache.tez.runtime.library.api.Partitioner;
 import org.apache.tez.runtime.library.cartesianproduct.CartesianProductConfig;
 import org.apache.tez.runtime.library.cartesianproduct.CartesianProductEdgeManager;
+import org.apache.tez.runtime.library.input.OrderedGroupedMergedKVInput;
+import org.apache.tez.runtime.library.partitioner.HashPartitioner;
+import org.apache.tez.runtime.library.partitioner.ValueHashPartitioner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -80,7 +82,6 @@ import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr.ExecMapper;
 import org.apache.hadoop.hive.ql.exec.mr.ExecReducer;
-import org.apache.hadoop.hive.ql.exec.tez.tools.TezMergedLogicalInput;
 import org.apache.hadoop.hive.ql.io.BucketizedHiveInputFormat;
 import org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils.NullOutputCommitter;
@@ -155,15 +156,11 @@ import org.apache.tez.dag.api.Vertex.VertexExecutionContext;
 import org.apache.tez.dag.api.VertexGroup;
 import org.apache.tez.dag.api.VertexManagerPluginDescriptor;
 import org.apache.tez.dag.library.vertexmanager.ShuffleVertexManager;
-import org.apache.tez.mapreduce.hadoop.MRHelpers;
 import org.apache.tez.mapreduce.hadoop.MRInputHelpers;
-import org.apache.tez.mapreduce.hadoop.MRJobConfig;
 import org.apache.tez.mapreduce.input.MRInputLegacy;
 import org.apache.tez.mapreduce.input.MultiMRInput;
 import org.apache.tez.mapreduce.partition.MRPartitioner;
 import org.apache.tez.runtime.library.api.TezRuntimeConfiguration;
-import org.apache.tez.runtime.library.common.comparator.TezBytesComparator;
-import org.apache.tez.runtime.library.common.serializer.TezBytesWritableSerialization;
 import org.apache.tez.runtime.library.conf.OrderedPartitionedKVEdgeConfig;
 import org.apache.tez.runtime.library.conf.UnorderedKVEdgeConfig;
 import org.apache.tez.runtime.library.conf.UnorderedPartitionedKVEdgeConfig;
@@ -195,7 +192,7 @@ public class DagUtils {
    */
   private final ConcurrentHashMap<String, Object> copyNotifiers = new ConcurrentHashMap<>();
 
-  class CollectFileSinkUrisNodeProcessor implements SemanticNodeProcessor {
+  public class CollectFileSinkUrisNodeProcessor implements SemanticNodeProcessor {
 
     private final Set<URI> uris;
     private final Set<TableDesc> tableDescs;
@@ -304,8 +301,10 @@ public class DagUtils {
   private static List<DagCredentialSupplier> defaultCredentialSuppliers() {
     // Class names of credential providers that should be used when adding credentials to the dag.
     // Use plain strings instead of {@link Class#getName()} to avoid compile scope dependencies to other modules.
-    List<String> supplierClassNames =
-        Collections.singletonList("org.apache.hadoop.hive.kafka.KafkaDagCredentialSupplier");
+    // do not use "org.apache.hadoop.hive.kafka.KafkaDagCredentialSupplier" in supplierClassNames because:
+    //   1) DagUtils.credentialSuppliers is not used in Hive-MR3;
+    //   2) the class file is not available during testing, thus calling LOG.error() below.
+    List<String> supplierClassNames = Collections.emptyList();
     List<DagCredentialSupplier> dagSuppliers = new ArrayList<>();
     for (String s : supplierClassNames) {
       try {
@@ -318,7 +317,7 @@ public class DagUtils {
     return dagSuppliers;
   }
 
-  private void collectNeededFileSinkData(BaseWork work, Set<URI> fileSinkUris, Set<TableDesc> fileSinkTableDescs) {
+  public void collectNeededFileSinkData(BaseWork work, Set<URI> fileSinkUris, Set<TableDesc> fileSinkTableDescs) {
     List<Node> topNodes = getTopNodes(work);
     LOG.debug("Collecting file sink uris for {} topnodes: {}", work.getClass(), topNodes);
     collectFileSinkUris(topNodes, fileSinkUris, fileSinkTableDescs);
@@ -334,7 +333,7 @@ public class DagUtils {
     dag.addURIsForCredentials(fileSinkUris);
   }
 
-  private List<Node> getTopNodes(BaseWork work) {
+  public List<Node> getTopNodes(BaseWork work) {
     List<Node> topNodes = new ArrayList<Node>();
 
     if (work instanceof MapWork) {
@@ -366,11 +365,6 @@ public class DagUtils {
     JobConf conf = new JobConf(baseConf);
 
     conf.set(Operator.CONTEXT_NAME_KEY, mapWork.getName());
-
-    if (mapWork.getNumMapTasks() != null) {
-      // Is this required ?
-      conf.setInt(MRJobConfig.NUM_MAPS, mapWork.getNumMapTasks().intValue());
-    }
 
     if (mapWork.getMaxSplitSize() != null) {
       HiveConf.setLongVar(conf, HiveConf.ConfVars.MAPRED_MAX_SPLIT_SIZE,
@@ -480,7 +474,8 @@ public class DagUtils {
       // fall through
 
     default:
-      mergeInputClass = TezMergedLogicalInput.class;
+      mergeInputClass = OrderedGroupedMergedKVInput.class;
+
       break;
     }
 
@@ -541,10 +536,9 @@ public class DagUtils {
   private EdgeProperty createEdgeProperty(Vertex w, TezEdgeProperty edgeProp,
                                           Configuration conf, BaseWork work, TezWork tezWork)
           throws IOException {
-    MRHelpers.translateMRConfToTez(conf);
+    // do not call MRHelpers because we do not use Tez
     String keyClass = conf.get(TezRuntimeConfiguration.TEZ_RUNTIME_KEY_CLASS);
     String valClass = conf.get(TezRuntimeConfiguration.TEZ_RUNTIME_VALUE_CLASS);
-    String partitionerClassName = conf.get("mapred.partitioner.class");
     Map<String, String> partitionerConf;
 
     EdgeType edgeType = edgeProp.getEdgeType();
@@ -553,18 +547,12 @@ public class DagUtils {
       UnorderedKVEdgeConfig et1Conf = UnorderedKVEdgeConfig
           .newBuilder(keyClass, valClass)
           .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName(), null)
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName(), null)
           .build();
       return et1Conf.createDefaultBroadcastEdgeProperty();
     case CUSTOM_EDGE:
-      assert partitionerClassName != null;
-      partitionerConf = createPartitionerConf(partitionerClassName, conf);
       UnorderedPartitionedKVEdgeConfig et2Conf = UnorderedPartitionedKVEdgeConfig
-          .newBuilder(keyClass, valClass, MRPartitioner.class.getName(), partitionerConf)
+          .newBuilder(keyClass, valClass, MRPartitioner.class.getName())
           .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName(), null)
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName(), null)
           .build();
       EdgeManagerPluginDescriptor edgeDesc =
           EdgeManagerPluginDescriptor.create(CustomPartitionEdge.class.getName());
@@ -576,13 +564,9 @@ public class DagUtils {
       edgeDesc.setUserPayload(UserPayload.create(ByteBuffer.wrap(userPayload)));
       return et2Conf.createDefaultCustomEdgeProperty(edgeDesc);
     case CUSTOM_SIMPLE_EDGE:
-      assert partitionerClassName != null;
-      partitionerConf = createPartitionerConf(partitionerClassName, conf);
       UnorderedPartitionedKVEdgeConfig.Builder et3Conf = UnorderedPartitionedKVEdgeConfig
-          .newBuilder(keyClass, valClass, MRPartitioner.class.getName(), partitionerConf)
-          .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName(), null)
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName(), null);
+          .newBuilder(keyClass, valClass, MRPartitioner.class.getName())
+          .setFromConfiguration(conf);
       if (edgeProp.getBufferSize() != null) {
         et3Conf.setAdditionalConfiguration(
             TezRuntimeConfiguration.TEZ_RUNTIME_UNORDERED_OUTPUT_BUFFER_SIZE_MB,
@@ -593,8 +577,6 @@ public class DagUtils {
       UnorderedKVEdgeConfig et4Conf = UnorderedKVEdgeConfig
           .newBuilder(keyClass, valClass)
           .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName(), null)
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName(), null)
           .build();
       return et4Conf.createDefaultOneToOneEdgeProperty();
     case XPROD_EDGE:
@@ -608,56 +590,20 @@ public class DagUtils {
       }
       CartesianProductConfig cpConfig = new CartesianProductConfig(crossProductSources);
       edgeManagerDescriptor.setUserPayload(cpConfig.toUserPayload(new TezConfiguration(conf)));
-      UnorderedPartitionedKVEdgeConfig cpEdgeConf =
-        UnorderedPartitionedKVEdgeConfig.newBuilder(keyClass, valClass,
-          ValueHashPartitioner.class.getName())
-            .setFromConfiguration(conf)
-            .setKeySerializationClass(TezBytesWritableSerialization.class.getName(), null)
-            .setValueSerializationClass(TezBytesWritableSerialization.class.getName(), null)
-            .build();
+      UnorderedPartitionedKVEdgeConfig cpEdgeConf = UnorderedPartitionedKVEdgeConfig
+          .newBuilder(keyClass, valClass, ValueHashPartitioner.class.getName())
+          .setFromConfiguration(conf)
+          .build();
       return cpEdgeConf.createDefaultCustomEdgeProperty(edgeManagerDescriptor);
     case SIMPLE_EDGE:
       // fallthrough
     default:
-      assert partitionerClassName != null;
-      partitionerConf = createPartitionerConf(partitionerClassName, conf);
       OrderedPartitionedKVEdgeConfig et5Conf = OrderedPartitionedKVEdgeConfig
-          .newBuilder(keyClass, valClass, MRPartitioner.class.getName(), partitionerConf)
+          .newBuilder(keyClass, valClass, MRPartitioner.class.getName())
           .setFromConfiguration(conf)
-          .setKeySerializationClass(TezBytesWritableSerialization.class.getName(),
-              TezBytesComparator.class.getName(), null)
-          .setValueSerializationClass(TezBytesWritableSerialization.class.getName(), null)
           .build();
       return et5Conf.createDefaultEdgeProperty();
     }
-  }
-
-  public static class ValueHashPartitioner implements Partitioner {
-
-    @Override
-    public int getPartition(Object key, Object value, int numPartitions) {
-      return (value.hashCode() & 2147483647) % numPartitions;
-    }
-  }
-
-  /**
-   * Utility method to create a stripped down configuration for the MR partitioner.
-   *
-   * @param partitionerClassName
-   *          the real MR partitioner class name
-   * @param baseConf
-   *          a base configuration to extract relevant properties
-   * @return
-   */
-  private Map<String, String> createPartitionerConf(String partitionerClassName,
-      Configuration baseConf) {
-    Map<String, String> partitionerConf = new HashMap<String, String>();
-    partitionerConf.put("mapred.partitioner.class", partitionerClassName);
-    if (baseConf.get("mapreduce.totalorderpartitioner.path") != null) {
-      partitionerConf.put("mapreduce.totalorderpartitioner.path",
-      baseConf.get("mapreduce.totalorderpartitioner.path"));
-    }
-    return partitionerConf;
   }
 
   /*
@@ -667,26 +613,7 @@ public class DagUtils {
    */
   public static Resource getContainerResource(Configuration conf) {
     int memorySizeMb = HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVE_TEZ_CONTAINER_SIZE);
-    if (memorySizeMb <= 0) {
-      LOG.warn("No Tez container size specified by {}. Falling back to MapReduce container MB {}",
-          HiveConf.ConfVars.HIVE_TEZ_CONTAINER_SIZE,  MRJobConfig.MAP_MEMORY_MB);
-      memorySizeMb = conf.getInt(MRJobConfig.MAP_MEMORY_MB, MRJobConfig.DEFAULT_MAP_MEMORY_MB);
-      // When config is explicitly set to "-1" defaultValue does not work!
-      if (memorySizeMb <= 0) {
-        LOG.warn("Falling back to default container MB {}", MRJobConfig.DEFAULT_MAP_MEMORY_MB);
-        memorySizeMb = MRJobConfig.DEFAULT_MAP_MEMORY_MB;
-      }
-    }
     int cpuCores = HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVE_TEZ_CPU_VCORES);
-    if (cpuCores <= 0) {
-      LOG.warn("No Tez VCore size specified by {}. Falling back to MapReduce container VCores {}",
-          HiveConf.ConfVars.HIVE_TEZ_CPU_VCORES,  MRJobConfig.MAP_CPU_VCORES);
-      cpuCores = conf.getInt(MRJobConfig.MAP_CPU_VCORES, MRJobConfig.DEFAULT_MAP_CPU_VCORES);
-      if (cpuCores <= 0) {
-        LOG.warn("Falling back to default container VCores {}", MRJobConfig.DEFAULT_MAP_CPU_VCORES);
-        cpuCores = MRJobConfig.DEFAULT_MAP_CPU_VCORES;
-      }
-    }
     Resource resource = Resource.newInstance(memorySizeMb, cpuCores);
     LOG.debug("Tez container resource: {}", resource);
     return resource;
@@ -698,7 +625,7 @@ public class DagUtils {
   @VisibleForTesting
   Map<String, String> getContainerEnvironment(Configuration conf, boolean isMap) {
     Map<String, String> environment = new HashMap<String, String>();
-    MRHelpers.updateEnvBasedOnMRTaskEnv(conf, environment, isMap);
+    // do not call MRHelpers because we do not use Tez
     return environment;
   }
 
@@ -727,7 +654,8 @@ public class DagUtils {
         LOG.warn(HiveConf.ConfVars.HIVE_TEZ_JAVA_OPTS + " will be ignored because "
                  + HiveConf.ConfVars.HIVE_TEZ_CONTAINER_SIZE + " is not set!");
       }
-      finalOpts = logLevel + " " + MRHelpers.getJavaOptsForMRMapper(conf);
+      // do not call MRHelpers because we do not use Tez
+      finalOpts = logLevel;
     }
     LOG.debug("Tez container final opts: {}", finalOpts);
     return finalOpts;
@@ -944,9 +872,6 @@ public class DagUtils {
 
     // Is this required ?
     conf.set("mapred.reducer.class", ExecReducer.class.getName());
-    // HIVE-23354 enforces that MR speculative execution is disabled
-    conf.setBoolean(org.apache.hadoop.mapreduce.MRJobConfig.REDUCE_SPECULATIVE, false);
-    conf.setBoolean(org.apache.hadoop.mapreduce.MRJobConfig.MAP_SPECULATIVE, false);
     return conf;
   }
 
@@ -1445,16 +1370,14 @@ public class DagUtils {
    * @return JobConf base configuration for job execution
    * @throws IOException
    */
-  public JobConf createConfiguration(HiveConf hiveConf, boolean skipAMConf) throws IOException {
+  public JobConf createConfiguration(HiveConf hiveConf, boolean skipAMConf) throws IOException {  // skipAMConf == false
     hiveConf.setBoolean("mapred.mapper.new-api", false);
 
-    Predicate<String> findDefaults =
-        (s) -> ((s != null) && (s.endsWith(".xml") || (s.endsWith(".java") && !"HiveConf.java".equals(s))));
+    // Predicate<String> findDefaults =
+    //    (s) -> ((s != null) && (s.endsWith(".xml") || (s.endsWith(".java") && !"HiveConf.java".equals(s))));
 
     // since this is an inclusion filter, negate the predicate
-    JobConf conf =
-        TezConfigurationFactory
-            .wrapWithJobConf(hiveConf, skipAMConf ? findDefaults.negate() : null);
+    JobConf conf = TezConfigurationFactory.wrapWithJobConfWithoutSourceTracking(hiveConf);
 
     if (conf.get("mapred.output.committer.class") == null) {
       conf.set("mapred.output.committer.class", NullOutputCommitter.class.getName());
@@ -1465,11 +1388,9 @@ public class DagUtils {
 
     conf.setClass("mapred.output.format.class", HiveOutputFormatImpl.class, OutputFormat.class);
 
-    conf.set(MRJobConfig.OUTPUT_KEY_CLASS, HiveKey.class.getName());
-    conf.set(MRJobConfig.OUTPUT_VALUE_CLASS, BytesWritable.class.getName());
-
-    conf.set("mapred.partitioner.class", HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_PARTITIONER));
-    conf.set("tez.runtime.partitioner.class", MRPartitioner.class.getName());
+    conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_KEY_CLASS, HiveKey.class.getName());
+    conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_VALUE_CLASS, BytesWritable.class.getName());
+    conf.set(TezRuntimeConfiguration.TEZ_RUNTIME_PARTITIONER_CLASS, HashPartitioner.class.getName());
 
     // Removing job credential entry/ cannot be set on the tasks
     conf.unset("mapreduce.job.credentials.binary");
