@@ -36,6 +36,8 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.io.CacheTag;
 import org.apache.hadoop.hive.common.io.encoded.MemoryBufferOrBuffers;
 import org.apache.hadoop.hive.llap.ProactiveEviction;
+import org.apache.hadoop.hive.llap.cache.EvictionAwareSimpleAllocator;
+import org.apache.hadoop.hive.llap.cache.EvictionAwareStoppableAllocator;
 import org.apache.hadoop.hive.llap.cache.LlapCacheHydration;
 import org.apache.hadoop.hive.llap.cache.MemoryLimitedPathCache;
 import org.apache.hadoop.hive.llap.cache.PathCache;
@@ -173,10 +175,18 @@ public class LlapIoImpl implements LlapIo<VectorizedRowBatch>, LlapIoDebugDump {
     BufferUsageManager bufferManagerOrc = null, bufferManagerGeneric = null;
     boolean isEncodeEnabled = useLowLevelCache
         && HiveConf.getBoolVar(conf, ConfVars.LLAP_IO_ENCODE_ENABLED);
+    boolean useHeapMemoryForLlapIo = HiveConf.getBoolVar(conf, ConfVars.MR3_LLAP_USE_HEAP_MEMORY);
     if (useLowLevelCache) {
       // Memory manager uses cache policy to trigger evictions, so create the policy first.
       boolean useLrfu = HiveConf.getBoolVar(conf, HiveConf.ConfVars.LLAP_USE_LRFU);
-      long totalMemorySize = HiveConf.getSizeVar(conf, ConfVars.LLAP_IO_MEMORY_MAX_SIZE);
+
+      long totalMemorySize;
+      if (useHeapMemoryForLlapIo) {
+        totalMemorySize = 1024L * 1024L * HiveConf.getIntVar(conf, HiveConf.ConfVars.MR3_LLAP_HEAP_MEMORY_MAX_SIZE_MB);
+      } else {
+        totalMemorySize = HiveConf.getSizeVar(conf, ConfVars.LLAP_IO_MEMORY_MAX_SIZE);
+      }
+
       int minAllocSize = (int) HiveConf.getSizeVar(conf, ConfVars.LLAP_ALLOCATOR_MIN_ALLOC);
       realCachePolicy =
           useLrfu ? new LowLevelLrfuCachePolicy(minAllocSize, totalMemorySize, conf) : new LowLevelFifoCachePolicy();
@@ -195,9 +205,19 @@ public class LlapIoImpl implements LlapIo<VectorizedRowBatch>, LlapIoDebugDump {
       this.memoryManager = new LowLevelCacheMemoryManager(
           totalMemorySize, cachePolicyWrapper, cacheMetrics);
       cacheMetrics.setCacheCapacityTotal(totalMemorySize);
-      // Cache uses allocator to allocate and deallocate, create allocator and then caches.
-      BuddyAllocator allocator = new BuddyAllocator(conf, memoryManager, cacheMetrics);
-      this.allocator = allocator;
+
+      EvictionAwareStoppableAllocator allocator;
+      if (useHeapMemoryForLlapIo) {
+        int allocatorMaxAlloc = (int) HiveConf.getSizeVar(conf, ConfVars.LLAP_ALLOCATOR_MAX_ALLOC);
+        allocator = new EvictionAwareSimpleAllocator(
+            new SimpleAllocator(conf), memoryManager, allocatorMaxAlloc);
+        this.allocator = allocator;
+      } else {
+        // Cache uses allocator to allocate and deallocate, create allocator and then caches.
+        allocator = new BuddyAllocator(conf, memoryManager, cacheMetrics);
+        this.allocator = allocator;
+      }
+
       LowLevelCacheImpl cacheImpl = new LowLevelCacheImpl(
           cacheMetrics, cachePolicyWrapper, allocator, true);
       dataCache = cacheImpl;
@@ -273,7 +293,9 @@ public class LlapIoImpl implements LlapIo<VectorizedRowBatch>, LlapIoDebugDump {
         serdeCache, bufferManagerGeneric, conf, cacheMetrics, ioMetrics, tracePool, encodeExecutor) : null;
     LOG.info("LLAP IO initialized");
 
-    registerMXBeans();
+    if (!useHeapMemoryForLlapIo) {
+      registerMXBeans();
+    }
     LlapCacheHydration.setupAndStartIfEnabled(daemonConf);
   }
 
