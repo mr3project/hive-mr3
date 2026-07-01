@@ -75,6 +75,7 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.hive.common.util.HiveStringUtils;
 import org.apache.hive.common.util.Ref;
 import org.apache.hive.common.util.ReflectionUtil;
+import org.apache.tez.mapreduce.input.MRInput;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -295,6 +296,11 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
     if (!HiveConf.getBoolVar(conf, ConfVars.LLAP_IO_ENABLED, LlapProxy.isDaemon())) {
       return inputFormat; // LLAP not enabled, no-op.
     }
+
+    if (!conf.getBoolean(MRInput.TEZ_MR3_SCHEDULED_ON_HOST, false)) {
+      return inputFormat; // use LLAP-IO cache only if TEZ_MR3_SCHEDULED_ON_HOST is exlicitly set
+    }
+
     String ifName = inputFormat.getClass().getCanonicalName();
     boolean isSupported = inputFormat instanceof LlapWrappableInputFormatInterface;
     boolean isCacheOnly = inputFormat instanceof LlapCacheOnlyInputFormatInterface;
@@ -491,7 +497,7 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
      * false due to an invalid cache key (like: "null_limit_reached"), so this will silently acts as
      * limit hasn't been reached, which is a proper behavior in case we don't support early bailout.
      */
-    return LimitOperator.checkLimitReachedForVertex(job, job.get("tez.mapreduce.vertex.name"));
+    return LimitOperator.checkLimitReachedForVertex(job);
   }
 
   protected void init(JobConf job) {
