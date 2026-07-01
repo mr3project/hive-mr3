@@ -154,7 +154,7 @@ public abstract class VectorMapJoinFastBytesHashMap
 
   public void add(byte[] keyBytes, int keyStart, int keyLength, BytesWritable currentValue, long hashCode) {
 
-    if (checkResize()) {
+    if (checkResize()) {  // glad
       expandAndRehash();
     }
 
@@ -192,18 +192,19 @@ public abstract class VectorMapJoinFastBytesHashMap
       // debugDumpKeyProbe(keyOffset, keyLength, hashCode, slot);
     }
 
-    byte[] valueBytes = currentValue.getBytes();
+    byte[] valueBytes = currentValue.getBytesRaw();
+    int valueOffset = currentValue.getOffset();
     int valueLength = currentValue.getLength();
 
     if (isNewKey) {
       slots[slot] =
           hashMapStore.addFirst(
-              partialHashCode, keyBytes, keyStart, keyLength, valueBytes, 0, valueLength);
+              partialHashCode, keyBytes, keyStart, keyLength, valueBytes, valueOffset, valueLength);
       keysAssigned++;
     } else {
       final long newRefWord =
           hashMapStore.addMore(
-              refWord, valueBytes, 0, valueLength, unsafeReadPos);
+              refWord, valueBytes, valueOffset, valueLength, unsafeReadPos);
       if (newRefWord != refWord) {
         slots[slot] = newRefWord;
       }
@@ -290,20 +291,21 @@ public abstract class VectorMapJoinFastBytesHashMap
 
   public void addFullOuterNullKeyValue(BytesWritable currentValue) {
 
-    byte[] valueBytes = currentValue.getBytes();
+    byte[] valueBytes = currentValue.getBytesRaw();   // glad
+    int valueOffset = currentValue.getOffset();
     int valueLength = currentValue.getLength();
 
     if (fullOuterNullKeyRefWord == 0) {
       fullOuterNullKeyRefWord =
           hashMapStore.addFirst(
               /* partialHashCode */ 0, EMPTY_BYTES, 0, 0,
-              valueBytes, 0, valueLength);
+              valueBytes, valueOffset, valueLength);
     } else {
 
       // Add another value.
       fullOuterNullKeyRefWord =
           hashMapStore.addMore(
-              fullOuterNullKeyRefWord, valueBytes, 0, valueLength, unsafeReadPos);
+              fullOuterNullKeyRefWord, valueBytes, valueOffset, valueLength, unsafeReadPos);
     }
   }
 

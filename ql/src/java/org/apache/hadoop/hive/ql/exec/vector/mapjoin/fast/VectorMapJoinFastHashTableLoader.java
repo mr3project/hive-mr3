@@ -30,13 +30,15 @@ import java.util.concurrent.atomic.LongAccumulator;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.hive.common.Pool;
-import org.apache.hadoop.hive.llap.LlapDaemonInfo;
 import org.apache.hadoop.hive.ql.exec.MemoryMonitorInfo;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionError;
 import org.apache.hive.common.util.FixedSizedObjectPool;
+import org.apache.tez.common.counters.TaskCounter;
 import org.apache.tez.common.counters.TezCounter;
+import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
+import org.apache.tez.runtime.library.api.LogicalInputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -55,6 +57,7 @@ import org.apache.tez.runtime.api.Input;
 import org.apache.tez.runtime.api.LogicalInput;
 import org.apache.tez.runtime.library.api.KeyValueReader;
 import org.apache.tez.runtime.api.AbstractLogicalInput;
+import org.slf4j.MDC;
 
 /**
  * HashTableLoader for Tez constructs the hashtable from records read from
@@ -153,11 +156,16 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
     for (int partitionId = 0; partitionId < numLoadThreads; partitionId++) {
       int finalPartitionId = partitionId;
       this.loadExecService.submit(() -> {
+        Map<String, String> oldMdcContext = MDC.getCopyOfContextMap();
         try {
+          org.apache.tez.runtime.library.common.shuffle.ShuffleUtils.restoreMdc(
+              tezContext.getTezProcessorContext().getMdcContext());
           LOG.info("Partition id {} with Queue size {}", finalPartitionId, loadBatchQueues[finalPartitionId].size());
           drainAndLoadForPartition(finalPartitionId, vectorMapJoinFastTableContainer);
         } catch (IOException | InterruptedException | SerDeException | HiveException e) {
           throw new RuntimeException("Failed to start HT Load threads", e);
+        } finally {
+          org.apache.tez.runtime.library.common.shuffle.ShuffleUtils.restoreMdc(oldMdcContext);
         }
       });
     }
@@ -213,16 +221,14 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
     if (memoryMonitorInfo != null) {
       effectiveThreshold = memoryMonitorInfo.getEffectiveThreshold(desc.getMaxMemoryAvailable());
 
-      // hash table loading happens in server side, LlapDecider could kick out some fragments to run outside of LLAP.
-      // Flip the flag at runtime in case if we are running outside of LLAP
-      if (!LlapDaemonInfo.INSTANCE.isLlap()) {
-        memoryMonitorInfo.setLlap(false);
-      }
       if (memoryMonitorInfo.doMemoryMonitoring()) {
         doMemCheck = true;
         LOG.info("Memory monitoring for hash table loader enabled. {}", memoryMonitorInfo);
       }
     }
+
+    long interruptCheckInterval = HiveConf.getLongVar(hconf, HiveConf.ConfVars.MR3_MAPJOIN_INTERRUPT_CHECK_INTERVAL);
+    LOG.info("VectorMapJoin interruptCheckInterval = " + interruptCheckInterval);
 
     if (!doMemCheck) {
       LOG.info("Not doing hash table memory monitoring. {}", memoryMonitorInfo);
@@ -233,7 +239,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       }
 
       String inputName = parentToInput.get(pos);
-      LogicalInput input = tezContext.getInput(inputName);
+      LogicalInputEdge input = (LogicalInputEdge)tezContext.getInput(inputName);
 
       try {
         input.start();
@@ -244,18 +250,16 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       }
 
       try {
-        KeyValueReader kvReader = (KeyValueReader) input.getReader();
+        KeyValueReaderEdge kvReader = (KeyValueReaderEdge) input.getReader();
 
         Long keyCountObj = parentKeyCounts.get(pos);
         long estKeyCount = (keyCountObj == null) ? -1 : keyCountObj;
 
         long inputRecords = -1;
         try {
-          //TODO : Need to use class instead of string.
-          // https://issues.apache.org/jira/browse/HIVE-23981
-          inputRecords = ((AbstractLogicalInput) input).getContext().getCounters().
-                  findCounter("org.apache.tez.common.counters.TaskCounter",
-                          "APPROXIMATE_INPUT_RECORDS").getValue();
+          inputRecords = ((AbstractLogicalInput) input).getContext().getCounters()
+            .findCounter(TaskCounter.APPROXIMATE_INPUT_RECORDS)
+            .getValue();
         } catch (Exception e) {
           LOG.debug("Failed to get value for counter APPROXIMATE_INPUT_RECORDS", e);
         }
@@ -276,17 +280,26 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
         long receivedEntries = 0;
         long startTime = System.currentTimeMillis();
         while (kvReader.next()) {
-          BytesWritable currentKey = (BytesWritable) kvReader.getCurrentKey();
-          BytesWritable currentValue = (BytesWritable) kvReader.getCurrentValue();
+          // currentKey, currentValue: backing byte[] arrays of BytesWritable are immutable.
+          BytesWritable currentKey = kvReader.getCurrentKey();
+          BytesWritable currentValue = kvReader.getCurrentValue();
+
           long hashCode = tableContainer.getHashCode(currentKey);
+
           int partitionId = (int) ((numLoadThreads - 1) & hashCode); // numLoadThreads divisor must be a power of 2!
-          // call getBytes as copy is called later
-          HashTableElement h = new HashTableElement(hashCode, currentValue.copyBytes(), currentKey.copyBytes());
+
+          HashTableElement h = new HashTableElement(hashCode,
+              currentKey.getBytesRaw(), currentKey.getOffset(), currentKey.getLength(),
+              currentValue.getBytesRaw(), currentValue.getOffset(), currentValue.getLength());
+
           if (elementBatches[partitionId].addElement(h)) {
             loadBatchQueues[partitionId].add(elementBatches[partitionId]);
             elementBatches[partitionId] = batchPool.take();
           }
           receivedEntries++;
+          if ((receivedEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
+            throw new InterruptedException("Hash table loading interrupted");
+          }
           if (doMemCheck && (receivedEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
             final long estMemUsage = tableContainer.getEstimatedMemorySize();
             if (estMemUsage > effectiveThreshold) {
@@ -296,10 +309,10 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
                 LOG.error(msg);
                 throw new MapJoinMemoryExhaustionError(msg);
               } else {
-              LOG.info(
+              if (LOG.isDebugEnabled()) { LOG.debug(
                   "Checking hash table loader memory usage for input: {} numEntries: {} "
                       + "estimatedMemoryUsage: {} effectiveThreshold: {}",
-                  inputName, receivedEntries, estMemUsage, effectiveThreshold);
+                  inputName, receivedEntries, estMemUsage, effectiveThreshold); }
             }
           }
         }
@@ -345,20 +358,30 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
   private static class HashTableElement {
     private final long hashCode;
     private final byte[] keyBytes;
+    private final int keyOffset, keyLength;
     private final byte[] valueBytes;
+    private final int valueOffset, valueLength;
 
-    public HashTableElement(long hashCode, byte[] valueBytes, byte[] keyBytes) {
+    public HashTableElement(long hashCode,
+                            byte[] keyBytes, int keyOffset, int keyLength,
+                            byte[] valueBytes, int valueOffset, int valueLength) {
       this.hashCode = hashCode;
+
       this.keyBytes = keyBytes;
+      this.keyOffset = keyOffset;
+      this.keyLength = keyLength;
+
       this.valueBytes = valueBytes;
+      this.valueOffset = valueOffset;
+      this.valueLength = valueLength;
     }
 
     public BytesWritable getKey() {
-      return new BytesWritable(this.keyBytes, this.keyBytes.length);
+      return new BytesWritable(keyBytes, keyOffset, keyLength);
     }
 
     public BytesWritable getValue() {
-      return new BytesWritable(this.valueBytes, this.valueBytes.length);
+      return new BytesWritable(valueBytes, valueOffset, valueLength);
     }
 
     public long getHashCode() {

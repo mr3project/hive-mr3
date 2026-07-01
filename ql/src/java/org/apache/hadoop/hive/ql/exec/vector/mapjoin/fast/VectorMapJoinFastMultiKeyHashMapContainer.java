@@ -122,14 +122,16 @@ public class VectorMapJoinFastMultiKeyHashMapContainer
 
   @Override
   public long getHashCode(BytesWritable currentKey) throws HiveException, IOException {
-    byte[] keyBytes = currentKey.getBytes();
+    byte[] keyBytes = currentKey.getBytesRaw();
+    int keyOffset = currentKey.getOffset();
     int keyLength = currentKey.getLength();
-    return HashCodeUtil.murmurHash(keyBytes, 0, keyLength);
+    return HashCodeUtil.murmurHash(keyBytes, keyOffset, keyLength);
   }
 
   @Override
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
+    // glad
     vectorMapJoinFastMultiKeyHashMaps[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey, currentValue);
   }
 
