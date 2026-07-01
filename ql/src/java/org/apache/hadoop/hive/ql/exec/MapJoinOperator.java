@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Future;
 
 import org.apache.commons.lang3.tuple.ImmutablePair;
@@ -54,6 +55,7 @@ import org.apache.hadoop.hive.ql.exec.persistence.ObjectContainer;
 import org.apache.hadoop.hive.ql.exec.persistence.UnwrapRowContainer;
 import org.apache.hadoop.hive.ql.exec.tez.LlapObjectCache;
 import org.apache.hadoop.hive.ql.exec.tez.LlapObjectSubCache;
+import org.apache.hadoop.hive.ql.exec.tez.TezContext;
 import org.apache.hadoop.hive.ql.io.HiveKey;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -73,12 +75,17 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.Object
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hive.common.util.ReflectionUtil;
+import org.apache.tez.runtime.library.common.shuffle.ShuffleUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.esotericsoftware.kryo.KryoException;
 import com.google.common.base.Preconditions;
+
+import java.security.PrivilegedExceptionAction;
+import org.apache.hadoop.security.UserGroupInformation;
+import org.slf4j.MDC;
 
 /**
  * Map side Join operator implementation.
@@ -178,6 +185,7 @@ public class MapJoinOperator extends AbstractMapJoinOperator<MapJoinDesc> implem
     // On Tez only: The hash map might already be cached in the container we run
     // the task in. On MR: The cache is a no-op.
     String queryId = HiveConf.getVar(hconf, HiveConf.ConfVars.HIVE_QUERY_ID);
+    int dagIdId = HiveConf.getIntVar(hconf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID);
     // The cacheKey may have already been defined in the MapJoin conf spec
     // as part of the Shared Work Optimization if it can be reused among
     // multiple mapjoin operators. In that case, we take that key from conf
@@ -188,7 +196,11 @@ public class MapJoinOperator extends AbstractMapJoinOperator<MapJoinDesc> implem
     cacheKey = conf.getCacheKey() == null ?
         MapJoinDesc.generateCacheKey(this.getOperatorId()) :
         conf.getCacheKey() + "_" + this.getClass().getName();
-    cache = ObjectCacheFactory.getCache(hconf, queryId, false);
+    if (conf.getCacheKey() == null) {
+      cache = ObjectCacheFactory.getCache(hconf, queryId, dagIdId, false, false);  // use per-vertex cache
+    } else {
+      cache = ObjectCacheFactory.getCache(hconf, queryId, dagIdId, false, true);   // use per-query cache
+    }
     loader = getHashTableLoader(hconf);
 
     bucketId = hconf.getInt(Constants.LLAP_BUCKET_ID, -1);
@@ -229,9 +241,37 @@ public class MapJoinOperator extends AbstractMapJoinOperator<MapJoinDesc> implem
        */
       LOG.debug("This is not bucket map join, so cache");
 
+      // The reason that we execute loadHashTable() inside the current UGI is that loadHashTable() may
+      // create LocalFileSystem (e.g., in ShuffleManager.localFs), which is stored in FileSystem.CACHE[].
+      // However, Keys for FileSystem.CACHE[] use UGI, so the first DAG's UGI bound to the Thread in
+      // LlapObjectCache.staticPool is reused for all subsequent DAGs. In other words, Threads in
+      // LlapObjectCache.staticPool never change their UGI. As a result, FileSystem.closeAllForUGI() after
+      // the first DAG has no effect (because Key of FileSystem.CACHE[] always uses the UGI of the first DAG).
+      // This leads to memory leak of DAGClassLoader and destroys the semantic correctness.
+      UserGroupInformation ugi;
+      try {
+        ugi = UserGroupInformation.getCurrentUser();
+      } catch (IOException e) {
+        throw new HiveException("ugi", e);
+      }
+
       Future<Pair<MapJoinTableContainer[], MapJoinTableContainerSerDe[]>> future =
-          cache.retrieveAsync(
-              cacheKey, () ->loadHashTable(mapContext, mrContext));
+        cache.retrieveAsync(cacheKey, () ->
+            ugi.doAs(new PrivilegedExceptionAction<Pair<MapJoinTableContainer[], MapJoinTableContainerSerDe[]>>() {
+              @Override
+              public Pair<MapJoinTableContainer[], MapJoinTableContainerSerDe[]> run() throws Exception {
+                Map<String, String> oldMdcContext = MDC.getCopyOfContextMap();
+                try {
+                  org.apache.tez.runtime.library.common.shuffle.ShuffleUtils.restoreMdc(
+                      ((TezContext) mrContext).getTezProcessorContext().getMdcContext());
+                  return loadHashTable(mapContext, mrContext);
+                } finally {
+                  org.apache.tez.runtime.library.common.shuffle.ShuffleUtils.restoreMdc(oldMdcContext);
+                }
+              }
+            })
+        );
+
       asyncInitOperations.add(future);
     } else if (!isInputFileChangeSensitive(mapContext)) {
       loadHashTable(mapContext, mrContext);
