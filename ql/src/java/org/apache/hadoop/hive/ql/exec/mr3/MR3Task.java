@@ -458,22 +458,18 @@ public class MR3Task {
     //   UserGroupInformation.getCurrentUser() == the user from HiveServer2 (auth:KERBEROS)
     //   UserGroupInformation.getCurrentUser() does not hold HIVE_DELEGATION_TOKEN (which is unnecessary)
 
-    DAG dag = DAG.create(dagName, dagInfo, operatorGraphMap, dagCredentials, queryId);
+    DAG dag = DAG.create(dagName, dagInfo, operatorGraphMap, dagCredentials, queryId, jobConf);
     if (LOG.isDebugEnabled()) {
       LOG.debug("DagInfo: {}", dagInfo);
     }
 
     for (BaseWork w: ws) {
       perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_CREATE_VERTEX + w.getName());
-
       if (w instanceof UnionWork) {
-        buildVertexGroupEdges(
-            dag, tezWork, (UnionWork) w, workToVertex, workToConf);
+        buildVertexGroupEdges(dag, tezWork, (UnionWork) w, workToVertex, workToConf);
       } else {
-        buildRegularVertexEdge(
-            jobConf, dag, tezWork, w, workToVertex, workToConf, mr3ScratchDir, context);
+        buildRegularVertexEdge(jobConf, dag, tezWork, w, workToVertex, workToConf, mr3ScratchDir, context);
       }
-
       perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_CREATE_VERTEX + w.getName());
     }
 
@@ -590,7 +586,8 @@ public class MR3Task {
       LOG.info("Modified {} to {}", TezRuntimeConfiguration.TEZ_RUNTIME_IO_SORT_MB, newValue);
     }
 
-    Vertex vertex = dagUtils.createVertex(vertexJobConf, baseWork, mr3ScratchDir, isFinal, vertexType, tezWork);
+    Vertex vertex = dagUtils.createVertex(
+        vertexJobConf, jobConf, baseWork, mr3ScratchDir, isFinal, vertexType, tezWork);
     dag.addVertex(vertex);
 
     if (dagUtils.shouldAddPathsToCredentials(jobConf)) {
@@ -606,7 +603,7 @@ public class MR3Task {
     workToVertex.put(baseWork, vertex);
     workToConf.put(baseWork, vertexJobConf);
 
-    // add all dependencies (i.e.: edges) to the graph
+    // add all dependencies (i.e., edges) to the graph
     for (BaseWork v: tezWork.getChildren(baseWork)) {
       assert workToVertex.containsKey(v);
       TezEdgeProperty edgeProp = tezWork.getEdgeProperty(baseWork, v);
