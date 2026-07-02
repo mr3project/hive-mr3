@@ -256,18 +256,14 @@ public class DAGUtils {
   /**
    * Create a vertex from a given work object.
    *
-   * @param conf JobConf to be used to this execution unit
-   * @param work The instance of BaseWork representing the actual work to be performed
-   * by this vertex.
+   * @param work The instance of BaseWork representing the actual work to be performed by this vertex.
    * @param mr3ScratchDir HDFS scratch dir for this execution unit.
-   * @param fileSystem FS corresponding to scratchDir and LocalResources
-   * @param ctx This query's context
    * @return Vertex
    */
   // we do not write anything to mr3ScratchDir, but still need it for the path to Plan
   @SuppressWarnings("deprecation")
   public Vertex createVertex(
-      JobConf vertexJobConf, BaseWork work,
+      JobConf vertexJobConf, JobConf commonJobConf, BaseWork work,
       Path mr3ScratchDir,
       boolean isFinal,
       VertexType vertexType, TezWork tezWork) throws Exception {
@@ -275,11 +271,11 @@ public class DAGUtils {
     Vertex vertex;
     // simply dispatch the call to the right method for the actual (sub-) type of BaseWork
     if (work instanceof MapWork) {
-      vertex = createMapVertex(vertexJobConf, (MapWork) work, mr3ScratchDir, vertexType);
+      vertex = createMapVertex(vertexJobConf, commonJobConf, (MapWork) work, mr3ScratchDir, vertexType);
     } else if (work instanceof ReduceWork) {
-      vertex = createReduceVertex(vertexJobConf, (ReduceWork) work, mr3ScratchDir);
+      vertex = createReduceVertex(vertexJobConf, commonJobConf, (ReduceWork) work, mr3ScratchDir);
     } else if (work instanceof MergeJoinWork) {
-      vertex = createMergeJoinVertex(vertexJobConf, (MergeJoinWork) work, mr3ScratchDir, vertexType);
+      vertex = createMergeJoinVertex(vertexJobConf, commonJobConf, (MergeJoinWork) work, mr3ScratchDir, vertexType);
 
       // set VertexManagerPlugin if whether it's a cross product destination vertex
       List<String> crossProductSources = new ArrayList<>();
@@ -301,7 +297,7 @@ public class DAGUtils {
         LOG.info("Set VertexManager: CartesianProductVertexManager {}", vertex.getName());
       }
     } else if (work instanceof MapReduceMapWork) {
-      vertex = createMapReduceMapVertex(vertexJobConf, (MapReduceMapWork)work);
+      vertex = createMapReduceMapVertex(vertexJobConf, commonJobConf, (MapReduceMapWork)work);
     } else {
       // something is seriously wrong if this is happening
       throw new HiveException(ErrorMsg.GENERIC_ERROR.getErrorCodedMsg());
@@ -356,7 +352,7 @@ public class DAGUtils {
   }
 
   private Vertex createMergeJoinVertex(
-      JobConf vertexJobConf, MergeJoinWork mergeJoinWork,
+      JobConf vertexJobConf, JobConf commonJobConf, MergeJoinWork mergeJoinWork,
       Path mr3ScratchDir,
       VertexType vertexType) throws Exception {
 
@@ -366,12 +362,11 @@ public class DAGUtils {
     if (mergeJoinWork.getMainWork() instanceof MapWork) {
       List<BaseWork> mapWorkList = mergeJoinWork.getBaseWorkList();
       MapWork mapWork = (MapWork) (mergeJoinWork.getMainWork());
-      Vertex mergeVx = createMapVertex(vertexJobConf, mapWork, mr3ScratchDir, vertexType);
+      Vertex mergeVx = createMapVertex(vertexJobConf, commonJobConf, mapWork, mr3ScratchDir, vertexType);
 
-      Class<?> inputFormatClass = vertexJobConf.getClass("mapred.input.format.class",
-              HiveInputFormat.class);
+      Class<?> inputFormatClass = vertexJobConf.getClass("mapred.input.format.class", HiveInputFormat.class);
       if (inputFormatClass != BucketizedHiveInputFormat.class &&
-              inputFormatClass != HiveInputFormat.class) {
+          inputFormatClass != HiveInputFormat.class) {
         // As of now only these two formats are supported.
         inputFormatClass = HiveInputFormat.class;
       }
@@ -385,8 +380,9 @@ public class DAGUtils {
         vertexJobConf.set(Utilities.INPUT_NAME, mapWork.getName());
         LOG.info("Going through each work and adding MultiMRInput");
 
+        Configuration inputBuilderConf = getConfForInputBuilder(vertexJobConf, commonJobConf, inputFormatClass);
         org.apache.tez.dag.api.DataSourceDescriptor dataSource=
-            MultiMRInput.createConfigBuilder(vertexJobConf, inputFormatClass).build();
+            MultiMRInput.createConfigBuilder(inputBuilderConf, inputFormatClass).build();
         DataSource mr3DataSource = MR3Utils.convertTezDataSourceDescriptor(dataSource);
         mergeVx.addDataSource(mapWork.getName(), mr3DataSource);
       }
@@ -420,7 +416,7 @@ public class DAGUtils {
       return mergeVx;
     } else {
       Vertex mergeVx =
-          createReduceVertex(vertexJobConf, (ReduceWork) mergeJoinWork.getMainWork(), mr3ScratchDir);
+          createReduceVertex(vertexJobConf, commonJobConf, (ReduceWork) mergeJoinWork.getMainWork(), mr3ScratchDir);
       return mergeVx;
     }
   }
@@ -429,7 +425,7 @@ public class DAGUtils {
    * Helper function to create Vertex from MapWork.
    */
   private Vertex createMapVertex(
-      JobConf vertexJobConf, MapWork mapWork,
+      JobConf vertexJobConf, JobConf commonJobConf, MapWork mapWork,
       Path mr3ScratchDir,
       VertexType vertexType) throws Exception {
 
@@ -444,8 +440,7 @@ public class DAGUtils {
     int numTasks;
 
     @SuppressWarnings("rawtypes")
-    Class inputFormatClass = vertexJobConf.getClass("mapred.input.format.class",
-        InputFormat.class);
+    Class inputFormatClass = vertexJobConf.getClass("mapred.input.format.class", InputFormat.class);
 
     boolean vertexHasCustomInput = VertexType.isCustomInputType(vertexType);
     LOG.info("Vertex has custom input? " + vertexHasCustomInput);
@@ -454,7 +449,7 @@ public class DAGUtils {
       // grouping happens in execution phase. The input payload should not enable grouping here,
       // it will be enabled in the CustomVertex.
       if (inputFormatClass != BucketizedHiveInputFormat.class &&
-              inputFormatClass != HiveInputFormat.class) {
+          inputFormatClass != HiveInputFormat.class) {
         // As of now only these two formats are supported.
         inputFormatClass = HiveInputFormat.class;
       }
@@ -463,8 +458,7 @@ public class DAGUtils {
       // this plug-in to avoid getting a serialized event at run-time.
       vertexJobConf.setBoolean("mapreduce.tez.input.initializer.serialize.event.payload", false);
     } else {
-      // we'll set up tez to combine spits for us iff the input format
-      // is HiveInputFormat
+      // we'll set up tez to combine spits for us iff the input format is HiveInputFormat
       if (inputFormatClass == HiveInputFormat.class) {
         groupSplitsInInputInitializer = true;
       } else {
@@ -491,27 +485,30 @@ public class DAGUtils {
     // remember mapping of plan to input
     vertexJobConf.set(Utilities.INPUT_NAME, mapWork.getName());
     if (HiveConf.getBoolVar(vertexJobConf, ConfVars.HIVE_AM_SPLIT_GENERATION)) {
-
       // set up the operator plan. (before setting up splits on the AM)
       Utilities.setMapWork(vertexJobConf, mapWork, mr3ScratchDir, false);
 
-      // if we're generating the splits in the AM, we just need to set
-      // the correct plugin.
+      Configuration inputBuilderConf = getConfForInputBuilder(vertexJobConf, commonJobConf, inputFormatClass);
+      // if we're generating the splits in the AM, we just need to set the correct plugin.
       if (groupSplitsInInputInitializer) {
         // Not setting a payload, since the MRInput payload is the same and can be accessed.
         InputInitializerDescriptor descriptor = InputInitializerDescriptor.create(
             HiveSplitGenerator.class.getName());
-        dataSource = MRInputLegacy.createConfigBuilder(vertexJobConf, inputFormatClass).groupSplits(true)
+        dataSource = MRInputLegacy
+            .createConfigBuilder(inputBuilderConf, inputFormatClass)
+            .groupSplits(true)
             .setCustomInitializerDescriptor(descriptor).build();
       } else {
         // Not HiveInputFormat, or a custom VertexManager will take care of grouping splits
         if (vertexHasCustomInput && vertexType == VertexType.MULTI_INPUT_UNINITIALIZED_EDGES) {
-          // SMB Join.
-          dataSource =
-              MultiMRInput.createConfigBuilder(vertexJobConf, inputFormatClass).groupSplits(false).build();
+          // SMB Join
+          dataSource = MultiMRInput
+              .createConfigBuilder(inputBuilderConf, inputFormatClass)
+              .groupSplits(false).build();
         } else {
-          dataSource =
-              MRInputLegacy.createConfigBuilder(vertexJobConf, inputFormatClass).groupSplits(false).build();
+          dataSource = MRInputLegacy
+              .createConfigBuilder(inputBuilderConf, inputFormatClass)
+              .groupSplits(false).build();
         }
       }
       numTasks = -1;  // to be decided at runtime
@@ -530,11 +527,11 @@ public class DAGUtils {
       InputSplitInfo inputSplitInfo = MRInputHelpers.generateInputSplitsToMem(vertexJobConf, false, 0);
       InputInitializerDescriptor descriptor = InputInitializerDescriptor.create(MRInputSplitDistributor.class.getName());
       InputDescriptor inputDescriptor = InputDescriptor.create(MRInputLegacy.class.getName())
-              .setUserPayload(UserPayload
-                      .create(MRRuntimeProtos.MRInputUserPayloadProto.newBuilder()
-                              .setConfigurationBytes(TezUtils.createByteStringFromConf(vertexJobConf))
-                              .setSplits(inputSplitInfo.getSplitsProto()).build().toByteString()
-                              .asReadOnlyByteBuffer()));
+          .setUserPayload(UserPayload
+              .create(MRRuntimeProtos.MRInputUserPayloadProto.newBuilder()
+                    .setConfigurationBytes(TezUtils.createByteStringFromConf(vertexJobConf))
+                    .setSplits(inputSplitInfo.getSplitsProto()).build().toByteString()
+                    .asReadOnlyByteBuffer()));
 
       dataSource = DataSourceDescriptor.create(inputDescriptor, descriptor, null);
       numTasks = inputSplitInfo.getNumTasks();
@@ -548,7 +545,7 @@ public class DAGUtils {
       procClassName = MergeFileTezProcessor.class.getName();
     }
 
-    ByteString userPayload = TezUtils.createByteStringFromConf(vertexJobConf);
+    ByteString userPayload = createConfPayload(vertexJobConf, commonJobConf, "map_processor");
     EntityDescriptor processorDescriptor = new EntityDescriptor(procClassName, userPayload);
 
     Resource taskResource = getMapTaskResource(vertexJobConf);
@@ -578,7 +575,7 @@ public class DAGUtils {
    * Helper function to create Vertex for given ReduceWork.
    */
   private Vertex createReduceVertex(
-      JobConf vertexJobConf, ReduceWork reduceWork,
+      JobConf vertexJobConf, JobConf commonJobConf, ReduceWork reduceWork,
       Path mr3ScratchDir) throws Exception {
 
     // set up operator plan
@@ -588,9 +585,8 @@ public class DAGUtils {
     // create the directories FileSinkOperators need
     Utilities.createTmpDirs(vertexJobConf, reduceWork);
 
-    EntityDescriptor processorDescriptor = new EntityDescriptor(
-        ReduceTezProcessor.class.getName(),
-        TezUtils.createByteStringFromConf(vertexJobConf));
+    ByteString userPayload = createConfPayload(vertexJobConf, commonJobConf, "reduce_processor");
+    EntityDescriptor processorDescriptor = new EntityDescriptor(ReduceTezProcessor.class.getName(), userPayload);
 
     Resource taskResource = getReduceTaskResource(vertexJobConf);
     String containerEnvironment = getContainerEnvironment(vertexJobConf);
@@ -608,9 +604,10 @@ public class DAGUtils {
     return reducer;
   }
 
-  private Vertex createMapReduceMapVertex(JobConf vertexJobConf, MapReduceMapWork mapReduceMapWork) throws Exception {
+  private Vertex createMapReduceMapVertex(
+      JobConf vertexJobConf, JobConf commonJobConf, MapReduceMapWork mapReduceMapWork) throws Exception {
     vertexJobConf.set(Utilities.INPUT_NAME, mapReduceMapWork.getName());
-    ByteString jobConfByteString = TezUtils.createByteStringFromConf(vertexJobConf);
+    ByteString jobConfByteString = createConfPayload(vertexJobConf, commonJobConf, "mapreduce_map_processor");
 
     EntityDescriptor processorDescriptor = new EntityDescriptor(
         MRMapProcessor.class.getName(), jobConfByteString);
@@ -629,8 +626,10 @@ public class DAGUtils {
       inputFormatClass = vertexJobConf.getClass("mapred.input.format.class", InputFormat.class);
       LOG.info("MapReduceMapVertex uses old MapReduce API: {} {}", mapReduceMapWork.getName(), inputFormatClass);
     }
-    DataSourceDescriptor dataSource =
-        MRInputLegacy.createConfigBuilder(vertexJobConf, inputFormatClass).groupSplits(false).build();
+    Configuration inputBuilderConf = getConfForInputBuilder(vertexJobConf, commonJobConf, inputFormatClass);
+    DataSourceDescriptor dataSource = MRInputLegacy
+        .createConfigBuilder(inputBuilderConf, inputFormatClass)
+        .groupSplits(false).build();
     DataSource mr3DataSource = MR3Utils.convertTezDataSourceDescriptor(dataSource);
     vertex.addDataSource("in_" + mapReduceMapWork.getName(), mr3DataSource);
 
@@ -643,6 +642,36 @@ public class DAGUtils {
     vertex.addDataSink("out_" + mapReduceMapWork.getName(), logicalOutputDescriptor, outputCommitterDescriptor);
 
     return vertex;
+  }
+
+  private Configuration getConfForInputBuilder(
+      JobConf vertexJobConf, JobConf commonJobConf, Class inputFormatClass) {
+    if (inputFormatClass == null) {
+      return vertexJobConf;
+    } else {
+      return computeDiffConf(vertexJobConf, commonJobConf);
+    }
+  }
+
+  private ByteString createConfPayload(JobConf vertexJobConf, JobConf commonJobConf, String payloadType)
+      throws IOException {
+    Configuration diffConf = computeDiffConf(vertexJobConf, commonJobConf);
+    ByteString payload = TezUtils.createByteStringFromConf(diffConf);
+    return payload;
+  }
+
+  private Configuration computeDiffConf(JobConf vertexJobConf, JobConf commonJobConf) {
+    Configuration diffConf = new Configuration(false);
+
+    for (Map.Entry<String, String> entry : vertexJobConf) {
+      String key = entry.getKey();
+      String value = entry.getValue();
+      if (value != null && !StringUtils.equals(value, commonJobConf.get(key))) {
+        diffConf.set(key, value);
+      }
+    }
+
+    return diffConf;
   }
 
   private boolean containsPerVertexCache(BaseWork baseWork) {
