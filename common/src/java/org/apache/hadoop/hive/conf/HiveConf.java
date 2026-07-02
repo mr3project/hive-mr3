@@ -5998,7 +5998,7 @@ public class HiveConf extends Configuration {
     HIVE_MR3_LOCALIZE_SESSION_JARS("hive.mr3.localize.session.jars", true,
         "Localize session jars"),
 
-    // Additional jars to include as initial session resoures
+    // Additional jars to include as initial session resources
     HIVE_MR3_AUX_JARS("hive.mr3.aux.jars", "",
       "Additional jars relative to the directory where Hive-exec-jar is located."),
 
@@ -6009,14 +6009,17 @@ public class HiveConf extends Configuration {
     HIVE_MR3_QUERY_DAG_ID_ID("hive.mr3.query.dag.id.id", -1, "DAGID.id for internal use"),
 
     HIVE_MR3_CONFIG_REMOVE_KEYS("hive.mr3.config.remove.keys", "",
-      "Comman-separated list of config keys to remove from JobConf for DAG"),
+      "Comma-separated list of config keys to remove from JobConf for DAG"),
     HIVE_MR3_DAG_CONFIG_REMOVE_PREFIXES("hive.mr3.dag.config.remove.prefixes", "",
       "Comma-separated list of key prefixes to remove from JobConf for DAG"),
     HIVE_MR3_SESSION_CONFIG_REMOVE_PREFIXES("hive.mr3.session.config.remove.prefixes", "",
       "Comma-separated list of key prefixes to remove from JobConf for MR3 session"),
 
+    HIVE_MR3_QUERY_RESULT_TASK_MAX_BYTES("hive.mr3.query.result.task.max.bytes",256 * 1024L * 1024L,
+      "Max number of bytes per task to keep in memory when using QueryResultOperator, -1 for no limit"),
+
     HIVE_MR3_UI_INCLUDE_OPERATOR_EXTRA("hive.mr3.ui.include.operator.extra", false,
-      "Include the details of each operator in JSON ojbect for DAG");
+      "Include the details of each operator in JSON object for DAG");
 
     public final String varname;
     public final String altName;

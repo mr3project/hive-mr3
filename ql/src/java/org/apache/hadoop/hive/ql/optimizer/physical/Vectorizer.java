@@ -137,6 +137,7 @@ import org.apache.hadoop.hive.ql.plan.MapredWork;
 import org.apache.hadoop.hive.ql.plan.MergeJoinWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.PTFDesc;
+import org.apache.hadoop.hive.ql.plan.QueryResultDesc;
 import org.apache.hadoop.hive.ql.plan.SelectDesc;
 import org.apache.hadoop.hive.ql.plan.TopNKeyDesc;
 import org.apache.hadoop.hive.ql.plan.VectorAppMasterEventDesc;
@@ -144,6 +145,7 @@ import org.apache.hadoop.hive.ql.plan.VectorDesc;
 import org.apache.hadoop.hive.ql.plan.VectorFileSinkDesc;
 import org.apache.hadoop.hive.ql.plan.VectorFilterDesc;
 import org.apache.hadoop.hive.ql.plan.VectorPTFDesc;
+import org.apache.hadoop.hive.ql.plan.VectorQueryResultDesc;
 import org.apache.hadoop.hive.ql.plan.VectorPTFInfo;
 import org.apache.hadoop.hive.ql.plan.VectorPTFDesc.SupportedFunctionType;
 import org.apache.hadoop.hive.ql.plan.VectorTableScanDesc;
@@ -5346,6 +5348,15 @@ public class Vectorizer implements PhysicalPlanResolver {
 
     boolean isNative = false;
     try {
+      if (op instanceof QueryResultOperator) {
+        QueryResultDesc queryResultDesc = (QueryResultDesc) op.getConf();
+        VectorQueryResultDesc vectorQueryResultDesc = new VectorQueryResultDesc();
+        vectorOp = OperatorFactory.getVectorOperator(
+            op.getCompilationOpContext(), queryResultDesc, vContext, vectorQueryResultDesc);
+        isNative = false;
+        return vectorOp;
+      }
+
       switch (op.getType()) {
         case MAPJOIN:
           {

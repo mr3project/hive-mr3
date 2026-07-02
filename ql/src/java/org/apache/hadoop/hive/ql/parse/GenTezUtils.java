@@ -40,6 +40,7 @@ import org.apache.hadoop.hive.ql.exec.HashTableDummyOperator;
 import org.apache.hadoop.hive.ql.exec.MapJoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
+import org.apache.hadoop.hive.ql.exec.QueryResultOperator;
 import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.SerializationUtilities;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
@@ -343,7 +344,9 @@ public class GenTezUtils {
     }
 
     private boolean isTerminal(Operator<?> o) {
-      return o instanceof FileSinkOperator || o instanceof ReduceSinkOperator;
+      return o instanceof FileSinkOperator
+          || o instanceof QueryResultOperator
+          || o instanceof ReduceSinkOperator;
     }
 
     @Override
@@ -522,6 +525,7 @@ public class GenTezUtils {
       }
 
       if (current instanceof FileSinkOperator
+          || current instanceof QueryResultOperator
           || current instanceof ReduceSinkOperator) {
         current.setChildOperators(null);
       } else {

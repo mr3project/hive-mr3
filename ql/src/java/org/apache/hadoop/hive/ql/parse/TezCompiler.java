@@ -57,6 +57,7 @@ import org.apache.hadoop.hive.ql.exec.JoinOperator;
 import org.apache.hadoop.hive.ql.exec.MapJoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
+import org.apache.hadoop.hive.ql.exec.QueryResultOperator;
 import org.apache.hadoop.hive.ql.exec.ReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.SelectOperator;
 import org.apache.hadoop.hive.ql.exec.TableScanOperator;
@@ -662,6 +663,9 @@ public class TezCompiler extends TaskCompiler {
     opRules.put(new RuleRegExp("Split Work + Move/Merge - FileSink",
         FileSinkOperator.getOperatorName() + "%"),
         new CompositeProcessor(new FileSinkProcessor(), genTezWork));
+
+    opRules.put(new RuleRegExp("Split Work - QueryResult",
+        QueryResultOperator.getOperatorName() + "%"), genTezWork);
 
     opRules.put(new RuleRegExp("Split work - DummyStore", DummyStoreOperator.getOperatorName()
         + "%"), genTezWork);
