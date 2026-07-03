@@ -385,6 +385,11 @@ public class ReduceRecordProcessor extends RecordProcessor {
   }
 
   @Override
+  boolean hasFileSinkOperator() {
+    return hasFileSinkOperator(reduceWork) || hasFileSinkOperator(mergeWorkList);
+  }
+
+  @Override
   void close() {
     if (cache != null) {
       for (String key : cacheKeys) {

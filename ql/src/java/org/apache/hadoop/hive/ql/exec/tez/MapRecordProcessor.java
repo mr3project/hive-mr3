@@ -443,6 +443,11 @@ public class MapRecordProcessor extends RecordProcessor {
   }
 
   @Override
+  boolean hasFileSinkOperator() {
+    return hasFileSinkOperator(mapWork) || hasFileSinkOperator(mergeWorkList);
+  }
+
+  @Override
   void close(){
     // check if there are IOExceptions
     if (!isAborted()) {
