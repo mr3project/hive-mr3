@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.ObjectCache;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor.TezKVOutputCollector;
@@ -89,6 +90,17 @@ public abstract class RecordProcessor extends InterruptibleProcessing {
   abstract void run() throws Exception;
 
   abstract void close();
+
+  abstract boolean hasFileSinkOperator();
+
+  protected static boolean hasFileSinkOperator(BaseWork work) {
+    return work != null
+        && work.getAllOperators().stream().anyMatch(o -> o instanceof FileSinkOperator);
+  }
+
+  protected static boolean hasFileSinkOperator(List<? extends BaseWork> workList) {
+    return workList != null && workList.stream().anyMatch(work -> hasFileSinkOperator(work));
+  }
 
   protected void createOutputMap() {
     Preconditions.checkState(outMap == null, "Outputs should only be setup once");
