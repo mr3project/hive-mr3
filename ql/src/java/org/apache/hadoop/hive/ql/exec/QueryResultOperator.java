@@ -126,14 +126,25 @@ public class QueryResultOperator extends TerminalOperator<QueryResultDesc> {
         return;
       }
 
-      if (!processorContext.canCommit()) {
-        LOG.info("QueryResultOperator is not allowed to commit resultId={}", conf.getResultId());
-        return;
-      }
+      waitForCanCommit();
 
       commitDagOutput();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new HiveException("Interrupted while waiting to commit QueryResultOperator", e);
     } catch (IOException | SerDeException e) {
       throw new HiveException("Error closing QueryResultOperator", e);
+    }
+  }
+
+  private void waitForCanCommit() throws IOException, InterruptedException {
+    boolean logged = false;
+    while (!processorContext.canCommit()) {
+      if (!logged) {
+        LOG.info("QueryResultOperator is not allowed to commit resultId={}; waiting", conf.getResultId());
+        logged = true;
+      }
+      Thread.sleep(500);
     }
   }
 
