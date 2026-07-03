@@ -275,6 +275,7 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       Map<String, LogicalOutput> outputs)
       throws Exception {
     Throwable originalThrowable = null;
+    boolean hasFileSinkOperator = false;
 
     boolean setLlapCacheCounters = isMap &&
         HiveConf.getVar(this.jobConf, HiveConf.ConfVars.HIVE_EXECUTION_MODE).equals("llap")
@@ -297,16 +298,9 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       rproc.init(mrReporter, inputs, outputs);
       rproc.run();
 
-      // Try to call canCommit to AM. If there is no other speculative attempt execute canCommit, then continue.
-      // If there are other speculative attempt execute canCommit first, then wait until the attempt is killed
-      // or the committed task fails.
-      while (!getContext().canCommit()) {
-        // If canCommit returns false, and we enter this loop, it means another task attempt has already committed.
-        // This task attempt only needs to sleep for a relatively long time while waiting to be killed.
-        // However, we must avoid a low-probability scenario: a rare case where a task attempt fails after committing.
-        // In that situation, the delay must not be excessively long so this attempt can still react in time.
-        // 500ms is chosen as a trade-off value.
-        Thread.sleep(500);
+      hasFileSinkOperator = rproc.hasFileSinkOperator();
+      if (hasFileSinkOperator) {
+        waitForCanCommit();
       }
     } catch (Throwable t) {
       rproc.setAborted(true);
@@ -332,6 +326,10 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
           rproc.close();
         }
         if (originalThrowable == null) {
+          if (!hasFileSinkOperator && hasCommitRequiredMROutput(outputs)) {
+            waitForCanCommit();
+          }
+
           closeOutputTasks(outputs, MROutput::commit);
 
           perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.TEZ_RUN_PROCESSOR);
@@ -378,6 +376,29 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
         throw new RuntimeException(originalThrowable);
       }
     }
+  }
+
+  private void waitForCanCommit() throws IOException, InterruptedException {
+    // Try to call canCommit to AM. If there is no other speculative attempt execute canCommit, then continue.
+    // If there are other speculative attempt execute canCommit first, then wait until the attempt is killed
+    // or the committed task fails.
+    while (!getContext().canCommit()) {
+      // If canCommit returns false, and we enter this loop, it means another task attempt has already committed.
+      // This task attempt only needs to sleep for a relatively long time while waiting to be killed.
+      // However, we must avoid a low-probability scenario: a rare case where a task attempt fails after committing.
+      // In that situation, the delay must not be excessively long so this attempt can still react in time.
+      // 500ms is chosen as a trade-off value.
+      Thread.sleep(500);
+    }
+  }
+
+  private static boolean hasCommitRequiredMROutput(Map<String, LogicalOutput> outputs) throws IOException {
+    for (LogicalOutput output : outputs.values()) {
+      if (output instanceof MROutput && ((MROutput) output).isCommitRequired()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static void closeOutputTasks(
