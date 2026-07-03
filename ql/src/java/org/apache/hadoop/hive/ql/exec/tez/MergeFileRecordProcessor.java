@@ -165,6 +165,11 @@ public class MergeFileRecordProcessor extends RecordProcessor {
   }
 
   @Override
+  boolean hasFileSinkOperator() {
+    return hasFileSinkOperator(mfWork);
+  }
+
+  @Override
   void close() {
 
     if (cache != null && cacheKey != null) {
