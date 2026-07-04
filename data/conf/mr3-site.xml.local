@@ -10,12 +10,12 @@
 <!-- Should be pointing valid paths -->
 <property>
   <name>mr3.aux.uris</name>
-  <value>file:///home/gitlab-runner/mr3-run/mr3/mr3lib/mr3-tez-2.0-assembly.jar,file:///home/gitlab-runner/.m2/repository/org/apache/hadoop/hadoop-common/3.3.6/hadoop-common-3.3.6-tests.jar,file:///home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-exec-4.0.0.jar,file:///home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-llap-common-4.0.0.jar,file:///home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-llap-server-4.0.0.jar,file:///home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-llap-tez-4.0.0.jar,file:///home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/hive-iceberg-handler-4.0.0.jar,file:///home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.0.0-bin/apache-hive-4.0.0-bin/lib/log4j-1.2-api-2.18.0.jar,file:///home/gitlab-runner/hive-mr3/ql/target/hive-exec-4.0.0-tests.jar</value>
+  <value>file:///home/gitlab-runner/mr3-run/mr3/mr3lib/mr3-tez-2.0-assembly.jar,file:///home/gitlab-runner/.m2/repository/org/apache/hadoop/hadoop-common/3.4.1/hadoop-common-3.4.1-tests.jar,file:///home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/hive-exec-4.2.0.jar,file:///home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/hive-llap-common-4.2.0.jar,file:///home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/hive-llap-server-4.2.0.jar,file:///home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/hive-llap-tez-4.2.0.jar,file:///home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/hive-iceberg-handler-4.2.0.jar,file:///home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/log4j-1.2-api-2.18.0.jar,file:///home/gitlab-runner/hive-mr3/ql/target/hive-exec-4.2.0-tests.jar</value>
 </property>
 
 <property>
   <name>mr3.lib.uris</name>
-  <value>file:///home/hive/mr3-run/tez/tezjar/tez-0.9.1.mr3.1.10.tar.gz</value>
+  <value>file:///home/gitlab-runner/mr3-run/tez/tezjar/tez-0.9.1.mr3.2.0.tar.gz</value>
 </property>
 
 <property>
