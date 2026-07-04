@@ -8223,7 +8223,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         Path localMaterializationPath = ctx.getLocalTmpPath();
         queryResultDesc.setLocalMaterializationPath(localMaterializationPath);
         queryResultMaterializationDesc = new QueryResultMaterializationDesc(
-            resultId, localMaterializationPath, tableDescriptor, cols, colTypes);
+            resultId, localMaterializationPath, tableDescriptor);
       }
       LOG.debug("Created QueryResultOperator {} for clause: {} row schema: {}", resultId, dest, inputRR);
       return output;

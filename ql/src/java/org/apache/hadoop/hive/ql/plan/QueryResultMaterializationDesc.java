@@ -31,16 +31,11 @@ public class QueryResultMaterializationDesc implements Serializable {
   private final String resultId;
   private final Path localMaterializationPath;
   private final TableDesc tableDesc;
-  private final String columns;
-  private final String columnTypes;
 
-  public QueryResultMaterializationDesc(String resultId, Path localMaterializationPath, TableDesc tableDesc,
-      String columns, String columnTypes) {
+  public QueryResultMaterializationDesc(String resultId, Path localMaterializationPath, TableDesc tableDesc) {
     this.resultId = resultId;
     this.localMaterializationPath = localMaterializationPath;
     this.tableDesc = tableDesc;
-    this.columns = columns;
-    this.columnTypes = columnTypes;
   }
 
   public String getResultId() {
@@ -53,13 +48,5 @@ public class QueryResultMaterializationDesc implements Serializable {
 
   public TableDesc getTableDesc() {
     return tableDesc;
-  }
-
-  public String getColumns() {
-    return columns;
-  }
-
-  public String getColumnTypes() {
-    return columnTypes;
   }
 }
