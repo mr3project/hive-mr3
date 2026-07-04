@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.plan;
 
 import java.util.Objects;
 
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.plan.Explain.Level;
 
@@ -34,6 +35,7 @@ public class QueryResultDesc extends AbstractOperatorDesc {
   private TableDesc tableInfo;
   private boolean isUsingBatchingSerDe;
   private long maxBytes;
+  private Path localMaterializationPath;
 
   public QueryResultDesc() {
   }
@@ -54,6 +56,7 @@ public class QueryResultDesc extends AbstractOperatorDesc {
   @Override
   public Object clone() {
     QueryResultDesc ret = new QueryResultDesc(resultId, tableInfo, isUsingBatchingSerDe, maxBytes);
+    ret.setLocalMaterializationPath(localMaterializationPath);
     ret.setStatistics(getStatistics());
     ret.setTraits(getTraits());
     ret.setOpProps(getOpProps());
@@ -101,6 +104,14 @@ public class QueryResultDesc extends AbstractOperatorDesc {
     this.maxBytes = maxBytes;
   }
 
+  public Path getLocalMaterializationPath() {
+    return localMaterializationPath;
+  }
+
+  public void setLocalMaterializationPath(Path localMaterializationPath) {
+    this.localMaterializationPath = localMaterializationPath;
+  }
+
   @Override
   public boolean isSame(OperatorDesc other) {
     if (!(other instanceof QueryResultDesc)) {
@@ -110,6 +121,7 @@ public class QueryResultDesc extends AbstractOperatorDesc {
     return Objects.equals(resultId, otherDesc.resultId)
         && Objects.equals(tableInfo, otherDesc.tableInfo)
         && isUsingBatchingSerDe == otherDesc.isUsingBatchingSerDe
-        && maxBytes == otherDesc.maxBytes;
+        && maxBytes == otherDesc.maxBytes
+        && Objects.equals(localMaterializationPath, otherDesc.localMaterializationPath);
   }
 }
