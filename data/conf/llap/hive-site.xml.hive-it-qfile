@@ -104,7 +104,7 @@
 
 <property>
   <name>javax.jdo.option.ConnectionDriverName</name>
-  <value>org.apache.derby.jdbc.EmbeddedDriver</value>
+  <value>org.apache.derby.iapi.jdbc.AutoloadedDriver</value>
 </property>
 
 <property>
@@ -158,6 +158,12 @@
   <name>hive.querylog.location</name>
   <value>${test.tmp.dir}/tmp</value>
   <description>Location of the structured hive logs</description>
+</property>
+
+<property>
+  <name>hive.lineage.statement.filter</name>
+  <value>ALL</value>
+  <description>Specify the types of statements for which column lineage information is generated</description>
 </property>
 
 <property>
@@ -276,6 +282,11 @@
 </property>
 
 <property>
+  <name>hive.tez.exec.print.summary</name>
+  <value>true</value>
+</property>
+
+<property>
   <name>hive.llap.cache.allow.synthetic.fileid</name>
   <value>true</value>
 </property>
@@ -390,15 +401,14 @@
 </property>
 
 <property>
-  <name>hive.cbo.fallback.strategy</name>
-  <value>TEST</value>
-</property>
-
-<property>
   <name>hive.txn.xlock.ctas</name>
   <value>false</value>
 </property>
 
+<property>
+  <name>hive.lock.sleep.between.retries</name>
+  <value>2</value>
+</property>
 <!-- Hive-MR3 -->
 
 <property>
