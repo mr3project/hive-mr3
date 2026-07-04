@@ -173,11 +173,13 @@ public abstract class TaskCompiler {
       optimizeOperatorPlan(pCtx);
     }
 
-    if (pCtx.getQueryProperties().isQuery()) {
+    if (pCtx.getQueryProperties().isQuery() && !isCStats) {
       /*
        * QueryResultOperator produces top-level query results in-memory. The legacy
        * FetchTask/LoadFileDesc path below is only for file-backed results produced
        * by FileSinkOperator, so do not create FetchWork, FetchTask, or MoveWork here.
+       * Analyze-table column statistics rewrites still use FileSinkOperator so the
+       * column stats task can fetch file-backed intermediate results.
        */
       if (outerQueryLimit == 0) {
         // Preserve the existing LIMIT 0 shortcut without creating file-backed fetch work.

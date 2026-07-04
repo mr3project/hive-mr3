@@ -7517,6 +7517,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     RowResolver inputRR = opParseCtx.get(input).getRowResolver();
     QBMetaData qbm = qb.getMetaData();
     Integer destType = qbm.getDestTypeForAlias(dest);
+    boolean useQueryResultOperator = qb.getIsQuery() && !qb.isAnalyzeRewrite();
 
     Table destinationTable = null; // destination table if any
     boolean destTableIsTransactional;     // true for full ACID table and MM table
@@ -7933,7 +7934,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       }
       assert !qb.getIsQuery() || !isPartitioned;
 
-      if (!qb.getIsQuery()) {
+      if (!useQueryResultOperator) {
         if (isLocal) {
           assert !isMmTable;
           // for local directory - we always write to map-red intermediate
@@ -7978,7 +7979,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       }
 
       boolean isDestTempFile = true;
-      if (!qb.getIsQuery()
+      if (!useQueryResultOperator
           && !ctx.isMRTmpFileURI(destinationPath.toUri().toString())
           && !ctx.isResultCacheDir(destinationPath)) {
         // not a temp dir and not a result cache dir
@@ -8107,7 +8108,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         ltd.setMdTable(destinationTable);
         WriteEntity output = generateTableWriteEntity(dest, destinationTable, dpCtx.getPartSpec(), ltd, dpCtx);
         ctx.getLoadTableOutputMap().put(ltd, output);
-      } else if (!qb.getIsQuery()) {
+      } else if (!useQueryResultOperator) {
         // Create LFD even for MM CTAS - it's a no-op move, but it still seems to be used for stats.
         LoadFileDesc loadFileDesc = new LoadFileDesc(tblDesc, viewDesc, queryTmpdir, destinationPath, isDfsDir, cols,
             colTypes,
@@ -8209,7 +8210,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       genPartnCols(dest, input, qb, tableDescriptor, destinationTable, rsCtx);
     }
 
-    if (qb.getIsQuery()) {
+    if (useQueryResultOperator) {
       QueryResultDesc queryResultDesc = new QueryResultDesc(null, tableDescriptor,
           null != tableDescriptor && useBatchingSerializer(tableDescriptor.getSerdeClassName()));
       Operator output = putOpInsertMap(OperatorFactory.getAndMakeChild(
