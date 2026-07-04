@@ -160,10 +160,12 @@ public class QueryResultOperator extends TerminalOperator<QueryResultDesc> {
   private void writeRecord(Writable writable) throws IOException, HiveException {
     if (writable instanceof Text) {
       Text text = (Text) writable;
+      dataOut.writeInt(text.getLength());
       dataOut.write(text.getBytes(), 0, text.getLength());
     } else {
       // Binary SerDes always write out BytesWritable.
       BytesWritable bytes = (BytesWritable) writable;
+      dataOut.writeInt(bytes.getLength());
       dataOut.write(bytes.getBytesRaw(), 0, bytes.getLength());
     }
     dataOut.write(rowSeparator);

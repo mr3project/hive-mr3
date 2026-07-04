@@ -69,6 +69,7 @@ import org.apache.hadoop.hive.ql.plan.LoadFileDesc;
 import org.apache.hadoop.hive.ql.plan.LoadTableDesc;
 import org.apache.hadoop.hive.ql.plan.MoveWork;
 import org.apache.hadoop.hive.ql.plan.PlanUtils;
+import org.apache.hadoop.hive.ql.plan.QueryResultMaterializationDesc;
 import org.apache.hadoop.hive.ql.plan.StatsWork;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 import org.apache.hadoop.hive.ql.session.SessionState;
@@ -274,7 +275,8 @@ public abstract class TaskCompiler {
         } catch (HiveException e) {
           throw new SemanticException(e);
         }
-        genColumnStatsTask(pCtx.getAnalyzeRewrite(), loadFileWork, map, outerQueryLimit, 0);
+        genColumnStatsTask(pCtx.getAnalyzeRewrite(), loadFileWork, pCtx.getQueryResultMaterializationDesc(),
+            map, outerQueryLimit, 0);
       } else {
         Set<Task<?>> leafTasks = new LinkedHashSet<Task<?>>();
         getLeafTasks(rootTasks, leafTasks);
@@ -297,7 +299,7 @@ public abstract class TaskCompiler {
             .getColumnStatsAutoGatherContexts()) {
           if (!columnStatsAutoGatherContext.isInsertInto()) {
             genColumnStatsTask(columnStatsAutoGatherContext.getAnalyzeRewrite(),
-                columnStatsAutoGatherContext.getLoadFileWork(), map, outerQueryLimit, 0);
+                columnStatsAutoGatherContext.getLoadFileWork(), null, map, outerQueryLimit, 0);
           } else {
             int numBitVector;
             try {
@@ -306,7 +308,7 @@ public abstract class TaskCompiler {
               throw new SemanticException(e.getMessage());
             }
             genColumnStatsTask(columnStatsAutoGatherContext.getAnalyzeRewrite(),
-                columnStatsAutoGatherContext.getLoadFileWork(), map, outerQueryLimit, numBitVector);
+                columnStatsAutoGatherContext.getLoadFileWork(), null, map, outerQueryLimit, numBitVector);
           }
         }
       }
@@ -577,27 +579,34 @@ public abstract class TaskCompiler {
    *
    */
   protected void genColumnStatsTask(AnalyzeRewriteContext analyzeRewrite,
-      List<LoadFileDesc> loadFileWork, Map<String, StatsTask> map,
-      int outerQueryLimit, int numBitVector) throws SemanticException {
+      List<LoadFileDesc> loadFileWork, QueryResultMaterializationDesc queryResultMaterializationDesc,
+      Map<String, StatsTask> map, int outerQueryLimit, int numBitVector) throws SemanticException {
     FetchWork fetch;
     String tableName = analyzeRewrite.getTableName();
     List<String> colName = analyzeRewrite.getColName();
     List<String> colType = analyzeRewrite.getColType();
     boolean isTblLevel = analyzeRewrite.isTblLvl();
 
-    String cols = loadFileWork.get(0).getColumns();
-    String colTypes = loadFileWork.get(0).getColumnTypes();
+    if (queryResultMaterializationDesc != null) {
+      fetch = new FetchWork(queryResultMaterializationDesc.getLocalMaterializationPath(),
+          queryResultMaterializationDesc.getTableDesc(), outerQueryLimit);
+    } else if (loadFileWork != null && !loadFileWork.isEmpty()) {
+      String cols = loadFileWork.get(0).getColumns();
+      String colTypes = loadFileWork.get(0).getColumnTypes();
 
-    TableDesc resultTab;
-    if (SessionState.get().isHiveServerQuery() && conf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_RESULTSET_SERIALIZE_IN_TASKS)) {
-      resultTab = PlanUtils.getDefaultQueryOutputTableDesc(cols, colTypes, ResultFileFormat.SEQUENCEFILE.toString(),
-              ThriftJDBCBinarySerDe.class);
+      TableDesc resultTab;
+      if (SessionState.get().isHiveServerQuery() && conf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_RESULTSET_SERIALIZE_IN_TASKS)) {
+        resultTab = PlanUtils.getDefaultQueryOutputTableDesc(cols, colTypes, ResultFileFormat.SEQUENCEFILE.toString(),
+                ThriftJDBCBinarySerDe.class);
+      } else {
+        resultTab = PlanUtils.getDefaultQueryOutputTableDesc(cols, colTypes, conf.getResultFileFormat().toString(),
+                LazySimpleSerDe.class);
+      }
+
+      fetch = new FetchWork(loadFileWork.get(0).getSourcePath(), resultTab, outerQueryLimit);
     } else {
-      resultTab = PlanUtils.getDefaultQueryOutputTableDesc(cols, colTypes, conf.getResultFileFormat().toString(),
-              LazySimpleSerDe.class);
+      throw new SemanticException("Can not find column stats result source");
     }
-
-    fetch = new FetchWork(loadFileWork.get(0).getSourcePath(), resultTab, outerQueryLimit);
 
     ColumnStatsDesc cStatsDesc = new ColumnStatsDesc(tableName,
         colName, colType, isTblLevel, numBitVector, fetch);
@@ -699,7 +708,7 @@ public abstract class TaskCompiler {
         pCtx.getReduceSinkOperatorsAddedByEnforceBucketingSorting(),
         pCtx.getAnalyzeRewrite(), pCtx.getCreateTable(),
         pCtx.getCreateViewDesc(), pCtx.getMaterializedViewUpdateDesc(),
-        pCtx.getQueryProperties(), pCtx.getViewProjectToTableSchema());
+        pCtx.getQueryProperties(), pCtx.getViewProjectToTableSchema(), pCtx.getQueryResultMaterializationDesc());
     clone.setFetchTask(pCtx.getFetchTask());
     clone.setLineageInfo(pCtx.getLineageInfo());
     clone.setMapJoinOps(pCtx.getMapJoinOps());

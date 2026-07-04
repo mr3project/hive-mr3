@@ -51,6 +51,7 @@ import org.apache.hadoop.hive.ql.plan.FilterDesc.SampleDesc;
 import org.apache.hadoop.hive.ql.plan.LoadFileDesc;
 import org.apache.hadoop.hive.ql.plan.LoadTableDesc;
 import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
+import org.apache.hadoop.hive.ql.plan.QueryResultMaterializationDesc;
 import org.apache.hadoop.hive.ql.plan.TableDesc;
 
 import java.util.ArrayList;
@@ -118,6 +119,7 @@ public class ParseContext {
   private ListSinkOperator fetchSink;
 
   private AnalyzeRewriteContext analyzeRewrite;
+  private QueryResultMaterializationDesc queryResultMaterializationDesc;
   private CreateTableDesc createTableDesc;
   private CreateMaterializedViewDesc createViewDesc;
   private MaterializedViewUpdateDesc materializedViewUpdateDesc;
@@ -204,7 +206,8 @@ public class ParseContext {
       AnalyzeRewriteContext analyzeRewrite, CreateTableDesc createTableDesc,
       CreateMaterializedViewDesc createViewDesc, MaterializedViewUpdateDesc materializedViewUpdateDesc,
       QueryProperties queryProperties,
-      Map<SelectOperator, Table> viewProjectToTableSchema) {
+      Map<SelectOperator, Table> viewProjectToTableSchema,
+      QueryResultMaterializationDesc queryResultMaterializationDesc) {
     this.queryState = queryState;
     this.conf = queryState.getConf();
     this.opToPartPruner = opToPartPruner;
@@ -237,6 +240,7 @@ public class ParseContext {
     this.materializedViewUpdateDesc = materializedViewUpdateDesc;
     this.queryProperties = queryProperties;
     this.viewProjectToViewSchema = viewProjectToTableSchema;
+    this.queryResultMaterializationDesc = queryResultMaterializationDesc;
     this.needViewColumnAuthorization = viewProjectToTableSchema != null
         && !viewProjectToTableSchema.isEmpty();
     if (this.needViewColumnAuthorization) {
@@ -601,6 +605,14 @@ public class ParseContext {
 
   public void setAnalyzeRewrite(AnalyzeRewriteContext analyzeRewrite) {
     this.analyzeRewrite = analyzeRewrite;
+  }
+
+  public QueryResultMaterializationDesc getQueryResultMaterializationDesc() {
+    return queryResultMaterializationDesc;
+  }
+
+  public void setQueryResultMaterializationDesc(QueryResultMaterializationDesc queryResultMaterializationDesc) {
+    this.queryResultMaterializationDesc = queryResultMaterializationDesc;
   }
 
   public CreateTableDesc getCreateTable() {

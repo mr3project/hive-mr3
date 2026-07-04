@@ -723,7 +723,7 @@ public class Driver implements IDriver {
     return true;
   }
 
-  private DataInput getNextResultStream() {
+  private DataInput getNextResultStream() throws IOException {
     if (driverContext.hasDagOutputResultReader()) {
       return driverContext.getDagOutputResultStream();
     }

@@ -20,8 +20,10 @@ package org.apache.hadoop.hive.ql;
 
 import com.google.protobuf.ByteString;
 
+import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -39,11 +41,11 @@ public class DagOutputResultReader {
     this.nextPayloadIndex = 0;
   }
 
-  public synchronized DataInput nextStream() {
+  public synchronized DataInput nextStream() throws IOException {
     if (nextPayloadIndex >= payloads.size()) {
       return null;
     }
-    return new DataInputStream(payloads.get(nextPayloadIndex++).newInput());
+    return new DataInputStream(unframePayload(payloads.get(nextPayloadIndex++).toByteArray()).newInput());
   }
 
   public synchronized void reset() {
@@ -52,5 +54,34 @@ public class DagOutputResultReader {
 
   public synchronized boolean hasPayloads() {
     return !payloads.isEmpty();
+  }
+
+  private ByteString unframePayload(byte[] payload) throws IOException {
+    ByteArrayOutputStream output = new ByteArrayOutputStream(payload.length);
+    int offset = 0;
+    while (offset < payload.length) {
+      if (payload.length - offset < Integer.BYTES) {
+        throw new IOException("Truncated DAG output row length");
+      }
+      int recordLength = readInt(payload, offset);
+      offset += Integer.BYTES;
+      if (recordLength < 0 || recordLength > payload.length - offset) {
+        throw new IOException("Invalid DAG output row length: " + recordLength);
+      }
+      output.write(payload, offset, recordLength);
+      offset += recordLength;
+      if (offset >= payload.length) {
+        throw new IOException("Missing DAG output row separator");
+      }
+      output.write(payload[offset++]);
+    }
+    return ByteString.copyFrom(output.toByteArray());
+  }
+
+  private int readInt(byte[] bytes, int offset) {
+    return ((bytes[offset] & 0xff) << 24)
+        | ((bytes[offset + 1] & 0xff) << 16)
+        | ((bytes[offset + 2] & 0xff) << 8)
+        | (bytes[offset + 3] & 0xff);
   }
 }
