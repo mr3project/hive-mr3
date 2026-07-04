@@ -23,6 +23,7 @@ import com.datamonad.mr3.api.client.VertexStatus;
 import com.datamonad.mr3.api.common.MR3Exception;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
@@ -31,6 +32,7 @@ import org.apache.hadoop.hive.ql.DriverContext;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
+import org.apache.hadoop.hive.ql.exec.QueryResultOperator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.Edge;
@@ -41,6 +43,8 @@ import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManager;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRef;
+import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils;
+import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.AbstractOperatorDesc;
@@ -67,7 +71,12 @@ import org.apache.hadoop.hive.ql.plan.TopNKeyDesc;
 import org.apache.hadoop.hive.ql.plan.UnionWork;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.ql.session.SessionStateUtil;
+import org.apache.hadoop.hive.serde2.AbstractSerDe;
+import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.records.LocalResource;
@@ -249,7 +258,7 @@ public class MR3Task {
         }
         String dagIdStr = mr3JobRef.getDagIdStr();    // may throw MR3Exception
         collectCommitInformation(tezWork, dagStatus, dagIdStr);
-        collectDagOutputs(dagStatus);
+        collectDagOutputs(tezWork, dagStatus);
         mr3Session.setAlreadyExecutedAnyDag();
       }
 
@@ -290,21 +299,105 @@ public class MR3Task {
   }
 
   @SuppressWarnings("unchecked")
-  private void collectDagOutputs(DAGStatus dagStatus) {
+  private void collectDagOutputs(TezWork tezWork, DAGStatus dagStatus) throws IOException {
     if (driverContext == null) {
       return;
     }
 
+    Map<String, QueryResultDesc> localMaterializationDescs = getLocalMaterializationDescs(tezWork);
+    Map<String, List<ByteString>> materializedPayloads = new HashMap<>();
     String queryId = driverContext.getQueryState().getQueryId();
     List<ByteString> payloads = new ArrayList<>();
     for (Tuple2<String, ByteString> dagOutput : JavaConverters.seqAsJavaList(dagStatus.dagOutputs())) {
-      if (dagOutput._1().startsWith(queryId)) {
+      String resultId = dagOutput._1();
+      if (localMaterializationDescs.containsKey(resultId)) {
+        materializedPayloads.computeIfAbsent(resultId, ignored -> new ArrayList<>()).add(dagOutput._2());
+      } else if (resultId.startsWith(queryId)) {
         payloads.add(dagOutput._2());
       }
     }
 
+    for (Map.Entry<String, QueryResultDesc> entry : localMaterializationDescs.entrySet()) {
+      materializeDagOutput(entry.getKey(),
+          materializedPayloads.getOrDefault(entry.getKey(), Collections.emptyList()), entry.getValue());
+    }
+
     LOG.info("Collected {} DAG output payload(s) for queryId={}", payloads.size(), queryId);
     driverContext.setDagOutputResultReader(new DagOutputResultReader(payloads));
+  }
+
+  private Map<String, QueryResultDesc> getLocalMaterializationDescs(TezWork tezWork) {
+    Map<String, QueryResultDesc> result = new HashMap<>();
+    for (BaseWork work : tezWork.getAllWork()) {
+      for (Operator<?> op : work.getAllOperators()) {
+        if (op instanceof QueryResultOperator) {
+          QueryResultDesc desc = (QueryResultDesc) op.getConf();
+          if (desc.getLocalMaterializationPath() != null) {
+            result.put(desc.getResultId(), desc);
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  private void materializeDagOutput(String resultId, List<ByteString> payloads,
+      QueryResultDesc queryResultDesc) throws IOException {
+    Path localPath = queryResultDesc.getLocalMaterializationPath();
+    FileSystem fs = localPath.getFileSystem(conf);
+    fs.mkdirs(localPath);
+    Path outputFile = new Path(localPath, "000000_0");
+    JobConf jobConf = new JobConf(conf);
+    FileSinkOperator.RecordWriter writer = null;
+    try {
+      AbstractSerDe serde = queryResultDesc.getTableInfo().getDeserializer(jobConf);
+      Class<? extends Writable> writableClass = serde.getSerializedClass();
+      writer = HiveFileFormatUtils.getHiveOutputFormat(conf, queryResultDesc.getTableInfo())
+          .getHiveRecordWriter(jobConf, outputFile, writableClass,
+              false, queryResultDesc.getTableInfo().getProperties(), Reporter.NULL);
+      for (ByteString payload : payloads) {
+        writeDagOutputPayload(writer, queryResultDesc, writableClass, payload);
+      }
+    } catch (Exception e) {
+      throw new IOException("Failed to materialize QueryResultOperator DAG output for resultId=" + resultId, e);
+    } finally {
+      if (writer != null) {
+        writer.close(false);
+      }
+    }
+    LOG.info("Materialized {} DAG output payload(s) for resultId={} to {}", payloads.size(), resultId, outputFile);
+  }
+
+  private void writeDagOutputPayload(FileSinkOperator.RecordWriter writer, QueryResultDesc queryResultDesc,
+      Class<? extends Writable> writableClass, ByteString payload) throws IOException {
+    byte[] bytes = payload.toByteArray();
+    int rowSeparator = HiveIgnoreKeyTextOutputFormat.getRowSeparator(queryResultDesc.getTableInfo().getProperties());
+    int recordStart = 0;
+    for (int i = 0; i < bytes.length; i++) {
+      if ((bytes[i] & 0xff) == rowSeparator) {
+        writeDagOutputRecord(writer, writableClass, bytes, recordStart, i - recordStart);
+        recordStart = i + 1;
+      }
+    }
+    if (recordStart < bytes.length) {
+      writeDagOutputRecord(writer, writableClass, bytes, recordStart, bytes.length - recordStart);
+    }
+  }
+
+  private void writeDagOutputRecord(FileSinkOperator.RecordWriter writer,
+      Class<? extends Writable> writableClass,
+      byte[] bytes, int start, int length) throws IOException {
+    if (Text.class.isAssignableFrom(writableClass)) {
+      Text text = new Text();
+      text.set(bytes, start, length);
+      writer.write(text);
+    } else if (BytesWritable.class.isAssignableFrom(writableClass)) {
+      BytesWritable bytesWritable = new BytesWritable();
+      bytesWritable.set(bytes, start, length);
+      writer.write(bytesWritable);
+    } else {
+      throw new IOException("Unsupported QueryResultOperator materialization writable class: " + writableClass);
+    }
   }
 
   private void collectCommitInformation(TezWork work, DAGStatus dagStatus, String dagIdStr) {

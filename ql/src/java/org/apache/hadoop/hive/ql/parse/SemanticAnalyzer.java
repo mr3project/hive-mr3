@@ -243,6 +243,7 @@ import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.PTFDesc;
 import org.apache.hadoop.hive.ql.plan.PlanUtils;
 import org.apache.hadoop.hive.ql.plan.QueryResultDesc;
+import org.apache.hadoop.hive.ql.plan.QueryResultMaterializationDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.ScriptDesc;
 import org.apache.hadoop.hive.ql.plan.SelectDesc;
@@ -350,6 +351,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
   protected Map<Operator<? extends OperatorDesc>, OpParseContext> opParseCtx;
   private List<LoadTableDesc> loadTableWork;
   private List<LoadFileDesc> loadFileWork;
+  private QueryResultMaterializationDesc queryResultMaterializationDesc;
   private final List<ColumnStatsAutoGatherContext> columnStatsAutoGatherContexts;
   private final Map<JoinOperator, QBJoinTree> joinContext;
   private final Map<SMBMapJoinOperator, QBJoinTree> smbMapJoinContext;
@@ -527,6 +529,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     }
     loadTableWork.clear();
     loadFileWork.clear();
+    queryResultMaterializationDesc = null;
     columnStatsAutoGatherContexts.clear();
     topOps.clear();
     destTableId = 1;
@@ -594,7 +597,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         opToSamplePruner, globalLimitCtx, nameToSplitSample, inputs, rootTasks,
         opToPartToSkewedPruner, viewAliasToInput, reduceSinkOperatorsAddedByEnforceBucketingSorting,
         analyzeRewrite, tableDesc, createVwDesc, materializedViewUpdateDesc,
-        queryProperties, viewProjectToTableSchema);
+        queryProperties, viewProjectToTableSchema, queryResultMaterializationDesc);
   }
 
   public CompilationOpContext getOpContext() {
@@ -8216,6 +8219,12 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
           queryResultDesc, fsRS, input), inputRR);
       String resultId = queryState.getQueryId() + "_" + output.getOperatorId();
       queryResultDesc.setResultId(resultId);
+      if (qb.isAnalyzeRewrite()) {
+        Path localMaterializationPath = ctx.getLocalTmpPath();
+        queryResultDesc.setLocalMaterializationPath(localMaterializationPath);
+        queryResultMaterializationDesc = new QueryResultMaterializationDesc(
+            resultId, localMaterializationPath, tableDescriptor);
+      }
       LOG.debug("Created QueryResultOperator {} for clause: {} row schema: {}", resultId, dest, inputRR);
       return output;
     }
@@ -13307,7 +13316,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         globalLimitCtx, nameToSplitSample, inputs, rootTasks, opToPartToSkewedPruner,
         viewAliasToInput, reduceSinkOperatorsAddedByEnforceBucketingSorting,
         analyzeRewrite, tableDesc, createVwDesc, materializedViewUpdateDesc,
-        queryProperties, viewProjectToTableSchema);
+        queryProperties, viewProjectToTableSchema, queryResultMaterializationDesc);
 
     // Set the semijoin hints in parse context
     pCtx.setSemiJoinHints(parseSemiJoinHint(getQB().getParseInfo().getHintList()));
