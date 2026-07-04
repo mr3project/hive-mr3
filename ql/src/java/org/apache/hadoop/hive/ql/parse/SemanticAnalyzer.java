@@ -243,6 +243,7 @@ import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.PTFDesc;
 import org.apache.hadoop.hive.ql.plan.PlanUtils;
 import org.apache.hadoop.hive.ql.plan.QueryResultDesc;
+import org.apache.hadoop.hive.ql.plan.QueryResultMaterializationDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.ScriptDesc;
 import org.apache.hadoop.hive.ql.plan.SelectDesc;
@@ -350,6 +351,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
   protected Map<Operator<? extends OperatorDesc>, OpParseContext> opParseCtx;
   private List<LoadTableDesc> loadTableWork;
   private List<LoadFileDesc> loadFileWork;
+  private QueryResultMaterializationDesc queryResultMaterializationDesc;
   private final List<ColumnStatsAutoGatherContext> columnStatsAutoGatherContexts;
   private final Map<JoinOperator, QBJoinTree> joinContext;
   private final Map<SMBMapJoinOperator, QBJoinTree> smbMapJoinContext;
@@ -527,6 +529,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     }
     loadTableWork.clear();
     loadFileWork.clear();
+    queryResultMaterializationDesc = null;
     columnStatsAutoGatherContexts.clear();
     topOps.clear();
     destTableId = 1;
@@ -594,7 +597,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         opToSamplePruner, globalLimitCtx, nameToSplitSample, inputs, rootTasks,
         opToPartToSkewedPruner, viewAliasToInput, reduceSinkOperatorsAddedByEnforceBucketingSorting,
         analyzeRewrite, tableDesc, createVwDesc, materializedViewUpdateDesc,
-        queryProperties, viewProjectToTableSchema);
+        queryProperties, viewProjectToTableSchema, queryResultMaterializationDesc);
   }
 
   public CompilationOpContext getOpContext() {
@@ -7517,7 +7520,6 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     RowResolver inputRR = opParseCtx.get(input).getRowResolver();
     QBMetaData qbm = qb.getMetaData();
     Integer destType = qbm.getDestTypeForAlias(dest);
-    boolean useQueryResultOperator = qb.getIsQuery() && !qb.isAnalyzeRewrite();
 
     Table destinationTable = null; // destination table if any
     boolean destTableIsTransactional;     // true for full ACID table and MM table
@@ -7934,7 +7936,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       }
       assert !qb.getIsQuery() || !isPartitioned;
 
-      if (!useQueryResultOperator) {
+      if (!qb.getIsQuery()) {
         if (isLocal) {
           assert !isMmTable;
           // for local directory - we always write to map-red intermediate
@@ -7979,7 +7981,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       }
 
       boolean isDestTempFile = true;
-      if (!useQueryResultOperator
+      if (!qb.getIsQuery()
           && !ctx.isMRTmpFileURI(destinationPath.toUri().toString())
           && !ctx.isResultCacheDir(destinationPath)) {
         // not a temp dir and not a result cache dir
@@ -8108,7 +8110,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         ltd.setMdTable(destinationTable);
         WriteEntity output = generateTableWriteEntity(dest, destinationTable, dpCtx.getPartSpec(), ltd, dpCtx);
         ctx.getLoadTableOutputMap().put(ltd, output);
-      } else if (!useQueryResultOperator) {
+      } else if (!qb.getIsQuery()) {
         // Create LFD even for MM CTAS - it's a no-op move, but it still seems to be used for stats.
         LoadFileDesc loadFileDesc = new LoadFileDesc(tblDesc, viewDesc, queryTmpdir, destinationPath, isDfsDir, cols,
             colTypes,
@@ -8210,13 +8212,19 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       genPartnCols(dest, input, qb, tableDescriptor, destinationTable, rsCtx);
     }
 
-    if (useQueryResultOperator) {
+    if (qb.getIsQuery()) {
       QueryResultDesc queryResultDesc = new QueryResultDesc(null, tableDescriptor,
           null != tableDescriptor && useBatchingSerializer(tableDescriptor.getSerdeClassName()));
       Operator output = putOpInsertMap(OperatorFactory.getAndMakeChild(
           queryResultDesc, fsRS, input), inputRR);
       String resultId = queryState.getQueryId() + "_" + output.getOperatorId();
       queryResultDesc.setResultId(resultId);
+      if (qb.isAnalyzeRewrite()) {
+        Path localMaterializationPath = ctx.getLocalTmpPath();
+        queryResultDesc.setLocalMaterializationPath(localMaterializationPath);
+        queryResultMaterializationDesc = new QueryResultMaterializationDesc(
+            resultId, localMaterializationPath, tableDescriptor, cols, colTypes);
+      }
       LOG.debug("Created QueryResultOperator {} for clause: {} row schema: {}", resultId, dest, inputRR);
       return output;
     }
@@ -13308,7 +13316,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         globalLimitCtx, nameToSplitSample, inputs, rootTasks, opToPartToSkewedPruner,
         viewAliasToInput, reduceSinkOperatorsAddedByEnforceBucketingSorting,
         analyzeRewrite, tableDesc, createVwDesc, materializedViewUpdateDesc,
-        queryProperties, viewProjectToTableSchema);
+        queryProperties, viewProjectToTableSchema, queryResultMaterializationDesc);
 
     // Set the semijoin hints in parse context
     pCtx.setSemiJoinHints(parseSemiJoinHint(getQB().getParseInfo().getHintList()));

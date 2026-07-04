@@ -23,6 +23,8 @@ import com.datamonad.mr3.api.client.VertexStatus;
 import com.datamonad.mr3.api.common.MR3Exception;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
@@ -31,6 +33,7 @@ import org.apache.hadoop.hive.ql.DriverContext;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
+import org.apache.hadoop.hive.ql.exec.QueryResultOperator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.Edge;
@@ -249,7 +252,7 @@ public class MR3Task {
         }
         String dagIdStr = mr3JobRef.getDagIdStr();    // may throw MR3Exception
         collectCommitInformation(tezWork, dagStatus, dagIdStr);
-        collectDagOutputs(dagStatus);
+        collectDagOutputs(tezWork, dagStatus);
         mr3Session.setAlreadyExecutedAnyDag();
       }
 
@@ -290,21 +293,58 @@ public class MR3Task {
   }
 
   @SuppressWarnings("unchecked")
-  private void collectDagOutputs(DAGStatus dagStatus) {
+  private void collectDagOutputs(TezWork tezWork, DAGStatus dagStatus) throws IOException {
     if (driverContext == null) {
       return;
     }
 
+    Map<String, Path> localMaterializationPaths = getLocalMaterializationPaths(tezWork);
+    Map<String, List<ByteString>> materializedPayloads = new HashMap<>();
     String queryId = driverContext.getQueryState().getQueryId();
     List<ByteString> payloads = new ArrayList<>();
     for (Tuple2<String, ByteString> dagOutput : JavaConverters.seqAsJavaList(dagStatus.dagOutputs())) {
-      if (dagOutput._1().startsWith(queryId)) {
+      String resultId = dagOutput._1();
+      if (localMaterializationPaths.containsKey(resultId)) {
+        materializedPayloads.computeIfAbsent(resultId, ignored -> new ArrayList<>()).add(dagOutput._2());
+      } else if (resultId.startsWith(queryId)) {
         payloads.add(dagOutput._2());
       }
     }
 
+    for (Map.Entry<String, Path> entry : localMaterializationPaths.entrySet()) {
+      materializeDagOutput(entry.getKey(),
+          materializedPayloads.getOrDefault(entry.getKey(), Collections.emptyList()), entry.getValue());
+    }
+
     LOG.info("Collected {} DAG output payload(s) for queryId={}", payloads.size(), queryId);
     driverContext.setDagOutputResultReader(new DagOutputResultReader(payloads));
+  }
+
+  private Map<String, Path> getLocalMaterializationPaths(TezWork tezWork) {
+    Map<String, Path> result = new HashMap<>();
+    for (BaseWork work : tezWork.getAllWork()) {
+      for (Operator<?> op : work.getAllOperators()) {
+        if (op instanceof QueryResultOperator) {
+          QueryResultDesc desc = (QueryResultDesc) op.getConf();
+          if (desc.getLocalMaterializationPath() != null) {
+            result.put(desc.getResultId(), desc.getLocalMaterializationPath());
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  private void materializeDagOutput(String resultId, List<ByteString> payloads, Path localPath) throws IOException {
+    FileSystem fs = localPath.getFileSystem(conf);
+    fs.mkdirs(localPath);
+    Path outputFile = new Path(localPath, "000000_0");
+    try (FSDataOutputStream out = fs.create(outputFile, true)) {
+      for (ByteString payload : payloads) {
+        payload.writeTo(out);
+      }
+    }
+    LOG.info("Materialized {} DAG output payload(s) for resultId={} to {}", payloads.size(), resultId, outputFile);
   }
 
   private void collectCommitInformation(TezWork work, DAGStatus dagStatus, String dagIdStr) {
