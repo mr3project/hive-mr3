@@ -42,4 +42,14 @@
     <value>1000</value>
   </property>
 
+  <property>
+    <name>tez.runtime.pipelined-shuffle.enabled</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>tez.runtime.pipelined-shuffle.ordered.enabled</name>
+    <value>true</value>
+  </property>
+
 </configuration>
