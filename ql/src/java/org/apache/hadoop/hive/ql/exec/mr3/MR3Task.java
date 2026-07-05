@@ -372,16 +372,33 @@ public class MR3Task {
       Class<? extends Writable> writableClass, ByteString payload) throws IOException {
     byte[] bytes = payload.toByteArray();
     int rowSeparator = HiveIgnoreKeyTextOutputFormat.getRowSeparator(queryResultDesc.getTableInfo().getProperties());
-    int recordStart = 0;
-    for (int i = 0; i < bytes.length; i++) {
-      if ((bytes[i] & 0xff) == rowSeparator) {
-        writeDagOutputRecord(writer, writableClass, bytes, recordStart, i - recordStart);
-        recordStart = i + 1;
+    int offset = 0;
+    while (offset < bytes.length) {
+      if (bytes.length - offset < Integer.BYTES) {
+        throw new IOException("Truncated QueryResultOperator DAG output row length");
+      }
+      int recordLength = readInt(bytes, offset);
+      offset += Integer.BYTES;
+      if (recordLength < 0 || recordLength > bytes.length - offset) {
+        throw new IOException("Invalid QueryResultOperator DAG output row length: " + recordLength);
+      }
+      writeDagOutputRecord(writer, writableClass, bytes, offset, recordLength);
+      offset += recordLength;
+      if (offset >= bytes.length) {
+        throw new IOException("Missing QueryResultOperator DAG output row separator");
+      }
+      int separator = bytes[offset++] & 0xff;
+      if (separator != rowSeparator) {
+        throw new IOException("Unexpected QueryResultOperator DAG output row separator: " + separator);
       }
     }
-    if (recordStart < bytes.length) {
-      writeDagOutputRecord(writer, writableClass, bytes, recordStart, bytes.length - recordStart);
-    }
+  }
+
+  private int readInt(byte[] bytes, int offset) {
+    return ((bytes[offset] & 0xff) << 24)
+        | ((bytes[offset + 1] & 0xff) << 16)
+        | ((bytes[offset + 2] & 0xff) << 8)
+        | (bytes[offset + 3] & 0xff);
   }
 
   private void writeDagOutputRecord(FileSinkOperator.RecordWriter writer,
