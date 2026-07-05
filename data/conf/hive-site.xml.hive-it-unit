@@ -405,7 +405,7 @@
 
 <property>
    <name>hive.aux.jars.path</name>
-   <value>/home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/hive-llap-common-4.2.0.jar,/home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/hive-llap-server-4.2.0.jar,/home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/hive-llap-tez-4.2.0.jar,/home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/hive-iceberg-handler-4.2.0.jar,/home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/log4j-1.2-api-2.18.0.jar</value>
+   <value>/home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/hive-llap-common-4.2.0.jar,/home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/hive-llap-server-4.2.0.jar,/home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/hive-llap-tez-4.2.0.jar,/home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/hive-iceberg-handler-4.2.0.jar,/home/gitlab-runner/hive-mr3/packaging/target/apache-hive-4.2.0-bin/apache-hive-4.2.0-bin/lib/log4j-1.2-api-2.24.3.jar</value>
 </property>
 
 <property>
