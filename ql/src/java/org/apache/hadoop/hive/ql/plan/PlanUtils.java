@@ -312,6 +312,22 @@ public final class PlanUtils {
   }
 
   /**
+   * MR3 transports ordinary HiveServer2 query results as delimited serialized rows, so the
+   * compiler-visible result artifact must use the matching text format. Task-side Thrift JDBC
+   * serialization remains a sequence-file contract because its payload consists of binary batches.
+   */
+  public static HiveConf.ResultFileFormat getQueryResultFileFormat(
+      HiveConf conf, boolean isHiveServerQuery, boolean isUsingThriftJDBCBinarySerDe) {
+    if (isHiveServerQuery
+        && "tez".equals(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE))) {
+      return isUsingThriftJDBCBinarySerDe
+          ? HiveConf.ResultFileFormat.SEQUENCEFILE
+          : HiveConf.ResultFileFormat.TEXTFILE;
+    }
+    return conf.getResultFileFormat();
+  }
+
+  /**
    * Generate a table descriptor from a createTableDesc.
    */
   public static TableDesc getTableDesc(CreateTableDesc crtTblDesc, String cols, String colTypes) {
