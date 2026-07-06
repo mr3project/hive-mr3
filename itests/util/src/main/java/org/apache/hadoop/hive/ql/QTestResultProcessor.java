@@ -18,15 +18,20 @@
 
 package org.apache.hadoop.hive.ql;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.io.output.ByteArrayOutputStream;
@@ -46,6 +51,8 @@ import org.apache.hive.common.util.StreamPrinter;
  */
 public class QTestResultProcessor {
   private static final String SORT_SUFFIX = ".sorted";
+  private static final Pattern FLOATING_POINT_PATTERN = Pattern.compile("([+-]?\\d*)\\.(\\d+)([eE][+-]?\\d+)?");
+  private static final int FLOATING_POINT_FRACTION_DIGITS = 10;
 
   private enum Operation {
     /***/
@@ -110,10 +117,15 @@ public class QTestResultProcessor {
   }
 
   public QTestProcessExecResult executeDiffCommand(String inFileName, String outFileName, boolean ignoreWhiteSpace) throws Exception {
+    return executeDiffCommand(inFileName, outFileName, ignoreWhiteSpace, shouldSort());
+  }
+
+  private QTestProcessExecResult executeDiffCommand(String inFileName, String outFileName, boolean ignoreWhiteSpace,
+      boolean sortBeforeDiff) throws Exception {
 
     QTestProcessExecResult result;
 
-    if (shouldSort()) {
+    if (sortBeforeDiff) {
       String inSorted = inFileName + SORT_SUFFIX;
       String outSorted = outFileName + SORT_SUFFIX;
 
@@ -140,12 +152,147 @@ public class QTestResultProcessor {
 
     result = executeCmd(diffCommandArgs);
 
-    if (shouldSort()) {
+    if (sortBeforeDiff) {
       new File(inFileName).delete();
       new File(outFileName).delete();
     }
 
     return result;
+  }
+
+  public QTestProcessExecResult executeQueryResultOnlyDiffCommand(String inFileName, String outFileName,
+      boolean ignoreWhiteSpace) throws Exception {
+    String inQueryResults = inFileName + ".query-results";
+    String outQueryResults = outFileName + ".query-results";
+
+    writeQueryResultOnlyFile(inFileName, inQueryResults, ignoreWhiteSpace);
+    writeQueryResultOnlyFile(outFileName, outQueryResults, ignoreWhiteSpace);
+
+    QTestProcessExecResult result = executeDiffCommand(inQueryResults, outQueryResults, ignoreWhiteSpace, false);
+    if (result.getReturnCode() == 0) {
+      new File(inQueryResults).delete();
+      new File(outQueryResults).delete();
+    }
+    return result;
+  }
+
+  private void writeQueryResultOnlyFile(String inFileName, String outFileName, boolean ignoreWhiteSpace)
+      throws Exception {
+    ArrayList<QueryResultSection> sections = extractQueryResultSections(inFileName, ignoreWhiteSpace);
+    PrintWriter writer = new PrintWriter(outFileName, "UTF-8");
+    try {
+      for (int i = 0; i < sections.size(); i++) {
+        QueryResultSection section = sections.get(i);
+        ArrayList<String> sortedRows = new ArrayList<String>(section.rows);
+        Collections.sort(sortedRows);
+        writer.println("#### QUERY RESULT SECTION " + (i + 1) + " ####");
+        for (String row : sortedRows) {
+          writer.println(row);
+        }
+      }
+    } finally {
+      writer.close();
+    }
+  }
+
+  private ArrayList<QueryResultSection> extractQueryResultSections(String fileName, boolean ignoreWhiteSpace)
+      throws Exception {
+    ArrayList<QueryResultSection> sections = new ArrayList<QueryResultSection>();
+    BufferedReader reader = new BufferedReader(new FileReader(fileName));
+    QueryResultSection currentSection = null;
+    boolean currentSectionComparable = false;
+    boolean currentQueryComparable = false;
+    boolean seenPostHookType = false;
+    try {
+      String line;
+      while ((line = reader.readLine()) != null) {
+        if (line.startsWith("PREHOOK: query: ")) {
+          if (currentSectionComparable && currentSection != null) {
+            sections.add(currentSection);
+          }
+          String query = line.substring("PREHOOK: query: ".length()).trim();
+          currentQueryComparable = isComparableQuery(query);
+          currentSectionComparable = false;
+          currentSection = new QueryResultSection();
+          seenPostHookType = false;
+          continue;
+        }
+
+        if (line.startsWith("PREHOOK: type: ")) {
+          currentSectionComparable = currentQueryComparable
+              && "QUERY".equals(line.substring("PREHOOK: type: ".length()));
+          if (!currentSectionComparable) {
+            currentSection = null;
+          }
+          continue;
+        }
+
+        if (!currentSectionComparable) {
+          continue;
+        }
+
+        if (line.startsWith("POSTHOOK: type: ")) {
+          seenPostHookType = true;
+          continue;
+        }
+
+        if (!seenPostHookType || isQTestMetadataLine(line)) {
+          continue;
+        }
+
+        currentSection.rows.add(normalizeQueryResultLine(line, ignoreWhiteSpace));
+      }
+    } finally {
+      reader.close();
+    }
+
+    if (currentSectionComparable && currentSection != null) {
+      sections.add(currentSection);
+    }
+
+    return sections;
+  }
+
+  private boolean isComparableQuery(String query) {
+    String normalizedQuery = query.trim().toLowerCase();
+    return !normalizedQuery.startsWith("explain")
+        && !normalizedQuery.startsWith("describe")
+        && !normalizedQuery.startsWith("desc ");
+  }
+
+  private boolean isQTestMetadataLine(String line) {
+    return line.startsWith("PREHOOK:")
+        || line.startsWith("POSTHOOK:")
+        || line.startsWith("Warning:")
+        || line.startsWith("#### A masked pattern was here ####")
+        || line.contains("hdfs://### HDFS PATH ###");
+  }
+
+  private String normalizeQueryResultLine(String line, boolean ignoreWhiteSpace) {
+    String normalizedLine = truncateFloatingPointNumbers(line.replaceAll("\\s+$", ""));
+    if (ignoreWhiteSpace) {
+      normalizedLine = normalizedLine.trim().replaceAll("\\s+", " ");
+    }
+    return normalizedLine;
+  }
+
+  private String truncateFloatingPointNumbers(String line) {
+    Matcher matcher = FLOATING_POINT_PATTERN.matcher(line);
+    StringBuffer buffer = new StringBuffer();
+    while (matcher.find()) {
+      String fraction = matcher.group(2);
+      if (fraction.length() > FLOATING_POINT_FRACTION_DIGITS) {
+        fraction = fraction.substring(0, FLOATING_POINT_FRACTION_DIGITS);
+      }
+      String exponent = matcher.group(3) == null ? "" : matcher.group(3);
+      matcher.appendReplacement(buffer, Matcher.quoteReplacement(matcher.group(1) + "." + fraction + exponent));
+    }
+    matcher.appendTail(buffer);
+    return buffer.toString();
+  }
+
+  private static class QueryResultSection {
+    private final ArrayList<String> rows = new ArrayList<String>();
   }
 
   public void overwriteResults(String inFileName, String outFileName) throws Exception {

@@ -24,6 +24,7 @@ public class QTestSystemProperties {
   public static final String SYS_PROP_TMP_DIR_PROPERTY = "test.tmp.dir"; // typically target/tmp
   private static final String SYS_PROP_SRC_TABLES_PROPERTY = "test.src.tables";
   private static final String SYS_PROP_OUTPUT_OVERWRITE = "test.output.overwrite";
+  private static final String SYS_PROP_COMPARE_QUERY_RESULTS_ONLY = "test.compare.query.results.only";
   private static final String SYS_PROP_SRC_UDFS = "test.src.udfs";
   private static final String SYS_PROP_VECTORIZATION_ENABLED = "test.vectorization.enabled";
   private static final String SYS_PROP_CHECK_SYNTAX = "test.check.syntax";
@@ -62,6 +63,10 @@ public class QTestSystemProperties {
 
   public static boolean shouldOverwriteResults() {
     return isTrue(SYS_PROP_OUTPUT_OVERWRITE);
+  }
+
+  public static boolean shouldCompareQueryResultsOnly() {
+    return !"false".equals(System.getProperty(SYS_PROP_COMPARE_QUERY_RESULTS_ONLY));
   }
 
   public static boolean shouldCheckSyntax() {
