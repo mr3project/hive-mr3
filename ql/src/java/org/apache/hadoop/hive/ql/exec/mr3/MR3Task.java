@@ -75,7 +75,7 @@ import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.DefaultFetchFormatter;
 import org.apache.hadoop.hive.serde2.FetchFormatter;
-import org.apache.hadoop.hive.serde2.SerDeUtils;
+import org.apache.hadoop.hive.serde2.NoOpFetchFormatter;
 import org.apache.hadoop.hive.serde2.thrift.ThriftFormatter;
 import org.apache.hadoop.hive.serde2.thrift.ThriftJDBCBinarySerDe;
 import org.apache.hadoop.io.BytesWritable;
@@ -85,7 +85,6 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.util.StringUtils;
-import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.yarn.api.records.LocalResource;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.tez.common.counters.CounterGroup;
@@ -407,21 +406,11 @@ public class MR3Task {
   }
 
   private FetchFormatter initializeFetchFormatter(JobConf jobConf, QueryResultDesc queryResultDesc) throws Exception {
-    String formatterName = jobConf.get(SerDeUtils.LIST_SINK_OUTPUT_FORMATTER);
-    if (!queryResultDesc.getTableInfo().getSerdeClassName().equalsIgnoreCase(ThriftJDBCBinarySerDe.class.getName())) {
-      SessionState sessionState = SessionState.get();
-      if (sessionState != null && sessionState.isHiveServerQuery()) {
-        formatterName = ThriftFormatter.class.getName();
-      } else if (formatterName == null || formatterName.isEmpty()) {
-        formatterName = DefaultFetchFormatter.class.getName();
-      }
-    }
-
     FetchFormatter formatter;
-    if (formatterName != null && !formatterName.isEmpty()) {
-      Class<? extends FetchFormatter> formatterClass = Class.forName(formatterName, true,
-          Utilities.getSessionSpecifiedClassLoader()).asSubclass(FetchFormatter.class);
-      formatter = ReflectionUtils.newInstance(formatterClass, null);
+    if (queryResultDesc.getTableInfo().getSerdeClassName().equalsIgnoreCase(ThriftJDBCBinarySerDe.class.getName())) {
+      formatter = new NoOpFetchFormatter();
+    } else if (Optional.ofNullable(SessionState.get()).map(SessionState::isHiveServerQuery).orElse(false)) {
+      formatter = new ThriftFormatter();
     } else {
       formatter = new DefaultFetchFormatter();
     }
