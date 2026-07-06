@@ -989,6 +989,8 @@ public class QTestUtil {
     if (QTestSystemProperties.shouldOverwriteResults()) {
       qTestResultProcessor.overwriteResults(f.getPath(), outFileName);
       return QTestProcessExecResult.createWithoutOutput(0);
+    } else if (QTestSystemProperties.shouldCompareQueryResultsOnly()) {
+      return qTestResultProcessor.executeQueryResultOnlyDiffCommand(f.getPath(), outFileName, false);
     } else {
       return qTestResultProcessor.executeDiffCommand(f.getPath(), outFileName, false);
     }
