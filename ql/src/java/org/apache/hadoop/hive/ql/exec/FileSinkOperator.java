@@ -149,6 +149,7 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
   private transient BiFunction<Object[], ObjectInspector[], Integer> hashFunc;
   public static final String TOTAL_TABLE_ROWS_WRITTEN = "TOTAL_TABLE_ROWS_WRITTEN";
   private transient Set<String> dynamicPartitionSpecs = new HashSet<>();
+  private transient QueryResultDagOutputWriter queryResultDagOutputWriter;
 
   /**
    * Counters.
@@ -619,6 +620,11 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
   @Override
   protected void initializeOp(Configuration hconf) throws HiveException {
     super.initializeOp(hconf);
+    if (conf.isEmitQueryResultToDag()) {
+      queryResultDagOutputWriter = new QueryResultDagOutputWriter();
+      queryResultDagOutputWriter.initialize(hconf, conf, inputObjInspectors);
+      return;
+    }
     try {
       this.hconf = hconf;
       filesCreated = false;
@@ -1070,6 +1076,11 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
 
   @Override
   public void process(Object row, int tag) throws HiveException {
+    if (conf.isEmitQueryResultToDag()) {
+      runTimeNumRows++;
+      queryResultDagOutputWriter.process(row, tag);
+      return;
+    }
     runTimeNumRows++;
     /* Create list bucketing sub-directory only if stored-as-directories is on. */
     String lbDirName = null;
@@ -1482,6 +1493,13 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
 
   @Override
   public void closeOp(boolean abort) throws HiveException {
+    if (conf.isEmitQueryResultToDag()) {
+      if (queryResultDagOutputWriter != null) {
+        queryResultDagOutputWriter.close(abort);
+      }
+      super.closeOp(abort);
+      return;
+    }
 
     row_count.set(conf.isDeleteOfSplitUpdate() ? 0 : numRows);
 

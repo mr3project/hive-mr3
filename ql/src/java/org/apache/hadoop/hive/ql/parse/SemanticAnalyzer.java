@@ -242,7 +242,6 @@ import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.PTFDesc;
 import org.apache.hadoop.hive.ql.plan.PlanUtils;
-import org.apache.hadoop.hive.ql.plan.QueryResultDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.ScriptDesc;
 import org.apache.hadoop.hive.ql.plan.SelectDesc;
@@ -2656,8 +2655,8 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
           } else {
             // This is the only place where isQuery is set to true; it defaults to false.
             qb.setIsQuery(true);
-            // QueryResultOperator does not write to a staging directory, but the destination
-            // metadata still needs a marker so planning can derive the query result schema.
+            // Top-level query results use the normal FileSinkOperator/FetchTask contract;
+            // the destination metadata still needs a marker so planning can derive the query result schema.
             fname = queryState.getQueryId();
             ctx.setResDir(null);
           }
@@ -2668,7 +2667,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
           isDfsFile = false;
         }
         // Set the destination metadata for CTAS and top-level SELECT queries.
-        // For top-level SELECT, QueryResultOperator uses this alias metadata for schema derivation only.
+        // For top-level SELECT, FileSinkOperator uses this alias metadata for schema derivation.
         qb.getMetaData().setDestForAlias(name, fname, isDfsFile);
 
         CreateTableDesc directoryDesc = new CreateTableDesc();
@@ -7933,7 +7932,10 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       }
       assert !qb.getIsQuery() || !isPartitioned;
 
-      if (!qb.getIsQuery()) {
+      if (qb.getIsQuery()) {
+        queryTmpdir = ctx.getMRTmpPath();
+        ctx.setResDir(queryTmpdir);
+      } else {
         if (isLocal) {
           assert !isMmTable;
           // for local directory - we always write to map-red intermediate
@@ -8207,17 +8209,6 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     // Generate the partition columns from the parent input
     if (destType == QBMetaData.DEST_TABLE || destType == QBMetaData.DEST_PARTITION) {
       genPartnCols(dest, input, qb, tableDescriptor, destinationTable, rsCtx);
-    }
-
-    if (qb.getIsQuery()) {
-      QueryResultDesc queryResultDesc = new QueryResultDesc(null, tableDescriptor,
-          null != tableDescriptor && useBatchingSerializer(tableDescriptor.getSerdeClassName()));
-      Operator output = putOpInsertMap(OperatorFactory.getAndMakeChild(
-          queryResultDesc, fsRS, input), inputRR);
-      String resultId = queryState.getQueryId() + "_" + output.getOperatorId();
-      queryResultDesc.setResultId(resultId);
-      LOG.debug("Created QueryResultOperator {} for clause: {} row schema: {}", resultId, dest, inputRR);
-      return output;
     }
 
     FileSinkDesc fileSinkDesc = createFileSinkDesc(dest, tableDescriptor, destinationPartition,

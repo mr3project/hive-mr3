@@ -175,9 +175,9 @@ public abstract class TaskCompiler {
 
     if (pCtx.getQueryProperties().isQuery()) {
       /*
-       * QueryResultOperator produces top-level query results in-memory. The legacy
-       * FetchTask/LoadFileDesc path below is only for file-backed results produced
-       * by FileSinkOperator, so do not create FetchWork, FetchTask, or MoveWork here.
+       * Top-level query results remain FileSinkOperator results fetched through the
+       * normal FetchTask contract. They do not need LoadFileDesc/MoveWork table
+       * movement here.
        */
       if (outerQueryLimit == 0) {
         // Preserve the existing LIMIT 0 shortcut without creating file-backed fetch work.

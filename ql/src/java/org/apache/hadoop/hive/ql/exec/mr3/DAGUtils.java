@@ -418,8 +418,11 @@ public class DAGUtils {
     }
   }
 
-  private boolean hasFileSinkOperator(BaseWork work) {
-    return work.getAllOperators().stream().anyMatch(o -> o instanceof FileSinkOperator);
+  private boolean hasTaskSideFileSinkWriter(BaseWork work) {
+    return work.getAllOperators().stream()
+        .filter(o -> o instanceof FileSinkOperator)
+        .map(o -> (FileSinkOperator) o)
+        .anyMatch(o -> !o.getConf().isEmitQueryResultToDag());
   }
 
   /*
@@ -433,13 +436,13 @@ public class DAGUtils {
     // set up the operator plan
     Utilities.cacheMapWork(vertexJobConf, mapWork, mr3ScratchDir);
 
-    // QueryResultOperator returns top-level query results through DAG outputs, not through
-    // FileSinkOperator output paths. Only create Hive Context scratch/staging temp
+    // FileSinkOperator can return MR3-private top-level query results through DAG outputs, not through
+    // task-side FileSinkOperator output paths. Only create Hive Context scratch/staging temp
     // directories when this work still has a real FileSinkOperator, e.g. for table writes.
-    if (hasFileSinkOperator(mapWork)) {
+    if (hasTaskSideFileSinkWriter(mapWork)) {
       Utilities.createTmpDirs(vertexJobConf, mapWork);
     } else {
-      LOG.debug("Skipping FileSinkOperator temp directory creation for MapWork {}", mapWork.getName());
+      LOG.debug("Skipping task-side FileSinkOperator temp directory creation for MapWork {}", mapWork.getName());
     }
 
     boolean groupSplitsInInputInitializer;  // use tez to combine splits???
@@ -589,13 +592,13 @@ public class DAGUtils {
     vertexJobConf.set(Utilities.INPUT_NAME, reduceWork.getName());
     Utilities.setReduceWork(vertexJobConf, reduceWork, mr3ScratchDir, false);
 
-    // QueryResultOperator returns top-level query results through DAG outputs, not through
-    // FileSinkOperator output paths. Only create Hive Context scratch/staging temp
+    // FileSinkOperator can return MR3-private top-level query results through DAG outputs, not through
+    // task-side FileSinkOperator output paths. Only create Hive Context scratch/staging temp
     // directories when this work still has a real FileSinkOperator, e.g. for table writes.
-    if (hasFileSinkOperator(reduceWork)) {
+    if (hasTaskSideFileSinkWriter(reduceWork)) {
       Utilities.createTmpDirs(vertexJobConf, reduceWork);
     } else {
-      LOG.debug("Skipping FileSinkOperator temp directory creation for ReduceWork {}", reduceWork.getName());
+      LOG.debug("Skipping task-side FileSinkOperator temp directory creation for ReduceWork {}", reduceWork.getName());
     }
 
     ByteString userPayload = createConfPayload(vertexJobConf, commonJobConf, "reduce_processor");

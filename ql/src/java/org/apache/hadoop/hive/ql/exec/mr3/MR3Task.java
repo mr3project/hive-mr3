@@ -23,10 +23,11 @@ import com.datamonad.mr3.api.client.VertexStatus;
 import com.datamonad.mr3.api.common.MR3Exception;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
-import org.apache.hadoop.hive.ql.DagOutputResultReader;
 import org.apache.hadoop.hive.ql.DriverContext;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
@@ -57,7 +58,6 @@ import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
 import org.apache.hadoop.hive.ql.plan.MergeJoinWork;
 import org.apache.hadoop.hive.ql.plan.PTFDesc;
 import org.apache.hadoop.hive.ql.plan.PlanUtils;
-import org.apache.hadoop.hive.ql.plan.QueryResultDesc;
 import org.apache.hadoop.hive.ql.plan.ReduceSinkDesc;
 import org.apache.hadoop.hive.ql.plan.SelectDesc;
 import org.apache.hadoop.hive.ql.plan.TableScanDesc;
@@ -84,6 +84,8 @@ import org.slf4j.LoggerFactory;
 import scala.Tuple2;
 import scala.collection.JavaConverters;
 
+import java.io.DataInputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -136,6 +138,7 @@ public class MR3Task {
 
   private Map<BaseWork, Vertex> workToVertex = null;
   private Map<BaseWork, JobConf> workToConf = null;
+  private final Map<String, QueryResultMaterializationContext> queryResultMaterializationContexts = new HashMap<>();
 
   public MR3Task(HiveConf conf, SessionState.LogHelper console, AtomicBoolean isShutdown) {
     this(conf, console, isShutdown, null);
@@ -290,21 +293,64 @@ public class MR3Task {
   }
 
   @SuppressWarnings("unchecked")
-  private void collectDagOutputs(DAGStatus dagStatus) {
-    if (driverContext == null) {
+  private void collectDagOutputs(DAGStatus dagStatus) throws IOException {
+    if (queryResultMaterializationContexts.isEmpty()) {
       return;
     }
 
-    String queryId = driverContext.getQueryState().getQueryId();
-    List<ByteString> payloads = new ArrayList<>();
+    Map<String, List<ByteString>> payloadsByResultId = new HashMap<>();
     for (Tuple2<String, ByteString> dagOutput : JavaConverters.seqAsJavaList(dagStatus.dagOutputs())) {
-      if (dagOutput._1().startsWith(queryId)) {
-        payloads.add(dagOutput._2());
+      QueryResultMaterializationContext materializationContext =
+          queryResultMaterializationContexts.get(dagOutput._1());
+      if (materializationContext != null) {
+        payloadsByResultId.computeIfAbsent(dagOutput._1(), key -> new ArrayList<>()).add(dagOutput._2());
       }
     }
 
-    LOG.info("Collected {} DAG output payload(s) for queryId={}", payloads.size(), queryId);
-    driverContext.setDagOutputResultReader(new DagOutputResultReader(payloads));
+    for (QueryResultMaterializationContext materializationContext : queryResultMaterializationContexts.values()) {
+      materializeDagOutputs(materializationContext,
+          payloadsByResultId.getOrDefault(materializationContext.resultId, Collections.emptyList()));
+    }
+  }
+
+  private void materializeDagOutputs(
+      QueryResultMaterializationContext ctx, List<ByteString> payloads) throws IOException {
+    FileSystem fs = ctx.resultDir.getFileSystem(conf);
+    if (fs.exists(ctx.resultDir)) {
+      fs.delete(ctx.resultDir, true);
+    }
+    fs.mkdirs(ctx.resultDir);
+    Path resultFile = new Path(ctx.resultDir, "000000_0");
+    try (FSDataOutputStream out = fs.create(resultFile, true)) {
+      for (ByteString payload : payloads) {
+        if (ctx.binaryFramed) {
+          writeUnframedBinaryPayload(payload, out);
+        } else {
+          payload.writeTo(out);
+        }
+      }
+    }
+    LOG.info("Materialized {} MR3 DAG output payload(s) for resultId={} into {}",
+        payloads.size(), ctx.resultId, resultFile);
+  }
+
+  private void writeUnframedBinaryPayload(ByteString payload, FSDataOutputStream out) throws IOException {
+    try (DataInputStream in = new DataInputStream(payload.newInput())) {
+      while (true) {
+        int length;
+        try {
+          length = in.readInt();
+        } catch (EOFException eof) {
+          return;
+        }
+        if (length < 0) {
+          throw new IOException("Negative MR3 query-result DAG-output frame length: " + length);
+        }
+        byte[] bytes = new byte[length];
+        in.readFully(bytes);
+        out.write(bytes);
+      }
+    }
   }
 
   private void collectCommitInformation(TezWork work, DAGStatus dagStatus, String dagIdStr) {
@@ -591,6 +637,86 @@ public class MR3Task {
     dag.addVertexGroup(vertexGroup);
   }
 
+  private void enableQueryResultDagOutputModeIfNeeded(
+      TezWork tezWork, BaseWork baseWork, boolean isFinal, JobConf vertexJobConf, Context context) {
+    if (driverContext == null || !isFinal) {
+      return;
+    }
+    for (Operator<?> op : baseWork.getAllOperators()) {
+      if (op instanceof FileSinkOperator) {
+        FileSinkOperator fsOp = (FileSinkOperator) op;
+        FileSinkDesc desc = fsOp.getConf();
+        if (isEligibleQueryResultFileSink(desc)) {
+          String queryId = driverContext.getQueryState().getQueryId();
+          String resultId = queryId + "_" + baseWork.getName() + "_" + fsOp.getIdentifier();
+          QueryResultMaterializationContext ctx = new QueryResultMaterializationContext(
+              resultId, fsOp, desc, desc.getDirName(), desc.getTableInfo(), desc.isUsingBatchingSerDe(),
+              baseWork.getName(), fsOp.getIdentifier());
+          enableQueryResultDagOutputMode(fsOp, ctx,
+              HiveConf.getLongVar(vertexJobConf, HiveConf.ConfVars.HIVE_MR3_QUERY_RESULT_TASK_MAX_BYTES));
+        }
+      }
+    }
+  }
+
+  private boolean isEligibleQueryResultFileSink(FileSinkDesc desc) {
+    return desc != null
+        && desc.getIsQuery()
+        && desc.getTable() == null
+        && desc.getDynPartCtx() == null
+        && !desc.isCTASorCM()
+        && !desc.isMerge()
+        && !desc.isMmCtas()
+        && desc.getWriteType() == org.apache.hadoop.hive.ql.io.AcidUtils.Operation.NOT_ACID;
+  }
+
+  private void enableQueryResultDagOutputMode(
+      FileSinkOperator fsOp, QueryResultMaterializationContext ctx, long maxBytes) {
+    FileSinkDesc desc = fsOp.getConf();
+    if (desc.isEmitQueryResultToDag()) {
+      if (!ctx.resultId.equals(desc.getQueryResultId())) {
+        throw new IllegalStateException("Conflicting MR3 query-result id for FileSinkOperator. existing="
+            + desc.getQueryResultId() + ", new=" + ctx.resultId);
+      }
+      registerMaterializationContextIfAbsent(ctx);
+      return;
+    }
+    desc.setEmitQueryResultToDag(true);
+    desc.setQueryResultId(ctx.resultId);
+    desc.setQueryResultMaxBytes(maxBytes);
+    registerMaterializationContextIfAbsent(ctx);
+  }
+
+  private void registerMaterializationContextIfAbsent(QueryResultMaterializationContext ctx) {
+    queryResultMaterializationContexts.putIfAbsent(ctx.resultId, ctx);
+  }
+
+  private static final class QueryResultMaterializationContext {
+    final String resultId;
+    final FileSinkOperator fileSinkOperator;
+    final FileSinkDesc fileSinkDesc;
+    final Path resultDir;
+    final org.apache.hadoop.hive.ql.plan.TableDesc tableDesc;
+    final boolean usingBatchingSerDe;
+    final boolean binaryFramed;
+    final String workName;
+    final String operatorId;
+
+    QueryResultMaterializationContext(String resultId, FileSinkOperator fileSinkOperator,
+        FileSinkDesc fileSinkDesc, Path resultDir, org.apache.hadoop.hive.ql.plan.TableDesc tableDesc,
+        boolean usingBatchingSerDe, String workName, String operatorId) {
+      this.resultId = resultId;
+      this.fileSinkOperator = fileSinkOperator;
+      this.fileSinkDesc = fileSinkDesc;
+      this.resultDir = resultDir;
+      this.tableDesc = tableDesc;
+      this.usingBatchingSerDe = usingBatchingSerDe;
+      this.binaryFramed = usingBatchingSerDe;
+      this.workName = workName;
+      this.operatorId = operatorId;
+    }
+  }
+
   private void buildRegularVertexEdge(
       JobConf jobConf,
       DAG dag, TezWork tezWork, BaseWork baseWork,
@@ -605,6 +731,8 @@ public class MR3Task {
 
     // update vertexJobConf before calling createVertex() which calls createBy
     int numChildren = tezWork.getChildren(baseWork).size();
+    enableQueryResultDagOutputModeIfNeeded(tezWork, baseWork, isFinal, vertexJobConf, context);
+
     if (numChildren > 1) {  // added from HIVE-22744
       String value = vertexJobConf.get(TezRuntimeConfiguration.TEZ_RUNTIME_IO_SORT_MB);
       int originalValue;
@@ -918,14 +1046,12 @@ public class MR3Task {
           FileSinkDesc fileSinkDesc = (FileSinkDesc) op.getConf();
           extraInfo.put("dirName", fileSinkDesc.getDirNameString());
           extraInfo.put("compressed", String.valueOf(fileSinkDesc.getCompressed()));
+          extraInfo.put("emitQueryResultToDag", String.valueOf(fileSinkDesc.isEmitQueryResultToDag()));
+          extraInfo.put("queryResultId", String.valueOf(fileSinkDesc.getQueryResultId()));
+          extraInfo.put("queryResultMaxBytes", String.valueOf(fileSinkDesc.getQueryResultMaxBytes()));
+          extraInfo.put("usingBatchingSerDe", String.valueOf(fileSinkDesc.isUsingBatchingSerDe()));
           break;
 
-        case "QRO":
-          QueryResultDesc queryResultDesc = (QueryResultDesc) op.getConf();
-          extraInfo.put("resultId", String.valueOf(queryResultDesc.getResultId()));
-          extraInfo.put("usingBatchingSerDe", String.valueOf(queryResultDesc.isUsingBatchingSerDe()));
-          extraInfo.put("maxBytes", String.valueOf(queryResultDesc.getMaxBytes()));
-          break;
       }
 
       // Add column expression map for all operators

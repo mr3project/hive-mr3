@@ -137,6 +137,37 @@ public class FileSinkDesc extends AbstractOperatorDesc implements IStatsGatherDe
 
   private boolean isCTASorCM = false;
 
+  /**
+   * MR3 execution-only query-result transport flag.
+   *
+   * This flag does not change the logical Hive meaning of FileSinkOperator.
+   * The logical result sink is still a FileSinkOperator whose output is
+   * consumed through the normal query-result/fetch contract.
+   *
+   * When this flag is true in MR3 task execution, FileSinkOperator does not
+   * create normal task-side FileSink writers. Instead it serializes final
+   * query-result rows and emits them through MR3 DAGOutputEvent. MR3Task
+   * later materializes those DAG-output bytes into the result artifact
+   * expected by the normal FileSink/FetchTask contract.
+   *
+   * Generic Hive planning, FetchTask, HiveServer2 result decoding, analyze
+   * logic, and normal FileSink output-path setup must not use this flag to
+   * infer SQL semantics or logical result semantics.
+   */
+  private boolean emitQueryResultToDag = false;
+
+  /**
+   * Exact MR3 DAG-output id used when emitQueryResultToDag is true.
+   * MR3Task.collectDagOutputs() must match DAG outputs by this exact id.
+   */
+  private String queryResultId;
+
+  /**
+   * Per-task byte limit for MR3 query-result DAG-output buffering.
+   * A negative value means no explicit per-task limit.
+   */
+  private long queryResultMaxBytes = -1;
+
   public FileSinkDesc() {
   }
 
@@ -209,6 +240,9 @@ public class FileSinkDesc extends AbstractOperatorDesc implements IStatsGatherDe
     ret.setIsDirectInsert(isDirectInsert);
     ret.setAcidOperation(acidOperation);
     ret.setMoveTaskId(moveTaskId);
+    ret.setEmitQueryResultToDag(emitQueryResultToDag);
+    ret.setQueryResultId(queryResultId);
+    ret.setQueryResultMaxBytes(queryResultMaxBytes);
     return ret;
   }
 
@@ -238,6 +272,30 @@ public class FileSinkDesc extends AbstractOperatorDesc implements IStatsGatherDe
 
   public void setHiveServerQuery(boolean isHiveServerQuery) {
     this.isHiveServerQuery = isHiveServerQuery;
+  }
+
+  public boolean isEmitQueryResultToDag() {
+    return emitQueryResultToDag;
+  }
+
+  public void setEmitQueryResultToDag(boolean emitQueryResultToDag) {
+    this.emitQueryResultToDag = emitQueryResultToDag;
+  }
+
+  public String getQueryResultId() {
+    return queryResultId;
+  }
+
+  public void setQueryResultId(String queryResultId) {
+    this.queryResultId = queryResultId;
+  }
+
+  public long getQueryResultMaxBytes() {
+    return queryResultMaxBytes;
+  }
+
+  public void setQueryResultMaxBytes(long queryResultMaxBytes) {
+    this.queryResultMaxBytes = queryResultMaxBytes;
   }
 
   public boolean isUsingBatchingSerDe() {
