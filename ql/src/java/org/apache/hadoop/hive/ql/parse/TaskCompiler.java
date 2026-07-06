@@ -200,11 +200,13 @@ public abstract class TaskCompiler {
       TableDesc resultTab = pCtx.getFetchTableDesc();
       boolean shouldSetOutputFormatter = false;
       if (resultTab == null) {
-        ResultFileFormat resFileFormat = conf.getResultFileFormat();
+        boolean isUsingThriftJDBCBinarySerDe =
+            SessionState.get().getIsUsingThriftJDBCBinarySerDe();
+        ResultFileFormat resFileFormat = PlanUtils.getQueryResultFileFormat(
+            conf, SessionState.get().isHiveServerQuery(), isUsingThriftJDBCBinarySerDe);
         String fileFormat;
         Class<? extends Deserializer> serdeClass;
-        if (SessionState.get().getIsUsingThriftJDBCBinarySerDe()
-            && resFileFormat == ResultFileFormat.SEQUENCEFILE) {
+        if (isUsingThriftJDBCBinarySerDe && resFileFormat == ResultFileFormat.SEQUENCEFILE) {
           fileFormat = resFileFormat.toString();
           serdeClass = ThriftJDBCBinarySerDe.class;
           shouldSetOutputFormatter = true;

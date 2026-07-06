@@ -7990,10 +7990,12 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
             tableDescriptor = PlanUtils.getTableDesc(viewDesc, cols, colTypes);
           } else if (qb.getIsQuery()) {
             Class<? extends Deserializer> serdeClass = LazySimpleSerDe.class;
-            String fileFormat = conf.getResultFileFormat().toString();
-            if (SessionState.get().getIsUsingThriftJDBCBinarySerDe()) {
+            boolean isUsingThriftJDBCBinarySerDe =
+                SessionState.get().getIsUsingThriftJDBCBinarySerDe();
+            String fileFormat = PlanUtils.getQueryResultFileFormat(
+                conf, SessionState.get().isHiveServerQuery(), isUsingThriftJDBCBinarySerDe).toString();
+            if (isUsingThriftJDBCBinarySerDe) {
               serdeClass = ThriftJDBCBinarySerDe.class;
-              fileFormat = ResultFileFormat.SEQUENCEFILE.toString();
               // Set the fetch formatter to be a no-op for the ListSinkOperator, since we'll
               // write out formatted thrift objects to SequenceFile
               conf.set(SerDeUtils.LIST_SINK_OUTPUT_FORMATTER, NoOpFetchFormatter.class.getName());
