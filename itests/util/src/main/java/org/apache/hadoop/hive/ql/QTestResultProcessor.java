@@ -18,12 +18,16 @@
 
 package org.apache.hadoop.hive.ql;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -110,10 +114,15 @@ public class QTestResultProcessor {
   }
 
   public QTestProcessExecResult executeDiffCommand(String inFileName, String outFileName, boolean ignoreWhiteSpace) throws Exception {
+    return executeDiffCommand(inFileName, outFileName, ignoreWhiteSpace, shouldSort());
+  }
+
+  private QTestProcessExecResult executeDiffCommand(String inFileName, String outFileName, boolean ignoreWhiteSpace,
+      boolean sortBeforeDiff) throws Exception {
 
     QTestProcessExecResult result;
 
-    if (shouldSort()) {
+    if (sortBeforeDiff) {
       String inSorted = inFileName + SORT_SUFFIX;
       String outSorted = outFileName + SORT_SUFFIX;
 
@@ -140,12 +149,130 @@ public class QTestResultProcessor {
 
     result = executeCmd(diffCommandArgs);
 
-    if (shouldSort()) {
+    if (sortBeforeDiff) {
       new File(inFileName).delete();
       new File(outFileName).delete();
     }
 
     return result;
+  }
+
+  public QTestProcessExecResult executeQueryResultOnlyDiffCommand(String inFileName, String outFileName,
+      boolean ignoreWhiteSpace) throws Exception {
+    String inQueryResults = inFileName + ".query-results";
+    String outQueryResults = outFileName + ".query-results";
+
+    writeQueryResultOnlyFile(inFileName, inQueryResults, ignoreWhiteSpace);
+    writeQueryResultOnlyFile(outFileName, outQueryResults, ignoreWhiteSpace);
+
+    QTestProcessExecResult result = executeDiffCommand(inQueryResults, outQueryResults, ignoreWhiteSpace, false);
+    if (result.getReturnCode() == 0) {
+      new File(inQueryResults).delete();
+      new File(outQueryResults).delete();
+    }
+    return result;
+  }
+
+  private void writeQueryResultOnlyFile(String inFileName, String outFileName, boolean ignoreWhiteSpace)
+      throws Exception {
+    ArrayList<QueryResultSection> sections = extractQueryResultSections(inFileName, ignoreWhiteSpace);
+    PrintWriter writer = new PrintWriter(outFileName, "UTF-8");
+    try {
+      for (int i = 0; i < sections.size(); i++) {
+        QueryResultSection section = sections.get(i);
+        ArrayList<String> sortedRows = new ArrayList<String>(section.rows);
+        Collections.sort(sortedRows);
+        writer.println("#### QUERY RESULT SECTION " + (i + 1) + " ####");
+        for (String row : sortedRows) {
+          writer.println(row);
+        }
+      }
+    } finally {
+      writer.close();
+    }
+  }
+
+  private ArrayList<QueryResultSection> extractQueryResultSections(String fileName, boolean ignoreWhiteSpace)
+      throws Exception {
+    ArrayList<QueryResultSection> sections = new ArrayList<QueryResultSection>();
+    BufferedReader reader = new BufferedReader(new FileReader(fileName));
+    QueryResultSection currentSection = null;
+    boolean currentSectionComparable = false;
+    boolean currentQueryComparable = false;
+    boolean seenPostHookQuery = false;
+    try {
+      String line;
+      while ((line = reader.readLine()) != null) {
+        if (line.startsWith("PREHOOK: query: ")) {
+          if (currentSectionComparable && currentSection != null) {
+            sections.add(currentSection);
+          }
+          String query = line.substring("PREHOOK: query: ".length()).trim();
+          currentQueryComparable = isComparableQuery(query);
+          currentSectionComparable = false;
+          currentSection = new QueryResultSection();
+          seenPostHookQuery = false;
+          continue;
+        }
+
+        if (line.startsWith("PREHOOK: type: ")) {
+          currentSectionComparable = currentQueryComparable
+              && "QUERY".equals(line.substring("PREHOOK: type: ".length()));
+          if (!currentSectionComparable) {
+            currentSection = null;
+          }
+          continue;
+        }
+
+        if (!currentSectionComparable) {
+          continue;
+        }
+
+        if (line.startsWith("POSTHOOK: query: ")) {
+          seenPostHookQuery = true;
+          continue;
+        }
+
+        if (!seenPostHookQuery || isQTestMetadataLine(line)) {
+          continue;
+        }
+
+        currentSection.rows.add(normalizeQueryResultLine(line, ignoreWhiteSpace));
+      }
+    } finally {
+      reader.close();
+    }
+
+    if (currentSectionComparable && currentSection != null) {
+      sections.add(currentSection);
+    }
+
+    return sections;
+  }
+
+  private boolean isComparableQuery(String query) {
+    String normalizedQuery = query.trim().toLowerCase();
+    return !normalizedQuery.startsWith("explain")
+        && !normalizedQuery.startsWith("describe")
+        && !normalizedQuery.startsWith("desc ");
+  }
+
+  private boolean isQTestMetadataLine(String line) {
+    return line.startsWith("PREHOOK:")
+        || line.startsWith("POSTHOOK:")
+        || line.startsWith("#### A masked pattern was here ####");
+  }
+
+  private String normalizeQueryResultLine(String line, boolean ignoreWhiteSpace) {
+    String normalizedLine = line.replaceAll("\\s+$", "");
+    if (ignoreWhiteSpace) {
+      normalizedLine = normalizedLine.trim().replaceAll("\\s+", " ");
+    }
+    return normalizedLine;
+  }
+
+  private static class QueryResultSection {
+    private final ArrayList<String> rows = new ArrayList<String>();
   }
 
   public void overwriteResults(String inFileName, String outFileName) throws Exception {
