@@ -34,11 +34,22 @@ import java.util.List;
  */
 public class DagOutputResultReader {
   private final List<ByteString> payloads;
+  private final List<Object> rows;
   private int nextPayloadIndex;
+  private int nextRowIndex;
 
   public DagOutputResultReader(List<ByteString> payloads) {
     this.payloads = Collections.unmodifiableList(new ArrayList<>(payloads));
+    this.rows = Collections.emptyList();
     this.nextPayloadIndex = 0;
+    this.nextRowIndex = 0;
+  }
+
+  public DagOutputResultReader(List<ByteString> payloads, List<Object> rows) {
+    this.payloads = Collections.unmodifiableList(new ArrayList<>(payloads));
+    this.rows = Collections.unmodifiableList(new ArrayList<>(rows));
+    this.nextPayloadIndex = 0;
+    this.nextRowIndex = 0;
   }
 
   public synchronized DataInput nextStream() throws IOException {
@@ -50,10 +61,25 @@ public class DagOutputResultReader {
 
   public synchronized void reset() {
     nextPayloadIndex = 0;
+    nextRowIndex = 0;
   }
 
   public synchronized boolean hasPayloads() {
     return !payloads.isEmpty();
+  }
+
+  public synchronized boolean hasRows() {
+    return !rows.isEmpty();
+  }
+
+  @SuppressWarnings({ "rawtypes", "unchecked" })
+  public synchronized int nextRows(List results, int maxRows) {
+    int count = 0;
+    while (count < maxRows && nextRowIndex < rows.size()) {
+      results.add(rows.get(nextRowIndex++));
+      count++;
+    }
+    return count;
   }
 
   private ByteString unframePayload(byte[] payload) throws IOException {

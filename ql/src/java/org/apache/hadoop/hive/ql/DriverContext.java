@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.util.List;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.Schema;
@@ -260,8 +261,20 @@ public class DriverContext {
     return dagOutputResultReader.nextStream();
   }
 
+  @SuppressWarnings("rawtypes")
+  public int getDagOutputResultRows(List results, int maxRows) {
+    if (dagOutputResultReader == null) {
+      return 0;
+    }
+    return dagOutputResultReader.nextRows(results, maxRows);
+  }
+
   public boolean hasDagOutputResultReader() {
     return dagOutputResultReader != null;
+  }
+
+  public boolean hasDagOutputResultRows() {
+    return dagOutputResultReader != null && dagOutputResultReader.hasRows();
   }
 
   public void resetDagOutputResultReader() {

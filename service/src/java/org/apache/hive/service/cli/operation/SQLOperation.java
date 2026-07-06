@@ -535,13 +535,19 @@ public class SQLOperation extends ExecuteStatementOperation {
   }
 
   private RowSet decode(final List<Object> rows, final RowSet rowSet) throws Exception {
-    return (driver.isFetchingTable()) ? prepareFromRow(rows, rowSet) : decodeFromString(rows, rowSet);
+    return (driver.isFetchingTable() || hasPreparedRows(rows))
+        ? prepareFromRow(rows, rowSet)
+        : decodeFromString(rows, rowSet);
   }
 
   // already encoded to thrift-able object in ThriftFormatter
   private RowSet prepareFromRow(final List<Object> rows, final RowSet rowSet) throws Exception {
     rows.forEach(row -> rowSet.addRow((Object[]) row));
     return rowSet;
+  }
+
+  private boolean hasPreparedRows(final List<Object> rows) {
+    return !rows.isEmpty() && rows.get(0) instanceof Object[];
   }
 
   private RowSet decodeFromString(List<Object> rows, RowSet rowSet)

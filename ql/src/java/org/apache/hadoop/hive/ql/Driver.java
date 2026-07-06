@@ -684,6 +684,14 @@ public class Driver implements IDriver {
       return false;
     }
 
+    if (driverContext.hasDagOutputResultRows()) {
+      int numRows = driverContext.getDagOutputResultRows(results, rowsAllowed);
+      for (int i = 0; i < numRows; i++) {
+        driverContext.incrementDagOutputRowsReturned();
+      }
+      return numRows > 0;
+    }
+
     if (driverContext.getResStream() == null) {
       DataInput resultStream = getNextResultStream();
       if (resultStream == null) {

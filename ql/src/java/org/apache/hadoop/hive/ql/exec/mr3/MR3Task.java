@@ -324,12 +324,19 @@ public class MR3Task {
     Map<String, List<ByteString>> materializedPayloads = new HashMap<>();
     String queryId = driverContext.getQueryState().getQueryId();
     List<ByteString> payloads = new ArrayList<>();
+    List<Object> rows = new ArrayList<>();
+    boolean hiveServerQuery = Optional.ofNullable(SessionState.get())
+        .map(SessionState::isHiveServerQuery).orElse(false);
     for (Tuple2<String, ByteString> dagOutput : JavaConverters.seqAsJavaList(dagStatus.dagOutputs())) {
       String resultId = dagOutput._1();
       if (localMaterializationDescs.containsKey(resultId)) {
         materializedPayloads.computeIfAbsent(resultId, ignored -> new ArrayList<>()).add(dagOutput._2());
       } else if (clientResultDescs.containsKey(resultId)) {
-        payloads.add(formatDagOutputPayloadForClient(clientResultDescs.get(resultId), dagOutput._2()));
+        if (hiveServerQuery) {
+          rows.addAll(formatDagOutputRowsForClient(clientResultDescs.get(resultId), dagOutput._2()));
+        } else {
+          payloads.add(formatDagOutputPayloadForClient(clientResultDescs.get(resultId), dagOutput._2()));
+        }
       } else if (resultId.startsWith(queryId)) {
         payloads.add(dagOutput._2());
       }
@@ -345,8 +352,9 @@ public class MR3Task {
       return;
     }
 
-    LOG.info("Collected {} DAG output payload(s) for queryId={}", payloads.size(), queryId);
-    driverContext.setDagOutputResultReader(new DagOutputResultReader(payloads));
+    LOG.info("Collected {} DAG output payload(s) and {} formatted row(s) for queryId={}",
+        payloads.size(), rows.size(), queryId);
+    driverContext.setDagOutputResultReader(new DagOutputResultReader(payloads, rows));
   }
 
   private Map<String, QueryResultDesc> getQueryResultDescs(TezWork tezWork) {
@@ -405,6 +413,51 @@ public class MR3Task {
       return ByteString.copyFrom(output.toByteArray());
     } catch (Exception e) {
       throw new IOException("Failed to format QueryResultOperator DAG output for resultId="
+          + queryResultDesc.getResultId(), e);
+    } finally {
+      if (formatter != null) {
+        formatter.close();
+      }
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private List<Object> formatDagOutputRowsForClient(QueryResultDesc queryResultDesc, ByteString payload)
+      throws IOException {
+    JobConf jobConf = new JobConf(conf);
+    FetchFormatter formatter = null;
+    try {
+      AbstractSerDe serde = queryResultDesc.getTableInfo().getDeserializer(jobConf);
+      Class<? extends Writable> writableClass = serde.getSerializedClass();
+      formatter = initializeFetchFormatter(jobConf, queryResultDesc);
+      List<Object> rows = new ArrayList<>();
+      byte[] bytes = payload.toByteArray();
+      int rowSeparator = HiveIgnoreKeyTextOutputFormat.getRowSeparator(queryResultDesc.getTableInfo().getProperties());
+      int offset = 0;
+      while (offset < bytes.length) {
+        if (bytes.length - offset < Integer.BYTES) {
+          throw new IOException("Truncated QueryResultOperator DAG output row length");
+        }
+        int recordLength = readInt(bytes, offset);
+        offset += Integer.BYTES;
+        if (recordLength < 0 || recordLength > bytes.length - offset) {
+          throw new IOException("Invalid QueryResultOperator DAG output row length: " + recordLength);
+        }
+        Writable writable = createDagOutputWritable(writableClass, bytes, offset, recordLength);
+        Object row = serde.deserialize(writable);
+        rows.add(formatter.convert(row, serde.getObjectInspector()));
+        offset += recordLength;
+        if (offset >= bytes.length) {
+          throw new IOException("Missing QueryResultOperator DAG output row separator");
+        }
+        int separator = bytes[offset++] & 0xff;
+        if (separator != rowSeparator) {
+          throw new IOException("Unexpected QueryResultOperator DAG output row separator: " + separator);
+        }
+      }
+      return rows;
+    } catch (Exception e) {
+      throw new IOException("Failed to format QueryResultOperator DAG output rows for resultId="
           + queryResultDesc.getResultId(), e);
     } finally {
       if (formatter != null) {
