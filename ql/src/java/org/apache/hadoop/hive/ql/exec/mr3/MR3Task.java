@@ -71,7 +71,13 @@ import org.apache.hadoop.hive.ql.plan.TopNKeyDesc;
 import org.apache.hadoop.hive.ql.plan.UnionWork;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.ql.session.SessionStateUtil;
+import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
+import org.apache.hadoop.hive.serde2.DefaultFetchFormatter;
+import org.apache.hadoop.hive.serde2.FetchFormatter;
+import org.apache.hadoop.hive.serde2.SerDeUtils;
+import org.apache.hadoop.hive.serde2.thrift.ThriftFormatter;
+import org.apache.hadoop.hive.serde2.thrift.ThriftJDBCBinarySerDe;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.Writable;
@@ -79,6 +85,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.yarn.api.records.LocalResource;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.tez.common.counters.CounterGroup;
@@ -93,9 +100,12 @@ import org.slf4j.LoggerFactory;
 import scala.Tuple2;
 import scala.collection.JavaConverters;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -104,6 +114,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -304,7 +315,10 @@ public class MR3Task {
       return;
     }
 
-    Map<String, QueryResultDesc> localMaterializationDescs = getLocalMaterializationDescs(tezWork);
+    Map<String, QueryResultDesc> queryResultDescs = getQueryResultDescs(tezWork);
+    Map<String, QueryResultDesc> localMaterializationDescs = queryResultDescs.entrySet().stream()
+        .filter(entry -> entry.getValue().getLocalMaterializationPath() != null)
+        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     Map<String, List<ByteString>> materializedPayloads = new HashMap<>();
     String queryId = driverContext.getQueryState().getQueryId();
     List<ByteString> payloads = new ArrayList<>();
@@ -312,6 +326,8 @@ public class MR3Task {
       String resultId = dagOutput._1();
       if (localMaterializationDescs.containsKey(resultId)) {
         materializedPayloads.computeIfAbsent(resultId, ignored -> new ArrayList<>()).add(dagOutput._2());
+      } else if (queryResultDescs.containsKey(resultId)) {
+        payloads.add(formatDagOutputPayloadForClient(queryResultDescs.get(resultId), dagOutput._2()));
       } else if (resultId.startsWith(queryId)) {
         payloads.add(dagOutput._2());
       }
@@ -326,19 +342,97 @@ public class MR3Task {
     driverContext.setDagOutputResultReader(new DagOutputResultReader(payloads));
   }
 
-  private Map<String, QueryResultDesc> getLocalMaterializationDescs(TezWork tezWork) {
+  private Map<String, QueryResultDesc> getQueryResultDescs(TezWork tezWork) {
     Map<String, QueryResultDesc> result = new HashMap<>();
     for (BaseWork work : tezWork.getAllWork()) {
       for (Operator<?> op : work.getAllOperators()) {
         if (op instanceof QueryResultOperator) {
           QueryResultDesc desc = (QueryResultDesc) op.getConf();
-          if (desc.getLocalMaterializationPath() != null) {
-            result.put(desc.getResultId(), desc);
-          }
+          result.put(desc.getResultId(), desc);
         }
       }
     }
     return result;
+  }
+
+  @SuppressWarnings("unchecked")
+  private ByteString formatDagOutputPayloadForClient(QueryResultDesc queryResultDesc, ByteString payload)
+      throws IOException {
+    JobConf jobConf = new JobConf(conf);
+    FetchFormatter formatter = null;
+    try {
+      AbstractSerDe serde = queryResultDesc.getTableInfo().getDeserializer(jobConf);
+      Class<? extends Writable> writableClass = serde.getSerializedClass();
+      formatter = initializeFetchFormatter(jobConf, queryResultDesc);
+      ByteArrayOutputStream output = new ByteArrayOutputStream(payload.size());
+      DataOutputStream dataOutput = new DataOutputStream(output);
+      byte[] bytes = payload.toByteArray();
+      int rowSeparator = HiveIgnoreKeyTextOutputFormat.getRowSeparator(queryResultDesc.getTableInfo().getProperties());
+      int offset = 0;
+      while (offset < bytes.length) {
+        if (bytes.length - offset < Integer.BYTES) {
+          throw new IOException("Truncated QueryResultOperator DAG output row length");
+        }
+        int recordLength = readInt(bytes, offset);
+        offset += Integer.BYTES;
+        if (recordLength < 0 || recordLength > bytes.length - offset) {
+          throw new IOException("Invalid QueryResultOperator DAG output row length: " + recordLength);
+        }
+        Writable writable = createDagOutputWritable(writableClass, bytes, offset, recordLength);
+        Object row = serde.deserialize(writable);
+        Object formattedRow = formatter.convert(row, serde.getObjectInspector());
+        byte[] formattedBytes = String.valueOf(formattedRow).getBytes(StandardCharsets.UTF_8);
+        dataOutput.writeInt(formattedBytes.length);
+        dataOutput.write(formattedBytes);
+        dataOutput.write(Utilities.newLineCode);
+        offset += recordLength;
+        if (offset >= bytes.length) {
+          throw new IOException("Missing QueryResultOperator DAG output row separator");
+        }
+        int separator = bytes[offset++] & 0xff;
+        if (separator != rowSeparator) {
+          throw new IOException("Unexpected QueryResultOperator DAG output row separator: " + separator);
+        }
+      }
+      dataOutput.flush();
+      return ByteString.copyFrom(output.toByteArray());
+    } catch (Exception e) {
+      throw new IOException("Failed to format QueryResultOperator DAG output for resultId="
+          + queryResultDesc.getResultId(), e);
+    } finally {
+      if (formatter != null) {
+        formatter.close();
+      }
+    }
+  }
+
+  private FetchFormatter initializeFetchFormatter(JobConf jobConf, QueryResultDesc queryResultDesc) throws Exception {
+    String formatterName = jobConf.get(SerDeUtils.LIST_SINK_OUTPUT_FORMATTER);
+    if (!queryResultDesc.getTableInfo().getSerdeClassName().equalsIgnoreCase(ThriftJDBCBinarySerDe.class.getName())) {
+      SessionState sessionState = SessionState.get();
+      if (sessionState != null && sessionState.isHiveServerQuery()) {
+        formatterName = ThriftFormatter.class.getName();
+      } else if (formatterName == null || formatterName.isEmpty()) {
+        formatterName = DefaultFetchFormatter.class.getName();
+      }
+    }
+
+    FetchFormatter formatter;
+    if (formatterName != null && !formatterName.isEmpty()) {
+      Class<? extends FetchFormatter> formatterClass = Class.forName(formatterName, true,
+          Utilities.getSessionSpecifiedClassLoader()).asSubclass(FetchFormatter.class);
+      formatter = ReflectionUtils.newInstance(formatterClass, null);
+    } else {
+      formatter = new DefaultFetchFormatter();
+    }
+
+    Properties props = new Properties();
+    props.put(serdeConstants.SERIALIZATION_FORMAT, "" + Utilities.tabCode);
+    props.put(serdeConstants.SERIALIZATION_NULL_FORMAT,
+        queryResultDesc.getTableInfo().getProperties()
+            .getProperty(serdeConstants.SERIALIZATION_NULL_FORMAT, "NULL"));
+    formatter.initialize(jobConf, props);
+    return formatter;
   }
 
   private void materializeDagOutput(String resultId, List<ByteString> payloads,
@@ -404,14 +498,19 @@ public class MR3Task {
   private void writeDagOutputRecord(FileSinkOperator.RecordWriter writer,
       Class<? extends Writable> writableClass,
       byte[] bytes, int start, int length) throws IOException {
+    writer.write(createDagOutputWritable(writableClass, bytes, start, length));
+  }
+
+  private Writable createDagOutputWritable(Class<? extends Writable> writableClass,
+      byte[] bytes, int start, int length) throws IOException {
     if (Text.class.isAssignableFrom(writableClass)) {
       Text text = new Text();
       text.set(bytes, start, length);
-      writer.write(text);
+      return text;
     } else if (BytesWritable.class.isAssignableFrom(writableClass)) {
       BytesWritable bytesWritable = new BytesWritable();
       bytesWritable.set(bytes, start, length);
-      writer.write(bytesWritable);
+      return bytesWritable;
     } else {
       throw new IOException("Unsupported QueryResultOperator materialization writable class: " + writableClass);
     }
