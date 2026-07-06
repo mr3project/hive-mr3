@@ -24,7 +24,12 @@ import static org.apache.hadoop.hive.ql.security.authorization.HiveCustomStorage
 import static org.apache.hadoop.hive.ql.security.authorization.HiveCustomStorageHandlerUtils.setWriteOperation;
 import static org.apache.hadoop.hive.ql.security.authorization.HiveCustomStorageHandlerUtils.setWriteOperationIsSorted;
 
+import com.datamonad.mr3.api.common.DAGOutputEvent;
 import com.google.common.collect.Lists;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.UnsafeByteOperations;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -59,6 +64,8 @@ import org.apache.hadoop.hive.ql.io.BucketCodec;
 import org.apache.hadoop.hive.ql.io.DefaultHivePartitioner;
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils;
 import org.apache.hadoop.hive.ql.io.HiveKey;
+import org.apache.hadoop.hive.ql.exec.tez.TezContext;
+import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.ql.io.HiveOutputFormat;
 import org.apache.hadoop.hive.ql.io.HivePartitioner;
 import org.apache.hadoop.hive.ql.io.RecordUpdater;
@@ -95,10 +102,14 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.IntObjectInspecto
 import org.apache.hadoop.hive.shims.HadoopShims.StoragePolicyShim;
 import org.apache.hadoop.hive.shims.HadoopShims.StoragePolicyValue;
 import org.apache.hadoop.hive.shims.ShimLoader;
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.tez.runtime.api.Event;
+import org.apache.tez.runtime.api.ProcessorContext;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hive.common.util.HiveStringUtils;
 import org.slf4j.Logger;
@@ -149,6 +160,7 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
   private transient BiFunction<Object[], ObjectInspector[], Integer> hashFunc;
   public static final String TOTAL_TABLE_ROWS_WRITTEN = "TOTAL_TABLE_ROWS_WRITTEN";
   private transient Set<String> dynamicPartitionSpecs = new HashSet<>();
+  private transient QueryResultDagOutputWriter queryResultDagOutputWriter;
 
   /**
    * Counters.
@@ -618,6 +630,13 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
 
   @Override
   protected void initializeOp(Configuration hconf) throws HiveException {
+    if (conf.isEmitQueryResultToDag()) {
+      super.initializeOp(hconf);
+      queryResultDagOutputWriter = new QueryResultDagOutputWriter();
+      queryResultDagOutputWriter.initialize(hconf, conf, inputObjInspectors);
+      return;
+    }
+
     super.initializeOp(hconf);
     try {
       this.hconf = hconf;
@@ -1070,6 +1089,12 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
 
   @Override
   public void process(Object row, int tag) throws HiveException {
+    if (conf.isEmitQueryResultToDag()) {
+      runTimeNumRows++;
+      queryResultDagOutputWriter.process(row, tag);
+      return;
+    }
+
     runTimeNumRows++;
     /* Create list bucketing sub-directory only if stored-as-directories is on. */
     String lbDirName = null;
@@ -1482,6 +1507,12 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
 
   @Override
   public void closeOp(boolean abort) throws HiveException {
+    if (conf.isEmitQueryResultToDag()) {
+      if (queryResultDagOutputWriter != null) {
+        queryResultDagOutputWriter.close(abort);
+      }
+      return;
+    }
 
     row_count.set(conf.isDeleteOfSplitUpdate() ? 0 : numRows);
 
@@ -1879,4 +1910,157 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
     LOG.debug("Parsed the attemptId " + attemptId.toString() + " from the task ID " + taskId);
     return attemptId;
   }
+
+  static class QueryResultDagOutputWriter {
+    private FileSinkDesc conf;
+    private AbstractSerDe serializer;
+    private ObjectInspector inputOI;
+    private ObjectInspector[] inputObjInspectors;
+    private ByteArrayOutputStream writer;
+    private DataOutputStream dataOut;
+    private ProcessorContext processorContext;
+    private long numRows;
+    private long maxBytes;
+    private int rowSeparator;
+
+    void initialize(Configuration hconf, FileSinkDesc conf, ObjectInspector[] inputObjInspectors)
+        throws HiveException {
+      this.conf = conf;
+      this.inputObjInspectors = inputObjInspectors;
+      try {
+        serializer = conf.getTableInfo().getSerDeClass().newInstance();
+        serializer.initialize(hconf, conf.getTableInfo().getProperties(), null);
+      } catch (InstantiationException | IllegalAccessException | SerDeException e) {
+        throw new HiveException("Unable to initialize MR3 query-result DAG-output serializer", e);
+      }
+      inputOI = inputObjInspectors[0];
+      writer = new ByteArrayOutputStream();
+      dataOut = new DataOutputStream(writer);
+      maxBytes = conf.getQueryResultMaxBytes();
+      if (maxBytes < 0) {
+        maxBytes = HiveConf.getLongVar(hconf, HiveConf.ConfVars.HIVE_MR3_QUERY_RESULT_TASK_MAX_BYTES);
+      }
+      rowSeparator = getRowSeparator(conf.getTableInfo().getProperties());
+      MapredContext mapredContext = MapredContext.get();
+      if (!(mapredContext instanceof TezContext)) {
+        throw new HiveException("MR3 query-result DAG-output mode requires Tez/MR3 context");
+      }
+      processorContext = ((TezContext) mapredContext).getTezProcessorContext();
+      if (processorContext == null) {
+        throw new HiveException("MR3 query-result DAG-output mode requires processor context");
+      }
+      if (conf.getQueryResultId() == null || conf.getQueryResultId().isEmpty()) {
+        throw new HiveException("MR3 query-result DAG-output mode requires queryResultId");
+      }
+    }
+
+    void process(Object row, int tag) throws HiveException {
+      try {
+        Writable recordValue = serializer.serialize(row, inputObjInspectors[tag]);
+        if (recordValue == null) {
+          return;
+        }
+        writeRecord(recordValue);
+        numRows++;
+      } catch (SerDeException | IOException e) {
+        throw new HiveException("Error writing MR3 query-result DAG-output row", e);
+      }
+    }
+
+    void close(boolean abort) throws HiveException {
+      try {
+        if (!abort && conf.isUsingBatchingSerDe()) {
+          Writable recordValue = serializer.serialize(null, inputOI);
+          if (recordValue != null) {
+            writeRecord(recordValue);
+            numRows++;
+          }
+        }
+        if (dataOut != null) {
+          dataOut.flush();
+        }
+        if (abort) {
+          return;
+        }
+        waitForCanCommit();
+        commitDagOutput();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new HiveException("Interrupted while committing MR3 query-result DAG output", e);
+      } catch (IOException | SerDeException e) {
+        throw new HiveException("Error closing MR3 query-result DAG-output writer", e);
+      }
+    }
+
+    private void waitForCanCommit() throws IOException, InterruptedException {
+      while (!processorContext.canCommit()) {
+        Thread.sleep(500);
+      }
+    }
+
+    private void commitDagOutput() throws IOException {
+      byte[] payload = writer.toByteArray();
+      if (payload.length == 0) {
+        return;
+      }
+      ByteString dagOutput = UnsafeByteOperations.unsafeWrap(payload);
+      Event event = DAGOutputEvent.create(conf.getQueryResultId(), dagOutput, (int) numRows);
+      processorContext.sendEvents(Collections.singletonList(event));
+    }
+
+    private void writeRecord(Writable writable) throws IOException, HiveException {
+      if (conf.isUsingBatchingSerDe()) {
+        writeBinaryRecord(writable);
+      } else {
+        writeTextRecord(writable);
+      }
+      enforceMaxBytes();
+    }
+
+    private void writeTextRecord(Writable writable) throws IOException {
+      if (writable instanceof Text) {
+        Text text = (Text) writable;
+        dataOut.write(text.getBytes(), 0, text.getLength());
+      } else if (writable instanceof BytesWritable) {
+        BytesWritable bytes = (BytesWritable) writable;
+        dataOut.write(bytes.get(), 0, bytes.getSize());
+      } else {
+        throw new IOException("Unsupported query-result writable: " + writable.getClass().getName());
+      }
+      dataOut.write(rowSeparator);
+    }
+
+    private void writeBinaryRecord(Writable writable) throws IOException {
+      if (writable instanceof BytesWritable) {
+        BytesWritable bytes = (BytesWritable) writable;
+        dataOut.writeInt(bytes.getSize());
+        dataOut.write(bytes.get(), 0, bytes.getSize());
+        return;
+      }
+      if (writable instanceof Text) {
+        Text text = (Text) writable;
+        dataOut.writeInt(text.getLength());
+        dataOut.write(text.getBytes(), 0, text.getLength());
+        return;
+      }
+      throw new IOException("Unsupported binary query-result writable: " + writable.getClass().getName());
+    }
+
+    private void enforceMaxBytes() throws HiveException {
+      if (maxBytes >= 0 && writer.size() > maxBytes) {
+        throw new HiveException("Query result for resultId=" + conf.getQueryResultId()
+            + " exceeded per-task limit " + maxBytes + " bytes");
+      }
+    }
+
+    private static int getRowSeparator(Properties tableProperties) {
+      String rowSeparatorString = tableProperties.getProperty(serdeConstants.LINE_DELIM, "\n");
+      try {
+        return Byte.parseByte(rowSeparatorString);
+      } catch (NumberFormatException e) {
+        return rowSeparatorString.charAt(0);
+      }
+    }
+  }
+
 }

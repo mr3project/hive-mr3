@@ -22,6 +22,9 @@ import com.datamonad.mr3.api.client.DAGStatus;
 import com.datamonad.mr3.api.client.VertexStatus;
 import com.datamonad.mr3.api.common.MR3Exception;
 import com.google.protobuf.ByteString;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.lang.reflect.Method;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -79,10 +82,10 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -130,6 +133,7 @@ public class MR3Task {
 
   private Map<BaseWork, Vertex> workToVertex = null;
   private Map<BaseWork, JobConf> workToConf = null;
+  private final Map<String, QueryResultMaterializationContext> queryResultMaterializationContexts = new LinkedHashMap<>();
 
   public MR3Task(HiveConf conf, SessionState.LogHelper console, AtomicBoolean isShutdown) {
     this.conf = conf;
@@ -237,6 +241,7 @@ public class MR3Task {
         }
         String dagIdStr = mr3JobRef.getDagIdStr();    // may throw MR3Exception
         collectCommitInformation(tezWork, dagStatus, dagIdStr);
+        collectDagOutputs(dagStatus);
         mr3Session.setAlreadyExecutedAnyDag();
       }
 
@@ -572,6 +577,8 @@ public class MR3Task {
     TezWork.VertexType vertexType = tezWork.getVertexType(baseWork);
     boolean isFinal = tezWork.getLeaves().contains(baseWork);
 
+    enableQueryResultDagOutputModeIfNeeded(tezWork, baseWork, isFinal, vertexJobConf, context);
+
     // update vertexJobConf before calling createVertex() which calls createBy
     int numChildren = tezWork.getChildren(baseWork).size();
     if (numChildren > 1) {  // added from HIVE-22744
@@ -611,6 +618,212 @@ public class MR3Task {
       Edge e = dagUtils.createEdge(
           vertexJobConf, vertex, workToVertex.get(v), edgeProp, v, tezWork);
       dag.addEdge(e);
+    }
+  }
+
+  private void enableQueryResultDagOutputModeIfNeeded(
+      TezWork tezWork, BaseWork baseWork, boolean isFinal, JobConf vertexJobConf, Context context) {
+    if (!isFinal || SessionState.get() == null || !SessionState.get().isHiveServerQuery()) {
+      return;
+    }
+    for (Operator<?> op : baseWork.getAllOperators()) {
+      if (op instanceof FileSinkOperator) {
+        FileSinkOperator fsOp = (FileSinkOperator) op;
+        FileSinkDesc desc = fsOp.getConf();
+        if (isEligibleQueryResultSink(desc)) {
+          String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_QUERY_ID);
+          String resultId = queryId + "_" + baseWork.getName() + "_" + fsOp.getIdentifier();
+          QueryResultMaterializationContext ctx = new QueryResultMaterializationContext(
+              resultId, fsOp, desc, desc.getDirName(), desc.getTableInfo(), desc.isUsingBatchingSerDe(),
+              getRowSeparator(desc), desc.isUsingBatchingSerDe(), baseWork.getName(), fsOp.getIdentifier());
+          enableQueryResultDagOutputMode(fsOp, ctx,
+              HiveConf.getLongVar(vertexJobConf, HiveConf.ConfVars.HIVE_MR3_QUERY_RESULT_TASK_MAX_BYTES));
+        }
+      }
+    }
+  }
+
+  private boolean isEligibleQueryResultSink(FileSinkDesc desc) {
+    return desc != null
+        && desc.isHiveServerQuery()
+        && desc.getIsQuery()
+        && !desc.isMmCtas()
+        && !desc.isCTASorCM()
+        && !desc.getInsertOverwrite()
+        && !desc.isDirectInsert()
+        && desc.getDynPartCtx() == null
+        && !desc.isGatherStats()
+        && !desc.isMerge()
+        && desc.getWriteType() == org.apache.hadoop.hive.ql.io.AcidUtils.Operation.NOT_ACID
+        && desc.getAcidOperation() == null;
+  }
+
+  private void enableQueryResultDagOutputMode(
+      FileSinkOperator fsOp, QueryResultMaterializationContext ctx, long maxBytes) {
+    FileSinkDesc desc = fsOp.getConf();
+    if (desc.isEmitQueryResultToDag()) {
+      if (!ctx.resultId.equals(desc.getQueryResultId())) {
+        throw new IllegalStateException("Conflicting MR3 query-result id for FileSinkOperator. existing="
+            + desc.getQueryResultId() + ", new=" + ctx.resultId);
+      }
+      registerMaterializationContextIfAbsent(ctx);
+      return;
+    }
+    desc.setEmitQueryResultToDag(true);
+    desc.setQueryResultId(ctx.resultId);
+    desc.setQueryResultMaxBytes(maxBytes);
+    registerMaterializationContextIfAbsent(ctx);
+  }
+
+  private void registerMaterializationContextIfAbsent(QueryResultMaterializationContext ctx) {
+    queryResultMaterializationContexts.putIfAbsent(ctx.resultId, ctx);
+  }
+
+  private void collectDagOutputs(DAGStatus dagStatus) throws Exception {
+    if (queryResultMaterializationContexts.isEmpty()) {
+      return;
+    }
+    Map<String, List<ByteString>> outputsById = getDagOutputsById(dagStatus);
+    for (QueryResultMaterializationContext ctx : queryResultMaterializationContexts.values()) {
+      List<ByteString> outputs = outputsById.get(ctx.resultId);
+      materializeQueryResult(ctx, outputs == null ? Collections.emptyList() : outputs);
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private Map<String, List<ByteString>> getDagOutputsById(DAGStatus dagStatus) throws Exception {
+    Map<String, List<ByteString>> result = new HashMap<>();
+    for (Method method : dagStatus.getClass().getMethods()) {
+      if (!method.getName().toLowerCase().contains("dagoutput") || method.getParameterCount() != 0) {
+        continue;
+      }
+      Object events = method.invoke(dagStatus);
+      if (!(events instanceof Iterable)) {
+        continue;
+      }
+      for (Object event : (Iterable<?>) events) {
+        String id = invokeString(event, "resultId", "getResultId", "outputId", "getOutputId", "name", "getName");
+        ByteString payload = invokeByteString(event, "dagOutput", "getDagOutput", "payload", "getPayload");
+        if (id != null && payload != null && queryResultMaterializationContexts.containsKey(id)) {
+          result.computeIfAbsent(id, ignored -> new ArrayList<>()).add(payload);
+        }
+      }
+    }
+    return result;
+  }
+
+  private String invokeString(Object target, String... names) throws Exception {
+    for (String name : names) {
+      try {
+        Object value = target.getClass().getMethod(name).invoke(target);
+        if (value != null) {
+          return value.toString();
+        }
+      } catch (NoSuchMethodException ignored) {
+      }
+    }
+    return null;
+  }
+
+  private ByteString invokeByteString(Object target, String... names) throws Exception {
+    for (String name : names) {
+      try {
+        Object value = target.getClass().getMethod(name).invoke(target);
+        if (value instanceof ByteString) {
+          return (ByteString) value;
+        }
+      } catch (NoSuchMethodException ignored) {
+      }
+    }
+    return null;
+  }
+
+  private void materializeQueryResult(QueryResultMaterializationContext ctx, List<ByteString> outputs)
+      throws IOException {
+    org.apache.hadoop.fs.FileSystem fs = ctx.resultDir.getFileSystem(conf);
+    if (fs.exists(ctx.resultDir)) {
+      fs.delete(ctx.resultDir, true);
+    }
+    fs.mkdirs(ctx.resultDir);
+    Path resultFile = new Path(ctx.resultDir, "000000_0");
+    try {
+      if (ctx.binaryFramed) {
+        materializeBinaryQueryResult(ctx, resultFile, outputs);
+      } else {
+        try (org.apache.hadoop.fs.FSDataOutputStream out = fs.create(resultFile, true)) {
+          for (ByteString output : outputs) {
+            output.writeTo(out);
+          }
+        }
+      }
+    } catch (IOException e) {
+      fs.delete(ctx.resultDir, true);
+      throw e;
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private void materializeBinaryQueryResult(
+      QueryResultMaterializationContext ctx, Path resultFile, List<ByteString> outputs) throws IOException {
+    JobConf jc = new JobConf(conf);
+    org.apache.hadoop.hive.ql.io.HiveOutputFormat outputFormat =
+        org.apache.hadoop.util.ReflectionUtils.newInstance(
+            ctx.tableDesc.getOutputFileFormatClass().asSubclass(
+                org.apache.hadoop.hive.ql.io.HiveOutputFormat.class), jc);
+    FileSinkOperator.RecordWriter recordWriter = outputFormat.getHiveRecordWriter(
+        jc, resultFile, org.apache.hadoop.io.BytesWritable.class, false,
+        ctx.tableDesc.getProperties(), null);
+    try {
+      for (ByteString output : outputs) {
+        try (DataInputStream in = new DataInputStream(output.newInput())) {
+          while (in.available() > 0) {
+            int len = in.readInt();
+            byte[] bytes = new byte[len];
+            in.readFully(bytes);
+            recordWriter.write(new org.apache.hadoop.io.BytesWritable(bytes));
+          }
+        }
+      }
+    } finally {
+      recordWriter.close(false);
+    }
+  }
+
+  private int getRowSeparator(FileSinkDesc desc) {
+    String rowSeparatorString = desc.getTableInfo().getProperties()
+        .getProperty(org.apache.hadoop.hive.serde.serdeConstants.LINE_DELIM, "\n");
+    try {
+      return Byte.parseByte(rowSeparatorString);
+    } catch (NumberFormatException e) {
+      return rowSeparatorString.charAt(0);
+    }
+  }
+
+  private static final class QueryResultMaterializationContext {
+    final String resultId;
+    final FileSinkOperator fileSinkOperator;
+    final FileSinkDesc fileSinkDesc;
+    final Path resultDir;
+    final org.apache.hadoop.hive.ql.plan.TableDesc tableDesc;
+    final boolean usingBatchingSerDe;
+    final int rowSeparator;
+    final boolean binaryFramed;
+    final String workName;
+    final String operatorId;
+
+    QueryResultMaterializationContext(String resultId, FileSinkOperator fileSinkOperator,
+        FileSinkDesc fileSinkDesc, Path resultDir, org.apache.hadoop.hive.ql.plan.TableDesc tableDesc,
+        boolean usingBatchingSerDe, int rowSeparator, boolean binaryFramed, String workName, String operatorId) {
+      this.resultId = resultId;
+      this.fileSinkOperator = fileSinkOperator;
+      this.fileSinkDesc = fileSinkDesc;
+      this.resultDir = resultDir;
+      this.tableDesc = tableDesc;
+      this.usingBatchingSerDe = usingBatchingSerDe;
+      this.rowSeparator = rowSeparator;
+      this.binaryFramed = binaryFramed;
+      this.workName = workName;
+      this.operatorId = operatorId;
     }
   }
 

@@ -2083,6 +2083,9 @@ public class HiveConf extends Configuration {
         "Default storage handler class for CREATE TABLE statements. If this is set to a valid class, a 'CREATE TABLE ... STORED AS ... LOCATION ...' command will " +
         "be equivalent to 'CREATE TABLE ... STORED BY [default.storage.handler.class] LOCATION ...'. Any STORED AS clauses will be ignored, given that STORED BY and STORED AS are " +
         "incompatible within the same command. Users can explicitly override the default class by issuing 'CREATE TABLE ... STORED BY [overriding.storage.handler.class] ...'"),
+    HIVE_MR3_QUERY_RESULT_TASK_MAX_BYTES("hive.mr3.query.result.task.max.bytes", -1L,
+        "Per-task byte limit for MR3 query-result DAG-output buffering. Negative means unlimited."),
+
     HIVE_QUERY_RESULT_FILEFORMAT("hive.query.result.fileformat", ResultFileFormat.SEQUENCEFILE.toString(),
         new StringSet(ResultFileFormat.getValidSet()),
         "Default file format for storing result of the query."),
