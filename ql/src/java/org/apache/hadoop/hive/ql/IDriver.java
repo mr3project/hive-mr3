@@ -64,6 +64,8 @@ public interface IDriver extends CommandProcessor {
 
   boolean isFetchingTable();
 
+  boolean isReturningPreparedRows();
+
   void resetFetch() throws IOException;
 
   // close&destroy is used in seq coupling most of the time - the difference is either not clear; or not relevant

@@ -623,6 +623,11 @@ public class Driver implements IDriver {
   }
 
   @Override
+  public boolean isReturningPreparedRows() {
+    return isFetchingTable() || driverContext.hasDagOutputResultRows();
+  }
+
+  @Override
   public Schema getSchema() {
     return driverContext.getSchema();
   }

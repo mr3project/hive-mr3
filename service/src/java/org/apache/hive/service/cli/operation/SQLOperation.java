@@ -535,7 +535,7 @@ public class SQLOperation extends ExecuteStatementOperation {
   }
 
   private RowSet decode(final List<Object> rows, final RowSet rowSet) throws Exception {
-    return (driver.isFetchingTable() || hasPreparedRows(rows))
+    return driver.isReturningPreparedRows()
         ? prepareFromRow(rows, rowSet)
         : decodeFromString(rows, rowSet);
   }
@@ -550,10 +550,6 @@ public class SQLOperation extends ExecuteStatementOperation {
       rowSet.addRow((Object[]) row);
     }
     return rowSet;
-  }
-
-  private boolean hasPreparedRows(final List<Object> rows) {
-    return rows.stream().anyMatch(row -> row instanceof Object[]);
   }
 
   private RowSet decodeFromString(List<Object> rows, RowSet rowSet)

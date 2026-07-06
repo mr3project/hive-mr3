@@ -264,6 +264,11 @@ public class ReExecDriver implements IDriver {
   }
 
   @Override
+  public boolean isReturningPreparedRows() {
+    return coreDriver.isReturningPreparedRows();
+  }
+
+  @Override
   public void resetFetch() throws IOException {
     coreDriver.resetFetch();
   }
