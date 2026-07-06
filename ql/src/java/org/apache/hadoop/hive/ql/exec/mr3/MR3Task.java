@@ -318,6 +318,9 @@ public class MR3Task {
     Map<String, QueryResultDesc> localMaterializationDescs = queryResultDescs.entrySet().stream()
         .filter(entry -> entry.getValue().getLocalMaterializationPath() != null)
         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    Map<String, QueryResultDesc> clientResultDescs = queryResultDescs.entrySet().stream()
+        .filter(entry -> entry.getValue().getLocalMaterializationPath() == null)
+        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     Map<String, List<ByteString>> materializedPayloads = new HashMap<>();
     String queryId = driverContext.getQueryState().getQueryId();
     List<ByteString> payloads = new ArrayList<>();
@@ -325,8 +328,8 @@ public class MR3Task {
       String resultId = dagOutput._1();
       if (localMaterializationDescs.containsKey(resultId)) {
         materializedPayloads.computeIfAbsent(resultId, ignored -> new ArrayList<>()).add(dagOutput._2());
-      } else if (queryResultDescs.containsKey(resultId)) {
-        payloads.add(formatDagOutputPayloadForClient(queryResultDescs.get(resultId), dagOutput._2()));
+      } else if (clientResultDescs.containsKey(resultId)) {
+        payloads.add(formatDagOutputPayloadForClient(clientResultDescs.get(resultId), dagOutput._2()));
       } else if (resultId.startsWith(queryId)) {
         payloads.add(dagOutput._2());
       }
@@ -335,6 +338,11 @@ public class MR3Task {
     for (Map.Entry<String, QueryResultDesc> entry : localMaterializationDescs.entrySet()) {
       materializeDagOutput(entry.getKey(),
           materializedPayloads.getOrDefault(entry.getKey(), Collections.emptyList()), entry.getValue());
+    }
+
+    if (clientResultDescs.isEmpty()) {
+      LOG.info("No client QueryResultOperator DAG output source found for queryId={}", queryId);
+      return;
     }
 
     LOG.info("Collected {} DAG output payload(s) for queryId={}", payloads.size(), queryId);
