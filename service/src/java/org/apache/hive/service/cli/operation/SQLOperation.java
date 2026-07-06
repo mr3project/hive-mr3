@@ -542,12 +542,18 @@ public class SQLOperation extends ExecuteStatementOperation {
 
   // already encoded to thrift-able object in ThriftFormatter
   private RowSet prepareFromRow(final List<Object> rows, final RowSet rowSet) throws Exception {
-    rows.forEach(row -> rowSet.addRow((Object[]) row));
+    for (Object row : rows) {
+      if (!(row instanceof Object[])) {
+        throw new HiveSQLException("Expected a prepared row from DAG output, but found "
+            + (row == null ? "null" : row.getClass().getName()), queryState.getQueryId());
+      }
+      rowSet.addRow((Object[]) row);
+    }
     return rowSet;
   }
 
   private boolean hasPreparedRows(final List<Object> rows) {
-    return !rows.isEmpty() && rows.get(0) instanceof Object[];
+    return rows.stream().anyMatch(row -> row instanceof Object[]);
   }
 
   private RowSet decodeFromString(List<Object> rows, RowSet rowSet)
