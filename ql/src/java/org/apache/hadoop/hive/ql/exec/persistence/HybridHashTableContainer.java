@@ -556,13 +556,29 @@ public class HybridHashTableContainer
     // Now we know where to put row
     if (putToSidefile) {
       KeyValueContainer kvContainer = hashPartition.getSidefileKVContainer();
-      kvContainer.add((HiveKey) currentKey, (BytesWritable) currentValue);
+      kvContainer.add(toHiveKey(currentKey, keyHash), (BytesWritable) currentValue);
     } else {
       hashPartition.hashMap.put(keyValueHelper, keyHash); // Pass along hashcode to avoid recalculation
       totalInMemRowCount++;
     }
 
     return null; // there's no key to return
+  }
+
+
+  private HiveKey toHiveKey(Writable currentKey, int keyHash) throws IOException {
+    if (currentKey instanceof HiveKey) {
+      return (HiveKey) currentKey;
+    }
+    if (currentKey instanceof BytesWritable) {
+      BytesWritable bytesWritable = (BytesWritable) currentKey;
+      HiveKey hiveKey = new HiveKey(bytesWritable.getBytesRaw(), bytesWritable.getOffset(),
+          bytesWritable.getLength());
+      hiveKey.setHashCode(keyHash);
+      return hiveKey;
+    }
+    throw new IOException("Unexpected key type " + currentKey.getClass().getName()
+        + " while spilling HybridHashTableContainer row to sidefile");
   }
 
   /**
