@@ -566,19 +566,12 @@ public class HybridHashTableContainer
   }
 
 
-  private HiveKey toHiveKey(Writable currentKey, int keyHash) throws IOException {
-    if (currentKey instanceof HiveKey) {
-      return (HiveKey) currentKey;
-    }
-    if (currentKey instanceof BytesWritable) {
-      BytesWritable bytesWritable = (BytesWritable) currentKey;
-      HiveKey hiveKey = new HiveKey(bytesWritable.getBytesRaw(), bytesWritable.getOffset(),
-          bytesWritable.getLength());
-      hiveKey.setHashCode(keyHash);
-      return hiveKey;
-    }
-    throw new IOException("Unexpected key type " + currentKey.getClass().getName()
-        + " while spilling HybridHashTableContainer row to sidefile");
+  private HiveKey toHiveKey(Writable currentKey, int keyHash) {
+    BytesWritable bytesWritable = (BytesWritable) currentKey;
+    HiveKey hiveKey = new HiveKey(bytesWritable.getBytesRaw(), bytesWritable.getOffset(),
+        bytesWritable.getLength());
+    hiveKey.setHashCode(keyHash);
+    return hiveKey;
   }
 
   /**
