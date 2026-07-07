@@ -158,11 +158,20 @@ public class CustomPartitionVertex extends VertexManagerPlugin {
     try {
       // This is using the payload from the RootVertexInitializer corresponding
       // to InputName. Ideally it should be using its own configuration class -
-      // but that
-      // means serializing another instance.
-      MRInputUserPayloadProto protoPayload =
+      // but that means serializing another instance.
+      MRInputUserPayloadProto userPayloadProto =
           MRInputHelpers.parseMRInputPayload(inputDescriptor.getUserPayload());
-      this.conf = TezUtils.createConfFromByteString(protoPayload.getConfigurationBytes());
+
+      com.datamonad.mr3.DAGAPI.ConfigurationProto commonJobConf = context.getCommonJobConf();
+      if (commonJobConf != null) {
+        this.conf = new Configuration(false);
+        for (com.datamonad.mr3.DAGAPI.KeyValueProto kv : commonJobConf.getConfKeyValuesList()) {
+          this.conf.set(kv.getKey(), kv.getValue());
+        }
+        this.conf.addResource(TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes()));
+      } else {
+        this.conf = TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes());
+      }
 
       /*
        * Currently in tez, the flow of events is thus:
@@ -180,7 +189,7 @@ public class CustomPartitionVertex extends VertexManagerPlugin {
       // This assumes that Grouping will always be used.
       // Enabling grouping on the payload.
       MRInputUserPayloadProto updatedPayload =
-          MRInputUserPayloadProto.newBuilder(protoPayload).setGroupingEnabled(true).build();
+          MRInputUserPayloadProto.newBuilder(userPayloadProto).setGroupingEnabled(true).build();
       inputDescriptor.setUserPayload(UserPayload.create(updatedPayload.toByteString().asReadOnlyByteBuffer()));
     } catch (IOException e) {
       throw new RuntimeException(e);
