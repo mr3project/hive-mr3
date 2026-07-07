@@ -42,6 +42,10 @@ public class HiveKey extends BytesWritable {
     super(bytes);
   }
 
+  public HiveKey(byte[] bytes, int offset, int length) {
+    super(bytes, offset, length);
+  }
+
   public HiveKey(byte[] bytes, int hashcode) {
     super(bytes);
     hashCode = hashcode;
