@@ -165,12 +165,12 @@ public class QTestResultProcessor {
     writeQueryResultOnlyFile(inFileName, inQueryResults, ignoreWhiteSpace);
     writeQueryResultOnlyFile(outFileName, outQueryResults, ignoreWhiteSpace);
 
-    try {
-      return executeDiffCommand(inQueryResults, outQueryResults, ignoreWhiteSpace, false);
-    } finally {
+    QTestProcessExecResult result = executeDiffCommand(inQueryResults, outQueryResults, ignoreWhiteSpace, false);
+    if (result.getReturnCode() == 0) {
       new File(inQueryResults).delete();
       new File(outQueryResults).delete();
     }
+    return result;
   }
 
   private void writeQueryResultOnlyFile(String inFileName, String outFileName, boolean ignoreWhiteSpace)
