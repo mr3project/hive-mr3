@@ -260,7 +260,12 @@ public class QTestResultProcessor {
   private boolean isQTestMetadataLine(String line) {
     return line.startsWith("PREHOOK:")
         || line.startsWith("POSTHOOK:")
-        || line.startsWith("#### A masked pattern was here ####");
+        || line.startsWith("#### A masked pattern was here ####")
+        || isMaskedHdfsListingLine(line);
+  }
+
+  private boolean isMaskedHdfsListingLine(String line) {
+    return line.matches("^[bcdlps-][rwx-]{9}\\s+\\d+\\s+.*hdfs://### HDFS PATH ###\\s*$");
   }
 
   private String normalizeQueryResultLine(String line, boolean ignoreWhiteSpace) {
