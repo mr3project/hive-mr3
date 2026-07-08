@@ -52,7 +52,9 @@ import org.apache.hive.common.util.StreamPrinter;
 public class QTestResultProcessor {
   private static final String SORT_SUFFIX = ".sorted";
   private static final Pattern FLOATING_POINT_PATTERN = Pattern.compile("([+-]?\\d*)\\.(\\d+)([eE][+-]?\\d+)?");
+  private static final Pattern ROW_ID_PATTERN = Pattern.compile("\\\"rowid\\\"\\s*:\\s*[+-]?\\d+");
   private static final int FLOATING_POINT_FRACTION_DIGITS = 10;
+  private static final String ROW_ID_MASK = "\\\"rowid\\\":### ROWID ###";
 
   private enum Operation {
     /***/
@@ -269,11 +271,15 @@ public class QTestResultProcessor {
   }
 
   private String normalizeQueryResultLine(String line, boolean ignoreWhiteSpace) {
-    String normalizedLine = truncateFloatingPointNumbers(line.replaceAll("\\s+$", ""));
+    String normalizedLine = maskRowIds(truncateFloatingPointNumbers(line.replaceAll("\\s+$", "")));
     if (ignoreWhiteSpace) {
       normalizedLine = normalizedLine.trim().replaceAll("\\s+", " ");
     }
     return normalizedLine;
+  }
+
+  private String maskRowIds(String line) {
+    return ROW_ID_PATTERN.matcher(line).replaceAll(ROW_ID_MASK);
   }
 
   private String truncateFloatingPointNumbers(String line) {
