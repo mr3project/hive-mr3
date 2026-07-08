@@ -31,6 +31,7 @@ import java.util.Collections;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.io.output.ByteArrayOutputStream;
@@ -50,6 +51,8 @@ import org.apache.hive.common.util.StreamPrinter;
  */
 public class QTestResultProcessor {
   private static final String SORT_SUFFIX = ".sorted";
+  private static final Pattern FLOATING_POINT_PATTERN = Pattern.compile("([+-]?\\d*)\\.(\\d+)([eE][+-]?\\d+)?");
+  private static final int FLOATING_POINT_FRACTION_DIGITS = 10;
 
   private enum Operation {
     /***/
@@ -266,11 +269,26 @@ public class QTestResultProcessor {
   }
 
   private String normalizeQueryResultLine(String line, boolean ignoreWhiteSpace) {
-    String normalizedLine = line.replaceAll("\\s+$", "");
+    String normalizedLine = truncateFloatingPointNumbers(line.replaceAll("\\s+$", ""));
     if (ignoreWhiteSpace) {
       normalizedLine = normalizedLine.trim().replaceAll("\\s+", " ");
     }
     return normalizedLine;
+  }
+
+  private String truncateFloatingPointNumbers(String line) {
+    Matcher matcher = FLOATING_POINT_PATTERN.matcher(line);
+    StringBuffer buffer = new StringBuffer();
+    while (matcher.find()) {
+      String fraction = matcher.group(2);
+      if (fraction.length() > FLOATING_POINT_FRACTION_DIGITS) {
+        fraction = fraction.substring(0, FLOATING_POINT_FRACTION_DIGITS);
+      }
+      String exponent = matcher.group(3) == null ? "" : matcher.group(3);
+      matcher.appendReplacement(buffer, Matcher.quoteReplacement(matcher.group(1) + "." + fraction + exponent));
+    }
+    matcher.appendTail(buffer);
+    return buffer.toString();
   }
 
   private static class QueryResultSection {
