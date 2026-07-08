@@ -199,7 +199,7 @@ public class QTestResultProcessor {
     QueryResultSection currentSection = null;
     boolean currentSectionComparable = false;
     boolean currentQueryComparable = false;
-    boolean seenPostHookQuery = false;
+    boolean seenPostHookType = false;
     try {
       String line;
       while ((line = reader.readLine()) != null) {
@@ -211,7 +211,7 @@ public class QTestResultProcessor {
           currentQueryComparable = isComparableQuery(query);
           currentSectionComparable = false;
           currentSection = new QueryResultSection();
-          seenPostHookQuery = false;
+          seenPostHookType = false;
           continue;
         }
 
@@ -228,12 +228,12 @@ public class QTestResultProcessor {
           continue;
         }
 
-        if (line.startsWith("POSTHOOK: query: ")) {
-          seenPostHookQuery = true;
+        if (line.startsWith("POSTHOOK: type: ")) {
+          seenPostHookType = true;
           continue;
         }
 
-        if (!seenPostHookQuery || isQTestMetadataLine(line)) {
+        if (!seenPostHookType || isQTestMetadataLine(line)) {
           continue;
         }
 
