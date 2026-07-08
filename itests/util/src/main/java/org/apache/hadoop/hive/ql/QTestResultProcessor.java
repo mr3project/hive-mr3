@@ -260,6 +260,7 @@ public class QTestResultProcessor {
   private boolean isQTestMetadataLine(String line) {
     return line.startsWith("PREHOOK:")
         || line.startsWith("POSTHOOK:")
+        || line.startsWith("Warning:")
         || line.startsWith("#### A masked pattern was here ####")
         || line.contains("hdfs://### HDFS PATH ###");
   }
