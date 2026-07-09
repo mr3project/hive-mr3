@@ -78,7 +78,7 @@ public class MR3CompactionHelper {
         hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ACTIVE_PASSIVE_HA_ENABLE);
 
     if (SessionState.get() == null) {
-      SessionState.start(hiveConf);
+      SessionState.start(hiveConf, "CompactorMR");
     }
     trySetupMr3SessionManager(hiveConf);
   }
