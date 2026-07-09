@@ -10,3 +10,5 @@ GRANT DROP ON DATABASE auth_db_fail TO USER hive_test_user;
 set hive.security.authorization.enabled=true;
 
 DROP TABLE auth_db_fail.auth_permanent_table;
+
+revoke drop on database auth_db_fail from user hive_test_user;
