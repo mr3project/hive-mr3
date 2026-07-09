@@ -670,6 +670,11 @@ public class SessionState implements ISessionAuthState {
     return start(ss);
   }
 
+  public static SessionState start(HiveConf conf, String userName) {
+    SessionState ss = new SessionState(conf, userName);
+    return start(ss);
+  }
+
   /**
    * Sets the given session state in the thread local var for sessions.
    */
