@@ -168,7 +168,11 @@ public class CustomPartitionVertex extends VertexManagerPlugin {
         for (com.datamonad.mr3.DAGAPI.KeyValueProto kv : commonJobConf.getConfKeyValuesList()) {
           this.conf.set(kv.getKey(), kv.getValue());
         }
-        this.conf.addResource(TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes()));
+        Configuration inputConf = TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes());
+        // do not use conf.addResource()
+        for (Map.Entry<String, String> kv : inputConf) {
+          this.conf.set(kv.getKey(), kv.getValue());
+        }
       } else {
         this.conf = TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes());
       }
