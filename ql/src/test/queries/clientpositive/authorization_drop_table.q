@@ -87,3 +87,6 @@ DROP TABLE auth_temp_table_1;
 -- Drop temporary table with IF EXISTS from current database
 
 DROP TABLE IF EXISTS auth_temp_table_2;
+
+revoke drop on database auth_db from user hive_test_user;
+revoke drop on database auth_db_1 from user hive_test_user;
