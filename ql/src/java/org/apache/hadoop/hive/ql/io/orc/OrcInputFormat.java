@@ -426,6 +426,38 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     return result;
   }
 
+  /**
+   * Make sure the physical ACID metadata columns required to materialize ROW__ID are included.
+   *
+   * <p>ROW__ID is a Hive virtual column, so it does not appear in the normal table column projection.
+   * For vectorized ACID reads of non-original ORC files, the ROW__ID value is assembled from the
+   * physical ACID metadata columns in the file. If those columns are not in the ORC include mask, the
+   * low-level ORC reader materializes them as null column vectors.</p>
+   *
+   * @param readerSchema ORC reader schema, expected to be the ACID event schema for non-original files
+   * @param included current ORC include mask
+   * @param fetchDeletedRows whether ROW__ID should use currentWriteId for deleted rows
+   * @return include mask with the ROW__ID backing columns included
+   */
+  public static boolean[] ensureAcidRowIdColumnsIncluded(
+      TypeDescription readerSchema, boolean[] included, boolean fetchDeletedRows) {
+    if (readerSchema == null || included == null) {
+      return included;
+    }
+    List<TypeDescription> children = readerSchema.getChildren();
+    if (children.size() <= OrcRecordUpdater.ROW_ID) {
+      return included;
+    }
+
+    addColumnToIncludes(children.get(OrcRecordUpdater.ORIGINAL_WRITEID), included);
+    addColumnToIncludes(children.get(OrcRecordUpdater.BUCKET), included);
+    addColumnToIncludes(children.get(OrcRecordUpdater.ROW_ID), included);
+    if (fetchDeletedRows && children.size() > OrcRecordUpdater.CURRENT_WRITEID) {
+      addColumnToIncludes(children.get(OrcRecordUpdater.CURRENT_WRITEID), included);
+    }
+    return included;
+  }
+
   // Mostly dup of genIncludedColumns
   public static TypeDescription[] genIncludedTypes(TypeDescription fileSchema,
       List<Integer> included, Integer recursiveStruct) {

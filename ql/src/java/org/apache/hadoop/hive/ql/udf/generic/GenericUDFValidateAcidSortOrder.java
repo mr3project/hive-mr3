@@ -28,8 +28,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorConverters.C
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory;
 import org.apache.hadoop.io.LongWritable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * GenericUDFValidateAcidSortOrder.
@@ -40,7 +38,6 @@ import org.slf4j.LoggerFactory;
     + "compared to the previous row")
 public class GenericUDFValidateAcidSortOrder extends GenericUDF {
   public static final String UDF_NAME = "validate_acid_sort_order";
-  private static final Logger LOG = LoggerFactory.getLogger(GenericUDFValidateAcidSortOrder.class);
   private transient PrimitiveCategory[] inputTypes = new PrimitiveCategory[3];
   private transient Converter[] converters = new Converter[3];
   private final LongWritable output = new LongWritable();
@@ -77,8 +74,6 @@ public class GenericUDFValidateAcidSortOrder extends GenericUDF {
       }
     }
     WriteIdRowId current = new WriteIdRowId(bucketProperty, writeId, rowId);
-    LOG.error("validate_acid_sort_order debug: writeId={}, bucketProperty={}, bucketNum={}, rowId={}, previous={}, current={}",
-        writeId, bucketProperty, bucketNum, rowId, previousWriteIdRowId, current);
     if (previousWriteIdRowId != null) {
       // Verify sort order for this new row
       if (current.compareTo(previousWriteIdRowId) <= 0) {

@@ -319,9 +319,6 @@ public class VectorizedOrcAcidRowBatchReader
           VectorizedRowBatch.DEFAULT_SIZE, null, null, null);
     }
     rowIdProjected = areRowIdsProjected(rbCtx);
-    LOG.error("VectorizedOrcAcidRowBatchReader ROW__ID projection debug: split={}, virtualColumnCount={}, neededVirtualColumns={}, rowIdProjected={}",
-        orcSplit, rbCtx == null ? null : rbCtx.getVirtualColumnCount(),
-        rbCtx == null ? null : rbCtx.getNeededVirtualColumns(), rowIdProjected);
     rowIsDeletedProjected = isRowIsDeletedProjected(rbCtx);
     if (rowIsDeletedProjected) {
       rowIsDeletedVector = new RowIsDeletedColumnVector(VectorizedRowBatch.DEFAULT_SIZE);
@@ -369,6 +366,10 @@ public class VectorizedOrcAcidRowBatchReader
       }
     }
     includeAcidColumns = readerOptions.getIncludeAcidColumns();//default is true
+    if (!isOriginal && rowIdProjected && includeAcidColumns) {
+      readerOptions.include(OrcInputFormat.ensureAcidRowIdColumnsIncluded(
+          readerOptions.getSchema(), readerOptions.getInclude(), fetchDeletedRows));
+    }
   }
 
   /**
@@ -869,21 +870,6 @@ public class VectorizedOrcAcidRowBatchReader
     return false;
   }
 
-
-  private static String describeColumnVector(ColumnVector columnVector) {
-    if (columnVector == null) {
-      return "null";
-    }
-    StringBuilder sb = new StringBuilder(columnVector.getClass().getSimpleName())
-        .append("{noNulls=").append(columnVector.noNulls)
-        .append(", isRepeating=").append(columnVector.isRepeating)
-        .append('}');
-    if (columnVector instanceof LongColumnVector) {
-      sb.append(" firstValue=").append(((LongColumnVector) columnVector).vector[0]);
-    }
-    return sb.toString();
-  }
-
   @Deprecated
   static Path[] getDeleteDeltaDirsFromSplit(OrcSplit orcSplit) {
     return getDeleteDeltaDirsFromSplit(orcSplit, null);
@@ -1070,14 +1056,6 @@ public class VectorizedOrcAcidRowBatchReader
       recordIdColumnVector.fields[0] = vectorizedRowBatchBase.cols[fetchDeletedRows ? OrcRecordUpdater.CURRENT_WRITEID : OrcRecordUpdater.ORIGINAL_WRITEID];
       recordIdColumnVector.fields[1] = vectorizedRowBatchBase.cols[OrcRecordUpdater.BUCKET];
       recordIdColumnVector.fields[2] = vectorizedRowBatchBase.cols[OrcRecordUpdater.ROW_ID];
-      LOG.error("VectorizedOrcAcidRowBatchReader ROW__ID vector debug: originalWriteId={}, bucket={}, rowId={}, recordIdWriteId={}, recordIdBucket={}, recordIdRowId={}, batchSize={}",
-          describeColumnVector(vectorizedRowBatchBase.cols[OrcRecordUpdater.ORIGINAL_WRITEID]),
-          describeColumnVector(vectorizedRowBatchBase.cols[OrcRecordUpdater.BUCKET]),
-          describeColumnVector(vectorizedRowBatchBase.cols[OrcRecordUpdater.ROW_ID]),
-          describeColumnVector(recordIdColumnVector.fields[0]),
-          describeColumnVector(recordIdColumnVector.fields[1]),
-          describeColumnVector(recordIdColumnVector.fields[2]),
-          vectorizedRowBatchBase.size);
     }
   }
   private ColumnVector[] handleOriginalFile(

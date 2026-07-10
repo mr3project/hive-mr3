@@ -292,27 +292,18 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
   public static InputFormat<WritableComparable, Writable> wrapForLlap(
       InputFormat<WritableComparable, Writable> inputFormat, Configuration conf,
       PartitionDesc part) throws HiveException {
-    String ifName = inputFormat.getClass().getCanonicalName();
-    boolean llapIoEnabledWithDaemonDefault = HiveConf.getBoolVar(conf, ConfVars.LLAP_IO_ENABLED, LlapProxy.isDaemon());
-    boolean llapIoEnabledWithFalseDefault = HiveConf.getBoolVar(conf, ConfVars.LLAP_IO_ENABLED, false);
-    boolean tezMr3ScheduledOnHost = conf.getBoolean(MRInput.TEZ_MR3_SCHEDULED_ON_HOST, false);
-    boolean isSupported = inputFormat instanceof LlapWrappableInputFormatInterface;
-    boolean isCacheOnly = inputFormat instanceof LlapCacheOnlyInputFormatInterface;
-    boolean isVectorized = Utilities.getIsVectorized(conf);
-    if (!llapIoEnabledWithDaemonDefault) {
-      LOG.error("HiveInputFormat.wrapForLlap debug: LLAP_IO_ENABLED={}, LLAP_IO_ENABLED_falseDefault={}, TEZ_MR3_SCHEDULED_ON_HOST={}, inputFormat={}, returnedInputFormat={}, isVectorized={}, isSupported={}, isCacheOnly={}, isSerdeBased={}, reason={}",
-          llapIoEnabledWithDaemonDefault, llapIoEnabledWithFalseDefault, tezMr3ScheduledOnHost, ifName,
-          inputFormat.getClass().getCanonicalName(), isVectorized, isSupported, isCacheOnly, false, "LLAP_IO_DISABLED");
+    if (!HiveConf.getBoolVar(conf, ConfVars.LLAP_IO_ENABLED, LlapProxy.isDaemon())) {
       return inputFormat; // LLAP not enabled, no-op.
     }
 
-    if (!tezMr3ScheduledOnHost) {
-      LOG.error("HiveInputFormat.wrapForLlap debug: LLAP_IO_ENABLED={}, LLAP_IO_ENABLED_falseDefault={}, TEZ_MR3_SCHEDULED_ON_HOST={}, inputFormat={}, returnedInputFormat={}, isVectorized={}, isSupported={}, isCacheOnly={}, isSerdeBased={}, reason={}",
-          llapIoEnabledWithDaemonDefault, llapIoEnabledWithFalseDefault, tezMr3ScheduledOnHost, ifName,
-          inputFormat.getClass().getCanonicalName(), isVectorized, isSupported, isCacheOnly, false, "NOT_SCHEDULED_ON_HOST");
+    if (!conf.getBoolean(MRInput.TEZ_MR3_SCHEDULED_ON_HOST, false)) {
       return inputFormat; // use LLAP-IO cache only if TEZ_MR3_SCHEDULED_ON_HOST is exlicitly set
     }
 
+    String ifName = inputFormat.getClass().getCanonicalName();
+    boolean isSupported = inputFormat instanceof LlapWrappableInputFormatInterface;
+    boolean isCacheOnly = inputFormat instanceof LlapCacheOnlyInputFormatInterface;
+    boolean isVectorized = Utilities.getIsVectorized(conf);
     if (!isVectorized) {
       // Pretend it's vectorized if the non-vector wrapped is enabled.
       isVectorized = HiveConf.getBoolVar(conf, ConfVars.LLAP_IO_NONVECTOR_WRAPPER_ENABLED)
@@ -327,10 +318,6 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
     if ((!isSupported || !isVectorized) && !isCacheOnly) {
       LOG.info("Not using llap for " + ifName + ": supported = " + isSupported + ", vectorized = " + isVectorized
           + ", cache only = " + isCacheOnly);
-      LOG.error("HiveInputFormat.wrapForLlap debug: LLAP_IO_ENABLED={}, LLAP_IO_ENABLED_falseDefault={}, TEZ_MR3_SCHEDULED_ON_HOST={}, inputFormat={}, returnedInputFormat={}, isVectorized={}, isSupported={}, isCacheOnly={}, isSerdeBased={}, reason={}",
-          llapIoEnabledWithDaemonDefault, llapIoEnabledWithFalseDefault, tezMr3ScheduledOnHost, ifName,
-          inputFormat.getClass().getCanonicalName(), isVectorized, isSupported, isCacheOnly, isSerdeBased,
-          "UNSUPPORTED_OR_NOT_VECTORIZED");
       return inputFormat;
     }
     LOG.debug("Processing {}", ifName);
@@ -339,10 +326,6 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
     LlapIo<VectorizedRowBatch> llapIo = LlapProxy.getIo();
     if (llapIo == null) {
       LOG.info("Not using LLAP IO because it is not initialized");
-      LOG.error("HiveInputFormat.wrapForLlap debug: LLAP_IO_ENABLED={}, LLAP_IO_ENABLED_falseDefault={}, TEZ_MR3_SCHEDULED_ON_HOST={}, inputFormat={}, returnedInputFormat={}, isVectorized={}, isSupported={}, isCacheOnly={}, isSerdeBased={}, reason={}",
-          llapIoEnabledWithDaemonDefault, llapIoEnabledWithFalseDefault, tezMr3ScheduledOnHost, ifName,
-          inputFormat.getClass().getCanonicalName(), isVectorized, isSupported, isCacheOnly, isSerdeBased,
-          "LLAP_IO_NOT_INITIALIZED");
       return inputFormat;
     }
     Deserializer serde = null;
@@ -354,10 +337,6 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
         } else {
           LOG.info("Not using LLAP IO because there's no partition spec for SerDe-based IF");
         }
-        LOG.error("HiveInputFormat.wrapForLlap debug: LLAP_IO_ENABLED={}, LLAP_IO_ENABLED_falseDefault={}, TEZ_MR3_SCHEDULED_ON_HOST={}, inputFormat={}, returnedInputFormat={}, isVectorized={}, isSupported={}, isCacheOnly={}, isSerdeBased={}, reason={}",
-            llapIoEnabledWithDaemonDefault, llapIoEnabledWithFalseDefault, tezMr3ScheduledOnHost, ifName,
-            inputFormat.getClass().getCanonicalName(), isVectorized, isSupported, isCacheOnly, isSerdeBased,
-            part == null ? "NO_PARTITION_SPEC" : "UNKNOWN");
         return inputFormat;
       }
       try {
@@ -370,21 +349,12 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
       InputFormat<?, ?> wrappedIf = llapIo.getInputFormat(inputFormat, serde);
       // null means we cannot wrap; the cause is logged inside.
       if (wrappedIf != null) {
-        InputFormat<WritableComparable, Writable> returnedInputFormat = castInputFormat(wrappedIf);
-        LOG.error("HiveInputFormat.wrapForLlap debug: LLAP_IO_ENABLED={}, LLAP_IO_ENABLED_falseDefault={}, TEZ_MR3_SCHEDULED_ON_HOST={}, inputFormat={}, returnedInputFormat={}, isVectorized={}, isSupported={}, isCacheOnly={}, isSerdeBased={}, reason={}",
-            llapIoEnabledWithDaemonDefault, llapIoEnabledWithFalseDefault, tezMr3ScheduledOnHost, ifName,
-            returnedInputFormat.getClass().getCanonicalName(), isVectorized, isSupported, isCacheOnly, isSerdeBased,
-            "WRAPPED");
-        return returnedInputFormat;
+        return castInputFormat(wrappedIf);
       }
     }
     if (isCacheOnly) {
       injectLlapCaches(inputFormat, llapIo, conf);
     }
-    LOG.error("HiveInputFormat.wrapForLlap debug: LLAP_IO_ENABLED={}, LLAP_IO_ENABLED_falseDefault={}, TEZ_MR3_SCHEDULED_ON_HOST={}, inputFormat={}, returnedInputFormat={}, isVectorized={}, isSupported={}, isCacheOnly={}, isSerdeBased={}, reason={}",
-        llapIoEnabledWithDaemonDefault, llapIoEnabledWithFalseDefault, tezMr3ScheduledOnHost, ifName,
-        inputFormat.getClass().getCanonicalName(), isVectorized, isSupported, isCacheOnly, isSerdeBased,
-        isCacheOnly ? "CACHE_ONLY_INJECTED" : "WRAP_RETURNED_NULL");
     return inputFormat;
   }
 
@@ -492,13 +462,7 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
     pushProjectionsAndFiltersAndAsOf(job, splitPath);
 
     InputFormat inputFormat = getInputFormatFromCache(inputFormatClass, job);
-    boolean llapIoEnabledWithDaemonDefault = HiveConf.getBoolVar(job, ConfVars.LLAP_IO_ENABLED, LlapProxy.isDaemon());
-    boolean llapIoEnabledWithFalseDefault = HiveConf.getBoolVar(job, ConfVars.LLAP_IO_ENABLED, false);
-    boolean tezMr3ScheduledOnHost = job.getBoolean(MRInput.TEZ_MR3_SCHEDULED_ON_HOST, false);
-    LOG.error("HiveInputFormat.getRecordReader LLAP gate debug: splitPath={}, LLAP_IO_ENABLED={}, LLAP_IO_ENABLED_falseDefault={}, TEZ_MR3_SCHEDULED_ON_HOST={}, originalInputFormat={}, cachedInputFormat={}, willCallWrapForLlap={}",
-        splitPath, llapIoEnabledWithDaemonDefault, llapIoEnabledWithFalseDefault, tezMr3ScheduledOnHost,
-        inputFormatClass.getCanonicalName(), inputFormat.getClass().getCanonicalName(), llapIoEnabledWithDaemonDefault);
-    if (llapIoEnabledWithDaemonDefault) {
+    if (HiveConf.getBoolVar(job, ConfVars.LLAP_IO_ENABLED, LlapProxy.isDaemon())) {
       try {
         inputFormat = HiveInputFormat.wrapForLlap(inputFormat, job, part);
       } catch (HiveException e) {
@@ -509,9 +473,6 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
     try {
       // Handle the special header/footer skipping cases here.
       innerReader = RecordReaderWrapper.create(inputFormat, hsplit, part.getTableDesc(), job, reporter);
-      LOG.error("HiveInputFormat.getRecordReader debug: splitPath={}, originalInputFormat={}, effectiveInputFormat={}, recordReader={}",
-          splitPath, inputFormatClass.getCanonicalName(), inputFormat.getClass().getCanonicalName(),
-          innerReader == null ? null : innerReader.getClass().getCanonicalName());
     } catch (Exception e) {
       Throwable rootCause = JavaUtils.findRootCause(e);
       if (checkLimitReached(job)
@@ -873,9 +834,6 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
                   readColumnsBuffer, readColumnNamesBuffer,
             tableScan.getNeededColumnIDs(), tableScan.getNeededColumns());
           fetchVirtualColumns = tableScan.getConf().hasVirtualCols();
-          LOG.error("HiveInputFormat.getSplits projection debug: dir={}, neededColumnIDs={}, neededColumns={}, hasVirtualCols={}, virtualCols={}",
-              dir, tableScan.getNeededColumnIDs(), tableScan.getNeededColumns(),
-              tableScan.getConf().hasVirtualCols(), tableScan.getConf().getVirtualCols());
           pushDownProjection = true;
           // push down filters and as of information
           pushFiltersAndAsOf(newjob, tableScan, this.mrwork);

@@ -74,9 +74,6 @@ class RecordReaderWrapper extends LineRecordReader {
     RecordReader innerReader = null;
     try {
      innerReader = inputFormat.getRecordReader(split.getInputSplit(), jobConf, reporter);
-     LOG.error("RecordReaderWrapper.create debug: inputFormat={}, inputSplit={}, rawRecordReader={}",
-         inputFormat.getClass().getCanonicalName(), split.getInputSplit(),
-         innerReader == null ? null : innerReader.getClass().getCanonicalName());
     } catch (InterruptedIOException iioe) {
       // If reading from the underlying record reader is interrupted, return a no-op record reader
       LOG.info("Interrupted while getting the input reader for {}", split.getInputSplit());

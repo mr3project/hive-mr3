@@ -19,8 +19,6 @@ package org.apache.hadoop.hive.ql.io.orc;
 
 import java.io.IOException;
 import java.io.PrintStream;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -86,8 +84,6 @@ public class OrcOutputFormat extends FileOutputFormat<NullWritable, OrcSerdeRow>
       if (writer == null) {
         init(row);
       }
-      LOG.error("OrcOutputFormat regular writer debug: path={}, row={}, inspector={}",
-          path, describeRow(row.getRow(), row.getInspector()), describeInspector(row.getInspector()));
       writer.addRow(row.getRow());
     }
 
@@ -97,8 +93,6 @@ public class OrcOutputFormat extends FileOutputFormat<NullWritable, OrcSerdeRow>
       if (writer == null) {
         init(serdeRow);
       }
-      LOG.error("OrcOutputFormat regular writer debug: path={}, row={}, inspector={}",
-          path, describeRow(serdeRow.getRow(), serdeRow.getInspector()), describeInspector(serdeRow.getInspector()));
       writer.addRow(serdeRow.getRow());
     }
 
@@ -114,13 +108,9 @@ public class OrcOutputFormat extends FileOutputFormat<NullWritable, OrcSerdeRow>
         FileSystem fs = options.getFileSystem() == null ?
             path.getFileSystem(options.getConfiguration()) : options.getFileSystem();
         fs.createNewFile(path);
-        LOG.error("yyyyy OrcOutputFormat regular writer close debug: path={}, emptyFile=true", path);
         return;
       }
-      LOG.error("yyyyy OrcOutputFormat regular writer close debug: path={}, rowsBeforeClose={}, rawDataSizeBeforeClose={}, isCompaction={}",
-          path, writer.getNumberOfRows(), writer.getRawDataSize(), options.isCompaction());
       writer.close();
-      logWrittenFileMetadata(path, options);
     }
 
     @Override
@@ -132,85 +122,10 @@ public class OrcOutputFormat extends FileOutputFormat<NullWritable, OrcSerdeRow>
 
     private void init(OrcSerdeRow serdeRow) throws IOException {
       options.inspector(serdeRow.getInspector());
-      LOG.error("OrcOutputFormat regular writer init debug: path={}, isCompaction={}, inspector={}, row={}",
-          path, options.isCompaction(), describeInspector(serdeRow.getInspector()),
-          describeRow(serdeRow.getRow(), serdeRow.getInspector()));
       writer = OrcFile.createWriter(path, options);
-      LOG.error("OrcOutputFormat regular writer schema debug: path={}, schema={}", path, options.getSchema());
       if (options.isCompaction()) {
         AcidUtils.OrcAcidVersion.setAcidVersionInDataFile(writer);
       }
-    }
-
-    private static void logWrittenFileMetadata(Path path, OrcFile.WriterOptions options) {
-      try {
-        Reader reader = OrcFile.createReader(path, OrcFile.readerOptions(options.getConfiguration()));
-        LOG.error("yyyyy OrcOutputFormat regular writer post-close metadata debug: path={}, fileLength={}, numberOfRows={}, schema={}, metadataKeys={}, acidVersion={}, acidKeyIndex={}, acidStats={}",
-            path, path.getFileSystem(options.getConfiguration()).getFileStatus(path).getLen(), reader.getNumberOfRows(),
-            reader.getSchema(), reader.getMetadataKeys(),
-            getMetadataValue(reader, AcidUtils.OrcAcidVersion.ACID_VERSION_KEY),
-            getMetadataValue(reader, OrcRecordUpdater.ACID_KEY_INDEX_NAME),
-            getMetadataValue(reader, OrcAcidUtils.ACID_STATS));
-      } catch (Exception e) {
-        LOG.error("yyyyy OrcOutputFormat regular writer post-close metadata debug failed: path={}", path, e);
-      }
-    }
-
-    private static String getMetadataValue(Reader reader, String key) {
-      try {
-        if (!reader.hasMetadataValue(key)) {
-          return null;
-        }
-        ByteBuffer buffer = reader.getMetadataValue(key).duplicate();
-        return StandardCharsets.UTF_8.decode(buffer).toString();
-      } catch (Exception e) {
-        return "<error reading " + key + ": " + e.getMessage() + ">";
-      }
-    }
-
-    private static String describeInspector(ObjectInspector inspector) {
-      if (inspector == null) {
-        return "null";
-      }
-      if (inspector instanceof StructObjectInspector) {
-        StructObjectInspector structInspector = (StructObjectInspector) inspector;
-        StringBuilder sb = new StringBuilder(inspector.getTypeName()).append(" fields=[");
-        boolean first = true;
-        for (StructField field : structInspector.getAllStructFieldRefs()) {
-          if (!first) {
-            sb.append(", ");
-          }
-          first = false;
-          sb.append(field.getFieldName()).append(':').append(field.getFieldObjectInspector().getTypeName());
-        }
-        return sb.append(']').toString();
-      }
-      return inspector.getTypeName();
-    }
-
-    private static String describeRow(Object row, ObjectInspector inspector) {
-      if (row == null || inspector == null) {
-        return String.valueOf(row);
-      }
-      if (inspector instanceof StructObjectInspector) {
-        StructObjectInspector structInspector = (StructObjectInspector) inspector;
-        StringBuilder sb = new StringBuilder("{");
-        boolean first = true;
-        for (StructField field : structInspector.getAllStructFieldRefs()) {
-          if (!first) {
-            sb.append(", ");
-          }
-          first = false;
-          sb.append(field.getFieldName()).append('=')
-              .append(describeRow(structInspector.getStructFieldData(row, field), field.getFieldObjectInspector()));
-        }
-        return sb.append('}').toString();
-      }
-      if (inspector instanceof PrimitiveObjectInspector) {
-        Object value = ((PrimitiveObjectInspector) inspector).getPrimitiveJavaObject(row);
-        return String.valueOf(value);
-      }
-      return String.valueOf(row);
     }
   }
 
@@ -271,9 +186,6 @@ public class OrcOutputFormat extends FileOutputFormat<NullWritable, OrcSerdeRow>
                          boolean isCompressed,
                          Properties tableProperties,
                          Progressable reporter) throws IOException {
-    LOG.error("OrcOutputFormat getHiveRecordWriter debug: path={}, valueClass={}, isCompressed={}, columns={}, columnTypes={}",
-        path, valueClass, isCompressed, tableProperties == null ? null : tableProperties.getProperty(IOConstants.COLUMNS),
-        tableProperties == null ? null : tableProperties.getProperty(IOConstants.COLUMNS_TYPES));
     return new OrcRecordWriter(path, getOptions(conf, tableProperties));
   }
 
@@ -402,12 +314,6 @@ public class OrcOutputFormat extends FileOutputFormat<NullWritable, OrcSerdeRow>
       @Override
       public void write(Writable w) throws IOException {
         OrcStruct orc = (OrcStruct) w;
-        LOG.error("OrcOutputFormat ACID writer debug: path={}, operation={}, originalWriteId={}, bucket={}, rowId={}, currentWriteId={}, row={}",
-            filename, orc.getFieldValue(OrcRecordUpdater.OPERATION),
-            orc.getFieldValue(OrcRecordUpdater.ORIGINAL_WRITEID),
-            orc.getFieldValue(OrcRecordUpdater.BUCKET),
-            orc.getFieldValue(OrcRecordUpdater.ROW_ID),
-            orc.getFieldValue(OrcRecordUpdater.CURRENT_WRITEID), orc.getFieldValue(OrcRecordUpdater.ROW));
         watcher.addKey(
             ((IntWritable) orc.getFieldValue(OrcRecordUpdater.OPERATION)).get(),
             ((LongWritable)

@@ -433,6 +433,48 @@ public class TestInputOutputFormat {
   }
 
   @Test
+  public void testEnsureAcidRowIdColumnsIncluded() {
+    TypeDescription schema = createAcidSchema();
+    boolean[] included = new boolean[schema.getMaximumId() + 1];
+    included[0] = true;
+    included[schema.findSubtype("row").getId()] = true;
+    included[schema.findSubtype("row.a").getId()] = true;
+
+    OrcInputFormat.ensureAcidRowIdColumnsIncluded(schema, included, false);
+
+    assertTrue(included[schema.findSubtype(OrcRecordUpdater.ORIGINAL_WRITEID_FIELD_NAME).getId()]);
+    assertTrue(included[schema.findSubtype(OrcRecordUpdater.BUCKET_FIELD_NAME).getId()]);
+    assertTrue(included[schema.findSubtype(OrcRecordUpdater.ROW_ID_FIELD_NAME).getId()]);
+    assertFalse(included[schema.findSubtype(OrcRecordUpdater.CURRENT_WRITEID_FIELD_NAME).getId()]);
+  }
+
+  @Test
+  public void testEnsureAcidRowIdColumnsIncludedForDeletedRows() {
+    TypeDescription schema = createAcidSchema();
+    boolean[] included = new boolean[schema.getMaximumId() + 1];
+    included[0] = true;
+
+    OrcInputFormat.ensureAcidRowIdColumnsIncluded(schema, included, true);
+
+    assertTrue(included[schema.findSubtype(OrcRecordUpdater.ORIGINAL_WRITEID_FIELD_NAME).getId()]);
+    assertTrue(included[schema.findSubtype(OrcRecordUpdater.BUCKET_FIELD_NAME).getId()]);
+    assertTrue(included[schema.findSubtype(OrcRecordUpdater.ROW_ID_FIELD_NAME).getId()]);
+    assertTrue(included[schema.findSubtype(OrcRecordUpdater.CURRENT_WRITEID_FIELD_NAME).getId()]);
+  }
+
+  private static TypeDescription createAcidSchema() {
+    return TypeDescription.createStruct()
+        .addField(OrcRecordUpdater.OPERATION_FIELD_NAME, TypeDescription.createInt())
+        .addField(OrcRecordUpdater.ORIGINAL_WRITEID_FIELD_NAME, TypeDescription.createLong())
+        .addField(OrcRecordUpdater.BUCKET_FIELD_NAME, TypeDescription.createInt())
+        .addField(OrcRecordUpdater.ROW_ID_FIELD_NAME, TypeDescription.createLong())
+        .addField(OrcRecordUpdater.CURRENT_WRITEID_FIELD_NAME, TypeDescription.createLong())
+        .addField(OrcRecordUpdater.ROW_FIELD_NAME, TypeDescription.createStruct()
+            .addField("a", TypeDescription.createInt())
+            .addField("b", TypeDescription.createString()));
+  }
+
+  @Test
   public void testGetInputPaths() throws Exception {
     conf.set("mapred.input.dir", "a,b,c");
     assertArrayEquals(new Path[]{new Path("a"), new Path("b"), new Path("c")},
