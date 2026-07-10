@@ -19,6 +19,8 @@ package org.apache.hadoop.hive.ql.io.orc;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -112,9 +114,13 @@ public class OrcOutputFormat extends FileOutputFormat<NullWritable, OrcSerdeRow>
         FileSystem fs = options.getFileSystem() == null ?
             path.getFileSystem(options.getConfiguration()) : options.getFileSystem();
         fs.createNewFile(path);
+        LOG.error("yyyyy OrcOutputFormat regular writer close debug: path={}, emptyFile=true", path);
         return;
       }
+      LOG.error("yyyyy OrcOutputFormat regular writer close debug: path={}, rowsBeforeClose={}, rawDataSizeBeforeClose={}, isCompaction={}",
+          path, writer.getNumberOfRows(), writer.getRawDataSize(), options.isCompaction());
       writer.close();
+      logWrittenFileMetadata(path, options);
     }
 
     @Override
@@ -133,6 +139,32 @@ public class OrcOutputFormat extends FileOutputFormat<NullWritable, OrcSerdeRow>
       LOG.error("OrcOutputFormat regular writer schema debug: path={}, schema={}", path, options.getSchema());
       if (options.isCompaction()) {
         AcidUtils.OrcAcidVersion.setAcidVersionInDataFile(writer);
+      }
+    }
+
+    private static void logWrittenFileMetadata(Path path, OrcFile.WriterOptions options) {
+      try {
+        Reader reader = OrcFile.createReader(path, OrcFile.readerOptions(options.getConfiguration()));
+        LOG.error("yyyyy OrcOutputFormat regular writer post-close metadata debug: path={}, fileLength={}, numberOfRows={}, schema={}, metadataKeys={}, acidVersion={}, acidKeyIndex={}, acidStats={}",
+            path, path.getFileSystem(options.getConfiguration()).getFileStatus(path).getLen(), reader.getNumberOfRows(),
+            reader.getSchema(), reader.getMetadataKeys(),
+            getMetadataValue(reader, AcidUtils.OrcAcidVersion.ACID_VERSION_KEY),
+            getMetadataValue(reader, OrcRecordUpdater.ACID_KEY_INDEX_NAME),
+            getMetadataValue(reader, OrcAcidUtils.ACID_STATS));
+      } catch (Exception e) {
+        LOG.error("yyyyy OrcOutputFormat regular writer post-close metadata debug failed: path={}", path, e);
+      }
+    }
+
+    private static String getMetadataValue(Reader reader, String key) {
+      try {
+        if (!reader.hasMetadataValue(key)) {
+          return null;
+        }
+        ByteBuffer buffer = reader.getMetadataValue(key).duplicate();
+        return StandardCharsets.UTF_8.decode(buffer).toString();
+      } catch (Exception e) {
+        return "<error reading " + key + ": " + e.getMessage() + ">";
       }
     }
 

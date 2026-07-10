@@ -331,10 +331,18 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
                 .trace("committing " + outPathsCommitted[idx] + " (direct insert = " + isDirectInsert + ")");
           }
           commitPaths.add(outPathsCommitted[idx]);
-        } else if (!isDirectInsert && !fs.rename(outPaths[idx], finalPaths[idx])) {
+        } else if (!isDirectInsert) {
+          long sourceLengthBeforeRename = getFileLength(fs, outPaths[idx]);
+          long targetLengthBeforeRename = getFileLength(fs, finalPaths[idx]);
+          LOG.error("yyyyy FileSinkOperator commit rename debug: source={}, target={}, sourceLengthBeforeRename={}, targetLengthBeforeRename={}, isCompactionTable={}, isMmTable={}, isDirectInsert={}",
+              outPaths[idx], finalPaths[idx], sourceLengthBeforeRename, targetLengthBeforeRename,
+              isCompactionTable, isMmTable, isDirectInsert);
+          if (!fs.rename(outPaths[idx], finalPaths[idx])) {
             FileStatus fileStatus = FileUtils.getFileStatusOrNull(fs, finalPaths[idx]);
             if (fileStatus != null) {
               LOG.warn("Target path " + finalPaths[idx] + " with a size " + fileStatus.getLen() + " exists. Trying to delete it.");
+              LOG.error("yyyyy FileSinkOperator commit rename target exists debug: source={}, target={}, existingTargetLength={}",
+                  outPaths[idx], finalPaths[idx], fileStatus.getLen());
               if (!fs.delete(finalPaths[idx], true)) {
                 throw new HiveException("Unable to delete existing target output: " + finalPaths[idx]);
               }
@@ -344,9 +352,17 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
               throw new HiveException("Unable to rename output from: "
                 + outPaths[idx] + " to: " + finalPaths[idx]);
             }
+          }
+          LOG.error("yyyyy FileSinkOperator commit rename completed debug: source={}, target={}, sourceExistsAfterRename={}, targetLengthAfterRename={}, isCompactionTable={}",
+              outPaths[idx], finalPaths[idx], fs.exists(outPaths[idx]), getFileLength(fs, finalPaths[idx]), isCompactionTable);
         }
       }
       updateProgress();
+    }
+
+    private long getFileLength(FileSystem fs, Path path) throws IOException {
+      FileStatus status = FileUtils.getFileStatusOrNull(fs, path);
+      return status == null ? -1 : status.getLen();
     }
 
     public void abortWritersAndUpdaters(FileSystem fs, boolean abort, boolean delete) throws HiveException {

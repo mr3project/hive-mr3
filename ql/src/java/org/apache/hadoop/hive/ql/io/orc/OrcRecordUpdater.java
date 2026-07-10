@@ -716,10 +716,14 @@ public class OrcRecordUpdater implements RecordUpdater {
       if(numKeysCurrentStripe > 0) {
         preStripeWrite(context);
       }
+      String acidKeyIndex = lastKey.toString();
+      String serializedAcidStats = acidStats.serialize();
+      LOG.error("yyyyy OrcRecordUpdater KeyIndexBuilder preFooterWrite debug: acidKeyIndex={}, acidStats={}, lastTransaction={}, lastBucket={}, lastRowId={}, numKeysCurrentStripe={}",
+          acidKeyIndex, serializedAcidStats, lastTransaction, lastBucket, lastRowId, numKeysCurrentStripe);
       context.getWriter().addUserMetadata(ACID_KEY_INDEX_NAME,
-          UTF8.encode(lastKey.toString()));
+          UTF8.encode(acidKeyIndex));
       context.getWriter().addUserMetadata(OrcAcidUtils.ACID_STATS,
-          UTF8.encode(acidStats.serialize()));
+          UTF8.encode(serializedAcidStats));
     }
 
     void addKey(int op, long transaction, int bucket, long rowId) {
