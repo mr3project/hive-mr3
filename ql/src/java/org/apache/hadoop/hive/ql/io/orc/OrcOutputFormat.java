@@ -84,6 +84,8 @@ public class OrcOutputFormat extends FileOutputFormat<NullWritable, OrcSerdeRow>
       if (writer == null) {
         init(row);
       }
+      LOG.error("OrcOutputFormat regular writer debug: path={}, row={}, inspector={}",
+          path, describeRow(row.getRow(), row.getInspector()), describeInspector(row.getInspector()));
       writer.addRow(row.getRow());
     }
 
@@ -93,6 +95,8 @@ public class OrcOutputFormat extends FileOutputFormat<NullWritable, OrcSerdeRow>
       if (writer == null) {
         init(serdeRow);
       }
+      LOG.error("OrcOutputFormat regular writer debug: path={}, row={}, inspector={}",
+          path, describeRow(serdeRow.getRow(), serdeRow.getInspector()), describeInspector(serdeRow.getInspector()));
       writer.addRow(serdeRow.getRow());
     }
 
@@ -122,10 +126,59 @@ public class OrcOutputFormat extends FileOutputFormat<NullWritable, OrcSerdeRow>
 
     private void init(OrcSerdeRow serdeRow) throws IOException {
       options.inspector(serdeRow.getInspector());
+      LOG.error("OrcOutputFormat regular writer init debug: path={}, isCompaction={}, inspector={}, row={}",
+          path, options.isCompaction(), describeInspector(serdeRow.getInspector()),
+          describeRow(serdeRow.getRow(), serdeRow.getInspector()));
       writer = OrcFile.createWriter(path, options);
+      LOG.error("OrcOutputFormat regular writer schema debug: path={}, schema={}", path, options.getSchema());
       if (options.isCompaction()) {
         AcidUtils.OrcAcidVersion.setAcidVersionInDataFile(writer);
       }
+    }
+
+    private static String describeInspector(ObjectInspector inspector) {
+      if (inspector == null) {
+        return "null";
+      }
+      if (inspector instanceof StructObjectInspector) {
+        StructObjectInspector structInspector = (StructObjectInspector) inspector;
+        StringBuilder sb = new StringBuilder(inspector.getTypeName()).append(" fields=[");
+        boolean first = true;
+        for (StructField field : structInspector.getAllStructFieldRefs()) {
+          if (!first) {
+            sb.append(", ");
+          }
+          first = false;
+          sb.append(field.getFieldName()).append(':').append(field.getFieldObjectInspector().getTypeName());
+        }
+        return sb.append(']').toString();
+      }
+      return inspector.getTypeName();
+    }
+
+    private static String describeRow(Object row, ObjectInspector inspector) {
+      if (row == null || inspector == null) {
+        return String.valueOf(row);
+      }
+      if (inspector instanceof StructObjectInspector) {
+        StructObjectInspector structInspector = (StructObjectInspector) inspector;
+        StringBuilder sb = new StringBuilder("{");
+        boolean first = true;
+        for (StructField field : structInspector.getAllStructFieldRefs()) {
+          if (!first) {
+            sb.append(", ");
+          }
+          first = false;
+          sb.append(field.getFieldName()).append('=')
+              .append(describeRow(structInspector.getStructFieldData(row, field), field.getFieldObjectInspector()));
+        }
+        return sb.append('}').toString();
+      }
+      if (inspector instanceof PrimitiveObjectInspector) {
+        Object value = ((PrimitiveObjectInspector) inspector).getPrimitiveJavaObject(row);
+        return String.valueOf(value);
+      }
+      return String.valueOf(row);
     }
   }
 
@@ -186,6 +239,9 @@ public class OrcOutputFormat extends FileOutputFormat<NullWritable, OrcSerdeRow>
                          boolean isCompressed,
                          Properties tableProperties,
                          Progressable reporter) throws IOException {
+    LOG.error("OrcOutputFormat getHiveRecordWriter debug: path={}, valueClass={}, isCompressed={}, columns={}, columnTypes={}",
+        path, valueClass, isCompressed, tableProperties == null ? null : tableProperties.getProperty(IOConstants.COLUMNS),
+        tableProperties == null ? null : tableProperties.getProperty(IOConstants.COLUMNS_TYPES));
     return new OrcRecordWriter(path, getOptions(conf, tableProperties));
   }
 
