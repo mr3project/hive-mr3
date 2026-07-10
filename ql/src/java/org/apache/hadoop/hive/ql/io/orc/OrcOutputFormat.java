@@ -314,6 +314,12 @@ public class OrcOutputFormat extends FileOutputFormat<NullWritable, OrcSerdeRow>
       @Override
       public void write(Writable w) throws IOException {
         OrcStruct orc = (OrcStruct) w;
+        LOG.error("OrcOutputFormat ACID writer debug: path={}, operation={}, originalWriteId={}, bucket={}, rowId={}, currentWriteId={}, row={}",
+            filename, orc.getFieldValue(OrcRecordUpdater.OPERATION),
+            orc.getFieldValue(OrcRecordUpdater.ORIGINAL_WRITEID),
+            orc.getFieldValue(OrcRecordUpdater.BUCKET),
+            orc.getFieldValue(OrcRecordUpdater.ROW_ID),
+            orc.getFieldValue(OrcRecordUpdater.CURRENT_WRITEID), orc.getFieldValue(OrcRecordUpdater.ROW));
         watcher.addKey(
             ((IntWritable) orc.getFieldValue(OrcRecordUpdater.OPERATION)).get(),
             ((LongWritable)

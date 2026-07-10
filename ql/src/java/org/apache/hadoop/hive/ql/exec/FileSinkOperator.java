@@ -1090,6 +1090,8 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
           int bucketProperty = getBucketProperty(row);
           bucketId = BucketCodec.determineVersion(bucketProperty).decodeWriterId(bucketProperty);
         }
+        LOG.error("FileSinkOperator compaction bucket debug: bucketProperty={}, decodedBucketId={}, row={}",
+            getBucketProperty(row), bucketId, describeCompactionRow(row));
         if (!filesCreatedPerBucket.get(bucketId)) {
           createBucketFilesForCompaction(fsp);
         }
@@ -1196,6 +1198,10 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
         writerOffset = bucketId;
         if (!isCompactionTable) {
           writerOffset = findWriterOffset(row);
+        } else {
+          LOG.error("FileSinkOperator compaction write debug: writerOffset={}, bucketId={}, row={}, recordValueClass={}, recordValue={}",
+              writerOffset, bucketId, describeCompactionRow(row),
+              recordValue == null ? null : recordValue.getClass().getName(), recordValue);
         }
         rowOutWriters[writerOffset].write(recordValue);
       } else if (conf.getWriteType() == AcidUtils.Operation.INSERT) {
@@ -1840,6 +1846,13 @@ public class FileSinkOperator extends TerminalOperator<FileSinkDesc> implements
     if (conf.getInsertOverwrite()) {
       job.setBoolean(Utilities.ENSURE_OPERATORS_EXECUTED, true);
     }
+  }
+
+  private String describeCompactionRow(Object row) {
+    if (row instanceof Object[]) {
+      return Arrays.toString((Object[]) row);
+    }
+    return String.valueOf(row);
   }
 
   /**
