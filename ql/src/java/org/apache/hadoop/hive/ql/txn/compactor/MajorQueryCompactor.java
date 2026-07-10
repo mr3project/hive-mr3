@@ -18,6 +18,7 @@
 package org.apache.hadoop.hive.ql.txn.compactor;
 
 import com.google.common.collect.Lists;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.ValidWriteIdList;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -34,6 +35,8 @@ import java.util.List;
  * Class responsible of running query based major compaction.
  */
 final class MajorQueryCompactor extends QueryCompactor {
+  private Path finalTmpTablePath;
+  private Path stagingTmpTablePath;
 
   @Override
   public boolean run(CompactorContext context) throws IOException {
@@ -48,15 +51,34 @@ final class MajorQueryCompactor extends QueryCompactor {
     HiveConf conf = setUpDriverSession(hiveConf);
 
     String tmpTableName = getTempTableName(table);
-    Path tmpTablePath = QueryCompactor.Util.getCompactionResultDir(storageDescriptor, writeIds,
+    finalTmpTablePath = QueryCompactor.Util.getCompactionResultDir(storageDescriptor, writeIds,
         conf, true, false, null);
+    stagingTmpTablePath = getStagingTmpTablePath(finalTmpTablePath);
 
-    List<String> createQueries = getCreateQueries(tmpTableName, table, tmpTablePath.toString());
+    List<String> createQueries = getCreateQueries(tmpTableName, table, stagingTmpTablePath.toString());
     List<String> compactionQueries = getCompactionQueries(table, context.getPartition(), tmpTableName);
     List<String> dropQueries = getDropQueries(tmpTableName);
-    runCompactionQueries(conf, tmpTableName, context.getCompactionInfo(), Lists.newArrayList(tmpTablePath), 
-        createQueries, compactionQueries, dropQueries, table.getParameters());
+    runCompactionQueries(conf, tmpTableName, context.getCompactionInfo(),
+        Lists.newArrayList(finalTmpTablePath, stagingTmpTablePath), createQueries, compactionQueries, dropQueries,
+        table.getParameters());
     return true;
+  }
+
+
+  @Override
+  protected void commitCompaction(String tmpTableName, HiveConf conf) throws IOException {
+    FileSystem fs = stagingTmpTablePath.getFileSystem(conf);
+    if (fs.exists(finalTmpTablePath)) {
+      throw new IOException("Compaction result directory already exists: " + finalTmpTablePath);
+    }
+    if (!fs.rename(stagingTmpTablePath, finalTmpTablePath)) {
+      throw new IOException("Could not move compaction result directory from " + stagingTmpTablePath
+          + " to " + finalTmpTablePath);
+    }
+  }
+
+  private Path getStagingTmpTablePath(Path finalPath) {
+    return new Path(finalPath.getParent(), ".tmp_compactor_" + finalPath.getName() + "_" + System.nanoTime());
   }
 
   @Override
