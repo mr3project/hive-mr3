@@ -31,12 +31,16 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapred.RecordReader;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static java.util.Arrays.asList;
 
 /** BatchToRowReader that returns the rows readable by ORC IOs. */
 public class OrcOiBatchToRowReader extends BatchToRowReader<OrcStruct, OrcUnion>
     implements AcidRecordReader<NullWritable, Object> {
+
+  private static final Logger LOG = LoggerFactory.getLogger(OrcOiBatchToRowReader.class);
 
   private final OrcRawRecordMerger.ReaderKey recordIdentifier;
   private boolean isNull;
@@ -54,12 +58,18 @@ public class OrcOiBatchToRowReader extends BatchToRowReader<OrcStruct, OrcUnion>
             new VirtualColumnHandler(VirtualColumn.ROWID, (value) -> {
               OrcStruct rowId = (OrcStruct) value;
               if (value == null) {
+                LOG.error("OrcOiBatchToRowReader ROW__ID conversion debug: ROW__ID object is null");
                 isNull = true;
                 return;
               }
-              recordIdentifier.setValues(((LongWritable) rowId.getFieldValue(Field.writeId.ordinal())).get(),
-                      ((IntWritable) rowId.getFieldValue(Field.bucketId.ordinal())).get(),
-                      ((LongWritable) rowId.getFieldValue(Field.rowId.ordinal())).get());
+              Object writeId = rowId.getFieldValue(Field.writeId.ordinal());
+              Object bucketId = rowId.getFieldValue(Field.bucketId.ordinal());
+              Object rowIdValue = rowId.getFieldValue(Field.rowId.ordinal());
+              LOG.error("OrcOiBatchToRowReader ROW__ID conversion debug: rowId={}, writeId={}, bucketId={}, rowIdValue={}",
+                  rowId, writeId, bucketId, rowIdValue);
+              recordIdentifier.setValues(((LongWritable) writeId).get(),
+                      ((IntWritable) bucketId).get(),
+                      ((LongWritable) rowIdValue).get());
               isNull = false;
             }),
             new VirtualColumnHandler(VirtualColumn.ROWISDELETED, (value) -> {

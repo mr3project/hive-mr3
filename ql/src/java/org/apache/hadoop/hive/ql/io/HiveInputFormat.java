@@ -834,6 +834,9 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
                   readColumnsBuffer, readColumnNamesBuffer,
             tableScan.getNeededColumnIDs(), tableScan.getNeededColumns());
           fetchVirtualColumns = tableScan.getConf().hasVirtualCols();
+          LOG.error("HiveInputFormat.getSplits projection debug: dir={}, neededColumnIDs={}, neededColumns={}, hasVirtualCols={}, virtualCols={}",
+              dir, tableScan.getNeededColumnIDs(), tableScan.getNeededColumns(),
+              tableScan.getConf().hasVirtualCols(), tableScan.getConf().getVirtualCols());
           pushDownProjection = true;
           // push down filters and as of information
           pushFiltersAndAsOf(newjob, tableScan, this.mrwork);
