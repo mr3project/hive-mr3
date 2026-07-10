@@ -492,7 +492,13 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
     pushProjectionsAndFiltersAndAsOf(job, splitPath);
 
     InputFormat inputFormat = getInputFormatFromCache(inputFormatClass, job);
-    if (HiveConf.getBoolVar(job, ConfVars.LLAP_IO_ENABLED, LlapProxy.isDaemon())) {
+    boolean llapIoEnabledWithDaemonDefault = HiveConf.getBoolVar(job, ConfVars.LLAP_IO_ENABLED, LlapProxy.isDaemon());
+    boolean llapIoEnabledWithFalseDefault = HiveConf.getBoolVar(job, ConfVars.LLAP_IO_ENABLED, false);
+    boolean tezMr3ScheduledOnHost = job.getBoolean(MRInput.TEZ_MR3_SCHEDULED_ON_HOST, false);
+    LOG.error("HiveInputFormat.getRecordReader LLAP gate debug: splitPath={}, LLAP_IO_ENABLED={}, LLAP_IO_ENABLED_falseDefault={}, TEZ_MR3_SCHEDULED_ON_HOST={}, originalInputFormat={}, cachedInputFormat={}, willCallWrapForLlap={}",
+        splitPath, llapIoEnabledWithDaemonDefault, llapIoEnabledWithFalseDefault, tezMr3ScheduledOnHost,
+        inputFormatClass.getCanonicalName(), inputFormat.getClass().getCanonicalName(), llapIoEnabledWithDaemonDefault);
+    if (llapIoEnabledWithDaemonDefault) {
       try {
         inputFormat = HiveInputFormat.wrapForLlap(inputFormat, job, part);
       } catch (HiveException e) {
