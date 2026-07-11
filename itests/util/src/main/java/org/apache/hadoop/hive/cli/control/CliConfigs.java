@@ -266,7 +266,7 @@ public class CliConfigs {
 
     private static Map<HiveConf.ConfVars, String> createConfVarsStringMap() {
       Map<HiveConf.ConfVars,String> customConfigValueMap = new HashMap<>();
-      customConfigValueMap.put(HiveConf.ConfVars.COMPACTOR_CRUD_QUERY_BASED, "true");
+      customConfigValueMap.put(HiveConf.ConfVars.COMPACTOR_CRUD_QUERY_BASED, "false");
       customConfigValueMap.put(HiveConf.ConfVars.HIVE_SUPPORT_CONCURRENCY, "true");
       customConfigValueMap.put(HiveConf.ConfVars.HIVE_TXN_MANAGER, "org.apache.hadoop.hive.ql.lockmgr.DbTxnManager");
       customConfigValueMap.put(HiveConf.ConfVars.HIVE_COMPACTOR_GATHER_STATS, "false");
