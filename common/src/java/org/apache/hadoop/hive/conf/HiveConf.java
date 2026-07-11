@@ -6003,7 +6003,7 @@ public class HiveConf extends Configuration {
       "Additional jars relative to the directory where Hive-exec-jar is located."),
 
     // Compaction using MR3
-    HIVE_MR3_COMPACTION_USING_MR3("hive.mr3.compaction.using.mr3", false,
+    HIVE_MR3_COMPACTION_USING_MR3("hive.mr3.compaction.using.mr3", true,
         "Enable compaction using MR3. High Availability needs to be enabled."),
 
     HIVE_MR3_QUERY_DAG_ID_ID("hive.mr3.query.dag.id.id", -1, "DAGID.id for internal use"),
