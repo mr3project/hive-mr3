@@ -366,9 +366,9 @@ public class VectorizedOrcAcidRowBatchReader
       }
     }
     includeAcidColumns = readerOptions.getIncludeAcidColumns();//default is true
-    if (!isOriginal && rowIdProjected && includeAcidColumns) {
-      readerOptions.include(OrcInputFormat.ensureAcidRowIdColumnsIncluded(
-          readerOptions.getSchema(), readerOptions.getInclude(), fetchDeletedRows));
+    if (!isOriginal) {
+      readerOptions.include(OrcInputFormat.genIncludedAcidColumns(
+          OrcInputFormat.getDesiredRowTypeDescr(conf, true, Integer.MAX_VALUE), conf, includeAcidColumns));
     }
   }
 

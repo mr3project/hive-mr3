@@ -84,6 +84,7 @@ import org.apache.hadoop.hive.ql.io.HiveOutputFormat;
 import org.apache.hadoop.hive.ql.io.IOConstants;
 import org.apache.hadoop.hive.ql.io.InputFormatChecker;
 import org.apache.hadoop.hive.ql.io.RecordIdentifier;
+import org.apache.hadoop.hive.ql.metadata.VirtualColumn;
 import org.apache.hadoop.hive.ql.io.RecordUpdater;
 import org.apache.hadoop.hive.ql.io.orc.OrcInputFormat.Context;
 import org.apache.hadoop.hive.ql.io.orc.OrcInputFormat.SplitStrategy;
@@ -128,6 +129,7 @@ import org.apache.orc.OrcConf;
 import org.apache.orc.OrcProto;
 import org.apache.orc.StripeInformation;
 import org.apache.orc.TypeDescription;
+import org.apache.orc.impl.SchemaEvolution;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -433,45 +435,65 @@ public class TestInputOutputFormat {
   }
 
   @Test
-  public void testEnsureAcidRowIdColumnsIncluded() {
-    TypeDescription schema = createAcidSchema();
-    boolean[] included = new boolean[schema.getMaximumId() + 1];
-    included[0] = true;
-    included[schema.findSubtype("row").getId()] = true;
-    included[schema.findSubtype("row.a").getId()] = true;
+  public void testGenIncludedAcidColumnsIncludesMetadataPrefixAndProjectedPayload() {
+    TypeDescription rowSchema = createRowSchema();
+    TypeDescription acidSchema = createAcidSchema();
+    ColumnProjectionUtils.appendReadColumns(conf, Collections.singletonList(0));
 
-    OrcInputFormat.ensureAcidRowIdColumnsIncluded(schema, included, false);
+    boolean[] included = OrcInputFormat.genIncludedAcidColumns(rowSchema, conf, true);
 
-    assertTrue(included[schema.findSubtype(OrcRecordUpdater.ORIGINAL_WRITEID_FIELD_NAME).getId()]);
-    assertTrue(included[schema.findSubtype(OrcRecordUpdater.BUCKET_FIELD_NAME).getId()]);
-    assertTrue(included[schema.findSubtype(OrcRecordUpdater.ROW_ID_FIELD_NAME).getId()]);
-    assertFalse(included[schema.findSubtype(OrcRecordUpdater.CURRENT_WRITEID_FIELD_NAME).getId()]);
+    assertTrue(included[acidSchema.findSubtype(OrcRecordUpdater.OPERATION_FIELD_NAME).getId()]);
+    assertTrue(included[acidSchema.findSubtype(OrcRecordUpdater.ORIGINAL_WRITEID_FIELD_NAME).getId()]);
+    assertTrue(included[acidSchema.findSubtype(OrcRecordUpdater.BUCKET_FIELD_NAME).getId()]);
+    assertTrue(included[acidSchema.findSubtype(OrcRecordUpdater.ROW_ID_FIELD_NAME).getId()]);
+    assertTrue(included[acidSchema.findSubtype(OrcRecordUpdater.CURRENT_WRITEID_FIELD_NAME).getId()]);
+    assertTrue(included[acidSchema.findSubtype("row").getId()]);
+    assertTrue(included[acidSchema.findSubtype("row.a").getId()]);
+    assertFalse(included[acidSchema.findSubtype("row.b").getId()]);
   }
 
   @Test
-  public void testEnsureAcidRowIdColumnsIncludedForDeletedRows() {
-    TypeDescription schema = createAcidSchema();
-    boolean[] included = new boolean[schema.getMaximumId() + 1];
-    included[0] = true;
+  public void testGenIncludedAcidColumnsOmitsMetadataPrefixWhenAcidColumnsExcluded() {
+    TypeDescription rowSchema = createRowSchema();
+    TypeDescription acidSchema = createAcidSchema();
+    ColumnProjectionUtils.appendReadColumns(conf, Collections.singletonList(1));
 
-    OrcInputFormat.ensureAcidRowIdColumnsIncluded(schema, included, true);
+    boolean[] included = OrcInputFormat.genIncludedAcidColumns(rowSchema, conf, false);
 
-    assertTrue(included[schema.findSubtype(OrcRecordUpdater.ORIGINAL_WRITEID_FIELD_NAME).getId()]);
-    assertTrue(included[schema.findSubtype(OrcRecordUpdater.BUCKET_FIELD_NAME).getId()]);
-    assertTrue(included[schema.findSubtype(OrcRecordUpdater.ROW_ID_FIELD_NAME).getId()]);
-    assertTrue(included[schema.findSubtype(OrcRecordUpdater.CURRENT_WRITEID_FIELD_NAME).getId()]);
+    assertFalse(included[acidSchema.findSubtype(OrcRecordUpdater.OPERATION_FIELD_NAME).getId()]);
+    assertFalse(included[acidSchema.findSubtype(OrcRecordUpdater.ORIGINAL_WRITEID_FIELD_NAME).getId()]);
+    assertFalse(included[acidSchema.findSubtype(OrcRecordUpdater.BUCKET_FIELD_NAME).getId()]);
+    assertFalse(included[acidSchema.findSubtype(OrcRecordUpdater.ROW_ID_FIELD_NAME).getId()]);
+    assertFalse(included[acidSchema.findSubtype(OrcRecordUpdater.CURRENT_WRITEID_FIELD_NAME).getId()]);
+    assertTrue(included[acidSchema.findSubtype("row").getId()]);
+    assertFalse(included[acidSchema.findSubtype("row.a").getId()]);
+    assertTrue(included[acidSchema.findSubtype("row.b").getId()]);
+  }
+
+  @Test
+  public void testGenIncludedAcidColumnsReadAllWithMetadataReadsAll() {
+    assertNull(OrcInputFormat.genIncludedAcidColumns(createRowSchema(), conf, true));
+  }
+
+  @Test
+  public void testDesiredRowTypeDescrClipsVirtualColumnsFromSchemaEvolutionProperties() {
+    conf.set(IOConstants.SCHEMA_EVOLUTION_COLUMNS, "a,b," + VirtualColumn.ROWID.getName());
+    conf.set(IOConstants.SCHEMA_EVOLUTION_COLUMNS_TYPES,
+        "int,string," + VirtualColumn.ROWID.getTypeInfo().getTypeName());
+
+    TypeDescription rowSchema = OrcInputFormat.getDesiredRowTypeDescr(conf, true, Integer.MAX_VALUE);
+
+    assertEquals(createRowSchema(), rowSchema);
   }
 
   private static TypeDescription createAcidSchema() {
+    return SchemaEvolution.createEventSchema(createRowSchema());
+  }
+
+  private static TypeDescription createRowSchema() {
     return TypeDescription.createStruct()
-        .addField(OrcRecordUpdater.OPERATION_FIELD_NAME, TypeDescription.createInt())
-        .addField(OrcRecordUpdater.ORIGINAL_WRITEID_FIELD_NAME, TypeDescription.createLong())
-        .addField(OrcRecordUpdater.BUCKET_FIELD_NAME, TypeDescription.createInt())
-        .addField(OrcRecordUpdater.ROW_ID_FIELD_NAME, TypeDescription.createLong())
-        .addField(OrcRecordUpdater.CURRENT_WRITEID_FIELD_NAME, TypeDescription.createLong())
-        .addField(OrcRecordUpdater.ROW_FIELD_NAME, TypeDescription.createStruct()
-            .addField("a", TypeDescription.createInt())
-            .addField("b", TypeDescription.createString()));
+        .addField("a", TypeDescription.createInt())
+        .addField("b", TypeDescription.createString());
   }
 
   @Test
