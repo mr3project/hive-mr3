@@ -447,6 +447,12 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     return includeAcidMetadataColumns(acidSchema, acidIncluded, fetchDeletedRows);
   }
 
+  static void ensureAcidMetadataColumns(Reader.Options options, boolean isOriginal, boolean needed) {
+    if (!isOriginal && needed) {
+      options.includeAcidColumns(true);
+    }
+  }
+
   private static boolean isOriginal(TypeDescription schema) {
     return schema == null || !CollectionUtils.isEqualCollection(schema.getFieldNames(),
         OrcRecordUpdater.ALL_ACID_ROW_NAMES);

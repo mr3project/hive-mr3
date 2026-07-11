@@ -33,7 +33,6 @@ import org.apache.hadoop.hive.shims.HadoopShims;
 import org.apache.orc.OrcUtils;
 import org.apache.orc.StripeInformation;
 import org.apache.orc.TypeDescription;
-import org.apache.orc.impl.SchemaEvolution;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -822,13 +821,8 @@ public class OrcRawRecordMerger implements AcidInputFormat.RawReader<OrcStruct>{
   static Reader.Options createEventOptions(Reader.Options options, TypeDescription rowSchema,
       boolean fetchDeletedRows, boolean isOriginal) {
     Reader.Options result = options.clone();
-    if (isOriginal) {
-      result.include(options.getInclude());
-    } else {
-      TypeDescription eventSchema = SchemaEvolution.createEventSchema(rowSchema);
-      result.include(OrcInputFormat.includeAcidMetadataColumns(
-          eventSchema, rowSchema, options.getInclude(), fetchDeletedRows));
-    }
+    result.include(options.getInclude());
+    OrcInputFormat.ensureAcidMetadataColumns(result, isOriginal, true);
 
     // slide the column names down by 6 for the name array
     if (options.getColumnNames() != null) {

@@ -325,12 +325,8 @@ public class VectorizedOrcAcidRowBatchReader
     } else {
       rowIsDeletedVector = null;
     }
-    if (!orcSplit.isOriginal() && (rowIdProjected || fetchDeletedRows || !deleteEventRegistry.isEmpty())) {
-      TypeDescription rowSchema = readerOptions.getSchema();
-      TypeDescription acidSchema = SchemaEvolution.createEventSchema(rowSchema);
-      readerOptions.include(OrcInputFormat.includeAcidMetadataColumns(
-          acidSchema, rowSchema, readerOptions.getInclude(), fetchDeletedRows));
-    }
+    OrcInputFormat.ensureAcidMetadataColumns(readerOptions, orcSplit.isOriginal(),
+        rowIdProjected || fetchDeletedRows || !deleteEventRegistry.isEmpty());
     rootPath = orcSplit.getRootDir();
 
     /**
@@ -344,7 +340,7 @@ public class VectorizedOrcAcidRowBatchReader
        * isOriginal - don't have meta columns - nothing to skip
        * there no relevant delete events && ROW__ID is not needed higher up
        * (e.g. this is not a delete statement)*/
-      if (deleteEventRegistry.isEmpty() && !rowIdProjected) {
+      if (deleteEventRegistry.isEmpty() && !rowIdProjected && !fetchDeletedRows) {
         Path parent = orcSplit.getPath().getParent();
         while (parent != null && !rootPath.equals(parent)) {
           if (parent.getName().startsWith(AcidUtils.BASE_PREFIX)) {
