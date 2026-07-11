@@ -325,6 +325,12 @@ public class VectorizedOrcAcidRowBatchReader
     } else {
       rowIsDeletedVector = null;
     }
+    if (!orcSplit.isOriginal() && (rowIdProjected || fetchDeletedRows || !deleteEventRegistry.isEmpty())) {
+      TypeDescription rowSchema = readerOptions.getSchema();
+      TypeDescription acidSchema = SchemaEvolution.createEventSchema(rowSchema);
+      readerOptions.include(OrcInputFormat.includeAcidMetadataColumns(
+          acidSchema, rowSchema, readerOptions.getInclude(), fetchDeletedRows));
+    }
     rootPath = orcSplit.getRootDir();
 
     /**

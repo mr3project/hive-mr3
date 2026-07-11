@@ -398,6 +398,67 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     return genIncludedColumns(readerSchema, included, null);
   }
 
+  /**
+   * Forces the physical ACID metadata columns needed to build ROW__ID/ACID keys
+   * into an ORC include mask for a non-original ACID event schema.
+   */
+  @VisibleForTesting
+  static boolean[] includeAcidMetadataColumns(TypeDescription acidSchema, boolean[] included,
+      boolean fetchDeletedRows) {
+    if (included == null || isOriginal(acidSchema)) {
+      return included;
+    }
+
+    boolean[] result = included;
+    if (result.length <= acidSchema.getMaximumId()) {
+      result = Arrays.copyOf(result, acidSchema.getMaximumId() + 1);
+    }
+    result[0] = true;
+    includeAcidColumn(acidSchema, result, OrcRecordUpdater.ORIGINAL_WRITEID_FIELD_NAME);
+    includeAcidColumn(acidSchema, result, OrcRecordUpdater.BUCKET_FIELD_NAME);
+    includeAcidColumn(acidSchema, result, OrcRecordUpdater.ROW_ID_FIELD_NAME);
+    if (fetchDeletedRows) {
+      includeAcidColumn(acidSchema, result, OrcRecordUpdater.CURRENT_WRITEID_FIELD_NAME);
+    }
+    return result;
+  }
+
+  static boolean[] includeAcidMetadataColumns(TypeDescription acidSchema, TypeDescription rowSchema,
+      boolean[] rowIncluded, boolean fetchDeletedRows) {
+    if (rowIncluded == null) {
+      return null;
+    }
+    boolean[] acidIncluded = new boolean[acidSchema.getMaximumId() + 1];
+    acidIncluded[0] = true;
+    int rowIx = acidSchema.getFieldNames().indexOf(OrcRecordUpdater.ROW_FIELD_NAME);
+    if (rowIx >= 0) {
+      TypeDescription acidRow = acidSchema.getChildren().get(rowIx);
+      if (rowIncluded[rowSchema.getId()]) {
+        acidIncluded[acidRow.getId()] = true;
+      }
+      List<TypeDescription> rowChildren = rowSchema.getChildren();
+      List<TypeDescription> acidRowChildren = acidRow.getChildren();
+      for (int i = 0; i < Math.min(rowChildren.size(), acidRowChildren.size()); ++i) {
+        if (rowIncluded[rowChildren.get(i).getId()]) {
+          addColumnToIncludes(acidRowChildren.get(i), acidIncluded);
+        }
+      }
+    }
+    return includeAcidMetadataColumns(acidSchema, acidIncluded, fetchDeletedRows);
+  }
+
+  private static boolean isOriginal(TypeDescription schema) {
+    return schema == null || !CollectionUtils.isEqualCollection(schema.getFieldNames(),
+        OrcRecordUpdater.ALL_ACID_ROW_NAMES);
+  }
+
+  private static void includeAcidColumn(TypeDescription acidSchema, boolean[] included, String columnName) {
+    int ix = acidSchema.getFieldNames().indexOf(columnName);
+    if (ix >= 0) {
+      addColumnToIncludes(acidSchema.getChildren().get(ix), included);
+    }
+  }
+
   public static boolean[] genIncludedColumns(TypeDescription readerSchema,
                                              List<Integer> included,
                                              Integer recursiveStruct) {
