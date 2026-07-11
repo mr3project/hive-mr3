@@ -453,6 +453,14 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     }
   }
 
+  static boolean[] includeAcidMergeColumns(TypeDescription acidSchema, boolean[] included) {
+    boolean[] result = includeAcidMetadataColumns(acidSchema, included, true);
+    if (result != null && !isOriginal(acidSchema)) {
+      includeAcidColumn(acidSchema, result, OrcRecordUpdater.OPERATION_FIELD_NAME);
+    }
+    return result;
+  }
+
   private static boolean isOriginal(TypeDescription schema) {
     return schema == null || !CollectionUtils.isEqualCollection(schema.getFieldNames(),
         OrcRecordUpdater.ALL_ACID_ROW_NAMES);
