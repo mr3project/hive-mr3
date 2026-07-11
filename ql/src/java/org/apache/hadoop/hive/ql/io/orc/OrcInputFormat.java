@@ -426,67 +426,6 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     return result;
   }
 
-  /**
-   * Build the physical ORC include mask for the vectorized ACID reader.
-   *
-   * <p>The query planner projects logical table columns, while non-original ACID ORC files store
-   * rows as {@code <operation, originaltransaction, bucket, rowid, currenttransaction, row>}.
-   * The vectorized ACID reader consumes the physical event layout, so the include mask must bridge
-   * logical table column IDs to the physical ACID event column IDs. This mirrors the LLAP include
-   * generation logic for the non-LLAP ORC reader path.</p>
-   *
-   * @param rowSchema logical table row schema without ACID metadata or virtual columns
-   * @param conf configuration containing the logical table column projection
-   * @param includeAcidColumns whether physical ACID metadata columns should be included
-   * @return physical ACID event-schema include mask, or {@code null} when all physical columns are read
-   */
-  public static boolean[] genIncludedAcidColumns(
-      TypeDescription rowSchema, Configuration conf, boolean includeAcidColumns) {
-    if (rowSchema == null) {
-      return null;
-    }
-    TypeDescription acidSchema = SchemaEvolution.createEventSchema(rowSchema);
-    validateAcidEventSchema(acidSchema);
-
-    if (ColumnProjectionUtils.isReadAllColumns(conf) && includeAcidColumns) {
-      return null;
-    }
-
-    int rootCol = getRootColumn(false);
-    int acidStructColumnId = rootCol - 1;
-    List<Integer> physicalColumnIds = new ArrayList<>();
-    if (includeAcidColumns) {
-      // Include the physical ACID metadata prefix before the row payload struct.
-      for (int i = 0; i < acidStructColumnId; ++i) {
-        physicalColumnIds.add(i);
-      }
-    }
-
-    if (ColumnProjectionUtils.isReadAllColumns(conf)) {
-      for (int tableColumnId = 0; tableColumnId < rowSchema.getChildren().size(); ++tableColumnId) {
-        physicalColumnIds.add(rootCol + tableColumnId);
-      }
-    } else {
-      for (int tableColumnId : ColumnProjectionUtils.getReadColumnIDs(conf)) {
-        physicalColumnIds.add(rootCol + tableColumnId);
-      }
-    }
-    return genIncludedColumns(acidSchema, physicalColumnIds, acidStructColumnId);
-  }
-
-  private static void validateAcidEventSchema(TypeDescription acidSchema) {
-    List<String> fieldNames = acidSchema.getFieldNames();
-    if (fieldNames.size() <= OrcRecordUpdater.ROW
-        || !OrcRecordUpdater.OPERATION_FIELD_NAME.equals(fieldNames.get(OrcRecordUpdater.OPERATION))
-        || !OrcRecordUpdater.ORIGINAL_WRITEID_FIELD_NAME.equals(fieldNames.get(OrcRecordUpdater.ORIGINAL_WRITEID))
-        || !OrcRecordUpdater.BUCKET_FIELD_NAME.equals(fieldNames.get(OrcRecordUpdater.BUCKET))
-        || !OrcRecordUpdater.ROW_ID_FIELD_NAME.equals(fieldNames.get(OrcRecordUpdater.ROW_ID))
-        || !OrcRecordUpdater.CURRENT_WRITEID_FIELD_NAME.equals(fieldNames.get(OrcRecordUpdater.CURRENT_WRITEID))
-        || !OrcRecordUpdater.ROW_FIELD_NAME.equals(fieldNames.get(OrcRecordUpdater.ROW))) {
-      throw new IllegalArgumentException("Expected ACID event schema, found " + acidSchema);
-    }
-  }
-
   // Mostly dup of genIncludedColumns
   public static TypeDescription[] genIncludedTypes(TypeDescription fileSchema,
       List<Integer> included, Integer recursiveStruct) {
@@ -2249,13 +2188,12 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     /**
      * Do we have schema on read in the configuration variables?
      */
-    TypeDescription rowSchema =
+    TypeDescription schema =
         OrcInputFormat.getDesiredRowTypeDescr(conf, true, Integer.MAX_VALUE);
-    TypeDescription acidSchema = rowSchema == null ? null : SchemaEvolution.createEventSchema(rowSchema);
-    Reader.Options readerOptions = new Reader.Options(conf).schema(acidSchema);
+    Reader.Options readerOptions = new Reader.Options(conf).schema(schema);
     // TODO: Convert genIncludedColumns and setSearchArgument to use TypeDescription.
-    final List<OrcProto.Type> schemaTypes = OrcUtils.getOrcTypes(rowSchema);
-    readerOptions.include(OrcInputFormat.genIncludedAcidColumns(rowSchema, conf, true));
+    final List<OrcProto.Type> schemaTypes = OrcUtils.getOrcTypes(schema);
+    readerOptions.include(OrcInputFormat.genIncludedColumns(schema, conf));
     //todo: last param is bogus. why is this hardcoded?
     OrcInputFormat.setSearchArgument(readerOptions, schemaTypes, conf, true);
     return readerOptions;
@@ -2727,7 +2665,6 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
                 " (isAcidRead " + isAcidRead + ")");
       }
     }
-
 
     // Desired ORC schemas must not include virtual columns such as ROW__ID.
     // Keep them visible to the vectorized row-batch context, but clip them from
