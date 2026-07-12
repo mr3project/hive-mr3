@@ -280,6 +280,10 @@ public class MR3Task {
     for (BaseWork w : work.getAllWork()) {
       JobConf jobConf = workToConf.get(w);
       Vertex vertex = workToVertex.get(w);
+      String outputCommitterClass = Optional.ofNullable(jobConf).map(JobConf::getOutputCommitter)
+          .map(Object::getClass).map(Class::getName).orElse(null);
+      LOG.error("kkkkk collectCommitInformation workName={}, vertexName={}, outputCommitterClass={}",
+          w.getName(), vertex == null ? null : vertex.getName(), outputCommitterClass);
       boolean hasIcebergCommitter = Optional.ofNullable(jobConf).map(JobConf::getOutputCommitter)
           .map(Object::getClass).map(Class::getName)
           .filter(name -> name.endsWith("HiveIcebergNoJobCommitter")).isPresent();
