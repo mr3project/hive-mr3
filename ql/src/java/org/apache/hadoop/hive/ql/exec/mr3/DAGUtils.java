@@ -317,6 +317,9 @@ public class DAGUtils {
     boolean hasFileSink = work.getAllOperators().stream().anyMatch(o -> o instanceof FileSinkOperator);
     // final vertices need to have at least one output
     if ((isFinal || hasFileSink) && !(work instanceof MapReduceMapWork)) {
+      // To support Iceberg,
+      //  - outputCommitterDescriptor must use null for userPayload
+      //  - logicalOutputDescriptor must use vertex.getProcessorDescriptorPayload() for userPayload
       EntityDescriptor outputCommitterDescriptor = null;
       String committer = HiveConf.getVar(vertexJobConf, ConfVars.TEZ_MAPREDUCE_OUTPUT_COMMITTER);
       if (committer != null && !committer.isEmpty()) {
