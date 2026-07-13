@@ -448,8 +448,9 @@ public class TezTask extends Task<TezWork> {
   }
 
   private void updateNumRows() {
-    if (runtimeContext.counters != null) {
-      TezCounter counter = runtimeContext.counters.findCounter(
+    TezCounters taskCounters = counters != null ? counters : runtimeContext.counters;
+    if (taskCounters != null) {
+      TezCounter counter = taskCounters.findCounter(
         conf.getVar(HiveConf.ConfVars.HIVE_COUNTER_GROUP), FileSinkOperator.TOTAL_TABLE_ROWS_WRITTEN);
       if (counter != null) {
         queryState.setNumModifiedRows(counter.getValue());
