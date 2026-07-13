@@ -328,8 +328,9 @@ public class DAGUtils {
       EntityDescriptor logicalOutputDescriptor = new EntityDescriptor(
           outputKlass.getName(),
           vertex.getProcessorDescriptorPayload());
-      // In the original implementation, no need to set OutputCommitter as Hive will handle moving temporary files to permanent locations.
-      // We set OutputCommitter here in order to support Iceberg.
+      // Keep the Tez-compatible OutputCommitter descriptor, but do not attach the processor payload to it.
+      // Iceberg task commit is driven by NullMROutput/MROutput using the JobConf output committer
+      // (HiveIcebergNoJobCommitter for Iceberg), so the descriptor itself is not what enables Iceberg task commit.
       vertex.addDataSink("out_" + work.getName(), logicalOutputDescriptor, outputCommitterDescriptor);
     }
 
