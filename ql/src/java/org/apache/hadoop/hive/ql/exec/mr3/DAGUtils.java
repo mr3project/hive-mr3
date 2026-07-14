@@ -801,12 +801,13 @@ public class DAGUtils {
    *
    * @param group The parent VertexGroup
    * @param parentJobConf Jobconf of one of the parent vertices in VertexGroup
+   * @param commonJobConf common JobConf shared by all components in the DAG
    * @param edgeProp the edge property of connection between the two
    * endpoints.
    */
   @SuppressWarnings("rawtypes")
   public GroupInputEdge createGroupInputEdge(
-      JobConf parentJobConf, Vertex destVertex,
+      JobConf parentJobConf, JobConf commonJobConf, Vertex destVertex,
       TezEdgeProperty edgeProp,
       BaseWork work, TezWork tezWork)
     throws IOException {
@@ -847,7 +848,7 @@ public class DAGUtils {
         break;
     }
 
-    org.apache.tez.dag.api.EdgeProperty ep = createTezEdgeProperty(edgeProp, parentJobConf, work, tezWork);
+    org.apache.tez.dag.api.EdgeProperty ep = createTezEdgeProperty(edgeProp, parentJobConf, commonJobConf, work, tezWork);
     EdgeProperty edgeProperty = MR3Utils.convertTezEdgeProperty(ep);
     if (edgeProp.isFixed()) {   // access edgeProp directly
       LOG.info("Set VertexManager setting FIXED: GroupInputEdge to {}, {}",
@@ -863,12 +864,13 @@ public class DAGUtils {
    * Given two vertices and the configuration for the source vertex, createEdge
    * will create an Edge object that connects the two.
    *
-   * @param vJobConf JobConf of the first (source) vertex
+   * @param vertexJobConf JobConf of the first (source) vertex
+   * @param commonJobConf common JobConf shared by all components in the DAG
    * @param v The first vertex (source)
    * @param w The second vertex (sink)
    * @return
    */
-  public Edge createEdge(JobConf vJobConf, Vertex v, Vertex w, TezEdgeProperty edgeProp,
+  public Edge createEdge(JobConf vertexJobConf, JobConf commonJobConf, Vertex v, Vertex w, TezEdgeProperty edgeProp,
       BaseWork work, TezWork tezWork)
     throws IOException {
 
@@ -891,11 +893,11 @@ public class DAGUtils {
       break;
 
     case SIMPLE_EDGE: {
-      setupAutoReducerParallelism(edgeProp, w, vJobConf);
+      setupAutoReducerParallelism(edgeProp, w, vertexJobConf);
       break;
     }
     case CUSTOM_SIMPLE_EDGE: {
-      setupQuickStart(edgeProp, w, vJobConf);
+      setupQuickStart(edgeProp, w, vertexJobConf);
       break;
     }
 
@@ -903,7 +905,7 @@ public class DAGUtils {
       // nothing
     }
 
-    org.apache.tez.dag.api.EdgeProperty ep = createTezEdgeProperty(edgeProp, vJobConf, work, tezWork);
+    org.apache.tez.dag.api.EdgeProperty ep = createTezEdgeProperty(edgeProp, vertexJobConf, commonJobConf, work, tezWork);
     EdgeProperty edgeProperty = MR3Utils.convertTezEdgeProperty(ep);
     if (edgeProp.isFixed()) {   // access edgeProp directly
       LOG.info("Set VertexManager setting FIXED: Edge from {} to {}, {}",
@@ -919,37 +921,38 @@ public class DAGUtils {
    */
   private org.apache.tez.dag.api.EdgeProperty createTezEdgeProperty(
         TezEdgeProperty edgeProp,
-        Configuration conf,
+        JobConf vertexJobConf, JobConf commonJobConf,
         BaseWork work, TezWork tezWork) throws IOException {
-    String keyClass = conf.get(TezRuntimeConfiguration.TEZ_RUNTIME_KEY_CLASS);
-    String valClass = conf.get(TezRuntimeConfiguration.TEZ_RUNTIME_VALUE_CLASS);
+    String keyClass = vertexJobConf.get(TezRuntimeConfiguration.TEZ_RUNTIME_KEY_CLASS);
+    String valClass = vertexJobConf.get(TezRuntimeConfiguration.TEZ_RUNTIME_VALUE_CLASS);
+    Configuration edgeConf = computeDiffConf(vertexJobConf, commonJobConf);
 
     EdgeType edgeType = edgeProp.getEdgeType();
     switch (edgeType) {
     case BROADCAST_EDGE:
       UnorderedKVEdgeConfig et1Conf = UnorderedKVEdgeConfig
           .newBuilder(keyClass, valClass)
-          .setFromConfiguration(conf)
+          .setFromConfiguration(edgeConf)
           .build();
       return et1Conf.createDefaultBroadcastEdgeProperty();
     case CUSTOM_EDGE:
       UnorderedPartitionedKVEdgeConfig et2Conf = UnorderedPartitionedKVEdgeConfig
           .newBuilder(keyClass, valClass, HashPartitioner.class.getName())
-          .setFromConfiguration(conf)
+          .setFromConfiguration(edgeConf)
           .build();
       EdgeManagerPluginDescriptor edgeDesc =
           EdgeManagerPluginDescriptor.create(CustomPartitionEdge.class.getName());
-      CustomEdgeConfiguration edgeConf =
+      CustomEdgeConfiguration customEdgeConf =
           new CustomEdgeConfiguration(edgeProp.getNumBuckets(), null);
       DataOutputBuffer dob = new DataOutputBuffer();
-      edgeConf.write(dob);
+      customEdgeConf.write(dob);
       byte[] userPayload = dob.getData();
       edgeDesc.setUserPayload(UserPayload.create(ByteBuffer.wrap(userPayload)));
       return et2Conf.createDefaultCustomEdgeProperty(edgeDesc);
     case CUSTOM_SIMPLE_EDGE:
       UnorderedPartitionedKVEdgeConfig.Builder et3Conf = UnorderedPartitionedKVEdgeConfig
           .newBuilder(keyClass, valClass, HashPartitioner.class.getName())
-          .setFromConfiguration(conf);
+          .setFromConfiguration(edgeConf);
       if (edgeProp.getBufferSize() != null) {
         et3Conf.setAdditionalConfiguration(
             TezRuntimeConfiguration.TEZ_RUNTIME_UNORDERED_OUTPUT_BUFFER_SIZE_MB,
@@ -959,7 +962,7 @@ public class DAGUtils {
     case ONE_TO_ONE_EDGE:
       UnorderedKVEdgeConfig et4Conf = UnorderedKVEdgeConfig
           .newBuilder(keyClass, valClass)
-          .setFromConfiguration(conf)
+          .setFromConfiguration(edgeConf)
           .build();
       return et4Conf.createDefaultOneToOneEdgeProperty();
     case XPROD_EDGE:
@@ -972,10 +975,10 @@ public class DAGUtils {
         }
       }
       CartesianProductConfig cpConfig = new CartesianProductConfig(crossProductSources);
-      edgeManagerDescriptor.setUserPayload(cpConfig.toUserPayload(new TezConfiguration(conf)));
+      edgeManagerDescriptor.setUserPayload(cpConfig.toUserPayload(new TezConfiguration(vertexJobConf)));
       UnorderedPartitionedKVEdgeConfig cpEdgeConf = UnorderedPartitionedKVEdgeConfig
           .newBuilder(keyClass, valClass, ValueHashPartitioner.class.getName())
-          .setFromConfiguration(conf)
+          .setFromConfiguration(edgeConf)
           .build();
       return cpEdgeConf.createDefaultCustomEdgeProperty(edgeManagerDescriptor);
     case SIMPLE_EDGE:
@@ -983,7 +986,7 @@ public class DAGUtils {
     default:
       OrderedPartitionedKVEdgeConfig et5Conf = OrderedPartitionedKVEdgeConfig
           .newBuilder(keyClass, valClass, HashPartitioner.class.getName())
-          .setFromConfiguration(conf)
+          .setFromConfiguration(edgeConf)
           .build();
       return et5Conf.createDefaultEdgeProperty();
     }

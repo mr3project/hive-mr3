@@ -551,7 +551,7 @@ public class MR3Task {
     List<GroupInputEdge> edges = new ArrayList<GroupInputEdge>();
     for (BaseWork v: children) {
       GroupInputEdge edge = dagUtils.createGroupInputEdge(
-          parentJobConf, workToVertex.get(v),
+          parentJobConf, dag.getCommonJobConf(), workToVertex.get(v),
           tezWork.getEdgeProperty(unionWork, v), v, tezWork);
       edges.add(edge);
     }
@@ -609,7 +609,7 @@ public class MR3Task {
       assert workToVertex.containsKey(v);
       TezEdgeProperty edgeProp = tezWork.getEdgeProperty(baseWork, v);
       Edge e = dagUtils.createEdge(
-          vertexJobConf, vertex, workToVertex.get(v), edgeProp, v, tezWork);
+          vertexJobConf, jobConf, vertex, workToVertex.get(v), edgeProp, v, tezWork);
       dag.addEdge(e);
     }
   }
