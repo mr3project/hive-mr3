@@ -43,6 +43,7 @@ public class MapRecordSource implements RecordSource {
   private AbstractMapOperator mapOp = null;
   private KeyValueReader reader = null;
   private final boolean grouped = false;
+  private int debugRows = 0;
 
   // Flush the last record when reader is out of records
   private boolean flushLastRecord = false;
@@ -93,6 +94,11 @@ public class MapRecordSource implements RecordSource {
 
   private boolean processRow(Object value) {
     try {
+      if (debugRows < 10) {
+        LOG.info("ORC_DEBUG MapRecordSource row {} class {} value {}", debugRows,
+            value == null ? null : value.getClass().getName(), value);
+        debugRows++;
+      }
       if (mapOp.getDone()) {
         return false; // done
       } else {

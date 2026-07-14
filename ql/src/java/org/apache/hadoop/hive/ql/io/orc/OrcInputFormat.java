@@ -248,6 +248,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     private float progress = 0.0f;
     private final Reader file;
     private final SerDeStats stats;
+    private int debugRows = 0;
 
 
     OrcRecordReader(Reader file, Configuration conf,
@@ -281,6 +282,13 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     public boolean next(NullWritable key, OrcStruct value) throws IOException {
       if (reader.hasNext()) {
         reader.next(value);
+        if (debugRows < 10) {
+          LOG.info("ORC_DEBUG row {} value {}", debugRows, value);
+          for (int i = 0; i < numColumns; i++) {
+            LOG.info("ORC_DEBUG row {} field{} {}", debugRows, i, value.getFieldValue(i));
+          }
+          debugRows++;
+        }
         progress = reader.getProgress();
         return true;
       } else {
@@ -360,7 +368,10 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     /**
      * Do we have schema on read in the configuration variables?
      */
+    logProjectionConf("OrcInputFormat.createReaderFromFile", conf);
     TypeDescription schema = getDesiredRowTypeDescr(conf, false, Integer.MAX_VALUE);
+    LOG.info("ORC_DEBUG createReaderFromFile file schema {}", file.getSchema());
+    LOG.info("ORC_DEBUG createReaderFromFile desired reader schema {}", schema);
 
     Reader.Options options = new Reader.Options(conf).range(offset, length);
     options.schema(schema);
@@ -368,9 +379,37 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
       schema = file.getSchema();
     }
     List<OrcProto.Type> types = OrcUtils.getOrcTypes(schema);
-    options.include(genIncludedColumns(schema, conf));
+    boolean[] includes = genIncludedColumns(schema, conf);
+    LOG.info("ORC_DEBUG createReaderFromFile effective reader schema {}", schema);
+    LOG.info("ORC_DEBUG createReaderFromFile includes {}", Arrays.toString(includes));
+    options.include(includes);
     setSearchArgument(options, types, conf, isOriginal);
     return file.rowsOptions(options, conf);
+  }
+
+  private static void logProjectionConf(String where, Configuration conf) {
+    LOG.info("ORC_DEBUG {}: {} = {}", where, ColumnProjectionUtils.READ_ALL_COLUMNS,
+        conf.get(ColumnProjectionUtils.READ_ALL_COLUMNS));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, ColumnProjectionUtils.READ_COLUMN_IDS_CONF_STR,
+        conf.get(ColumnProjectionUtils.READ_COLUMN_IDS_CONF_STR));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR,
+        conf.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, ColumnProjectionUtils.FETCH_VIRTUAL_COLUMNS_CONF_STR,
+        conf.get(ColumnProjectionUtils.FETCH_VIRTUAL_COLUMNS_CONF_STR));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, IOConstants.SCHEMA_EVOLUTION_COLUMNS,
+        conf.get(IOConstants.SCHEMA_EVOLUTION_COLUMNS));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, IOConstants.SCHEMA_EVOLUTION_COLUMNS_TYPES,
+        conf.get(IOConstants.SCHEMA_EVOLUTION_COLUMNS_TYPES));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, serdeConstants.LIST_COLUMNS,
+        conf.get(serdeConstants.LIST_COLUMNS));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, serdeConstants.LIST_COLUMN_TYPES,
+        conf.get(serdeConstants.LIST_COLUMN_TYPES));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, ConfVars.HIVE_SCHEMA_EVOLUTION.varname,
+        conf.get(ConfVars.HIVE_SCHEMA_EVOLUTION.varname));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, ConfVars.HIVE_ORC_FORCE_POSITIONAL_SCHEMA_EVOLUTION.varname,
+        conf.get(ConfVars.HIVE_ORC_FORCE_POSITIONAL_SCHEMA_EVOLUTION.varname));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, ConfVars.HIVE_VECTORIZATION_ENABLED.varname,
+        conf.get(ConfVars.HIVE_VECTORIZATION_ENABLED.varname));
   }
 
   /**
@@ -1972,6 +2011,8 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
   public org.apache.hadoop.mapred.RecordReader<NullWritable, OrcStruct>
   getRecordReader(InputSplit inputSplit, JobConf conf,
                   Reporter reporter) throws IOException {
+    LOG.info("ORC_DEBUG OrcInputFormat.getRecordReader split {}", inputSplit);
+    logProjectionConf("OrcInputFormat.getRecordReader", conf);
     //CombineHiveInputFormat may produce FileSplit that is not OrcSplit
     boolean vectorMode = Utilities.getIsVectorized(conf);
     boolean isAcidRead = isFullAcidRead(conf, inputSplit);
@@ -2607,6 +2648,16 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
 
       columnNameProperty = conf.get(IOConstants.SCHEMA_EVOLUTION_COLUMNS);
       columnTypeProperty = conf.get(IOConstants.SCHEMA_EVOLUTION_COLUMNS_TYPES);
+      LOG.info("ORC_DEBUG getDesiredRowTypeDescr: {} = {}",
+          ConfVars.HIVE_SCHEMA_EVOLUTION.varname, conf.get(ConfVars.HIVE_SCHEMA_EVOLUTION.varname));
+      LOG.info("ORC_DEBUG getDesiredRowTypeDescr: {} = {}",
+          IOConstants.SCHEMA_EVOLUTION_COLUMNS, columnNameProperty);
+      LOG.info("ORC_DEBUG getDesiredRowTypeDescr: {} = {}",
+          IOConstants.SCHEMA_EVOLUTION_COLUMNS_TYPES, columnTypeProperty);
+      LOG.info("ORC_DEBUG getDesiredRowTypeDescr: {} = {}",
+          serdeConstants.LIST_COLUMNS, conf.get(serdeConstants.LIST_COLUMNS));
+      LOG.info("ORC_DEBUG getDesiredRowTypeDescr: {} = {}",
+          serdeConstants.LIST_COLUMN_TYPES, conf.get(serdeConstants.LIST_COLUMN_TYPES));
 
       haveSchemaEvolutionProperties =
           (columnNameProperty != null && columnTypeProperty != null);

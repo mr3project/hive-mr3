@@ -49,6 +49,7 @@ import org.apache.hadoop.hive.ql.exec.ObjectCache;
 import org.apache.hadoop.hive.ql.exec.ObjectCacheFactory;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
+import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.exec.TezDummyStoreOperator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr.ExecMapper.ReportStats;
@@ -57,12 +58,15 @@ import org.apache.hadoop.hive.ql.exec.tez.DynamicValueRegistryTez.RegistryConfTe
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor.TezKVOutputCollector;
 import org.apache.hadoop.hive.ql.exec.tez.tools.KeyValueInputMerger;
 import org.apache.hadoop.hive.ql.exec.vector.VectorMapOperator;
+import org.apache.hadoop.hive.ql.io.IOConstants;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.DynamicValue;
 import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.serde2.Deserializer;
+import org.apache.hadoop.hive.serde.serdeConstants;
+import org.apache.hadoop.hive.serde2.ColumnProjectionUtils;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.tez.mapreduce.input.MRInputLegacy;
@@ -145,6 +149,8 @@ public class MapRecordProcessor extends RecordProcessor {
     }
     // TODO HIVE-14042. Cleanup may be required if exiting early.
     Utilities.setMapWork(jconf, mapWork);
+    logProjectionConf("MapRecordProcessor after getMapWork/before MRInput updates", jconf);
+    logMapWorkTableScanColumns("MapRecordProcessor mapWork after getMapWork", mapWork);
 
     for (PartitionDesc part : mapWork.getAliasToPartnInfo().values()) {
       TableDesc tableDesc = part.getTableDesc();
@@ -179,11 +185,13 @@ public class MapRecordProcessor extends RecordProcessor {
     if (legacyMRInput != null) {
       Configuration updatedConf = legacyMRInput.getConfigUpdates();
       if (updatedConf != null) {
+        logProjectionConf("MapRecordProcessor legacyMRInput.getConfigUpdates", updatedConf);
         for (Entry<String, String> entry : updatedConf) {
           jconf.set(entry.getKey(), entry.getValue());
         }
       }
     }
+    logProjectionConf("MapRecordProcessor after MRInput updates", jconf);
     checkAbortCondition();
 
     createOutputMap();
@@ -550,5 +558,51 @@ public class MapRecordProcessor extends RecordProcessor {
       }
     }
     return theMRInput;
+  }
+
+  private static void logProjectionConf(String where, Configuration conf) {
+    LOG.info("ORC_DEBUG {}: {} = {}", where, ColumnProjectionUtils.READ_ALL_COLUMNS,
+        conf.get(ColumnProjectionUtils.READ_ALL_COLUMNS));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, ColumnProjectionUtils.READ_COLUMN_IDS_CONF_STR,
+        conf.get(ColumnProjectionUtils.READ_COLUMN_IDS_CONF_STR));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR,
+        conf.get(ColumnProjectionUtils.READ_COLUMN_NAMES_CONF_STR));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, ColumnProjectionUtils.FETCH_VIRTUAL_COLUMNS_CONF_STR,
+        conf.get(ColumnProjectionUtils.FETCH_VIRTUAL_COLUMNS_CONF_STR));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, IOConstants.SCHEMA_EVOLUTION_COLUMNS,
+        conf.get(IOConstants.SCHEMA_EVOLUTION_COLUMNS));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, IOConstants.SCHEMA_EVOLUTION_COLUMNS_TYPES,
+        conf.get(IOConstants.SCHEMA_EVOLUTION_COLUMNS_TYPES));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, serdeConstants.LIST_COLUMNS,
+        conf.get(serdeConstants.LIST_COLUMNS));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, serdeConstants.LIST_COLUMN_TYPES,
+        conf.get(serdeConstants.LIST_COLUMN_TYPES));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, HiveConf.ConfVars.HIVE_SCHEMA_EVOLUTION.varname,
+        conf.get(HiveConf.ConfVars.HIVE_SCHEMA_EVOLUTION.varname));
+    LOG.info("ORC_DEBUG {}: {} = {}", where,
+        HiveConf.ConfVars.HIVE_ORC_FORCE_POSITIONAL_SCHEMA_EVOLUTION.varname,
+        conf.get(HiveConf.ConfVars.HIVE_ORC_FORCE_POSITIONAL_SCHEMA_EVOLUTION.varname));
+    LOG.info("ORC_DEBUG {}: {} = {}", where, HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED.varname,
+        conf.get(HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED.varname));
+  }
+
+  private static void logMapWorkTableScanColumns(String where, MapWork mapWork) {
+    if (mapWork == null) {
+      LOG.info("ORC_DEBUG {}: mapWork is null", where);
+      return;
+    }
+    for (Entry<String, Operator<?>> entry : mapWork.getAliasToWork().entrySet()) {
+      LOG.info("ORC_DEBUG {}: alias = {}", where, entry.getKey());
+      if (entry.getValue() instanceof TableScanOperator) {
+        TableScanOperator ts = (TableScanOperator) entry.getValue();
+        LOG.info("ORC_DEBUG {}: TS neededColumnIDs = {}", where, ts.getNeededColumnIDs());
+        LOG.info("ORC_DEBUG {}: TS neededColumns = {}", where, ts.getNeededColumns());
+        LOG.info("ORC_DEBUG {}: TS outputColumnNames = {}", where, ts.getConf().getOutputColumnNames());
+        LOG.info("ORC_DEBUG {}: TS schemaEvolutionColumns = {}", where, ts.getSchemaEvolutionColumns());
+        LOG.info("ORC_DEBUG {}: TS schemaEvolutionColumnsTypes = {}", where, ts.getSchemaEvolutionColumnsTypes());
+      } else {
+        LOG.info("ORC_DEBUG {}: root operator = {}", where, entry.getValue());
+      }
+    }
   }
 }

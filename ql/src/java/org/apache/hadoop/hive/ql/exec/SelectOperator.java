@@ -19,6 +19,7 @@
 package org.apache.hadoop.hive.ql.exec;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -40,6 +41,7 @@ public class SelectOperator extends Operator<SelectDesc> implements Serializable
   protected transient ExprNodeEvaluator[] eval;
 
   transient Object[] output;
+  private transient long debugRows;
 
   private transient boolean isSelectStarNoCompute = false;
 
@@ -90,6 +92,10 @@ public class SelectOperator extends Operator<SelectDesc> implements Serializable
       throw e;
     } catch (RuntimeException e) {
       throw new HiveException("Error evaluating " + conf.getColList().get(i).getExprString(), e);
+    }
+    if (debugRows < 10) {
+      LOG.info("ORC_DEBUG SelectOperator row {} output {}", debugRows, Arrays.toString(output));
+      debugRows++;
     }
     forward(output, outputObjInspector);
   }

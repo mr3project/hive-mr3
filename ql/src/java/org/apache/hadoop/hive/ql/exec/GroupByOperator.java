@@ -116,6 +116,7 @@ public class GroupByOperator extends Operator<GroupByDesc> implements IConfigure
   private transient boolean hashAggr;
   private transient long numRowsInput;
   private transient long numRowsHashTbl;
+  private transient long debugKeyRows;
   private transient int groupbyMapAggrInterval;
   private transient long numRowsCompareHashAggr;
   private transient float minReductionHashAggr;
@@ -745,6 +746,11 @@ public class GroupByOperator extends Operator<GroupByDesc> implements IConfigure
     try {
       countAfterReport++;
       newKeys.getNewKey(row, rowInspector);
+      if (debugKeyRows < 10) {
+        LOG.info("ORC_DEBUG GroupByOperator row {} keys {}", debugKeyRows,
+            Arrays.toString(newKeys.getKeyArray()));
+        debugKeyRows++;
+      }
 
       if (groupingSetsPresent) {
         Object[] newKeysArray = newKeys.getKeyArray();
