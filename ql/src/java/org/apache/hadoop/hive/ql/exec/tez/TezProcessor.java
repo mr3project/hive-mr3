@@ -149,9 +149,18 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
   @Override
   public void initialize() throws IOException {
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.TEZ_INITIALIZE_PROCESSOR);
+
     ProcessorContext processorContext = getContext();
-    Configuration conf = processorContext.getConfigurationFromUserPayload(false);
-    this.jobConf = new JobConf(conf);
+    Configuration commonJobConf = processorContext.getCommonJobConf(false);
+    Configuration vertexJobConfDiff = processorContext.getConfigurationFromUserPayload(false);
+    this.jobConf = new JobConf(false);
+    for (Map.Entry<String, String> kv : commonJobConf) {
+      this.jobConf.set(kv.getKey(), kv.getValue());
+    }
+    for (Map.Entry<String, String> kv : vertexJobConfDiff) {
+      this.jobConf.set(kv.getKey(), kv.getValue());
+    }
+
     this.jobConf.getCredentials().mergeAll(UserGroupInformation.getCurrentUser().getCredentials());
     int dagIdId = processorContext.getDagIdentifier();
     HiveConf.setIntVar(this.jobConf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID, dagIdId);

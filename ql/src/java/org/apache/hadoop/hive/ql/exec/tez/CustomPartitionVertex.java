@@ -159,6 +159,7 @@ public class CustomPartitionVertex extends VertexManagerPlugin {
       // This is using the payload from the RootVertexInitializer corresponding
       // to InputName. Ideally it should be using its own configuration class -
       // but that means serializing another instance.
+      // userPayloadProto (of MRInputUserPayloadProto) is assumed to contain 'vertexJobConf - commonJobConf'
       MRInputUserPayloadProto userPayloadProto =
           MRInputHelpers.parseMRInputPayload(inputDescriptor.getUserPayload());
 
@@ -168,9 +169,9 @@ public class CustomPartitionVertex extends VertexManagerPlugin {
         for (com.datamonad.mr3.DAGAPI.KeyValueProto kv : commonJobConf.getConfKeyValuesList()) {
           this.conf.set(kv.getKey(), kv.getValue());
         }
-        Configuration inputConf = TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes());
+        Configuration vertexJobConfDiff = TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes());
         // do not use conf.addResource()
-        for (Map.Entry<String, String> kv : inputConf) {
+        for (Map.Entry<String, String> kv : vertexJobConfDiff) {
           this.conf.set(kv.getKey(), kv.getValue());
         }
       } else {
