@@ -492,14 +492,15 @@ public class DAGUtils {
       // set up the operator plan. (before setting up splits on the AM)
       Utilities.setMapWork(vertexJobConf, mapWork, mr3ScratchDir, false);
 
-      Configuration inputBuilderConf = getConfForInputBuilder(vertexJobConf, commonJobConf, inputFormatClass);
+      Configuration vertexJobConfDiff = getConfForInputBuilder(vertexJobConf, commonJobConf, inputFormatClass);
       // if we're generating the splits in the AM, we just need to set the correct plugin.
       if (groupSplitsInInputInitializer) {
         // Not setting a payload, since the MRInput payload is the same and can be accessed.
         InputInitializerDescriptor descriptor = InputInitializerDescriptor.create(
             HiveSplitGenerator.class.getName());
+        // MRInputLegacy eventually creates MRInputUserPayloadProto, so we store 'diffConf = vertexJobConf - commonJobConf'
         dataSource = MRInputLegacy
-            .createConfigBuilder(inputBuilderConf, inputFormatClass)
+            .createConfigBuilder(vertexJobConfDiff, inputFormatClass)
             .groupSplits(true)
             .setCustomInitializerDescriptor(descriptor).build();
       } else {
@@ -507,11 +508,11 @@ public class DAGUtils {
         if (vertexHasCustomInput && vertexType == VertexType.MULTI_INPUT_UNINITIALIZED_EDGES) {
           // SMB Join
           dataSource = MultiMRInput
-              .createConfigBuilder(inputBuilderConf, inputFormatClass)
+              .createConfigBuilder(vertexJobConfDiff, inputFormatClass)
               .groupSplits(false).build();
         } else {
           dataSource = MRInputLegacy
-              .createConfigBuilder(inputBuilderConf, inputFormatClass)
+              .createConfigBuilder(vertexJobConfDiff, inputFormatClass)
               .groupSplits(false).build();
         }
       }
@@ -533,7 +534,7 @@ public class DAGUtils {
       InputDescriptor inputDescriptor = InputDescriptor.create(MRInputLegacy.class.getName())
           .setUserPayload(UserPayload
               .create(MRRuntimeProtos.MRInputUserPayloadProto.newBuilder()
-                    .setConfigurationBytes(TezUtils.createByteStringFromConf(vertexJobConf))
+                    .setConfigurationBytes(TezUtils.createByteStringFromConf(vertexJobConf))  // do not store 'diffConf' because not in AM
                     .setSplits(inputSplitInfo.getSplitsProto()).build().toByteString()
                     .asReadOnlyByteBuffer()));
 

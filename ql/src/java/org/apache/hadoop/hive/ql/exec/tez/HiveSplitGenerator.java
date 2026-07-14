@@ -141,6 +141,7 @@ public class HiveSplitGenerator extends InputInitializer {
 
   @VisibleForTesting
   void prepare(InputInitializerContext initializerContext) throws IOException, SerDeException {
+    // userPayloadProto (MRInputUserPayloadProto) contains 'vertexJobConf - commonJobConf'
     userPayloadProto = MRInputHelpers.parseMRInputPayload(initializerContext.getInputUserPayload());
 
     com.datamonad.mr3.DAGAPI.ConfigurationProto commonJobConf = initializerContext.getCommonJobConf();
@@ -149,9 +150,9 @@ public class HiveSplitGenerator extends InputInitializer {
       for (com.datamonad.mr3.DAGAPI.KeyValueProto kv : commonJobConf.getConfKeyValuesList()) {
         this.conf.set(kv.getKey(), kv.getValue());
       }
-      Configuration inputConf = TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes());
+      Configuration vertexJobConfDiff = TezUtils.createConfFromByteString(userPayloadProto.getConfigurationBytes());
       // do not use conf.addResource()
-      for (Map.Entry<String, String> kv : inputConf) {
+      for (Map.Entry<String, String> kv : vertexJobConfDiff) {
         this.conf.set(kv.getKey(), kv.getValue());
       }
     } else {
