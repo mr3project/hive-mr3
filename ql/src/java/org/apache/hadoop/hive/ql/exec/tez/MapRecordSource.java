@@ -19,7 +19,14 @@
 package org.apache.hadoop.hive.ql.exec.tez;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
+import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.tez.tools.KeyValueInputMerger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,7 +103,7 @@ public class MapRecordSource implements RecordSource {
     try {
       if (debugRows < 10) {
         LOG.info("ORC_DEBUG MapRecordSource row {} class {} value {}", debugRows,
-            value == null ? null : value.getClass().getName(), value);
+            value == null ? null : value.getClass().getName(), summarizeValue(value));
         debugRows++;
       }
       if (mapOp.getDone()) {
@@ -117,6 +124,74 @@ public class MapRecordSource implements RecordSource {
       }
     }
     return true; // give me more
+  }
+
+  private static String summarizeValue(Object value) {
+    if (value instanceof VectorizedRowBatch) {
+      return summarizeBatch((VectorizedRowBatch) value);
+    }
+    return String.valueOf(value);
+  }
+
+  private static String summarizeBatch(VectorizedRowBatch batch) {
+    StringBuilder sb = new StringBuilder();
+    sb.append("size=").append(batch.size)
+        .append(", projectionSize=").append(batch.projectionSize)
+        .append(", projectedColumns=").append(Arrays.toString(
+            Arrays.copyOf(batch.projectedColumns, batch.projectionSize)))
+        .append(", cols=[");
+    int maxColumns = Math.min(batch.cols.length, 8);
+    for (int c = 0; c < maxColumns; c++) {
+      if (c > 0) {
+        sb.append("; ");
+      }
+      sb.append(c).append(":").append(summarizeColumn(batch.cols[c], batch, 5));
+    }
+    if (batch.cols.length > maxColumns) {
+      sb.append("; ...");
+    }
+    sb.append("]");
+    return sb.toString();
+  }
+
+  private static String summarizeColumn(ColumnVector column, VectorizedRowBatch batch, int maxRows) {
+    if (column == null) {
+      return "null";
+    }
+    StringBuilder sb = new StringBuilder(column.getClass().getSimpleName());
+    sb.append("(noNulls=").append(column.noNulls)
+        .append(", isRepeating=").append(column.isRepeating)
+        .append(", values=");
+    int rowCount = Math.min(batch.size, maxRows);
+    sb.append("[");
+    for (int r = 0; r < rowCount; r++) {
+      if (r > 0) {
+        sb.append(",");
+      }
+      int row = batch.selectedInUse ? batch.selected[r] : r;
+      int vectorIndex = column.isRepeating ? 0 : row;
+      sb.append(formatColumnValue(column, vectorIndex));
+    }
+    if (batch.size > rowCount) {
+      sb.append(",...");
+    }
+    sb.append("])");
+    return sb.toString();
+  }
+
+  private static String formatColumnValue(ColumnVector column, int row) {
+    if (!column.noNulls && column.isNull[row]) {
+      return "null";
+    } else if (column instanceof LongColumnVector) {
+      return Long.toString(((LongColumnVector) column).vector[row]);
+    } else if (column instanceof DoubleColumnVector) {
+      return Double.toString(((DoubleColumnVector) column).vector[row]);
+    } else if (column instanceof BytesColumnVector) {
+      BytesColumnVector bytesColumn = (BytesColumnVector) column;
+      return new String(bytesColumn.vector[row], bytesColumn.start[row], bytesColumn.length[row],
+          StandardCharsets.UTF_8);
+    }
+    return column.getClass().getSimpleName();
   }
 
   private void closeReader() {

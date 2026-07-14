@@ -19,6 +19,8 @@
 package org.apache.hadoop.hive.ql.io.orc;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -27,6 +29,10 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedBatchUtil;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedInputFormatInterface;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
@@ -48,6 +54,8 @@ import org.apache.hadoop.mapred.Reporter;
 import org.apache.orc.OrcProto;
 import org.apache.orc.OrcUtils;
 import org.apache.orc.TypeDescription;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A MapReduce/Hive input format for ORC files.
@@ -55,6 +63,8 @@ import org.apache.orc.TypeDescription;
 public class VectorizedOrcInputFormat extends FileInputFormat<NullWritable, VectorizedRowBatch>
     implements InputFormatChecker, VectorizedInputFormatInterface,
     SelfDescribingInputFormatInterface {
+
+  private static final Logger LOG = LoggerFactory.getLogger(VectorizedOrcInputFormat.class);
 
   static class VectorizedOrcRecordReader
       implements RecordReader<NullWritable, VectorizedRowBatch>, RowPositionAwareVectorizedRecordReader {
@@ -66,6 +76,7 @@ public class VectorizedOrcInputFormat extends FileInputFormat<NullWritable, Vect
     private final Object[] partitionValues;
     private boolean addPartitionCols = true;
     private final BucketIdentifier bucketIdentifier;
+    private int debugBatches = 0;
 
     VectorizedOrcRecordReader(Reader file, Configuration conf,
         FileSplit fileSplit) throws IOException {
@@ -76,6 +87,7 @@ public class VectorizedOrcInputFormat extends FileInputFormat<NullWritable, Vect
       }
 
       rbCtx = Utilities.getVectorizedRowBatchCtx(conf);
+      OrcInputFormat.logProjectionConf("VectorizedOrcRecordReader", conf);
       /**
        * Do we have schema on read in the configuration variables?
        */
@@ -84,6 +96,8 @@ public class VectorizedOrcInputFormat extends FileInputFormat<NullWritable, Vect
       TypeDescription schema = orcSchemaOverrideString == null ?
           OrcInputFormat.getDesiredRowTypeDescr(conf, false, dataColumns) :
           TypeDescription.fromString(orcSchemaOverrideString);
+      LOG.info("ORC_DEBUG VectorizedOrcRecordReader file schema {}", file.getSchema());
+      LOG.info("ORC_DEBUG VectorizedOrcRecordReader desired reader schema {}", schema);
       if (schema == null) {
         schema = file.getSchema();
         // Even if the user isn't doing schema evolution, cut the schema
@@ -103,7 +117,10 @@ public class VectorizedOrcInputFormat extends FileInputFormat<NullWritable, Vect
       this.offset = fileSplit.getStart();
       this.length = fileSplit.getLength();
       options.range(offset, length);
-      options.include(OrcInputFormat.genIncludedColumns(schema, conf));
+      boolean[] includes = OrcInputFormat.genIncludedColumns(schema, conf);
+      LOG.info("ORC_DEBUG VectorizedOrcRecordReader effective reader schema {}", schema);
+      LOG.info("ORC_DEBUG VectorizedOrcRecordReader includes {}", Arrays.toString(includes));
+      options.include(includes);
       OrcInputFormat.setSearchArgument(options, types, conf, true);
 
       this.reader = file.rowsOptions(options, conf);
@@ -137,6 +154,11 @@ public class VectorizedOrcInputFormat extends FileInputFormat<NullWritable, Vect
         }
         if (!reader.nextBatch(value)) {
           return false;
+        }
+        if (debugBatches < 10) {
+          LOG.info("ORC_DEBUG VectorizedOrcRecordReader batch {} {}",
+              debugBatches, summarizeBatch(value));
+          debugBatches++;
         }
       } catch (Exception e) {
         throw new RuntimeException(e);
@@ -178,6 +200,67 @@ public class VectorizedOrcInputFormat extends FileInputFormat<NullWritable, Vect
     @Override
     public long getRowNumber() throws IOException {
       return reader.getRowNumber();
+    }
+
+    private static String summarizeBatch(VectorizedRowBatch batch) {
+      StringBuilder sb = new StringBuilder();
+      sb.append("size=").append(batch.size)
+          .append(", projectionSize=").append(batch.projectionSize)
+          .append(", projectedColumns=").append(Arrays.toString(
+              Arrays.copyOf(batch.projectedColumns, batch.projectionSize)))
+          .append(", cols=[");
+      int maxColumns = Math.min(batch.cols.length, 8);
+      for (int c = 0; c < maxColumns; c++) {
+        if (c > 0) {
+          sb.append("; ");
+        }
+        sb.append(c).append(":").append(summarizeColumn(batch.cols[c], batch, 5));
+      }
+      if (batch.cols.length > maxColumns) {
+        sb.append("; ...");
+      }
+      sb.append("]");
+      return sb.toString();
+    }
+
+    private static String summarizeColumn(ColumnVector column, VectorizedRowBatch batch, int maxRows) {
+      if (column == null) {
+        return "null";
+      }
+      StringBuilder sb = new StringBuilder(column.getClass().getSimpleName());
+      sb.append("(noNulls=").append(column.noNulls)
+          .append(", isRepeating=").append(column.isRepeating)
+          .append(", values=");
+      int rowCount = Math.min(batch.size, maxRows);
+      sb.append("[");
+      for (int r = 0; r < rowCount; r++) {
+        if (r > 0) {
+          sb.append(",");
+        }
+        int row = batch.selectedInUse ? batch.selected[r] : r;
+        int vectorIndex = column.isRepeating ? 0 : row;
+        sb.append(formatColumnValue(column, vectorIndex));
+      }
+      if (batch.size > rowCount) {
+        sb.append(",...");
+      }
+      sb.append("])");
+      return sb.toString();
+    }
+
+    private static String formatColumnValue(ColumnVector column, int row) {
+      if (!column.noNulls && column.isNull[row]) {
+        return "null";
+      } else if (column instanceof LongColumnVector) {
+        return Long.toString(((LongColumnVector) column).vector[row]);
+      } else if (column instanceof DoubleColumnVector) {
+        return Double.toString(((DoubleColumnVector) column).vector[row]);
+      } else if (column instanceof BytesColumnVector) {
+        BytesColumnVector bytesColumn = (BytesColumnVector) column;
+        return new String(bytesColumn.vector[row], bytesColumn.start[row], bytesColumn.length[row],
+            StandardCharsets.UTF_8);
+      }
+      return column.getClass().getSimpleName();
     }
   }
 

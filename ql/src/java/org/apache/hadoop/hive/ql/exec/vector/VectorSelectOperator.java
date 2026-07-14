@@ -56,6 +56,7 @@ public class VectorSelectOperator extends Operator<SelectDesc>
   private int [] projectedOutputColumns = null;
 
   private transient VectorExpressionWriter [] valueWriters = null;
+  private transient long debugBatches;
 
   // Create a new outgoing vectorization context because column name map will change.
   private VectorizationContext vOutContext;
@@ -155,6 +156,12 @@ public class VectorSelectOperator extends Operator<SelectDesc>
     int originalProjectionSize = vrg.projectionSize;
     vrg.projectionSize = projectedOutputColumns.length;
     vrg.projectedColumns = this.projectedOutputColumns;
+    if (debugBatches < 10) {
+      LOG.info("ORC_DEBUG VectorSelectOperator batch {} size {} projectedOutputColumns {} summary {}",
+          debugBatches, vrg.size, Arrays.toString(projectedOutputColumns),
+          summarizeProjectedColumns(vrg, projectedOutputColumns));
+      debugBatches++;
+    }
     vectorForward((VectorizedRowBatch) row);
 
     // Revert the projected columns back, because vrg will be re-used.
@@ -176,6 +183,48 @@ public class VectorSelectOperator extends Operator<SelectDesc>
 
   public void setVExpressions(VectorExpression[] vExpressions) {
     this.vExpressions = vExpressions;
+  }
+
+  private static String summarizeProjectedColumns(VectorizedRowBatch batch, int[] columns) {
+    StringBuilder sb = new StringBuilder("[");
+    int maxColumns = Math.min(columns.length, 8);
+    for (int i = 0; i < maxColumns; i++) {
+      if (i > 0) {
+        sb.append("; ");
+      }
+      int columnNum = columns[i];
+      sb.append(columnNum).append(":").append(summarizeColumn(batch.cols[columnNum], batch, 5));
+    }
+    if (columns.length > maxColumns) {
+      sb.append("; ...");
+    }
+    sb.append("]");
+    return sb.toString();
+  }
+
+  private static String summarizeColumn(ColumnVector column, VectorizedRowBatch batch, int maxRows) {
+    if (column == null) {
+      return "null";
+    }
+    StringBuilder sb = new StringBuilder(column.getClass().getSimpleName());
+    sb.append("(noNulls=").append(column.noNulls)
+        .append(", isRepeating=").append(column.isRepeating)
+        .append(", nulls=");
+    int rowCount = Math.min(batch.size, maxRows);
+    sb.append("[");
+    for (int r = 0; r < rowCount; r++) {
+      if (r > 0) {
+        sb.append(",");
+      }
+      int row = batch.selectedInUse ? batch.selected[r] : r;
+      int vectorIndex = column.isRepeating ? 0 : row;
+      sb.append(!column.noNulls && column.isNull[vectorIndex]);
+    }
+    if (batch.size > rowCount) {
+      sb.append(",...");
+    }
+    sb.append("])");
+    return sb.toString();
   }
 
   @Override

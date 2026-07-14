@@ -387,7 +387,7 @@ public class OrcInputFormat implements InputFormat<NullWritable, OrcStruct>,
     return file.rowsOptions(options, conf);
   }
 
-  private static void logProjectionConf(String where, Configuration conf) {
+  static void logProjectionConf(String where, Configuration conf) {
     LOG.info("ORC_DEBUG {}: {} = {}", where, ColumnProjectionUtils.READ_ALL_COLUMNS,
         conf.get(ColumnProjectionUtils.READ_ALL_COLUMNS));
     LOG.info("ORC_DEBUG {}: {} = {}", where, ColumnProjectionUtils.READ_COLUMN_IDS_CONF_STR,

@@ -101,6 +101,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
    * Key vector expressions.
    */
   private VectorExpression[] keyExpressions;
+  private transient long debugBatches;
   private int outputKeyLength;
 
   private TypeInfo[] outputTypeInfos;
@@ -1321,6 +1322,14 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
   public void process(Object row, int tag) throws HiveException {
     VectorizedRowBatch batch = (VectorizedRowBatch) row;
     if (batch.size > 0) {
+      if (debugBatches < 10) {
+        LOG.info("ORC_DEBUG VectorGroupByOperator batch {} size {} projectionSize {} projectedColumns {} "
+                + "keyExpressions {}",
+            debugBatches, batch.size, batch.projectionSize,
+            Arrays.toString(Arrays.copyOf(batch.projectedColumns, batch.projectionSize)),
+            Arrays.toString(keyExpressions));
+        debugBatches++;
+      }
       processingMode.processBatch(batch);
     }
   }
