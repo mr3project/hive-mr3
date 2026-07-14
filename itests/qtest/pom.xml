@@ -419,6 +419,11 @@
       </exclusions>
     </dependency>
     <dependency>
+      <groupId>org.apache.tez</groupId>
+      <artifactId>tez-protobuf-history-plugin</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>com.datamonad.mr3</groupId>
       <artifactId>mr3-tez</artifactId>
       <version>${mr3.version}</version>
