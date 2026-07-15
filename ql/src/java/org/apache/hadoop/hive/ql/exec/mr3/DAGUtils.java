@@ -1527,6 +1527,17 @@ public class DAGUtils {
   }
 
   private boolean isHiveConfDefaultValue(Map.Entry<String, String> entry) {
+    // This keeps those keys that are consumed by third-party consumers, such as:
+    //   orc.force.positional.evolution
+    //   parquet.memory.pool.ratio
+    // Without this filtering, ORC and Parquet may produce wrong results.
+    // For example, orc_schema_evol_quoted.q fails with wrong results.
+    // TODO: This filtering logic needs to be revisited with future changes.
+    String key = entry.getKey();
+    if (!key.startsWith("hive.")) {
+      return false;
+    }
+
     ConfVars confVar = HiveConf.getConfVars(entry.getKey());
     if (confVar == null) {
       return false;
