@@ -517,6 +517,12 @@
       <artifactId>jaxb-runtime</artifactId>
       <version>${jaxb-runtime.version}</version>
     </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpkix-jdk18on</artifactId>
+      <version>${bcprov-jdk18on.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <plugins>
