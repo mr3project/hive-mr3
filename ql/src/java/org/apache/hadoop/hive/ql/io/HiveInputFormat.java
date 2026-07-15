@@ -975,7 +975,7 @@ public class HiveInputFormat<K extends WritableComparable, V extends Writable>
     // disable filter pushdown for mapreduce(except for storage handlers) when there are more than one table aliases,
     // since we don't clone jobConf per alias
     if (mrwork != null && mrwork.getAliases() != null && mrwork.getAliases().size() > 1
-        && jobConf.get(ConfVars.HIVE_EXECUTION_ENGINE.varname).equals("mr")
+        && HiveConf.getVar(jobConf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE).equals("mr")
         && (scanDesc.getTableMetadata() == null
             || !(scanDesc.getTableMetadata().getStorageHandler() instanceof HiveStoragePredicateHandler))) {
       return;
