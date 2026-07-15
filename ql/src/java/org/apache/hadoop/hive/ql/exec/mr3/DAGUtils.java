@@ -1526,8 +1526,30 @@ public class DAGUtils {
     }
   }
 
+  // TODO: add unsafe keys here
+  private static final Set<String> HIVE_DEFAULT_KEYS_TO_PRESERVE = java.util.Set.of();
+
   private boolean isHiveConfDefaultValue(Map.Entry<String, String> entry) {
-    ConfVars confVar = HiveConf.getConfVars(entry.getKey());
+    // This keeps those keys that are consumed by third-party consumers, such as:
+    //   orc.force.positional.evolution
+    //   parquet.memory.pool.ratio
+    // Without this filtering, ORC and Parquet may produce wrong results.
+    // Example:
+    //   orc_schema_evol_quoted.q
+    //   TestMiniLlapLocalCompactorCliDriver
+
+    // TODO (Critical): This filtering logic needs to be revisited with future changes.
+    //   A safer approach is to always return false.
+
+    String key = entry.getKey();
+    if (!key.startsWith("hive.")
+        || key.contains("orc")
+        || key.contains("parquet")
+        || HIVE_DEFAULT_KEYS_TO_PRESERVE.contains(key)) {
+      return false;
+    }
+
+    ConfVars confVar = HiveConf.getConfVars(key);
     if (confVar == null) {
       return false;
     }
