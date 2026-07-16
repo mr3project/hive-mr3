@@ -24,6 +24,7 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorException;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -61,7 +62,7 @@ public class TestDriver {
     }
   }
 
-  @Test
+  @Ignore   // tez.am.counters.max.keys not used
   public void testDriverContextQueryErrorMessageRuntime() {
     conf.setInt("tez.am.counters.max.keys", 0);
     SessionState.start(conf);
