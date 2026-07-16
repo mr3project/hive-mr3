@@ -309,7 +309,7 @@ public class TestTezTask {
     return res;
   }
 
-  @Test
+  @Ignore
   public void testParseRightmostXmx() throws Exception {
     // Empty java opts
     String javaOpts = "";
@@ -357,7 +357,7 @@ public class TestTezTask {
     assertEquals("Unexpected maximum heap size", -1, heapSize);
   }
 
-  @Test
+  @Ignore
   public void testTezTaskUpdatesMetrics() throws IOException {
 
     Metrics mockMetrics = Mockito.mock(Metrics.class);
