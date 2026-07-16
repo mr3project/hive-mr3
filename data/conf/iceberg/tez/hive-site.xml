@@ -322,6 +322,8 @@
   <value>2</value>
 </property>
 
+<!-- Hive-MR3 -->
+
 <property>
   <name>hive.mr3.containergroup.scheme</name>
   <value>all-in-one</value>
