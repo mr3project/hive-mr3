@@ -404,11 +404,6 @@
 </property>
 
 <property>
-   <name>hive.mr3.aux.jars</name>
-   <value>hive-llap-common-4.2.0.jar,hive-llap-server-4.2.0.jar,hive-llap-tez-4.2.0.jar,hive-iceberg-handler-4.2.0.jar,log4j-1.2-api-2.24.3.jar</value>
-</property>
-
-<property>
   <name>tez.task.scale.memory.allocator.class</name>
   <value>org.apache.tez.runtime.common.resources.ScalingAllocator</value>
 </property>
