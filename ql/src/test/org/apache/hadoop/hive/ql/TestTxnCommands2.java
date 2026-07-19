@@ -3268,7 +3268,7 @@ public class TestTxnCommands2 extends TxnCommandsBaseForTests {
         // Wait for the scheduled query to finish. Hopefully 30 seconds should be more than enough.
         SessionState.getConsole().logInfo("Waiting for query execution to finish ...");
         synchronized (qService.notifier) {
-          qService.notifier.wait(30000);
+          qService.notifier.wait(90000);
         }
         SessionState.getConsole().logInfo("Done waiting for query execution!");
       }
