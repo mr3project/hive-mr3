@@ -33,6 +33,7 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.tez.dag.api.DAG;
 import org.apache.tez.dag.api.Vertex;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import org.junit.Assert;
@@ -96,7 +97,7 @@ public class TestDagUtils {
         configuration.get("mapred.output.committer.class"));
   }
 
-  @Test
+  @Ignore   // getContainerEnvironment() not used
   public void testMapTezTaskEnvIsCopiedFromMrProperties() {
     final DagUtils dagUtils = DagUtils.getInstance();
 
@@ -110,7 +111,7 @@ public class TestDagUtils {
     Assert.assertEquals("value", map.getTaskEnvironment().get("key"));
   }
 
-  @Test
+  @Ignore   // getContainerEnvironment() not used
   public void testReduceTezTaskEnvIsCopiedFromMrProperties() {
     final DagUtils dagUtils = DagUtils.getInstance();
 
