@@ -2027,12 +2027,21 @@ public final class Utilities {
     }
 
     // for Hive on MR3, do not call getFileSizeRecursively()
-    if (existingFile.getLen() >= file.getLen()) {
+    if (existingFile.getLen() > file.getLen()) {
       // keep existing
       toRetain = existingFile;
       toDelete = file;
-    } else {
+    } else if (existingFile.getLen() < file.getLen()) {
       // keep file
+      toRetain = file;
+      toDelete = existingFile;
+    } else if (getAttemptIdFromFilename(existingFile.getPath().getName())
+        > getAttemptIdFromFilename(file.getPath().getName())) {
+      // Keep the file with the larger attempt ID when the sizes are equal.
+      toRetain = existingFile;
+      toDelete = file;
+    } else {
+      // Keep the file with the larger attempt ID when the sizes are equal.
       toRetain = file;
       toDelete = existingFile;
     }
