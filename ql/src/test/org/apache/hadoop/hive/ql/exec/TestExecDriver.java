@@ -66,6 +66,7 @@ import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.mapred.TextInputFormat;
 import static org.junit.Assert.assertEquals;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -73,6 +74,7 @@ import org.junit.Test;
  * them out.
  *
  */
+@Ignore("MR-specific TestExecDriver is disabled while using MR3")
 public class TestExecDriver {
 
   static QueryState queryState;
