@@ -40,7 +40,7 @@
 
 <property>
   <name>mr3.am.local.resourcescheduler.max.memory.mb</name>
-  <value>2048</value>
+  <value>6144</value>
 </property>
 
 <property>
