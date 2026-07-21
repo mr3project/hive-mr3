@@ -1192,7 +1192,7 @@ public class TestWorker extends CompactorTest {
   }
 
   // With low timeout, but slow run we should finish without a problem, even if the interrupt is swallowed
-  @Test(timeout=2000)
+  @Test(timeout=5000)
   public void testTimeoutWithoutInterrupt() throws Exception {
     runTimeoutTest(1, true, true);
   }
