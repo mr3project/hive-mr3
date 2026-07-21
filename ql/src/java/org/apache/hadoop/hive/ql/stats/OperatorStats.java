@@ -57,6 +57,15 @@ public final class OperatorStats {
     return operatorId;
   }
 
+  // Added to support Jackson 2.18.0 for serializing and deserializing operatorId
+  // With the previous Jackson 2.16.1, setOperatorId() is not strictly needed because
+  // MapperFeature.INFER_PROPERTY_MUTATORS is set.
+  // With Jackson 2.18.0, operatorId is not serialized without setOperatorId() by default, so we add this method.
+  // Cf. TestRuntimeStatsPersistence.checkCanStore
+  public void setOperatorId(final String operatorId) {
+    this.operatorId = operatorId;
+  }
+
   @Override
   public String toString() {
     return String.format("OperatorStats %s records: %d", operatorId, outputRecords);
