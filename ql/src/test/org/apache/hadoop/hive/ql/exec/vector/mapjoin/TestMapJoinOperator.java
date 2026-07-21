@@ -23,6 +23,7 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.MapJoinOperator;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainerSerDe;
+import org.apache.hadoop.hive.ql.exec.tez.ObjectCache;
 import org.apache.hadoop.hive.ql.exec.util.collectoroperator.CountCollectorTestOperator;
 import org.apache.hadoop.hive.ql.exec.util.rowobjects.RowTestObjects;
 import org.apache.hadoop.hive.ql.exec.util.rowobjects.RowTestObjectsMultiSet;
@@ -45,6 +46,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.Ignore;
 
@@ -54,6 +56,11 @@ import java.util.Map.Entry;
 import org.junit.Assert;
 
 public class TestMapJoinOperator {
+
+  @Before
+  public void setup() {
+    ObjectCache.setupObjectRegistryDummy();
+  }
 
   private boolean addLongHiveConfVariation(int hiveConfVariation, HiveConf hiveConf) {
 
