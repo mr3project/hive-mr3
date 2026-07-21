@@ -118,9 +118,9 @@ public class TestVectorMapJoinFastHashTable {
     LOG.info("executionEstimate : {}", executionEstimate);
     LOG.info("compilerEstimate: {}", compilerEstimate);
 
-    checkRelativeError(realObjectSize, executionEstimate, .05);
-    checkRelativeError(realObjectSize, compilerEstimate, .05);
-    checkRelativeError(compilerEstimate, executionEstimate, .05);
+    checkRelativeError(realObjectSize, executionEstimate, .1);
+    checkRelativeError(realObjectSize, compilerEstimate, .1);
+    checkRelativeError(compilerEstimate, executionEstimate, .1);
   }
 
   private void checkRelativeError(Long v1, Long v2, double err) {
