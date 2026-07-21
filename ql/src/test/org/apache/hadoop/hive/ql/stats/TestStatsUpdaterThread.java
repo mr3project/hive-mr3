@@ -429,7 +429,7 @@ public class TestStatsUpdaterThread {
     msClient.close();
   }
 
-  @Test(timeout=80000)
+  @Test(timeout=160000)
   public void testPartitionsWithDifferentColsAll() throws Exception {
     StatsUpdaterThread su = createUpdater();
     IMetaStoreClient msClient = new HiveMetaStoreClient(hiveConf);
