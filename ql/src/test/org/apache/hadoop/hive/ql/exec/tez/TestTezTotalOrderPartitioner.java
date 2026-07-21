@@ -43,9 +43,11 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.lib.partition.TotalOrderPartitioner;
 import org.apache.tez.runtime.library.api.TezRuntimeConfiguration;
 import org.junit.Test;
+import org.junit.Ignore;
 
 import static org.junit.Assert.assertEquals;
 
+@Ignore   // TezTotalOrderPartitioner is not used in Hive-MR3
 public class TestTezTotalOrderPartitioner {
 
   public static final String PARTITIONER_PATH = "mapreduce.totalorderpartitioner.path";
