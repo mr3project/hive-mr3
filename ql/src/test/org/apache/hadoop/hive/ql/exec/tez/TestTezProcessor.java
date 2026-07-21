@@ -61,6 +61,8 @@ public class TestTezProcessor {
     when(processorContext.getTaskAttemptNumber()).thenReturn(0);
     when(processorContext.getApplicationId()).thenReturn(ApplicationId.fromString("application_123456_0"));
     when(processorContext.getUniqueIdentifier()).thenReturn("attempt_97501718590653602_0001_1_01_000000_0");
+    when(processorContext.getCommonJobConf(false)).thenReturn(new org.apache.hadoop.conf.Configuration(false));
+    when(processorContext.getConfigurationFromUserPayload(false)).thenReturn(new org.apache.hadoop.conf.Configuration(false));
 
     return processorContext;
   }
