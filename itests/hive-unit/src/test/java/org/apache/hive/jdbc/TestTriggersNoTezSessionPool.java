@@ -33,6 +33,7 @@ import org.junit.rules.TestName;
 
 import com.google.common.collect.Lists;
 
+@org.junit.Ignore("Not relevant to MR3")
 public class TestTriggersNoTezSessionPool extends AbstractJdbcTriggersTest {
   @Rule
   public TestName testName = new TestName();
