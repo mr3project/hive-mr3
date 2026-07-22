@@ -380,7 +380,8 @@ public class HiveServer2 extends CompositeService {
           hs2HARegistry = HS2ActivePassiveHARegistry.create(hiveConf, false);
 
           if (hiveConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
-            watcherThreadExecutor = Executors.newSingleThreadExecutor();
+            watcherThreadExecutor = Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setDaemon(true)
+              .setNameFormat("MR3 Application Watcher Thread").build());
           }
         }
       }
@@ -1123,7 +1124,7 @@ public class HiveServer2 extends CompositeService {
 
     String engine = hiveConf != null ? hiveConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE) : "";
     if (serviceDiscovery && activePassiveHA && engine.equals("tez")) {
-      watcherThreadExecutor.shutdown();
+      watcherThreadExecutor.shutdownNow();
     }
 
     if (scheduledQueryService != null) {
