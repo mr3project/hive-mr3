@@ -23,6 +23,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.net.InetAddress;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -390,7 +391,8 @@ public class TestActivePassiveHA {
     String zkJdbcUrl = miniHS2_1.getJdbcURL();
     // getAllUrls will parse zkJdbcUrl and will plugin the active HS2's host:port
     String parsedUrl = HiveConnection.getAllUrls(zkJdbcUrl).get(0).getJdbcUriString();
-    String hs2_1_directUrl = "jdbc:hive2://" + miniHS2_1.getHost() + ":" + miniHS2_1.getBinaryPort() +
+    String hs2_1Host = InetAddress.getByName(miniHS2_1.getHost()).getCanonicalHostName();
+    String hs2_1_directUrl = "jdbc:hive2://" + hs2_1Host + ":" + miniHS2_1.getBinaryPort() +
       "/default;serviceDiscoveryMode=" + serviceDiscoveryMode + ";zooKeeperNamespace=" + zkHANamespace + ";";
     assertTrue(zkJdbcUrl.contains(zkConnectString));
     assertEquals(hs2_1_directUrl, parsedUrl);
@@ -400,7 +402,8 @@ public class TestActivePassiveHA {
     miniHS2_1.stop();
     assertEquals(true, miniHS2_2.getIsLeaderTestFuture().get());
     parsedUrl = HiveConnection.getAllUrls(zkJdbcUrl).get(0).getJdbcUriString();
-    String hs2_2_directUrl = "jdbc:hive2://" + miniHS2_2.getHost() + ":" + miniHS2_2.getHttpPort() +
+    String hs2_2Host = InetAddress.getByName(miniHS2_2.getHost()).getCanonicalHostName();
+    String hs2_2_directUrl = "jdbc:hive2://" + hs2_2Host + ":" + miniHS2_2.getHttpPort() +
       "/default;serviceDiscoveryMode=" + serviceDiscoveryMode + ";zooKeeperNamespace=" + zkHANamespace + ";";
     assertTrue(zkJdbcUrl.contains(zkConnectString));
     assertEquals(hs2_2_directUrl, parsedUrl);
@@ -418,7 +421,7 @@ public class TestActivePassiveHA {
     miniHS2_2.stop();
     assertEquals(true, miniHS2_1.getIsLeaderTestFuture().get());
     parsedUrl = HiveConnection.getAllUrls(zkJdbcUrl).get(0).getJdbcUriString();
-    hs2_1_directUrl = "jdbc:hive2://" + miniHS2_1.getHost() + ":" + miniHS2_1.getBinaryPort() +
+    hs2_1_directUrl = "jdbc:hive2://" + hs2_1Host + ":" + miniHS2_1.getBinaryPort() +
       "/default;serviceDiscoveryMode=" + serviceDiscoveryMode + ";zooKeeperNamespace=" + zkHANamespace + ";";
     assertTrue(zkJdbcUrl.contains(zkConnectString));
     assertEquals(hs2_1_directUrl, parsedUrl);
@@ -574,14 +577,8 @@ public class TestActivePassiveHA {
       assertEquals(true, miniHS2_2.getIsLeaderTestFuture().get());
       assertEquals(true, miniHS2_2.isLeader());
 
-      try {
-        hs2Conn = getConnection(hs1Url, System.getProperty("user.name"));
-        fail("Should throw");
-      } catch (Exception e) {
-        if (!e.getMessage().contains("Cannot open sessions on an inactive HS2")) {
-          throw e;
-        }
-      }
+      hs2Conn = getConnection(hs1Url, System.getProperty("user.name"));
+      hs2Conn.close();
     } finally {
       resetFailoverConfs();
     }
@@ -628,7 +625,8 @@ public class TestActivePassiveHA {
       assertEquals("true", sendGet(healthCheckUrl1, true));
 
       // before failover, check if we are getting connection from miniHS2_1
-      String hs2_1_directUrl = "jdbc:hive2://" + miniHS2_1.getHost() + ":" + miniHS2_1.getBinaryPort() +
+      String hs2_1Host = InetAddress.getByName(miniHS2_1.getHost()).getCanonicalHostName();
+      String hs2_1_directUrl = "jdbc:hive2://" + hs2_1Host + ":" + miniHS2_1.getBinaryPort() +
         "/default;serviceDiscoveryMode=" + serviceDiscoveryMode + ";zooKeeperNamespace=" + zkHANamespace + ";";
       String parsedUrl = HiveConnection.getAllUrls(zkJdbcUrl).get(0).getJdbcUriString();
       assertEquals(hs2_1_directUrl, parsedUrl);
@@ -637,10 +635,12 @@ public class TestActivePassiveHA {
         Thread.sleep(100);
       }
 
-      // trigger failover on miniHS2_1 and make sure the connections are closed
+      // trigger failover on miniHS2_1 and make sure the connection remains open
       String resp = sendDelete(url1, true);
       assertTrue(resp.contains("Failover successful!"));
-      // wait for failover to close sessions
+      assertEquals(1, miniHS2_1.getOpenSessionsCount());
+      hs2Conn.close();
+      hs2Conn = null;
       while (miniHS2_1.getOpenSessionsCount() != 0) {
         Thread.sleep(100);
       }
@@ -661,7 +661,8 @@ public class TestActivePassiveHA {
       assertEquals("true", sendGet(healthCheckUrl2, true));
 
       // when we make a new connection we should get it from miniHS2_2 this time
-      String hs2_2_directUrl = "jdbc:hive2://" + miniHS2_2.getHost() + ":" + miniHS2_2.getHttpPort() +
+      String hs2_2Host = InetAddress.getByName(miniHS2_2.getHost()).getCanonicalHostName();
+      String hs2_2_directUrl = "jdbc:hive2://" + hs2_2Host + ":" + miniHS2_2.getHttpPort() +
         "/default;serviceDiscoveryMode=" + serviceDiscoveryMode + ";zooKeeperNamespace=" + zkHANamespace + ";";
       parsedUrl = HiveConnection.getAllUrls(zkJdbcUrl).get(0).getJdbcUriString();
       assertEquals(hs2_2_directUrl, parsedUrl);
@@ -687,7 +688,10 @@ public class TestActivePassiveHA {
       assertEquals("false", sendGet(url2, true));
       assertEquals("false", sendGet(healthCheckUrl2, true));
       assertEquals(false, miniHS2_2.isLeader());
-      // make sure miniHS2_2 closes all its connections
+      // make sure miniHS2_2 keeps its connection after losing leadership
+      assertEquals(1, miniHS2_2.getOpenSessionsCount());
+      hs2Conn.close();
+      hs2Conn = null;
       while (miniHS2_2.getOpenSessionsCount() != 0) {
         Thread.sleep(100);
       }
