@@ -27,7 +27,7 @@ import org.junit.BeforeClass;
 
 /**
  * TestOperationLoggingAPIWithTez
- * Test the FetchResults of TFetchType.LOG in thrift level in Tez mode.
+ * Test the FetchResults of TFetchType.LOG in thrift level with Tez work executed by MR3.
  */
 public class TestOperationLoggingAPIWithTez extends OperationLoggingAPITestBase {
 
@@ -43,8 +43,9 @@ public class TestOperationLoggingAPIWithTez extends OperationLoggingAPITestBase 
       "Executing command",
       "Completed executing command",
       "Semantic Analysis Completed",
-      "Executing on YARN cluster with App id",
-      "Setting Tez DAG access"
+      "MR3Task.execute():",
+      "Finished building DAG, now submitting:",
+      "Executing on MR3 DAGAppMaster"
     };
     expectedLogsPerformance = new String[]{
       "<PERFLOG method=compile from=org.apache.hadoop.hive.ql.Driver>",
