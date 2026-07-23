@@ -281,6 +281,12 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
     return shareMr3Session;
   }
 
+  public static boolean isSharedMr3Session(HiveConf hiveConf) {
+    return hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_MR3_SHARE_SESSION)
+        || (hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_SUPPORT_DYNAMIC_SERVICE_DISCOVERY)
+            && hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ACTIVE_PASSIVE_HA_ENABLE));
+  }
+
   @Override
   public synchronized MR3Session getSession(HiveConf hiveConf) throws HiveException {
     if (!initializedClientFactory) {  // e.g., called from Hive-CLI

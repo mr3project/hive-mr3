@@ -244,8 +244,11 @@ public class MR3SessionImpl implements MR3Session {
     Path mr3SessionScratchDir = new Path(SessionState.get().getHdfsScratchDirURIString(), MR3_DIR);
     mr3SessionScratchDir = new Path(mr3SessionScratchDir, sessionId);
     FileSystem fs = mr3SessionScratchDir.getFileSystem(sessionConf);
+    FsPermission sessionScratchDirPermission = shareMr3Session
+        ? new FsPermission(SessionState.SESSION_SCRATCH_DIR_PERMISSION)
+        : new FsPermission(HiveConf.getVar(sessionConf, HiveConf.ConfVars.SCRATCH_DIR_PERMISSION));
     Utilities.createDirsWithPermission(
-        sessionConf, mr3SessionScratchDir, new FsPermission(SessionState.SESSION_SCRATCH_DIR_PERMISSION), true);
+        sessionConf, mr3SessionScratchDir, sessionScratchDirPermission, true);
     // Make sure the path is normalized.
     FileStatus dirStatus = DAGUtils.validateTargetDir(mr3SessionScratchDir, sessionConf);
     assert dirStatus != null;
