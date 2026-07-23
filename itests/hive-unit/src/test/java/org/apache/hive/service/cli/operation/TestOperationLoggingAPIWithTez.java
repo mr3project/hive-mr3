@@ -27,7 +27,7 @@ import org.junit.BeforeClass;
 
 /**
  * TestOperationLoggingAPIWithTez
- * Test the FetchResults of TFetchType.LOG in thrift level in Tez mode.
+ * Test the FetchResults of TFetchType.LOG in thrift level with Tez work executed by MR3.
  */
 public class TestOperationLoggingAPIWithTez extends OperationLoggingAPITestBase {
 
@@ -43,17 +43,16 @@ public class TestOperationLoggingAPIWithTez extends OperationLoggingAPITestBase 
       "Executing command",
       "Completed executing command",
       "Semantic Analysis Completed",
-      "Executing on YARN cluster with App id",
-      "Setting Tez DAG access"
+      "MR3Task.execute():",
+      "Finished building DAG, now submitting:",
+      "Executing on MR3 DAGAppMaster"
     };
     expectedLogsPerformance = new String[]{
       "<PERFLOG method=compile from=org.apache.hadoop.hive.ql.Driver>",
       "<PERFLOG method=parse from=org.apache.hadoop.hive.ql.Driver>",
-      "from=org.apache.hadoop.hive.ql.exec.tez.monitoring.TezJobMonitor",
-      "org.apache.tez.common.counters.DAGCounter",
-      "NUM_SUCCEEDED_TASKS",
-      "TOTAL_LAUNCHED_TASKS",
-      "CPU_MILLISECONDS"
+      "<PERFLOG method=MR3BuildDag from=org.apache.hadoop.hive.ql.exec.mr3.MR3Task>",
+      "<PERFLOG method=MR3SubmitDag from=org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionImpl>",
+      "<PERFLOG method=MR3RunDag from=org.apache.hadoop.hive.ql.exec.mr3.monitoring.MR3JobMonitor>"
     };
     hiveConf = UtilsForTest.getHiveOnTezConfFromDir("../../data/conf/tez/");
     hiveConf.set(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LEVEL.varname, "verbose");
