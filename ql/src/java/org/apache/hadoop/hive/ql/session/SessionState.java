@@ -786,8 +786,10 @@ public class SessionState implements ISessionAuthState {
     // 1. HDFS scratch dir
     path = new Path(rootHDFSDirPath, userName);
     hdfsScratchDirURIString = path.toUri().toString();
-    // HDFS scratch dir does not necessarily mean 'isLocal==true' when using MR3
-    Utilities.createDirsWithPermission(conf, path, new FsPermission(SESSION_SCRATCH_DIR_PERMISSION), true);
+    FsPermission hdfsScratchDirPermission = MR3SessionManagerImpl.isSharedMr3Session(conf)
+        ? new FsPermission(SESSION_SCRATCH_DIR_PERMISSION)
+        : new FsPermission(scratchDirPermission);
+    Utilities.createDirsWithPermission(conf, path, hdfsScratchDirPermission, true);
     // 2. Local scratch dir
     path = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.LOCAL_SCRATCH_DIR));
     createPath(conf, path, scratchDirPermission, true, false);
