@@ -5960,7 +5960,7 @@ public class HiveConf extends Configuration {
     MR3_USE_DAEMON_SHUFFLEHANDLER("hive.mr3.use.daemon.shufflehandler", 0,
         "Number of daemon ShuffleHandlers in every non-local ContainerWorker"),
     // HiveServer2
-    HIVE_SERVER2_MR3_SHARE_SESSION("hive.server2.mr3.share.session", false,
+    HIVE_SERVER2_MR3_SHARE_SESSION("hive.server2.mr3.share.session", true,
         "Use a common MR3Session to be shared by all HiveSessions"),
     // for internal use only
     // -1: not stored in HiveConf yet
