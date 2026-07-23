@@ -114,6 +114,8 @@ public class MR3Task {
   private final HiveConf conf;
   private final SessionState.LogHelper console;
   private final AtomicBoolean isShutdown;
+  private String dagIdStr;
+  private String terminalDagStatus;
   private final DAGUtils dagUtils;
 
   private TezCounters counters;
@@ -151,6 +153,37 @@ public class MR3Task {
     exception = ex;
   }
 
+  public String getDagIdStr() {
+    return dagIdStr;
+  }
+
+  public String getTerminalDagStatus() {
+    return terminalDagStatus;
+  }
+
+  private void updateDagId(MR3JobRef mr3JobRef) {
+    try {
+      dagIdStr = mr3JobRef.getDagIdStr();
+    } catch (MR3Exception e) {
+      LOG.warn("DAG ID is not available: {}", e.getMessage());
+    }
+  }
+
+  private void setTerminalDagStatus(int returnCode) {
+    switch (returnCode) {
+    case 0:
+      terminalDagStatus = "SUCCEEDED";
+      break;
+    case 1:
+      terminalDagStatus = "KILLED";
+      break;
+    case 2:
+    default:
+      terminalDagStatus = "FAILED";
+      break;
+    }
+  }
+
   public int execute(Context contextFromTezTask, TezWork tezWork) {
     int returnCode = 1;   // 1 == error
     boolean cleanContext = false;
@@ -177,6 +210,7 @@ public class MR3Task {
       try {
         mr3JobRef = mr3Session.submit(
             dag, amDagCommonLocalResources, conf, tezWork.getWorkMap(), context, isShutdown, perfLogger);
+        updateDagId(mr3JobRef);
         // mr3Session can be closed at any time, so the call may fail
         // handle only Exception from mr3Session.submit()
       } catch (Exception submitEx) {
@@ -204,6 +238,7 @@ public class MR3Task {
           // mr3Session can be closed at any time, so the call may fail
           mr3JobRef = mr3Session.submit(
               newDag, amDagCommonLocalResources, conf, tezWork.getWorkMap(), context, isShutdown, perfLogger);
+          updateDagId(mr3JobRef);
         }
       }
 
@@ -213,6 +248,7 @@ public class MR3Task {
       // console.printInfo(
       //     "Status: Running (Executing on MR3 DAGAppMaster with ApplicationID " + mr3JobRef.getJobId() + ")");
       returnCode = mr3JobRef.monitorJob();
+      setTerminalDagStatus(returnCode);
       if (returnCode != 0) {
         this.setException(new HiveException(mr3JobRef.getDiagnostics()));
       }
@@ -243,6 +279,9 @@ public class MR3Task {
       LOG.info("MR3Task completed");
     } catch (Exception e) {
       LOG.error("Failed to execute MR3Task", e);
+      if (terminalDagStatus == null) {
+        terminalDagStatus = "FAILED";
+      }
       StringWriter sw = new StringWriter();
       e.printStackTrace(new PrintWriter(sw));
       this.setException(new HiveException(sw.toString()));

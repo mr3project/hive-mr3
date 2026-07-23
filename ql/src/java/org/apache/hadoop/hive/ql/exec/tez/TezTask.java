@@ -166,6 +166,12 @@ public class TezTask extends Task<TezWork> {
     org.apache.hadoop.hive.ql.exec.mr3.MR3Task mr3Task =
       new org.apache.hadoop.hive.ql.exec.mr3.MR3Task(conf, console, isShutdownMr3);
     int returnCode = mr3Task.execute(context, this.getWork());
+    if (mr3Task.getDagIdStr() != null) {
+      this.jobID = mr3Task.getDagIdStr();
+    }
+    if (mr3Task.getTerminalDagStatus() != null) {
+      setStatusMessage(mr3Task.getTerminalDagStatus());
+    }
     // Utils.mergeTezCounters is null-safe.
     counters = Utils.mergeTezCounters(mr3Task.getTezCounters(), counters);
     Throwable exFromMr3 = mr3Task.getException();
