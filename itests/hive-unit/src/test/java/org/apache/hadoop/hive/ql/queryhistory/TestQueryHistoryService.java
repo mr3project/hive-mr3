@@ -269,7 +269,29 @@ public class TestQueryHistoryService {
 
     Set<Schema.Field> notTestedFields = Sets.newHashSet(
         Schema.Field.QUERY_HISTORY_SCHEMA_VERSION,
-        Schema.Field.HIVE_VERSION);
+        Schema.Field.HIVE_VERSION,
+        // Tez task counters are not supported by MR3.
+        Schema.Field.TOTAL_LAUNCHED_TASKS,
+        Schema.Field.NUM_SUCCEEDED_TASKS,
+        Schema.Field.NUM_KILLED_TASKS,
+        Schema.Field.NUM_FAILED_TASKS,
+        Schema.Field.TASK_DURATION_MILLIS,
+        Schema.Field.NODE_USED_COUNT,
+        Schema.Field.NODE_TOTAL_COUNT,
+        Schema.Field.REDUCE_INPUT_GROUPS,
+        Schema.Field.REDUCE_INPUT_RECORDS,
+        Schema.Field.SPILLED_RECORDS,
+        Schema.Field.NUM_SHUFFLED_INPUTS,
+        Schema.Field.NUM_FAILED_SHUFFLE_INPUTS,
+        Schema.Field.INPUT_RECORDS_PROCESSED,
+        Schema.Field.INPUT_SPLIT_LENGTH_BYTES,
+        Schema.Field.OUTPUT_RECORDS,
+        Schema.Field.OUTPUT_BYTES_PHYSICAL,
+        Schema.Field.SHUFFLE_CHUNK_COUNT,
+        Schema.Field.SHUFFLE_BYTES,
+        Schema.Field.SHUFFLE_BYTES_DISK_DIRECT,
+        Schema.Field.SHUFFLE_PHASE_TIME,
+        Schema.Field.MERGE_PHASE_TIME);
     final int FIELDS_TO_BE_VALIDATED = ALL_FIELDS - notTestedFields.size();
     LOG.info("Comparing input driverContext ({}) to the record to be flushed ({})", driverContext, record);
 
@@ -374,49 +396,6 @@ public class TestQueryHistoryService {
     compareValue(Schema.Field.CONFIGURATION_OPTIONS_CHANGED,
         Joiner.on(";").withKeyValueSeparator("=").join(DummyRecord.CONFIGURATION_OPTIONS_CHANGED),
         record, fieldsValidated);
-    compareValue(Schema.Field.TOTAL_LAUNCHED_TASKS,
-        DummyRecord.TOTAL_LAUNCHED_TASKS, record, fieldsValidated);
-    compareValue(Schema.Field.NUM_SUCCEEDED_TASKS,
-        DummyRecord.NUM_SUCCEEDED_TASKS, record, fieldsValidated);
-    compareValue(Schema.Field.NUM_KILLED_TASKS,
-        DummyRecord.NUM_KILLED_TASKS, record, fieldsValidated);
-    compareValue(Schema.Field.NUM_FAILED_TASKS,
-        DummyRecord.NUM_FAILED_TASKS, record, fieldsValidated);
-    compareValue(Schema.Field.TASK_DURATION_MILLIS,
-        DummyRecord.TASK_DURATION_MILLIS, record, fieldsValidated);
-    compareValue(Schema.Field.NODE_USED_COUNT,
-        DummyRecord.NODE_USED_COUNT, record, fieldsValidated);
-    compareValue(Schema.Field.NODE_TOTAL_COUNT,
-        DummyRecord.NODE_TOTAL_COUNT, record, fieldsValidated);
-    compareValue(Schema.Field.REDUCE_INPUT_GROUPS,
-        DummyRecord.REDUCE_INPUT_GROUPS, record, fieldsValidated);
-    compareValue(Schema.Field.REDUCE_INPUT_RECORDS,
-        DummyRecord.REDUCE_INPUT_RECORDS, record, fieldsValidated);
-    compareValue(Schema.Field.SPILLED_RECORDS,
-        DummyRecord.SPILLED_RECORDS, record, fieldsValidated);
-    compareValue(Schema.Field.NUM_SHUFFLED_INPUTS,
-        DummyRecord.NUM_SHUFFLED_INPUTS, record, fieldsValidated);
-    compareValue(Schema.Field.NUM_FAILED_SHUFFLE_INPUTS,
-        DummyRecord.NUM_FAILED_SHUFFLE_INPUTS, record, fieldsValidated);
-    compareValue(Schema.Field.INPUT_RECORDS_PROCESSED,
-        DummyRecord.INPUT_RECORDS_PROCESSED, record, fieldsValidated);
-    compareValue(Schema.Field.INPUT_SPLIT_LENGTH_BYTES,
-        DummyRecord.INPUT_SPLIT_LENGTH_BYTES, record, fieldsValidated);
-    compareValue(Schema.Field.OUTPUT_RECORDS,
-        DummyRecord.OUTPUT_RECORDS, record, fieldsValidated);
-    compareValue(Schema.Field.OUTPUT_BYTES_PHYSICAL,
-        DummyRecord.OUTPUT_BYTES_PHYSICAL, record, fieldsValidated);
-    compareValue(Schema.Field.SHUFFLE_CHUNK_COUNT,
-        DummyRecord.SHUFFLE_CHUNK_COUNT, record, fieldsValidated);
-    compareValue(Schema.Field.SHUFFLE_BYTES,
-        DummyRecord.SHUFFLE_BYTES, record, fieldsValidated);
-    compareValue(Schema.Field.SHUFFLE_BYTES_DISK_DIRECT,
-        DummyRecord.SHUFFLE_BYTES_DISK_DIRECT, record, fieldsValidated);
-    compareValue(Schema.Field.SHUFFLE_PHASE_TIME,
-        DummyRecord.SHUFFLE_PHASE_TIME, record, fieldsValidated);
-    compareValue(Schema.Field.MERGE_PHASE_TIME,
-        DummyRecord.MERGE_PHASE_TIME, record, fieldsValidated);
-
     if (fieldsValidated.get() != FIELDS_TO_BE_VALIDATED) {
       Assert.fail(
           "Less (or more?) fields have been validated than expected: all: " + ALL_FIELDS + ", expected: "
