@@ -571,8 +571,8 @@ public class TestCrudCompactorOnTez extends CompactorOnTezTest {
     Collections.sort(expectedRows);
 
     String columns = isPartitioned ? "ROW__ID.writeid, a, b, ds" : "ROW__ID.writeid, a, b";
-    List<String> actualRows = execSelectAndDumpData("select " + columns + " from " + tableName, driver,
-        "Rebalance compaction data for " + tableName);
+    List<String> actualRows = executeStatementOnDriverAndReturnResults("select " + columns + " from " + tableName,
+        driver);
     Collections.sort(actualRows);
     Assert.assertEquals("rebalance compaction data", expectedRows, actualRows);
   }
