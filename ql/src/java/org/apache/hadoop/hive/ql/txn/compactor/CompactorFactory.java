@@ -72,27 +72,28 @@ public final class CompactorFactory {
   public CompactorPipeline getCompactorPipeline(Table table, HiveConf configuration, CompactionInfo compactionInfo, IMetaStoreClient msc)
       throws HiveException {
     if (AcidUtils.isFullAcidTable(table.getParameters())) {
-      if (!"tez".equalsIgnoreCase(HiveConf.getVar(configuration, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE)) ||
-          !HiveConf.getBoolVar(configuration, HiveConf.ConfVars.COMPACTOR_CRUD_QUERY_BASED)) {
-        if (CompactionType.REBALANCE.equals(compactionInfo.type)) {
+      if (!"tez".equalsIgnoreCase(HiveConf.getVar(configuration, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE))) {
+        throw new HiveException("Compaction is only supported with Tez execution engine.");
+      }
+      boolean queryBased = HiveConf.getBoolVar(configuration, HiveConf.ConfVars.COMPACTOR_CRUD_QUERY_BASED);
+      boolean mergeEnabled = HiveConf.getBoolVar(configuration, HiveConf.ConfVars.HIVE_MERGE_COMPACTION_ENABLED);
+      if (CompactionType.REBALANCE.equals(compactionInfo.type)) {
+        if (!queryBased) {
           throw new HiveException("Rebalancing compaction is only supported in Tez, and via Query based compaction. " +
               "Set hive.execution.engine=tez and hive.compactor.crud.query.based=true to enable it.");
         }
-        if (!"tez".equalsIgnoreCase(HiveConf.getVar(configuration, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE)) &&
-            HiveConf.getBoolVar(configuration, HiveConf.ConfVars.COMPACTOR_CRUD_QUERY_BASED)) {
-          LOG.warn("Query-based compaction is enabled, but it is only supported on tez. Falling back to MR compaction.");
-        }
+        return new CompactorPipeline(new RebalanceQueryCompactor());
+      }
+      if (!queryBased && !mergeEnabled) {
         return new CompactorPipeline(new MRCompactor(msc));
       }
       switch (compactionInfo.type) {
         case MINOR:
           return new CompactorPipeline(new MergeCompactor())
-                  .addCompactor(new MinorQueryCompactor());
+                  .addCompactor(queryBased ? new MinorQueryCompactor() : new MRCompactor(msc));
         case MAJOR:
           return new CompactorPipeline(new MergeCompactor())
-                  .addCompactor(new MajorQueryCompactor());
-        case REBALANCE:
-          return new CompactorPipeline(new RebalanceQueryCompactor());
+                  .addCompactor(queryBased ? new MajorQueryCompactor() : new MRCompactor(msc));
       }
     } else if (AcidUtils.isInsertOnlyTable(table.getParameters())) {
       if (!configuration.getBoolVar(HiveConf.ConfVars.HIVE_COMPACTOR_COMPACT_MM)) {
