@@ -428,8 +428,12 @@ public final class OrcFile extends org.apache.orc.OrcFile {
   public static Writer createWriter(Path path,
                                     WriterOptions opts
                                     ) throws IOException {
+    Configuration conf = opts.getConfiguration();
+    LOG.error("xxxxx Creating ORC writer for {}: hive.exec.orc.default.compress={}, orc.compress={}, "
+            + "orc.compression.kind={}", path, conf.get("hive.exec.orc.default.compress"),
+        conf.get("orc.compress"), conf.get("orc.compression.kind"));
     FileSystem fs = opts.getFileSystem() == null ?
-      path.getFileSystem(opts.getConfiguration()) : opts.getFileSystem();
+      path.getFileSystem(conf) : opts.getFileSystem();
 
     return new WriterImpl(fs, path, opts);
   }
