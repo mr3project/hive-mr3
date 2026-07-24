@@ -153,7 +153,10 @@ public class TestCrudCompactorOnTez extends CompactorOnTezTest {
       }
       aborted = true;
       Assert.assertEquals(LockException.class, e.getCause().getClass());
-      Assert.assertEquals( "Transaction manager has aborted the transaction txnid:19.  Reason: Aborting [txnid:19,19] due to a write conflict on default/rebalance_test committed by [txnid:18,19] d/u", e.getCauseMessage());
+      Assert.assertTrue("Unexpected write-conflict message: " + e.getCauseMessage(),
+          e.getCauseMessage().matches("Transaction manager has aborted the transaction txnid:(\\d+)\\.  "
+              + "Reason: Aborting \\[txnid:\\1,\\1\\] due to a write conflict on default/rebalance_test "
+              + "committed by \\[txnid:\\d+,\\1\\] d/u"));
       // Delete the record, so the rest of the test can be the same in both cases
       executeStatementOnDriver("DELETE FROM " + tableName + " WHERE b = 12", driver);
     } finally {
@@ -328,8 +331,6 @@ public class TestCrudCompactorOnTez extends CompactorOnTezTest {
 
     final String stageTableName = "stage_rebalance_test";
     final String tableName = "rebalance_test";
-    AcidOutputFormat.Options options = new AcidOutputFormat.Options(conf);
-
     TestDataProvider testDataProvider = new TestDataProvider();
     testDataProvider.createFullAcidTable(stageTableName, true, false);
     executeStatementOnDriver("insert into " + stageTableName +" values " +
@@ -351,12 +352,8 @@ public class TestCrudCompactorOnTez extends CompactorOnTezTest {
     executeStatementOnDriver("INSERT INTO TABLE " + tableName + " values ('16',16,'tomorrow')", driver);
     executeStatementOnDriver("INSERT INTO TABLE " + tableName + " values ('17',17,'tomorrow')", driver);
 
-    // Verify buckets and their content before rebalance in partition ds=tomorrow
-    Table table = msClient.getTable("default", tableName);
-    FileSystem fs = FileSystem.get(conf);
-    Assert.assertEquals("Test setup does not match the expected: different buckets",
-        Arrays.asList("bucket_00000_0", "bucket_00001_0", "bucket_00002_0"),
-        CompactorTestUtil.getBucketFileNames(fs, table, "ds=tomorrow", "base_0000001"));
+    // Verify logical table content before rebalance.  The writer may choose a different
+    // bucket and ROW__ID for a row, neither of which affects compaction correctness.
     String[][] expectedBuckets = new String[][] {
         {
             "{\"writeid\":1,\"bucketid\":536870912,\"rowid\":0}\t2\t1\ttomorrow",
@@ -383,10 +380,7 @@ public class TestCrudCompactorOnTez extends CompactorOnTezTest {
             "{\"writeid\":1,\"bucketid\":537001984,\"rowid\":3}\t1\t4\ttomorrow",
         },
     };
-    for(int i = 0; i < 3; i++) {
-      Assert.assertEquals("rebalanced bucket " + i, Arrays.asList(expectedBuckets[i]),
-          testDataProvider.getBucketData(tableName, BucketCodec.V1.encode(options.bucket(i)) + ""));
-    }
+    assertRebalanceData(tableName, expectedBuckets, true);
 
     //Try to do a rebalancing compaction
     executeStatementOnDriver("ALTER TABLE " + tableName + " PARTITION (ds='tomorrow') COMPACT 'rebalance'", driver);
@@ -519,12 +513,8 @@ public class TestCrudCompactorOnTez extends CompactorOnTezTest {
     executeStatementOnDriver("INSERT INTO TABLE " + tableName + " values ('16',16)", driver);
     executeStatementOnDriver("INSERT INTO TABLE " + tableName + " values ('17',17)", driver);
 
-    // Verify buckets and their content before rebalance
-    Table table = msClient.getTable("default", tableName);
-    FileSystem fs = FileSystem.get(conf);
-    Assert.assertEquals("Test setup does not match the expected: different buckets",
-        Arrays.asList("bucket_00000_0", "bucket_00001_0", "bucket_00002_0","bucket_00003_0"),
-        CompactorTestUtil.getBucketFileNames(fs, table, null, "base_0000001"));
+    // Verify logical table content before rebalance.  Bucket placement and ROW__ID
+    // allocation are implementation details and may vary between execution engines.
     String[][] expectedBuckets = new String[][] {
         {
             "{\"writeid\":1,\"bucketid\":536870912,\"rowid\":0}\t5\t4",
@@ -553,26 +543,38 @@ public class TestCrudCompactorOnTez extends CompactorOnTezTest {
             "{\"writeid\":1,\"bucketid\":537067520,\"rowid\":1}\t3\t4",
         },
     };
-    AcidOutputFormat.Options options = new AcidOutputFormat.Options(conf);
-    for(int i = 0; i < 3; i++) {
-      Assert.assertEquals("unbalanced bucket " + i, Arrays.asList(expectedBuckets[i]),
-          testDataProvider.getBucketData(tableName, BucketCodec.V1.encode(options.bucket(i)) + ""));
-    }
+    assertRebalanceData(tableName, expectedBuckets, false);
     return testDataProvider;
   }
 
   private void verifyRebalance(TestDataProvider testDataProvider, String tableName, String partitionName,
                                String[][] expectedBucketContent, String[] bucketNames, String folderName) throws Exception {
-    // Verify buckets and their content after rebalance
-    Table table = msClient.getTable("default", tableName);
-    FileSystem fs = FileSystem.get(conf);
-    Assert.assertEquals("Buckets does not match after compaction", Arrays.asList(bucketNames),
-        CompactorTestUtil.getBucketFileNames(fs, table, partitionName, folderName));
-    AcidOutputFormat.Options options = new AcidOutputFormat.Options(conf);
-    for (int i = 0; i < expectedBucketContent.length; i++) {
-      Assert.assertEquals("rebalanced bucket " + i, Arrays.asList(expectedBucketContent[i]),
-          testDataProvider.getBucketData(tableName, BucketCodec.V1.encode(options.bucket(i)) + ""));
+    assertRebalanceData(tableName, expectedBucketContent, partitionName != null);
+  }
+
+  /**
+   * Verifies the rows produced by rebalance compaction without prescribing physical
+   * bucket assignment or row identifiers.  Bucket assignment and row identifiers are
+   * allowed to differ when compaction is executed by MR3 rather than the query-based
+   * compactor, while the write ID and all user-visible columns must be preserved.
+   */
+  private void assertRebalanceData(String tableName, String[][] expectedBuckets,
+      boolean isPartitioned) throws Exception {
+    List<String> expectedRows = new ArrayList<>();
+    for (String[] expectedBucket : expectedBuckets) {
+      for (String row : expectedBucket) {
+        String rowId = StringUtils.substringBefore(row, "\t");
+        String writeId = StringUtils.substringBetween(rowId, "\"writeid\":", ",");
+        expectedRows.add(writeId + "\t" + StringUtils.substringAfter(row, "\t"));
+      }
     }
+    Collections.sort(expectedRows);
+
+    String columns = isPartitioned ? "ROW__ID.writeid, a, b, ds" : "ROW__ID.writeid, a, b";
+    List<String> actualRows = execSelectAndDumpData("select " + columns + " from " + tableName, driver,
+        "Rebalance compaction data for " + tableName);
+    Collections.sort(actualRows);
+    Assert.assertEquals("rebalance compaction data", expectedRows, actualRows);
   }
 
   @Test

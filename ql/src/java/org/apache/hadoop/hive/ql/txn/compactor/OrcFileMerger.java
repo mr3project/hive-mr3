@@ -98,16 +98,26 @@ public class OrcFileMerger {
    */
   public boolean checkCompatibility(final List<Reader> readers) {
     if (readers == null || readers.isEmpty()) {
+      LOG.error("xxxxx Cannot merge an empty ORC reader list.");
       return false;
     }
 
-    if (!readers.stream().allMatch(
-      r -> readers.get(0).getSchema().equals(r.getSchema()) && readers.get(0).getCompression()
-              .equals(r.getCompression()) && readers.get(0).getCompressionSize() == r.getCompressionSize() && readers
-              .get(0).getFileVersion().equals(r.getFileVersion()) && readers.get(0).getWriterVersion()
-              .equals(r.getWriterVersion()) && readers.get(0).getRowIndexStride() == r.getRowIndexStride())) {
-      LOG.warn("Incompatible ORC file merge!");
-      return false;
+    Reader first = readers.get(0);
+    for (Reader reader : readers) {
+      if (!first.getSchema().equals(reader.getSchema()) || !first.getCompression().equals(reader.getCompression())
+          || first.getCompressionSize() != reader.getCompressionSize()
+          || !first.getFileVersion().equals(reader.getFileVersion())
+          || !first.getWriterVersion().equals(reader.getWriterVersion())
+          || first.getRowIndexStride() != reader.getRowIndexStride()) {
+        LOG.error("xxxxx Incompatible ORC file merge: expected schema={}, compression={}, compressionSize={}, "
+                + "fileVersion={}, writerVersion={}, rowIndexStride={}; found schema={}, compression={}, "
+                + "compressionSize={}, fileVersion={}, writerVersion={}, rowIndexStride={}",
+            first.getSchema(), first.getCompression(), first.getCompressionSize(), first.getFileVersion(),
+            first.getWriterVersion(), first.getRowIndexStride(), reader.getSchema(), reader.getCompression(),
+            reader.getCompressionSize(), reader.getFileVersion(), reader.getWriterVersion(),
+            reader.getRowIndexStride());
+        return false;
+      }
     }
     return true;
   }

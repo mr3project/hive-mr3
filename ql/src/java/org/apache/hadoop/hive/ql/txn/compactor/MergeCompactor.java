@@ -59,11 +59,18 @@ final class MergeCompactor extends QueryCompactor {
       Path outputDirPath = QueryCompactor.Util.getCompactionResultDir(storageDescriptor, writeIds,
           hiveConf, compactionInfo.isMajorCompaction(), false, dir);
       try {
-        return mergeFiles(hiveConf, compactionInfo.isMajorCompaction(),
+        boolean merged = mergeFiles(hiveConf, compactionInfo.isMajorCompaction(),
                 dir, outputDirPath, AcidUtils.isInsertOnlyTable(table.getParameters()));
+        if (!merged) {
+          LOG.error("xxxxx Merge compaction could not merge ORC input files for {} into {}.",
+              compactionInfo.getFullPartitionName(), outputDirPath);
+        }
+        return merged;
       } catch (Throwable t) {
         // Error handling, just delete the output directory,
         // and fall back to query based compaction.
+        LOG.error("xxxxx Merge compaction failed for {} while writing {}. Falling back to query-based compaction.",
+            compactionInfo.getFullPartitionName(), outputDirPath, t);
         FileSystem fs = outputDirPath.getFileSystem(hiveConf);
         if (fs.exists(outputDirPath)) {
           fs.delete(outputDirPath, true);
@@ -84,22 +91,22 @@ final class MergeCompactor extends QueryCompactor {
    */
   private boolean isMergeCompaction(HiveConf conf, AcidDirectory directory,
                                    StorageDescriptor storageDescriptor) {
-    return HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_MERGE_COMPACTION_ENABLED)
-            && storageDescriptor.getOutputFormat().equalsIgnoreCase("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat")
-            && !hasDeleteOrAbortedDirectories(directory);
-  }
-
-  /**
-   * Scan a directory for delete deltas or aborted directories.
-   * @param directory the directory to be scanned
-   * @return true, if delete or aborted directory found
-   */
-  private boolean hasDeleteOrAbortedDirectories(AcidDirectory directory) {
-    if (!directory.getCurrentDirectories().isEmpty()) {
-      return directory.getCurrentDirectories().stream()
-              .anyMatch(AcidUtils.ParsedDeltaLight::isDeleteDelta) || !directory.getAbortedDirectories().isEmpty();
+    boolean mergeEnabled = HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_MERGE_COMPACTION_ENABLED);
+    boolean orcOutput = storageDescriptor.getOutputFormat()
+        .equalsIgnoreCase("org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat");
+    boolean hasCurrentDirectories = !directory.getCurrentDirectories().isEmpty();
+    boolean hasDeleteDelta = directory.getCurrentDirectories().stream()
+        .anyMatch(AcidUtils.ParsedDeltaLight::isDeleteDelta);
+    boolean hasAbortedDirectories = !directory.getAbortedDirectories().isEmpty();
+    boolean eligible = mergeEnabled && orcOutput && hasCurrentDirectories
+        && !hasDeleteDelta && !hasAbortedDirectories;
+    if (!eligible) {
+      LOG.error("xxxxx Merge compaction is ineligible: mergeEnabled={}, outputFormat={}, "
+              + "hasCurrentDirectories={}, hasDeleteDelta={}, hasAbortedDirectories={}",
+          mergeEnabled, storageDescriptor.getOutputFormat(), hasCurrentDirectories, hasDeleteDelta,
+          hasAbortedDirectories);
     }
-    return true;
+    return eligible;
   }
 
   /**
