@@ -114,15 +114,14 @@ public class TestParseUtilsStagingDir {
   }
 
   /**
-   * Test that no staging directory is created for default behavior where the
-   * directory location is on the local file system.
+   * Test that no staging directory is created for default behavior.
    */
   @Test
   public void testGetStagingDir() throws Exception {
     Context ctx = new Context(conf);
     QB qb = new QB("", "", false);
     Path path = SemanticAnalyzer.getStagingDirectoryPathname(qb, conf, ctx);
-    FileSystem fs = FileSystem.getLocal(conf);
+    FileSystem fs = path.getFileSystem(conf);
     Assert.assertFalse(fs.exists(path.getParent()));
   }
 
