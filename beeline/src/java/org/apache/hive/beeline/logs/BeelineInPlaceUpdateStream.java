@@ -43,11 +43,15 @@ public class BeelineInPlaceUpdateStream implements InPlaceUpdateStream {
         for example, DDL statements
       */
       notifier.progressBarCompleted();
-    } else if (notifier.isOperationLogUpdatedAtLeastOnce()) {
+    } else if (notifier.isOperationLogUpdatedAtLeastOnce()
+        || response.getStatus() == TJobExecutionStatus.COMPLETE) {
       /*
         try to render in place update progress bar only if the operations logs is update at least once
         as this will hopefully allow printing the metadata information like query id, application id
-        etc. have to remove these notifiers when the operation logs get merged into GetOperationStatus
+        etc. Operation logs and progress updates are intentionally delivered independently, so a
+        completed response must still be rendered: for short queries it can be the only progress
+        response and can arrive before the log thread has displayed its first operation log.
+        Have to remove these notifiers when the operation logs get merged into GetOperationStatus.
       */
       inPlaceUpdate.render(new ProgressMonitorWrapper(response));
     }
