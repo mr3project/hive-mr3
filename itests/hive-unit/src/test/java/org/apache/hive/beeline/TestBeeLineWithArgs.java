@@ -791,8 +791,9 @@ import org.junit.Test;
         "set hive.support.concurrency = false;\n"
             + "set hive.server2.logging.operation.level=execution;\n"
             + "select count(*) from " + tableName + ";\n";
-    // Check for part of log message as well as part of progress information
-    final String EXPECTED_PATTERN = "ELAPSED TIME";
+    // MR3 reports query progress through its execution log and summaries rather than the
+    // Tez in-place progress bar. Verify the terminal MR3 status and the ordering of log output.
+    final String EXPECTED_PATTERN = "Status: Succeeded";
     final String UNEXPECTED_PATTERN = "(?=Reducer 2\\:).*(?=Map 1\\:)";
     testScriptFile(SCRIPT_TEXT, getBaseArgs(miniHS2.getBaseJdbcURL()), OutStream.ERR,
         Arrays.asList(
@@ -844,8 +845,10 @@ import org.junit.Test;
     final String SCRIPT_TEXT =
         "set hive.support.concurrency = false;\nset hive.server2.in.place.progress=false;\n" +
             "select count(*) from " + tableName + ";\n";
-    // Check for part of log message as well as part of progress information
-    final String EXPECTED_PATTERN = "(?=Reducer 2\\:).*(?=Map 1\\:)";
+    // With the progress bar disabled, MR3 prints per-vertex task timing information.
+    final String EXPECTED_PATTERN =
+        "Map 1\\s+\\d+ tasks?\\s+\\d+ milliseconds.*"
+            + "Reducer 2\\s+\\d+ tasks?\\s+\\d+ milliseconds";
     testScriptFile(SCRIPT_TEXT, getBaseArgs(miniHS2.getBaseJdbcURL()), OutStream.ERR,
         Arrays.asList(
             new Tuple<>(EXPECTED_PATTERN, true),
