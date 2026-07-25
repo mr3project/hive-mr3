@@ -188,11 +188,13 @@ public class TestAcidOnTez {
   }
 
   @Test
+  @Ignore("MapReduce-specific test is disabled while using MR3")
   public void testMergeJoinOnMR() throws Exception {
     testJoin("mr", "MergeJoin");
   }
 
   @Test
+  @Ignore("MapReduce-specific test is disabled while using MR3")
   public void testMapJoinOnMR() throws Exception {
     testJoin("mr", "MapJoin");
   }
