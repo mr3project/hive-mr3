@@ -81,8 +81,8 @@ class TestCompactorBase {
     }
 
     HiveConf hiveConf = new HiveConf(this.getClass());
-    // this test is mr specific, for Tez-based compaction look at CompactorOnTezTest
-    hiveConf.set(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "mr");
+    // Full ACID compaction is supported only with the Tez execution engine.
+    hiveConf.set(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "tez");
     hiveConf.setVar(HiveConf.ConfVars.PRE_EXEC_HOOKS, "");
     hiveConf.setVar(HiveConf.ConfVars.POST_EXEC_HOOKS, "");
     hiveConf.setVar(HiveConf.ConfVars.METASTORE_WAREHOUSE, TEST_WAREHOUSE_DIR);

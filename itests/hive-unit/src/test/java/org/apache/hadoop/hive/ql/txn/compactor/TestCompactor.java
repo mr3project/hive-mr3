@@ -1704,7 +1704,8 @@ public class TestCompactor extends TestCompactorBase {
 
     FileStatus[] files = fs.listStatus(new Path(table.getSd().getLocation(), baseDir),
         FileUtils.HIDDEN_FILES_PATH_FILTER);
-    Assert.assertEquals(Lists.newArrayList(files).toString(), 64, files.length);
+    // Tez compaction creates files only for buckets that contain rows.
+    Assert.assertEquals(Lists.newArrayList(files).toString(), 2, files.length);
   }
 
   @Test
