@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.metastore.MetaStoreTestUtils;
 import org.apache.hadoop.hive.metastore.api.TableMeta;
 import org.apache.hadoop.hive.ql.DriverFactory;
 import org.apache.hadoop.hive.ql.IDriver;
+import org.apache.hadoop.hive.ql.metadata.HiveUtils;
 import org.apache.hadoop.hive.ql.security.authorization.DefaultHiveAuthorizationProvider;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.shims.Utils;
@@ -84,28 +85,28 @@ public class TestMetastoreClientSideAuthorizationProvider {
     }
 
     private void allowCreateDatabase(String userName) throws Exception {
-        driver.run("grant create to user " + userName);
+        driver.run("grant create to user " + HiveUtils.unparseIdentifier(userName));
     }
 
     private void allowSelect(String userName) throws Exception {
-        driver.run("grant select to user " + userName);
+        driver.run("grant select to user " + HiveUtils.unparseIdentifier(userName));
     }
 
     private void revokeSelect(String userName) throws Exception {
-        driver.run("revoke select from user " + userName);
+        driver.run("revoke select from user " + HiveUtils.unparseIdentifier(userName));
     }
 
     protected void allowCreateInDb(String dbName, String userName) throws Exception {
-        driver.run("grant create on database "+ dbName +" to user " + userName);
+        driver.run("grant create on database "+ dbName +" to user " + HiveUtils.unparseIdentifier(userName));
     }
 
     private void allowSelectInDb(String dbName, String userName) throws Exception {
-        driver.run("grant select on database " + dbName + " to user " + userName);
+        driver.run("grant select on database " + dbName + " to user " + HiveUtils.unparseIdentifier(userName));
     }
 
 
     private void disallowSelectDatabase(String dbName, String userName) throws Exception {
-        driver.run("revoke select on database " + dbName + " from user " + userName);
+        driver.run("revoke select on database " + dbName + " from user " + HiveUtils.unparseIdentifier(userName));
     }
 
     @Test

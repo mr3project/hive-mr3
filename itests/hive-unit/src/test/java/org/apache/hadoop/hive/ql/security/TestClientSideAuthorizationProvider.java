@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.ql.DriverFactory;
 import org.apache.hadoop.hive.ql.IDriver;
 import org.apache.hadoop.hive.ql.exec.tez.ObjectCache;
+import org.apache.hadoop.hive.ql.metadata.HiveUtils;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorException;
 import org.apache.hadoop.hive.ql.security.authorization.DefaultHiveAuthorizationProvider;
 import org.apache.hadoop.hive.ql.session.SessionState;
@@ -195,7 +196,7 @@ public class TestClientSideAuthorizationProvider {
 
   protected void allowCreateInTbl(String tableName, String userName, String location)
       throws Exception{
-    driver.run("grant create on table "+tableName+" to user "+userName);
+    driver.run("grant create on table "+tableName+" to user "+HiveUtils.unparseIdentifier(userName));
   }
 
   protected void disallowCreateInTbl(String tableName, String userName, String location)
@@ -205,17 +206,17 @@ public class TestClientSideAuthorizationProvider {
 
   protected void allowCreateDatabase(String userName)
       throws Exception {
-    driver.run("grant create to user "+userName);
+    driver.run("grant create to user "+HiveUtils.unparseIdentifier(userName));
   }
 
   protected void disallowCreateDatabase(String userName)
       throws Exception {
-    driver.run("revoke create from user "+userName);
+    driver.run("revoke create from user "+HiveUtils.unparseIdentifier(userName));
   }
 
   protected void allowCreateInDb(String dbName, String userName, String location)
       throws Exception {
-    driver.run("grant create on database "+dbName+" to user "+userName);
+    driver.run("grant create on database "+dbName+" to user "+HiveUtils.unparseIdentifier(userName));
   }
 
   protected void disallowCreateInDb(String dbName, String userName, String location)
@@ -225,17 +226,17 @@ public class TestClientSideAuthorizationProvider {
 
   protected void allowDropOnTable(String tblName, String userName, String location)
       throws Exception {
-    driver.run("grant drop on table "+tblName+" to user "+userName);
+    driver.run("grant drop on table "+tblName+" to user "+HiveUtils.unparseIdentifier(userName));
   }
 
   protected void allowDropOnDb(String dbName, String userName, String location)
       throws Exception {
-    driver.run("grant drop on database "+dbName+" to user "+userName);
+    driver.run("grant drop on database "+dbName+" to user "+HiveUtils.unparseIdentifier(userName));
   }
 
   protected void allowSelectOnTable(String tblName, String userName, String location)
       throws Exception {
-    driver.run("grant select on table "+tblName+" to user "+userName);
+    driver.run("grant select on table "+tblName+" to user "+HiveUtils.unparseIdentifier(userName));
   }
 
   protected void assertNoPrivileges(CommandProcessorException ret){
