@@ -71,9 +71,11 @@ import org.apache.hadoop.hive.metastore.PersistenceManagerProvider;
 import org.apache.hadoop.hive.ql.QueryPlan;
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
 import org.apache.hadoop.hive.ql.exec.UDF;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.hive.ql.hooks.HookContext;
 import org.apache.hadoop.hive.ql.hooks.LineageLogger;
 import org.apache.hadoop.hive.ql.optimizer.lineage.LineageCtx;
+import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hive.common.util.ReflectionUtil;
 import org.apache.hive.jdbc.miniHS2.MiniHS2;
 import org.apache.hive.service.cli.HiveSQLException;
@@ -796,53 +798,59 @@ public class TestJdbcWithMiniHS2 {
     // Set a scratch dir permission
     String fsPermissionStr = "700";
     conf.set("hive.scratch.dir.permission", fsPermissionStr);
-    // Start an instance of HiveServer2 which uses miniMR
-    startMiniHS2(conf);
-    // 1. Test with doAs=false
-    String sessionConf="hive.server2.enable.doAs=false";
-    userName = System.getProperty("user.name");
-    Connection conn = getConnection(miniHS2.getJdbcURL(testDbName, sessionConf), userName, "password");
-    // FS
-    FileSystem fs = miniHS2.getLocalFS();
-    FsPermission expectedFSPermission = new FsPermission(HiveConf.getVar(conf,
-        HiveConf.ConfVars.SCRATCH_DIR_PERMISSION));
+    try {
+      // Start an instance of HiveServer2 which uses miniMR
+      startMiniHS2(conf);
+      // 1. Test with doAs=false
+      String sessionConf="hive.server2.enable.doAs=false";
+      userName = System.getProperty("user.name");
+      Connection conn = getConnection(miniHS2.getJdbcURL(testDbName, sessionConf), userName, "password");
+      // FS
+      FileSystem fs = miniHS2.getLocalFS();
+      FsPermission expectedFSPermission = new FsPermission(HiveConf.getVar(conf,
+          HiveConf.ConfVars.SCRATCH_DIR_PERMISSION));
+      // LocalFileSystem does not preserve the sticky bit from the shared MR3 permission.
+      FsPermission expectedDFSPermission = MR3SessionManagerImpl.isSharedMr3Session(conf)
+          ? new FsPermission((short) (SessionState.SESSION_SCRATCH_DIR_PERMISSION & 0777))
+          : expectedFSPermission;
 
-    // Verify scratch dir paths and permission
-    // HDFS scratch dir
-    scratchDirPath = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.SCRATCH_DIR) + "/" + userName);
-    verifyScratchDir(conf, fs, scratchDirPath, expectedFSPermission, userName, false);
+      // Verify scratch dir paths and permission
+      // HDFS scratch dir
+      scratchDirPath = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.SCRATCH_DIR) + "/" + userName);
+      verifyScratchDir(conf, fs, scratchDirPath, expectedDFSPermission, userName, false);
 
-    // Local scratch dir
-    scratchDirPath = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.LOCAL_SCRATCH_DIR));
-    verifyScratchDir(conf, fs, scratchDirPath, expectedFSPermission, userName, true);
+      // Local scratch dir
+      scratchDirPath = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.LOCAL_SCRATCH_DIR));
+      verifyScratchDir(conf, fs, scratchDirPath, expectedFSPermission, userName, true);
 
-    // Downloaded resources dir
-    scratchDirPath = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.DOWNLOADED_RESOURCES_DIR));
-    verifyScratchDir(conf, fs, scratchDirPath, expectedFSPermission, userName, true);
-    conn.close();
+      // Downloaded resources dir
+      scratchDirPath = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.DOWNLOADED_RESOURCES_DIR));
+      verifyScratchDir(conf, fs, scratchDirPath, expectedFSPermission, userName, true);
+      conn.close();
 
-    // 2. Test with doAs=true
-    sessionConf="hive.server2.enable.doAs=true";
-    // Test for user "neo"
-    userName = "neo";
-    conn = getConnection(miniHS2.getJdbcURL(testDbName, sessionConf), userName, "the-one");
+      // 2. Test with doAs=true
+      sessionConf="hive.server2.enable.doAs=true";
+      // Test for user "neo"
+      userName = "neo";
+      conn = getConnection(miniHS2.getJdbcURL(testDbName, sessionConf), userName, "the-one");
 
-    // Verify scratch dir paths and permission
-    // HDFS scratch dir
-    scratchDirPath = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.SCRATCH_DIR) + "/" + userName);
-    verifyScratchDir(conf, fs, scratchDirPath, expectedFSPermission, userName, false);
+      // Verify scratch dir paths and permission
+      // HDFS scratch dir
+      scratchDirPath = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.SCRATCH_DIR) + "/" + userName);
+      verifyScratchDir(conf, fs, scratchDirPath, expectedDFSPermission, userName, false);
 
-    // Local scratch dir
-    scratchDirPath = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.LOCAL_SCRATCH_DIR));
-    verifyScratchDir(conf, fs, scratchDirPath, expectedFSPermission, userName, true);
+      // Local scratch dir
+      scratchDirPath = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.LOCAL_SCRATCH_DIR));
+      verifyScratchDir(conf, fs, scratchDirPath, expectedFSPermission, userName, true);
 
-    // Downloaded resources dir
-    scratchDirPath = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.DOWNLOADED_RESOURCES_DIR));
-    verifyScratchDir(conf, fs, scratchDirPath, expectedFSPermission, userName, true);
-    conn.close();
-
-    // Restore original state
-    restoreMiniHS2AndConnections();
+      // Downloaded resources dir
+      scratchDirPath = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.DOWNLOADED_RESOURCES_DIR));
+      verifyScratchDir(conf, fs, scratchDirPath, expectedFSPermission, userName, true);
+      conn.close();
+    } finally {
+      // Restore the shared server even when a scratch directory assertion fails.
+      restoreMiniHS2AndConnections();
+    }
   }
 
 
