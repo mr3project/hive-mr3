@@ -69,22 +69,21 @@ public class TestServerSpecificConfig {
     assertFalse(HiveConf.isLoadHiveServer2Config());
     assertNull(conf.get("hive.dummyparam.test.server.specific.config.hiveserver2site"));
 
-    // check if hiveserver2 config gets loaded when HS2 is started
+    // check that starting HS2 keeps the configuration loaded from the shared site files
     new HiveServer2();
     conf = new HiveConf();
-    verifyHS2ConfParams(conf);
+    verifyHS2ConfParams(conf, "from.metastore-site.xml");
 
     assertEquals("from.metastore-site.xml",
         conf.get("hive.dummyparam.test.server.specific.config.metastoresite"));
   }
 
-  private void verifyHS2ConfParams(HiveConf conf) {
+  private void verifyHS2ConfParams(HiveConf conf, String expectedOverride) {
     assertTrue(HiveConf.isLoadHiveServer2Config());
-    assertEquals("from.hiveserver2-site.xml",
+    assertEquals(expectedOverride,
         conf.get("hive.dummyparam.test.server.specific.config.override"));
 
-    assertEquals("from.hiveserver2-site.xml",
-        conf.get("hive.dummyparam.test.server.specific.config.hiveserver2site"));
+    assertNull(conf.get("hive.dummyparam.test.server.specific.config.hiveserver2site"));
 
     assertEquals("from.hive-site.xml",
         conf.get("hive.dummyparam.test.server.specific.config.hivesite"));
@@ -153,10 +152,10 @@ public class TestServerSpecificConfig {
     assertEquals("from.hive-site.xml",
         conf.get("hive.dummyparam.test.server.specific.config.override"));
 
-    // get HS2 site.xml loaded
+    // enable HS2 mode; HS2 configuration remains in hive-site.xml
     new HiveServer2();
     conf = new HiveConf();
-    verifyHS2ConfParams(conf);
+    verifyHS2ConfParams(conf, "from.hive-site.xml");
     verifyMetastoreConfNotLoaded(conf);
   }
 
