@@ -306,6 +306,12 @@
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-util</artifactId>
     </dependency>
+    <dependency>
+      <groupId>com.datamonad.mr3</groupId>
+      <artifactId>mr3-tez</artifactId>
+      <version>${mr3.version}</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <profiles>
     <profile>
