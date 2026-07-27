@@ -26,7 +26,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.google.common.collect.Sets;
-import org.apache.calcite.adapter.druid.DruidQuery;
 import org.apache.calcite.adapter.jdbc.JdbcConvention;
 import org.apache.calcite.adapter.jdbc.JdbcRel;
 import org.apache.calcite.adapter.jdbc.JdbcRules;
@@ -44,6 +43,7 @@ import org.apache.calcite.rel.core.Project;
 import org.apache.calcite.rel.core.SetOp;
 import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.core.Spool;
+import org.apache.calcite.rel.core.TableSpool;
 import org.apache.calcite.rel.core.Window.RexWinAggCall;
 import org.apache.calcite.rel.rules.MultiJoin;
 import org.apache.calcite.rel.type.RelDataType;
@@ -263,9 +263,10 @@ public class PlanModifierForASTConv {
 
     @Override
     public RelNode visit(final RelNode rel) {
-      if (rel instanceof DruidQuery dq) {
-        aliases.add(((HiveTableScan) dq.getTableScan()).getTableAlias().toLowerCase());
-        return dq;
+      if (rel instanceof TableSpool spool) {
+        aliases.add(spool.getTable().getQualifiedName().getLast().toLowerCase());
+        // The CTE body has its own alias scope.
+        return new SelfJoinHandler().visitChildren(spool);
       }
       return super.visit(rel);
     }

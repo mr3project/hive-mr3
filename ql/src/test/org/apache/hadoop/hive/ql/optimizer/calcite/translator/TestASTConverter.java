@@ -18,21 +18,42 @@
 
 package org.apache.hadoop.hive.ql.optimizer.calcite.translator;
 
+import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
+import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.hep.HepPlanner;
+import org.apache.calcite.plan.hep.HepProgram;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.core.Spool;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
 import org.apache.calcite.rel.type.RelRecordType;
+import org.apache.calcite.rex.RexBuilder;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.type.ArraySqlType;
 import org.apache.calcite.sql.type.BasicSqlType;
 import org.apache.calcite.sql.type.MapSqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.optimizer.calcite.HiveTypeSystemImpl;
+import org.apache.hadoop.hive.ql.optimizer.calcite.RelOptHiveTable;
+import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveJoin;
+import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveProject;
+import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveTableScan;
+import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveTableSpool;
 import org.apache.hadoop.hive.ql.parse.ASTNode;
+import org.apache.hadoop.hive.ql.parse.QueryTables;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
@@ -42,6 +63,37 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
 
 class TestASTConverter {
+
+  @Test
+  void testDisambiguatesSelfJoinInsideMaterializedCte() throws Exception {
+    JavaTypeFactoryImpl typeFactory = new JavaTypeFactoryImpl();
+    RexBuilder rexBuilder = new RexBuilder(typeFactory);
+    HepPlanner planner = new HepPlanner(HepProgram.builder().build());
+    RelOptCluster cluster = RelOptCluster.create(planner, rexBuilder);
+    RelDataType rowType = typeFactory.builder().add("id", SqlTypeName.INTEGER).build();
+    RelOptHiveTable base = createTable(cluster, "base", rowType);
+    HiveTableScan left = new HiveTableScan(cluster, cluster.traitSet(), base, "base", "left", false, false);
+    HiveTableScan right = new HiveTableScan(cluster, cluster.traitSet(), base, "base", "right", false, false);
+    RexNode condition = rexBuilder.makeCall(SqlStdOperatorTable.EQUALS, rexBuilder.makeInputRef(left, 0),
+        rexBuilder.makeInputRef(rowType.getFieldList().getFirst().getType(), 1));
+    HiveJoin join = HiveJoin.getJoin(cluster, left, right, condition, JoinRelType.INNER);
+    HiveTableSpool cte = new HiveTableSpool(join, Spool.Type.LAZY, Spool.Type.LAZY,
+        createTable(cluster, "cte", join.getRowType()));
+    HiveProject select = HiveProject.create(cte, List.of(rexBuilder.makeInputRef(cte, 0)), List.of("id"));
+
+    RelNode modified = PlanModifierForASTConv.convertOpTree(select, List.of(new FieldSchema("id", "int", null)), false);
+
+    HiveTableSpool modifiedCte = Assertions.assertInstanceOf(HiveTableSpool.class, modified.getInput(0));
+    HiveProject cteBody = Assertions.assertInstanceOf(HiveProject.class, modifiedCte.getInput());
+    HiveJoin modifiedJoin = Assertions.assertInstanceOf(HiveJoin.class, cteBody.getInput());
+    Assertions.assertInstanceOf(HiveProject.class, modifiedJoin.getLeft());
+  }
+
+  private static RelOptHiveTable createTable(RelOptCluster cluster, String name, RelDataType rowType) {
+    return new RelOptHiveTable(null, cluster.getTypeFactory(), List.of("default", name), rowType,
+        new Table("default", name), List.of(), List.of(), List.of(), new HiveConf(), new QueryTables(),
+        new HashMap<>(), new HashMap<>(), new AtomicInteger());
+  }
 
   @Test
   void testConvertTypeWhenInputIsStruct() {

@@ -17,7 +17,6 @@
  */
 package org.apache.hadoop.hive.ql.optimizer.calcite.rules;
 
-import org.apache.calcite.adapter.druid.DruidQuery;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.rel.RelNode;
@@ -46,11 +45,6 @@ public class HiveFilterProjectTSTransposeRule extends RelOptRule {
       new HiveFilterProjectTSTransposeRule(
           Filter.class, HiveRelFactories.HIVE_FILTER_FACTORY, HiveProject.class,
           HiveRelFactories.HIVE_PROJECT_FACTORY, TableScan.class, ProjectMergeRule.DEFAULT_BLOAT);
-
-  public final static  HiveFilterProjectTSTransposeRule INSTANCE_DRUID =
-      new HiveFilterProjectTSTransposeRule(
-          Filter.class, HiveRelFactories.HIVE_FILTER_FACTORY, HiveProject.class,
-          HiveRelFactories.HIVE_PROJECT_FACTORY, DruidQuery.class, ProjectMergeRule.DEFAULT_BLOAT);
 
   private final RelFactories.FilterFactory  filterFactory;
   private final RelFactories.ProjectFactory projectFactory;

@@ -153,6 +153,7 @@ public class TestHiveConf {
         HiveConf.ConfVars.METASTORE_PWD.varname,
         HiveConf.ConfVars.HIVE_SERVER2_SSL_KEYSTORE_PASSWORD.varname,
         HiveConf.ConfVars.HIVE_SERVER2_WEBUI_SSL_KEYSTORE_PASSWORD.varname,
+        "hive.druid.metadata.password",
         "fs.s3.awsSecretAccessKey",
         "fs.s3n.awsSecretAccessKey",
         "dfs.adls.oauth2.credential",
