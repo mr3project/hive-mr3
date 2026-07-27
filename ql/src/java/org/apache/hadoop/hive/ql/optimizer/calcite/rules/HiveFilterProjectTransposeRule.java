@@ -86,6 +86,13 @@ public class HiveFilterProjectTransposeRule extends FilterProjectTransposeRule {
           new HiveFilterProjectTransposeRule(Filter.class, HiveProject.class,
                   HiveRelFactories.HIVE_BUILDER, false, false, ProjectMergeRule.DEFAULT_BLOAT);
 
+  public static final HiveFilterProjectTransposeRule SCAN = new HiveFilterProjectTransposeRule(
+      operand(Filter.class, operand(HiveProject.class, operand(HiveTableScan.class, none()))),
+      HiveRelFactories.HIVE_BUILDER,
+      false,
+      false,
+      ProjectMergeRule.DEFAULT_BLOAT);
+
   private final boolean onlyDeterministic;
 
   private final boolean pushThroughWindowing;

@@ -231,7 +231,7 @@ public class QTestUtil {
     setMetaStoreProperties();
 
     final String scriptsDir = getScriptsDir(conf);
-    this.miniClusters.setup(testArgs, conf, scriptsDir, logDir);
+    this.miniClusters.setup(testArgs, conf, scriptsDir);
 
     initConf();
 
