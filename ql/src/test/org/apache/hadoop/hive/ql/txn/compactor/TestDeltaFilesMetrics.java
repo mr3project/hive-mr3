@@ -94,9 +94,21 @@ public class TestDeltaFilesMetrics extends CompactorTest  {
   private static void verifyDeltaMetricsMatch(Map<String, Integer> expected,
       Map<String, Integer> actualMBeanMetric, Map<String, Integer> actualMapMetric) {
     assertThat("Actual mBean metrics " + actualMBeanMetric + " don't match expected: " + expected,
-        actualMapMetric, is(expected));
+        actualMBeanMetric, is(expected));
     assertThat("Actual map metrics " + actualMapMetric + " don't match expected: " + expected,
         actualMapMetric, is(expected));
+  }
+
+  private void runCleanerUntilObsoleteDeltaMetricsAreEmpty() throws Exception {
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+    do {
+      startCleaner();
+      metricService.run();
+      if (Metrics.getOrCreateMapMetrics(MetricsConstants.COMPACTION_NUM_OBSOLETE_DELTAS).get().isEmpty()) {
+        return;
+      }
+      Thread.sleep(100);
+    } while (System.nanoTime() < deadline);
   }
 
   @Override
@@ -198,9 +210,7 @@ public class TestDeltaFilesMetrics extends CompactorTest  {
         ImmutableMap.of(dbName + "." + tblName + Path.SEPARATOR + partName, 2),
         MetricsConstants.COMPACTION_NUM_OBSOLETE_DELTAS);
 
-    startCleaner();
-
-    metricService.run();
+    runCleanerUntilObsoleteDeltaMetricsAreEmpty();
     // 3 active deltas
     // 2 small deltas
     // 0 obsolete delta
@@ -230,9 +240,7 @@ public class TestDeltaFilesMetrics extends CompactorTest  {
         ImmutableMap.of(dbName + "." + tblName + Path.SEPARATOR + partName, 3),
         MetricsConstants.COMPACTION_NUM_OBSOLETE_DELTAS);
 
-    startCleaner();
-
-    metricService.run();
+    runCleanerUntilObsoleteDeltaMetricsAreEmpty();
     verifyDeltaMetricsMatch(
         ImmutableMap.of(dbName + "." + tblName + Path.SEPARATOR + partName, 1),
         MetricsConstants.COMPACTION_NUM_DELTAS);
@@ -329,10 +337,7 @@ public class TestDeltaFilesMetrics extends CompactorTest  {
             dbName + "." + tblName + Path.SEPARATOR + part3Name, 4),
         MetricsConstants.COMPACTION_NUM_OBSOLETE_DELTAS);
 
-    startCleaner();
-    startCleaner();
-
-    metricService.run();
+    runCleanerUntilObsoleteDeltaMetricsAreEmpty();
     verifyDeltaMetricsMatch(
         ImmutableMap.of(
           dbName + "." + tblName + Path.SEPARATOR + part1Name, 2,
@@ -403,9 +408,7 @@ public class TestDeltaFilesMetrics extends CompactorTest  {
         ImmutableMap.of(dbName + "." + tblName, 2),
         MetricsConstants.COMPACTION_NUM_OBSOLETE_DELTAS);
 
-    startCleaner();
-
-    metricService.run();
+    runCleanerUntilObsoleteDeltaMetricsAreEmpty();
     // 0 active delta
     // 0 small delta
     // 0 obsolete delta
