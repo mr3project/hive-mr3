@@ -56,6 +56,9 @@ import org.apache.hadoop.hive.metastore.txn.entities.CompactionInfo;
 import org.apache.hadoop.hive.metastore.txn.ThrowingTxnHandler;
 import org.apache.hadoop.hive.metastore.txn.TxnStore;
 import org.apache.hadoop.hive.metastore.txn.TxnUtils;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
+import org.apache.hadoop.hive.ql.session.SessionState;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -92,6 +95,19 @@ public class TestCompactionMetrics  extends CompactorTest {
     // re-initialize metrics
     Metrics.shutdown();
     Metrics.initialize(conf);
+  }
+
+  @After
+  public void tearDown() throws Exception {
+    // MR3CompactionHelper uses process-wide session singletons.  Leaving either
+    // one initialized makes a later test reuse the previous test's HiveConf and
+    // application, even though CompactorTest creates a fresh conf and database.
+    MR3SessionManagerImpl.getInstance().shutdown();
+    SessionState sessionState = SessionState.get();
+    if (sessionState != null) {
+      sessionState.close();
+    }
+    MetricsFactory.close();
   }
 
   @Test
