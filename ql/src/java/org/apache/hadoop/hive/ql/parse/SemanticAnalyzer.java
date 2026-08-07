@@ -92,7 +92,6 @@ import org.apache.hadoop.hive.common.metrics.common.MetricsConstant;
 import org.apache.hadoop.hive.conf.Constants;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.conf.HiveConf.ResultFileFormat;
 import org.apache.hadoop.hive.conf.HiveConf.StrictChecks;
 import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.TransactionalValidationListener;
@@ -2655,7 +2654,9 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
           } else {
             // This is the only place where isQuery is set to true; it defaults to false.
             qb.setIsQuery(true);
-            Path stagingPath = getStagingDirectoryPathname(qb, conf, ctx);
+            Path stagingPath = isHiveServer2Mr3Execution(conf)
+                ? ctx.getLocalTmpPath(false)
+                : getStagingDirectoryPathname(qb, conf, ctx);
             fname = stagingPath.toString();
             ctx.setResDir(stagingPath);
           }
@@ -7530,6 +7531,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     StructObjectInspector specificRowObjectInspector = null;
     int currentTableId = 0;
     boolean isLocal = false;
+    boolean useLocalMr3QueryResult = false;
     SortBucketRSCtx rsCtx = new SortBucketRSCtx();
     DynamicPartitionCtx dpCtx = null;
     LoadTableDesc ltd = null;
@@ -7929,7 +7931,26 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         isPartitioned = false;
       }
 
-      if (isLocal) {
+      // useLocalMr3QueryResult == true:
+      //   This is a non-cached HiveServer2 MR3 query result
+      //   which should be materialized in HiveServer2 local scratch.
+      useLocalMr3QueryResult =
+          qb.getIsQuery()       // must be a logical query result rather than a table/directory write
+          && tblDesc == null    // must not be a CTAS-style result carrying a create-table descriptor
+          && viewDesc == null   // must not be a materialized-view creation result
+          && !ctx.isResultCacheDir(destinationPath)   // must not be intended for persistent query-results-cache
+          && isHiveServer2Mr3Execution(conf);   // if true, local result materialization is supported
+      // Note:
+      // If ctx.isResultCacheDir(destinationPath) is true, SemanticAnalyzer has assigned this cache-miss execution
+      // a query-results-cache destination and prevents it from using HiveServer2 local scratch.
+      // If its final HiveServer2 MR3 FileSink is eligible, MR3Task will later use DAG-output mode
+      // and materializes the collected output at that cache destination.
+
+      if (useLocalMr3QueryResult) {
+        // Later MR3Task must enable DAG-output mode.
+        queryTmpdir = destinationPath;
+        ctx.setResDir(queryTmpdir);
+      } else if (isLocal) {
         assert !isMmTable;
         // for local directory - we always write to map-red intermediate
         // store and then copy to local fs
@@ -8227,6 +8248,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     } else {
       fileSinkDesc.setIsUsingBatchingSerDe(false);
     }
+    fileSinkDesc.setMr3QueryResultLocal(useLocalMr3QueryResult);
 
     Operator output = putOpInsertMap(OperatorFactory.getAndMakeChild(
         fileSinkDesc, fsRS, input), inputRR);
@@ -8369,6 +8391,14 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
   private boolean useBatchingSerializer(String serdeClassName) {
     return SessionState.get().isHiveServerQuery() &&
       hasSetBatchSerializer(serdeClassName);
+  }
+
+  private static boolean isHiveServer2Mr3Execution(HiveConf conf) {
+    SessionState sessionState = SessionState.get();
+    return sessionState != null
+        && sessionState.isHiveServerQuery()
+        && "tez".equalsIgnoreCase(
+            HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE));
   }
 
   private boolean hasSetBatchSerializer(String serdeClassName) {
