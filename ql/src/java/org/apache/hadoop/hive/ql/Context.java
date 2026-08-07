@@ -889,7 +889,11 @@ public class Context {
    * @return next available tmp path on local fs
    */
   public Path getLocalTmpPath() {
-    return new Path(getLocalScratchDir(true), LOCAL_PREFIX + nextPathId());
+    return getLocalTmpPath(true);
+  }
+
+  public Path getLocalTmpPath(boolean mkDir) {
+    return new Path(getLocalScratchDir(mkDir), LOCAL_PREFIX + nextPathId());
   }
 
   /**
