@@ -52,6 +52,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.common.metrics.common.Metrics;
 import org.apache.hadoop.hive.common.metrics.common.MetricsConstant;
 import org.apache.hadoop.hive.common.metrics.common.MetricsFactory;
@@ -524,7 +525,6 @@ public final class QueryResultsCache {
    */
   public boolean setEntryValid(CacheEntry cacheEntry, FetchWork fetchWork) {
     Path queryResultsPath = null;
-    Path cachedResultsPath = null;
 
     try {
       // if we are here file sink op should have created files to fetch from
@@ -533,6 +533,13 @@ public final class QueryResultsCache {
       boolean requiresCaching = true;
       queryResultsPath = fetchWork.getTblDir();
       FileSystem resultsFs = queryResultsPath.getFileSystem(conf);
+      Path qualifiedQueryResultsPath = resultsFs.makeQualified(queryResultsPath);
+      Path qualifiedCacheDirPath = resultsFs.makeQualified(cacheDirPath);
+      if (qualifiedQueryResultsPath.equals(qualifiedCacheDirPath)
+          || qualifiedQueryResultsPath.equals(resultsFs.makeQualified(zeroRowsPath))
+          || !FileUtils.isPathWithinSubtree(qualifiedQueryResultsPath, qualifiedCacheDirPath)) {
+        throw new IOException("Query result path is not a cache entry directory: " + qualifiedQueryResultsPath);
+      }
 
       long resultSize = 0;
       for(FileStatus fs:fetchWork.getFilesToFetch()) {
@@ -572,7 +579,7 @@ public final class QueryResultsCache {
         fetchWorkForCache.setCachedResult(true);
         fetchWorkForCache.setFilesToFetch(fetchWork.getFilesToFetch());
         cacheEntry.fetchWork = fetchWorkForCache;
-        //cacheEntry.cachedResultsPath = cachedResultsPath;
+        cacheEntry.cachedResultsPath = qualifiedQueryResultsPath;
         cacheEntry.size = resultSize;
         this.cacheSize += resultSize;
 
