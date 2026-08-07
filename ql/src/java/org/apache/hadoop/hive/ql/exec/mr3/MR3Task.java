@@ -663,14 +663,19 @@ public class MR3Task {
 
   private void enableQueryResultDagOutputModeIfNeeded(
       TezWork tezWork, BaseWork baseWork, boolean isFinal, JobConf vertexJobConf, Context context) {
-    if (!isFinal || SessionState.get() == null || !SessionState.get().isHiveServerQuery()) {
+    if (SessionState.get() == null || !SessionState.get().isHiveServerQuery()) {
       return;
     }
     for (Operator<?> op : baseWork.getAllOperators()) {
       if (op instanceof FileSinkOperator) {
         FileSinkOperator fsOp = (FileSinkOperator) op;
         FileSinkDesc desc = fsOp.getConf();
-        if (isEligibleQueryResultSink(desc)) {
+        boolean eligible = isFinal && isEligibleQueryResultSink(desc);
+        if (desc.isMr3QueryResultLocal() && !eligible) {
+          throw new IllegalStateException("HiveServer2-local MR3 query-result path was assigned to "
+              + "an ineligible FileSinkOperator " + fsOp.getIdentifier());
+        }
+        if (eligible) {
           String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_QUERY_ID);
           String resultId = queryId + "_" + baseWork.getName() + "_" + fsOp.getIdentifier();
           QueryResultMaterializationContext ctx = new QueryResultMaterializationContext(
@@ -745,12 +750,20 @@ public class MR3Task {
 
   private void materializeQueryResult(QueryResultMaterializationContext ctx, List<ByteString> outputs)
       throws IOException {
-    org.apache.hadoop.fs.FileSystem fs = ctx.resultDir.getFileSystem(conf);
-    if (fs.exists(ctx.resultDir)) {
-      fs.delete(ctx.resultDir, true);
+    if (ctx.fileSinkDesc.isMr3QueryResultLocal()
+        && !"file".equalsIgnoreCase(ctx.resultDir.toUri().getScheme())) {
+      throw new IOException("MR3 query-result DAG output must use HiveServer2 local scratch space: "
+          + ctx.resultDir);
     }
-    fs.mkdirs(ctx.resultDir);
-    Path resultFile = new Path(ctx.resultDir, "000000_0");
+    org.apache.hadoop.fs.FileSystem fs = ctx.fileSinkDesc.isMr3QueryResultLocal()
+        ? org.apache.hadoop.fs.FileSystem.getLocal(conf)
+        : ctx.resultDir.getFileSystem(conf);
+    Path resultDir = fs.makeQualified(ctx.resultDir);
+    if (fs.exists(resultDir)) {
+      fs.delete(resultDir, true);
+    }
+    fs.mkdirs(resultDir);
+    Path resultFile = new Path(resultDir, "000000_0");
     try {
       if (ctx.binaryFramed) {
         materializeBinaryQueryResult(ctx, resultFile, outputs);
@@ -762,7 +775,7 @@ public class MR3Task {
         }
       }
     } catch (IOException e) {
-      fs.delete(ctx.resultDir, true);
+      fs.delete(resultDir, true);
       throw e;
     }
   }
