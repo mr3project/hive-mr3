@@ -663,19 +663,14 @@ public class MR3Task {
 
   private void enableQueryResultDagOutputModeIfNeeded(
       TezWork tezWork, BaseWork baseWork, boolean isFinal, JobConf vertexJobConf, Context context) {
-    if (SessionState.get() == null || !SessionState.get().isHiveServerQuery()) {
+    if (!isFinal || SessionState.get() == null || !SessionState.get().isHiveServerQuery()) {
       return;
     }
     for (Operator<?> op : baseWork.getAllOperators()) {
       if (op instanceof FileSinkOperator) {
         FileSinkOperator fsOp = (FileSinkOperator) op;
         FileSinkDesc desc = fsOp.getConf();
-        boolean eligible = isFinal && isEligibleQueryResultSink(desc);
-        if (desc.isMr3QueryResultLocal() && !eligible) {
-          throw new IllegalStateException("HiveServer2-local MR3 query-result path was assigned to "
-              + "an ineligible FileSinkOperator " + fsOp.getIdentifier());
-        }
-        if (eligible) {
+        if (isEligibleQueryResultSink(desc)) {
           String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_QUERY_ID);
           String resultId = queryId + "_" + baseWork.getName() + "_" + fsOp.getIdentifier();
           QueryResultMaterializationContext ctx = new QueryResultMaterializationContext(
@@ -683,6 +678,9 @@ public class MR3Task {
               getRowSeparator(desc), desc.isUsingBatchingSerDe(), baseWork.getName(), fsOp.getIdentifier());
           enableQueryResultDagOutputMode(fsOp, ctx,
               HiveConf.getLongVar(vertexJobConf, HiveConf.ConfVars.HIVE_MR3_QUERY_RESULT_TASK_MAX_BYTES));
+        } else if (desc.isMr3QueryResultLocal()) {
+          throw new IllegalStateException("HiveServer2-local MR3 query-result path was assigned to "
+              + "an ineligible FileSinkOperator " + fsOp.getIdentifier());
         }
       }
     }
