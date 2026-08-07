@@ -2655,7 +2655,9 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
           } else {
             // This is the only place where isQuery is set to true; it defaults to false.
             qb.setIsQuery(true);
-            Path stagingPath = getStagingDirectoryPathname(qb, conf, ctx);
+            Path stagingPath = useLocalMr3QueryResultPath(conf)
+                ? ctx.getLocalTmpPath(false)
+                : getStagingDirectoryPathname(qb, conf, ctx);
             fname = stagingPath.toString();
             ctx.setResDir(stagingPath);
           }
@@ -7530,6 +7532,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     StructObjectInspector specificRowObjectInspector = null;
     int currentTableId = 0;
     boolean isLocal = false;
+    boolean useLocalMr3QueryResult = false;
     SortBucketRSCtx rsCtx = new SortBucketRSCtx();
     DynamicPartitionCtx dpCtx = null;
     LoadTableDesc ltd = null;
@@ -7929,7 +7932,17 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
         isPartitioned = false;
       }
 
-      if (isLocal) {
+      useLocalMr3QueryResult = qb.getIsQuery()
+          && tblDesc == null
+          && viewDesc == null
+          && !ctx.isResultCacheDir(destinationPath)
+          && useLocalMr3QueryResultPath(conf);
+      if (useLocalMr3QueryResult) {
+        // The MR3 workers emit this FileSink through DAG outputs.  Keep the artifact consumed by
+        // FetchTask in HiveServer2 local scratch space and let MR3Task create it after DAG success.
+        queryTmpdir = destinationPath;
+        ctx.setResDir(queryTmpdir);
+      } else if (isLocal) {
         assert !isMmTable;
         // for local directory - we always write to map-red intermediate
         // store and then copy to local fs
@@ -8227,6 +8240,7 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     } else {
       fileSinkDesc.setIsUsingBatchingSerDe(false);
     }
+    fileSinkDesc.setMr3QueryResultLocal(useLocalMr3QueryResult);
 
     Operator output = putOpInsertMap(OperatorFactory.getAndMakeChild(
         fileSinkDesc, fsRS, input), inputRR);
@@ -8369,6 +8383,14 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
   private boolean useBatchingSerializer(String serdeClassName) {
     return SessionState.get().isHiveServerQuery() &&
       hasSetBatchSerializer(serdeClassName);
+  }
+
+  private static boolean useLocalMr3QueryResultPath(HiveConf conf) {
+    SessionState sessionState = SessionState.get();
+    return sessionState != null
+        && sessionState.isHiveServerQuery()
+        && "tez".equalsIgnoreCase(
+            HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE));
   }
 
   private boolean hasSetBatchSerializer(String serdeClassName) {

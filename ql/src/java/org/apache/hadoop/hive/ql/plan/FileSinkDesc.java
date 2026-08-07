@@ -157,6 +157,13 @@ public class FileSinkDesc extends AbstractOperatorDesc implements IStatsGatherDe
    */
   private long queryResultMaxBytes = -1;
 
+  /**
+   * Whether the MR3 query-result artifact is assigned to HiveServer2 local scratch space.
+   * A FileSink carrying this flag must use the MR3 DAG-output transport; a worker must never
+   * open this path as an ordinary FileSink output path.
+   */
+  private boolean mr3QueryResultLocal = false;
+
   private boolean isInsertOverwrite = false;
 
   private boolean isDirectInsert = false;
@@ -243,6 +250,7 @@ public class FileSinkDesc extends AbstractOperatorDesc implements IStatsGatherDe
     ret.setEmitQueryResultToDag(emitQueryResultToDag);
     ret.setQueryResultId(queryResultId);
     ret.setQueryResultMaxBytes(queryResultMaxBytes);
+    ret.setMr3QueryResultLocal(mr3QueryResultLocal);
     return ret;
   }
 
@@ -304,6 +312,14 @@ public class FileSinkDesc extends AbstractOperatorDesc implements IStatsGatherDe
 
   public void setQueryResultMaxBytes(long queryResultMaxBytes) {
     this.queryResultMaxBytes = queryResultMaxBytes;
+  }
+
+  public boolean isMr3QueryResultLocal() {
+    return mr3QueryResultLocal;
+  }
+
+  public void setMr3QueryResultLocal(boolean mr3QueryResultLocal) {
+    this.mr3QueryResultLocal = mr3QueryResultLocal;
   }
 
   public void setIsDirectInsert(boolean isDirectInsert) {

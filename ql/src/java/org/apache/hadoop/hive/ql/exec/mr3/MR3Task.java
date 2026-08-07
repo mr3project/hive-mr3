@@ -678,6 +678,9 @@ public class MR3Task {
               getRowSeparator(desc), desc.isUsingBatchingSerDe(), baseWork.getName(), fsOp.getIdentifier());
           enableQueryResultDagOutputMode(fsOp, ctx,
               HiveConf.getLongVar(vertexJobConf, HiveConf.ConfVars.HIVE_MR3_QUERY_RESULT_TASK_MAX_BYTES));
+        } else if (desc.isMr3QueryResultLocal()) {
+          throw new IllegalStateException("HiveServer2-local MR3 query-result path was assigned to "
+              + "an ineligible FileSinkOperator " + fsOp.getIdentifier());
         }
       }
     }
@@ -745,12 +748,20 @@ public class MR3Task {
 
   private void materializeQueryResult(QueryResultMaterializationContext ctx, List<ByteString> outputs)
       throws IOException {
-    org.apache.hadoop.fs.FileSystem fs = ctx.resultDir.getFileSystem(conf);
-    if (fs.exists(ctx.resultDir)) {
-      fs.delete(ctx.resultDir, true);
+    if (ctx.fileSinkDesc.isMr3QueryResultLocal()
+        && !"file".equalsIgnoreCase(ctx.resultDir.toUri().getScheme())) {
+      throw new IOException("MR3 query-result DAG output must use HiveServer2 local scratch space: "
+          + ctx.resultDir);
     }
-    fs.mkdirs(ctx.resultDir);
-    Path resultFile = new Path(ctx.resultDir, "000000_0");
+    org.apache.hadoop.fs.FileSystem fs = ctx.fileSinkDesc.isMr3QueryResultLocal()
+        ? org.apache.hadoop.fs.FileSystem.getLocal(conf)
+        : ctx.resultDir.getFileSystem(conf);
+    Path resultDir = fs.makeQualified(ctx.resultDir);
+    if (fs.exists(resultDir)) {
+      fs.delete(resultDir, true);
+    }
+    fs.mkdirs(resultDir);
+    Path resultFile = new Path(resultDir, "000000_0");
     try {
       if (ctx.binaryFramed) {
         materializeBinaryQueryResult(ctx, resultFile, outputs);
@@ -762,7 +773,7 @@ public class MR3Task {
         }
       }
     } catch (IOException e) {
-      fs.delete(ctx.resultDir, true);
+      fs.delete(resultDir, true);
       throw e;
     }
   }
