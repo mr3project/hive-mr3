@@ -617,7 +617,7 @@ public class MR3Task {
     TezWork.VertexType vertexType = tezWork.getVertexType(baseWork);
     boolean isFinal = tezWork.getLeaves().contains(baseWork);
 
-    enableQueryResultDagOutputModeIfNeeded(tezWork, baseWork, isFinal, vertexJobConf, context);
+    enableQueryResultDagOutputModeIfNeeded(baseWork, isFinal, vertexJobConf);
 
     // update vertexJobConf before calling createVertex() which calls createBy
     int numChildren = tezWork.getChildren(baseWork).size();
@@ -662,7 +662,7 @@ public class MR3Task {
   }
 
   private void enableQueryResultDagOutputModeIfNeeded(
-      TezWork tezWork, BaseWork baseWork, boolean isFinal, JobConf vertexJobConf, Context context) {
+      BaseWork baseWork, boolean isFinal, JobConf vertexJobConf) {
     if (!isFinal || SessionState.get() == null || !SessionState.get().isHiveServerQuery()) {
       return;
     }
@@ -678,6 +678,9 @@ public class MR3Task {
               getRowSeparator(desc), desc.isUsingBatchingSerDe(), baseWork.getName(), fsOp.getIdentifier());
           enableQueryResultDagOutputMode(fsOp, ctx,
               HiveConf.getLongVar(vertexJobConf, HiveConf.ConfVars.HIVE_MR3_QUERY_RESULT_TASK_MAX_BYTES));
+        } else {
+          // if desc.isMr3QueryResultLocal() == true, we must enable DAG-output mode and thus cannot reach here
+          assert !desc.isMr3QueryResultLocal();
         }
       }
     }
@@ -701,6 +704,11 @@ public class MR3Task {
   private void enableQueryResultDagOutputMode(
       FileSinkOperator fsOp, QueryResultMaterializationContext ctx, long maxBytes) {
     FileSinkDesc desc = fsOp.getConf();
+
+    // emitQueryResultToDag = how the MR3 worker should transport result rows to HiveServer2
+    // mr3QueryResultLocal = where HiveServer2 should materialize the collected result artifact
+    // (emitQueryResultToDag, mr3QueryResultLocal) = (false, true) is an invalid state.
+
     if (desc.isEmitQueryResultToDag()) {
       if (!ctx.resultId.equals(desc.getQueryResultId())) {
         throw new IllegalStateException("Conflicting MR3 query-result id for FileSinkOperator. existing="
@@ -745,12 +753,22 @@ public class MR3Task {
 
   private void materializeQueryResult(QueryResultMaterializationContext ctx, List<ByteString> outputs)
       throws IOException {
-    org.apache.hadoop.fs.FileSystem fs = ctx.resultDir.getFileSystem(conf);
-    if (fs.exists(ctx.resultDir)) {
-      fs.delete(ctx.resultDir, true);
+    assert !ctx.fileSinkDesc.isMr3QueryResultLocal() || "file".equalsIgnoreCase(ctx.resultDir.toUri().getScheme());
+
+    // if isMr3QueryResultLocal() == true, store the result in the local file system
+    // if isMr3QueryResultLocal() == false, we have finished executing a cache-miss query and thus
+    // should use the query-results-cache destination directory.
+    org.apache.hadoop.fs.FileSystem fs = ctx.fileSinkDesc.isMr3QueryResultLocal()
+        ? org.apache.hadoop.fs.FileSystem.getLocal(conf)
+        : ctx.resultDir.getFileSystem(conf);
+    Path resultDir = fs.makeQualified(ctx.resultDir);
+
+    if (fs.exists(resultDir)) {
+      fs.delete(resultDir, true);
     }
-    fs.mkdirs(ctx.resultDir);
-    Path resultFile = new Path(ctx.resultDir, "000000_0");
+    fs.mkdirs(resultDir);
+
+    Path resultFile = new Path(resultDir, "000000_0");
     try {
       if (ctx.binaryFramed) {
         materializeBinaryQueryResult(ctx, resultFile, outputs);
@@ -762,7 +780,7 @@ public class MR3Task {
         }
       }
     } catch (IOException e) {
-      fs.delete(ctx.resultDir, true);
+      fs.delete(resultDir, true);
       throw e;
     }
   }
