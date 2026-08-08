@@ -25,6 +25,7 @@ import com.google.protobuf.ByteString;
 import java.io.DataInputStream;
 import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
@@ -779,6 +780,10 @@ public class MR3Task {
             output.writeTo(out);
           }
         }
+      }
+      Set<FileStatus> filesToFetch = ctx.fileSinkDesc.getFilesToFetch();
+      if (filesToFetch != null) {
+        filesToFetch.add(fs.getFileStatus(resultFile));
       }
     } catch (IOException e) {
       fs.delete(resultDir, true);
