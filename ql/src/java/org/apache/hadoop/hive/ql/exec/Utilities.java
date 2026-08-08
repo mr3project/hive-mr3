@@ -3492,11 +3492,7 @@ public final class Utilities {
    * so we don't want to depend on scratch dir and context.
    */
   public static List<Path> getInputPathsTez(JobConf job, MapWork work) throws Exception {
-    String scratchDir = job.get(DagUtils.TEZ_TMP_DIR_KEY);
-
-    List<Path> paths = getInputPaths(job, work, new Path(scratchDir), null, true);
-
-    return paths;
+    return getInputPaths(job, work, null, null, true);
   }
 
   /**

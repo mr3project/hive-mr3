@@ -174,7 +174,6 @@ import org.apache.tez.runtime.library.cartesianproduct.CartesianProductVertexMan
  */
 public class DagUtils {
 
-  public static final String TEZ_TMP_DIR_KEY = "_hive_tez_tmp_dir";
   private static final Logger LOG = LoggerFactory.getLogger(DagUtils.class.getName());
   private static final String TEZ_DIR = "_tez_scratch_dir";
   private static final DagUtils instance = new DagUtils(DagUtils::defaultCredentialSuppliers);
@@ -400,7 +399,6 @@ public class DagUtils {
       inpFormat = CombineHiveInputFormat.class.getName();
     }
 
-    conf.set(TEZ_TMP_DIR_KEY, context.getMRTmpPath().toUri().toString());
     conf.set("mapred.mapper.class", ExecMapper.class.getName());
     conf.set("mapred.input.format.class", inpFormat);
 
