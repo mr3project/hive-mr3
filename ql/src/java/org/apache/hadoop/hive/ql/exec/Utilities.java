@@ -3881,7 +3881,8 @@ public final class Utilities {
 
       if (op instanceof FileSinkOperator) {
         FileSinkDesc fdesc = ((FileSinkOperator) op).getConf();
-        if (fdesc.isMmTable() || fdesc.isDirectInsert()) {
+        if (fdesc.isEmitQueryResultToDag() || fdesc.isMmTable() || fdesc.isDirectInsert()) {
+          // DAG-output sinks do not create task-side files.
           // No need to create for MM tables, or ACID insert
           continue;
         }
