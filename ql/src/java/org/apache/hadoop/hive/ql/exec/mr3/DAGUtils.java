@@ -31,7 +31,6 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.MapJoinOperator;
@@ -698,14 +697,14 @@ public class DAGUtils {
    * @param work BaseWork will be used to populate the configuration object.
    * @return JobConf new configuration object
    */
-  public JobConf initializeVertexConf(JobConf jobConf, Context context, BaseWork work) {
+  public JobConf initializeVertexConf(JobConf jobConf, BaseWork work) {
     // simply dispatch the call to the right method for the actual (sub-) type of BaseWork.
     if (work instanceof MapWork) {
-      return initializeMapVertexConf(jobConf, context, (MapWork)work);
+      return initializeMapVertexConf(jobConf, (MapWork)work);
     } else if (work instanceof ReduceWork) {
-      return initializeReduceVertexConf(jobConf, context, (ReduceWork)work);
+      return initializeReduceVertexConf(jobConf, (ReduceWork)work);
     } else if (work instanceof MergeJoinWork) {
-      return initializeMergeJoinVertexConf(jobConf, context, (MergeJoinWork) work);
+      return initializeMergeJoinVertexConf(jobConf, (MergeJoinWork) work);
     } else if (work instanceof MapReduceMapWork) {
       return initializeMapReduceMapVertexConf(jobConf, (MapReduceMapWork) work);
     } else {
@@ -718,18 +717,18 @@ public class DAGUtils {
     return work.configureVertexConf(jobConf);   // ignore jobConf and return work.jobConf
   }
 
-  private JobConf initializeMergeJoinVertexConf(JobConf jobConf, Context context, MergeJoinWork work) {
+  private JobConf initializeMergeJoinVertexConf(JobConf jobConf, MergeJoinWork work) {
     if (work.getMainWork() instanceof MapWork) {
-      return initializeMapVertexConf(jobConf, context, (MapWork) (work.getMainWork()));
+      return initializeMapVertexConf(jobConf, (MapWork) (work.getMainWork()));
     } else {
-      return initializeReduceVertexConf(jobConf, context, (ReduceWork) (work.getMainWork()));
+      return initializeReduceVertexConf(jobConf, (ReduceWork) (work.getMainWork()));
     }
   }
 
   /*
    * Helper function to create JobConf for specific ReduceWork.
    */
-  private JobConf initializeReduceVertexConf(JobConf baseConf, Context context, ReduceWork reduceWork) {
+  private JobConf initializeReduceVertexConf(JobConf baseConf, ReduceWork reduceWork) {
     JobConf jobConf = new JobConf(baseConf);
 
     jobConf.set(Operator.CONTEXT_NAME_KEY, reduceWork.getName());
@@ -743,7 +742,7 @@ public class DAGUtils {
    * Creates the configuration object necessary to run a specific vertex from
    * map work. This includes input formats, input processor, etc.
    */
-  private JobConf initializeMapVertexConf(JobConf baseConf, Context context, MapWork mapWork) {
+  private JobConf initializeMapVertexConf(JobConf baseConf, MapWork mapWork) {
     JobConf jobConf = new JobConf(baseConf);
 
     jobConf.set(Operator.CONTEXT_NAME_KEY, mapWork.getName());
@@ -781,7 +780,6 @@ public class DAGUtils {
       inpFormat = CombineHiveInputFormat.class.getName();
     }
 
-    jobConf.set(DagUtils.TEZ_TMP_DIR_KEY, context.getMRTmpPath().toUri().toString());
     jobConf.set(Utilities.MAPRED_MAPPER_CLASS, ExecMapper.class.getName());
     jobConf.set("mapred.input.format.class", inpFormat);
 

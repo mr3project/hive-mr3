@@ -100,6 +100,17 @@ public class TestUtilities {
   private static final int NUM_BUCKETS = 3;
 
   @Test
+  public void testGetInputPathsTezDoesNotRequireScratchDirectory() throws Exception {
+    JobConf jobConf = new JobConf();
+    MapWork mapWork = new MapWork();
+    List<Path> inputPaths = Lists.newArrayList(new Path("file:///input"));
+    mapWork.setUseInputPathsDirectly(true);
+    mapWork.setInputPaths(inputPaths);
+
+    assertEquals(inputPaths, Utilities.getInputPathsTez(jobConf, mapWork));
+  }
+
+  @Test
   public void testGetFileExtension() {
     JobConf jc = new JobConf();
     assertEquals("No extension for uncompressed unknown format", "",

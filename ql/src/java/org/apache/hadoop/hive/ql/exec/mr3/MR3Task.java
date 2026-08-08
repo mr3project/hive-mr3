@@ -517,7 +517,7 @@ public class MR3Task {
         buildVertexGroupEdges(dag, tezWork, (UnionWork) w, workToVertex, workToConf);
       } else {
         buildRegularVertexEdge(
-            jobConf, dag, tezWork, w, workToVertex, workToConf, mr3ScratchDir, context, isSubmissionRetry);
+            jobConf, dag, tezWork, w, workToVertex, workToConf, mr3ScratchDir, isSubmissionRetry);
       }
       perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_CREATE_VERTEX + w.getName());
     }
@@ -614,9 +614,8 @@ public class MR3Task {
       Map<BaseWork, Vertex> workToVertex,
       Map<BaseWork, JobConf> workToConf,
       Path mr3ScratchDir,
-      Context context,
       boolean isSubmissionRetry) throws Exception {
-    JobConf vertexJobConf = dagUtils.initializeVertexConf(jobConf, context, baseWork);
+    JobConf vertexJobConf = dagUtils.initializeVertexConf(jobConf, baseWork);
     checkOutputSpec(baseWork, vertexJobConf);
     TezWork.VertexType vertexType = tezWork.getVertexType(baseWork);
     boolean isFinal = tezWork.getLeaves().contains(baseWork);
