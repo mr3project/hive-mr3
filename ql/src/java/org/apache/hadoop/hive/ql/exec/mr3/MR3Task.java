@@ -209,7 +209,7 @@ public class MR3Task {
       // effectful: conf is updated
       JobConf jobConf = dagUtils.createConfiguration(conf);
 
-      DAG dag = setupSubmit(jobConf, tezWork, context, workToConf);
+      DAG dag = setupSubmit(jobConf, tezWork, context, workToConf, false);
 
       // 4. submit
       try {
@@ -238,8 +238,10 @@ public class MR3Task {
           if (mr3ScratchDir != null && mr3ScratchDirCreated) {
             dagUtils.cleanMr3Dir(mr3ScratchDir, conf);
           }
-          // 2. call again
-          DAG newDag = setupSubmit(jobConf, tezWork, context, workToConf);
+          // 2. call again. Do not reuse dag: the replacement session has its own scratch directory
+          // and AM-localization state. setupSubmit() recreates the LocalResources and vertex JobConfs
+          // after the previous session's MR3 scratch directory has been cleaned above.
+          DAG newDag = setupSubmit(jobConf, tezWork, context, workToConf, true);
           // mr3Session can be closed at any time, so the call may fail
           mr3JobRef = mr3Session.submit(
               newDag, amDagCommonLocalResources, conf, tezWork.getWorkMap(), context, isShutdown, perfLogger);
@@ -356,7 +358,7 @@ public class MR3Task {
   }
 
   private DAG setupSubmit(JobConf jobConf, TezWork tezWork, Context context,
-                          Map<BaseWork, JobConf> workToConf) throws Exception {
+                          Map<BaseWork, JobConf> workToConf, boolean isSubmissionRetry) throws Exception {
     mr3Session = getMr3Session(conf);
     // mr3Session can be closed at any time
     Path sessionScratchDir = mr3Session.getSessionScratchDir();
@@ -375,7 +377,8 @@ public class MR3Task {
     amDagCommonLocalResources = dagUtils.convertLocalResourceListToMap(confLocalResources);
 
     // 3. create DAG
-    DAG dag = buildDag(jobConf, tezWork, context, amDagCommonLocalResources, sessionScratchDir, workToConf);
+    DAG dag = buildDag(
+        jobConf, tezWork, context, amDagCommonLocalResources, sessionScratchDir, workToConf, isSubmissionRetry);
     console.printInfo("Finished building DAG, now submitting: " + tezWork.getName());
 
     if (this.isShutdown.get()) {
@@ -450,7 +453,7 @@ public class MR3Task {
   private DAG buildDag(
       JobConf jobConf, TezWork tezWork, Context context,
       Map<String, LocalResource> amDagCommonLocalResources, Path sessionScratchDir,
-      Map<BaseWork, JobConf> workToConf) throws Exception {
+      Map<BaseWork, JobConf> workToConf, boolean isSubmissionRetry) throws Exception {
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_BUILD_DAG);
     Map<BaseWork, Vertex> workToVertex = new HashMap<BaseWork, Vertex>();
 
@@ -514,7 +517,8 @@ public class MR3Task {
       if (w instanceof UnionWork) {
         buildVertexGroupEdges(dag, tezWork, (UnionWork) w, workToVertex, workToConf);
       } else {
-        buildRegularVertexEdge(jobConf, dag, tezWork, w, workToVertex, workToConf, mr3ScratchDir, context);
+        buildRegularVertexEdge(
+            jobConf, dag, tezWork, w, workToVertex, workToConf, mr3ScratchDir, context, isSubmissionRetry);
       }
       perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_CREATE_VERTEX + w.getName());
     }
@@ -611,13 +615,14 @@ public class MR3Task {
       Map<BaseWork, Vertex> workToVertex,
       Map<BaseWork, JobConf> workToConf,
       Path mr3ScratchDir,
-      Context context) throws Exception {
+      Context context,
+      boolean isSubmissionRetry) throws Exception {
     JobConf vertexJobConf = dagUtils.initializeVertexConf(jobConf, context, baseWork);
     checkOutputSpec(baseWork, vertexJobConf);
     TezWork.VertexType vertexType = tezWork.getVertexType(baseWork);
     boolean isFinal = tezWork.getLeaves().contains(baseWork);
 
-    enableQueryResultDagOutputModeIfNeeded(baseWork, isFinal, vertexJobConf);
+    enableQueryResultDagOutputModeIfNeeded(baseWork, isFinal, vertexJobConf, isSubmissionRetry);
 
     // update vertexJobConf before calling createVertex() which calls createBy
     int numChildren = tezWork.getChildren(baseWork).size();
@@ -662,7 +667,7 @@ public class MR3Task {
   }
 
   private void enableQueryResultDagOutputModeIfNeeded(
-      BaseWork baseWork, boolean isFinal, JobConf vertexJobConf) {
+      BaseWork baseWork, boolean isFinal, JobConf vertexJobConf, boolean isSubmissionRetry) {
     if (!isFinal || SessionState.get() == null || !SessionState.get().isHiveServerQuery()) {
       return;
     }
@@ -673,10 +678,9 @@ public class MR3Task {
         if (isEligibleQueryResultSink(desc)) {
           String queryId = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_QUERY_ID);
           String resultId = queryId + "_" + baseWork.getName() + "_" + fsOp.getIdentifier();
-          QueryResultMaterializationContext ctx = new QueryResultMaterializationContext(
-              resultId, fsOp, desc, desc.getDirName(), desc.getTableInfo(), desc.isUsingBatchingSerDe(),
-              getRowSeparator(desc), desc.isUsingBatchingSerDe(), baseWork.getName(), fsOp.getIdentifier());
+          QueryResultMaterializationContext ctx = new QueryResultMaterializationContext(resultId, desc);
           enableQueryResultDagOutputMode(fsOp, ctx,
+              isSubmissionRetry,
               HiveConf.getLongVar(vertexJobConf, HiveConf.ConfVars.HIVE_MR3_QUERY_RESULT_TASK_MAX_BYTES));
         } else {
           // if desc.isMr3QueryResultLocal() == true, we must enable DAG-output mode and thus cannot reach here
@@ -702,7 +706,7 @@ public class MR3Task {
   }
 
   private void enableQueryResultDagOutputMode(
-      FileSinkOperator fsOp, QueryResultMaterializationContext ctx, long maxBytes) {
+      FileSinkOperator fsOp, QueryResultMaterializationContext ctx, boolean isSubmissionRetry, long maxBytes) {
     FileSinkDesc desc = fsOp.getConf();
 
     // emitQueryResultToDag = how the MR3 worker should transport result rows to HiveServer2
@@ -710,13 +714,12 @@ public class MR3Task {
     // (emitQueryResultToDag, mr3QueryResultLocal) = (false, true) is an invalid state.
 
     if (desc.isEmitQueryResultToDag()) {
-      if (!ctx.resultId.equals(desc.getQueryResultId())) {
-        throw new IllegalStateException("Conflicting MR3 query-result id for FileSinkOperator. existing="
-            + desc.getQueryResultId() + ", new=" + ctx.resultId);
-      }
-      registerMaterializationContextIfAbsent(ctx);
+      assert isSubmissionRetry;
+      assert ctx.resultId.equals(desc.getQueryResultId());
+      assert queryResultMaterializationContexts.containsKey(ctx.resultId);
       return;
     }
+    assert !desc.isEmitQueryResultToDag();
     desc.setEmitQueryResultToDag(true);
     desc.setQueryResultId(ctx.resultId);
     desc.setQueryResultMaxBytes(maxBytes);
@@ -753,15 +756,16 @@ public class MR3Task {
 
   private void materializeQueryResult(QueryResultMaterializationContext ctx, List<ByteString> outputs)
       throws IOException {
-    assert !ctx.fileSinkDesc.isMr3QueryResultLocal() || "file".equalsIgnoreCase(ctx.resultDir.toUri().getScheme());
+    Path resultDir = ctx.fileSinkDesc.getDirName();
+    assert !ctx.fileSinkDesc.isMr3QueryResultLocal() || "file".equalsIgnoreCase(resultDir.toUri().getScheme());
 
     // if isMr3QueryResultLocal() == true, store the result in the local file system
     // if isMr3QueryResultLocal() == false, we have finished executing a cache-miss query and thus
     // should use the query-results-cache destination directory.
     org.apache.hadoop.fs.FileSystem fs = ctx.fileSinkDesc.isMr3QueryResultLocal()
         ? org.apache.hadoop.fs.FileSystem.getLocal(conf)
-        : ctx.resultDir.getFileSystem(conf);
-    Path resultDir = fs.makeQualified(ctx.resultDir);
+        : resultDir.getFileSystem(conf);
+    resultDir = fs.makeQualified(resultDir);
 
     if (fs.exists(resultDir)) {
       fs.delete(resultDir, true);
@@ -770,7 +774,7 @@ public class MR3Task {
 
     Path resultFile = new Path(resultDir, "000000_0");
     try {
-      if (ctx.binaryFramed) {
+      if (ctx.fileSinkDesc.isUsingBatchingSerDe()) {
         materializeBinaryQueryResult(ctx, resultFile, outputs);
       } else {
         try (org.apache.hadoop.fs.FSDataOutputStream out = fs.create(resultFile, true)) {
@@ -789,13 +793,14 @@ public class MR3Task {
   private void materializeBinaryQueryResult(
       QueryResultMaterializationContext ctx, Path resultFile, List<ByteString> outputs) throws IOException {
     JobConf jc = new JobConf(conf);
+    org.apache.hadoop.hive.ql.plan.TableDesc tableDesc = ctx.fileSinkDesc.getTableInfo();
     org.apache.hadoop.hive.ql.io.HiveOutputFormat outputFormat =
         org.apache.hadoop.util.ReflectionUtils.newInstance(
-            ctx.tableDesc.getOutputFileFormatClass().asSubclass(
+            tableDesc.getOutputFileFormatClass().asSubclass(
                 org.apache.hadoop.hive.ql.io.HiveOutputFormat.class), jc);
     FileSinkOperator.RecordWriter recordWriter = outputFormat.getHiveRecordWriter(
         jc, resultFile, org.apache.hadoop.io.BytesWritable.class, false,
-        ctx.tableDesc.getProperties(), null);
+        tableDesc.getProperties(), null);
     try {
       for (ByteString output : outputs) {
         try (DataInputStream in = new DataInputStream(output.newInput())) {
@@ -812,41 +817,13 @@ public class MR3Task {
     }
   }
 
-  private int getRowSeparator(FileSinkDesc desc) {
-    String rowSeparatorString = desc.getTableInfo().getProperties()
-        .getProperty(org.apache.hadoop.hive.serde.serdeConstants.LINE_DELIM, "\n");
-    try {
-      return Byte.parseByte(rowSeparatorString);
-    } catch (NumberFormatException e) {
-      return rowSeparatorString.charAt(0);
-    }
-  }
-
   private static final class QueryResultMaterializationContext {
     final String resultId;
-    final FileSinkOperator fileSinkOperator;
     final FileSinkDesc fileSinkDesc;
-    final Path resultDir;
-    final org.apache.hadoop.hive.ql.plan.TableDesc tableDesc;
-    final boolean usingBatchingSerDe;
-    final int rowSeparator;
-    final boolean binaryFramed;
-    final String workName;
-    final String operatorId;
 
-    QueryResultMaterializationContext(String resultId, FileSinkOperator fileSinkOperator,
-        FileSinkDesc fileSinkDesc, Path resultDir, org.apache.hadoop.hive.ql.plan.TableDesc tableDesc,
-        boolean usingBatchingSerDe, int rowSeparator, boolean binaryFramed, String workName, String operatorId) {
+    QueryResultMaterializationContext(String resultId, FileSinkDesc fileSinkDesc) {
       this.resultId = resultId;
-      this.fileSinkOperator = fileSinkOperator;
       this.fileSinkDesc = fileSinkDesc;
-      this.resultDir = resultDir;
-      this.tableDesc = tableDesc;
-      this.usingBatchingSerDe = usingBatchingSerDe;
-      this.rowSeparator = rowSeparator;
-      this.binaryFramed = binaryFramed;
-      this.workName = workName;
-      this.operatorId = operatorId;
     }
   }
 
