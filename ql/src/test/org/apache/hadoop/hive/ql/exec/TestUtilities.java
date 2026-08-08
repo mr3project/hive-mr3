@@ -58,6 +58,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hive.common.type.Timestamp;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConfForTest;
+import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.mr.ExecDriver;
 import org.apache.hadoop.hive.ql.exec.tez.TezTask;
@@ -108,6 +109,23 @@ public class TestUtilities {
     mapWork.setInputPaths(inputPaths);
 
     assertEquals(inputPaths, Utilities.getInputPathsTez(jobConf, mapWork));
+  }
+
+  @Test
+  public void testCreateTmpDirsSkipsDagOutputFileSink() throws Exception {
+    Configuration conf = new Configuration();
+    Path resultPath = new Path(temporaryFolder.newFolder().toURI().toString(), "result");
+    FileSinkDesc fileSinkDesc = new FileSinkDesc(resultPath, Utilities.defaultTd, false);
+    fileSinkDesc.setEmitQueryResultToDag(true);
+    FileSinkOperator fileSink = new FileSinkOperator(new CompilationOpContext());
+    fileSink.setConf(fileSinkDesc);
+    MapWork mapWork = new MapWork();
+    mapWork.addMapWork(new Path("file:///input"), "alias", fileSink, new PartitionDesc());
+
+    Utilities.createTmpDirs(conf, mapWork);
+
+    Path tempResultPath = Utilities.toTempPath(resultPath);
+    assertFalse(tempResultPath.getFileSystem(conf).exists(tempResultPath));
   }
 
   @Test

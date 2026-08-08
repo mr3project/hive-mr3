@@ -3881,8 +3881,9 @@ public final class Utilities {
 
       if (op instanceof FileSinkOperator) {
         FileSinkDesc fdesc = ((FileSinkOperator) op).getConf();
-        if (fdesc.isMmTable() || fdesc.isDirectInsert()) {
-          // No need to create for MM tables, or ACID insert
+        if (fdesc.isEmitQueryResultToDag() || fdesc.isMmTable() || fdesc.isDirectInsert()) {
+          // DAG-output sinks do not create task-side files. MM tables and ACID inserts use their
+          // transactional commit protocols instead of the ordinary FileSink temporary directory.
           continue;
         }
         Path tempDir = fdesc.getDirName();
