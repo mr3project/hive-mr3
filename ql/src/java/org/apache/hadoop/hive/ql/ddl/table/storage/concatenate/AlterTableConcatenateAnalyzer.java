@@ -176,7 +176,9 @@ public class AlterTableConcatenateAnalyzer extends AbstractAlterTableAnalyzer {
     addInputsOutputsAlterTable(tableName, partitionSpec, null, AlterTableType.MERGEFILES, false);
 
     TableDesc tableDesc = Utilities.getTableDesc(table);
-    Path queryTmpDir = ctx.getExternalTmpPath(newLocation);
+    Path queryTmpDir = HiveConf.getBoolVar(conf, ConfVars.HIVE_USE_SCRATCHDIR_FOR_STAGING)
+        ? ctx.getExternalTmpPath(newLocation)
+        : ctx.getTempDirForFinalJobPath(newLocation);
 
     Task<?> mergeTask =
         createMergeTask(tableName, table, partitionSpec, oldLocation, lbCtx, inputFormatClass, queryTmpDir);
