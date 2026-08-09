@@ -62,6 +62,7 @@ import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils.NullOutputCommitter;
 import org.apache.hadoop.hive.ql.io.HiveInputFormat;
 import org.apache.hadoop.hive.ql.io.HiveKey;
 import org.apache.hadoop.hive.ql.io.HiveOutputFormatImpl;
+import org.apache.hadoop.hive.ql.io.NullRowsInputFormat;
 import org.apache.hadoop.hive.ql.io.merge.MergeFileMapper;
 import org.apache.hadoop.hive.ql.io.merge.MergeFileOutputFormat;
 import org.apache.hadoop.hive.ql.io.merge.MergeFileWork;
@@ -776,8 +777,10 @@ public class DAGUtils {
     }
 
     if (mapWork.getDummyTableScan()) {
-      // hive input format doesn't handle the special condition of no paths + 1 split correctly.
-      inpFormat = CombineHiveInputFormat.class.getName();
+      // A dummy scan is an engine-level synthetic input. NullRowsInputFormat creates its
+      // DummyInputSplit directly from the logical MapWork path and performs no filesystem
+      // discovery, so this must not depend on the user-configured top-level input format.
+      inpFormat = NullRowsInputFormat.class.getName();
     }
 
     jobConf.set(Utilities.MAPRED_MAPPER_CLASS, ExecMapper.class.getName());

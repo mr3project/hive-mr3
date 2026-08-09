@@ -76,7 +76,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -305,7 +304,6 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
 import org.apache.hadoop.hive.shims.HadoopShims;
 import org.apache.hadoop.hive.shims.Utils;
-import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.OutputFormat;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
@@ -12547,10 +12545,15 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     opParseCtx.get(operator).setRowResolver(newRR);
   }
 
+  private static final Path DUMMY_TABLE_PATH = new Path("file:/__hive_dummy__");
+
   Path dummyPath;
   public Table getDummyTable() throws SemanticException {
     if (dummyPath == null) {
-      dummyPath = createDummyFile();
+      // NullRowsInputFormat produces a synthetic split and never reads this path.  Keep a
+      // path in the table metadata for the legacy MapWork path-to-partition mapping, but do
+      // not create a dummy file (and, in particular, do not create distributed MR scratch).
+      dummyPath = DUMMY_TABLE_PATH;
     }
 
     Table desc = new Table(DUMMY_DATABASE, DUMMY_TABLE);
@@ -12559,27 +12562,6 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
     desc.setInputFormatClass(NullRowsInputFormat.class);
     desc.setOutputFormatClass(HiveIgnoreKeyTextOutputFormat.class);
     return desc;
-  }
-
-  // add dummy data for not removed by CombineHiveInputFormat, etc.
-  private Path createDummyFile() throws SemanticException {
-    Path dummyPath = new Path(ctx.getMRScratchDir(), "dummy_path");
-    Path dummyFile = new Path(dummyPath, "dummy_file");
-    FSDataOutputStream fout = null;
-    try {
-      FileSystem fs = dummyFile.getFileSystem(conf);
-      if (fs.exists(dummyFile)) {
-        return dummyPath;
-      }
-      fout = fs.create(dummyFile);
-      fout.write(1);
-      fout.close();
-    } catch (IOException e) {
-      throw new SemanticException(e);
-    } finally {
-      IOUtils.closeStream(fout);
-    }
-    return dummyPath;
   }
 
   /**
