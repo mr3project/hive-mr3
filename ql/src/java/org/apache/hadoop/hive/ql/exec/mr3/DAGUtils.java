@@ -1449,11 +1449,11 @@ public class DAGUtils {
    * @return JobConf base configuration for job execution
    */
   public JobConf createConfiguration(HiveConf hiveConf) {
-    hiveConf.setBoolean("mapred.mapper.new-api", false);
-    // mapred.mapper.new-api can be overridden in vertexJobConf created in initializeVertexConf()
-    // e.g., for MapReduceMapWork created by MR3DistCp
-
     JobConf conf = TezConfigurationFactory.wrapWithJobConfWithoutSourceTracking(hiveConf);
+
+    // 0. mapred.mapper.new-api can be overridden in vertexJobConf created in initializeVertexConf()
+    // e.g., for MapReduceMapWork created by MR3DistCp
+    conf.setBoolean("mapred.mapper.new-api", false);
 
     // 1. remove config keys
 

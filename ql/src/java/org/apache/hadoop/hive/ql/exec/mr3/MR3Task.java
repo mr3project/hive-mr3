@@ -207,7 +207,6 @@ public class MR3Task {
       }
 
       // jobConf holds all the configurations for hadoop, tez, and hive, but not MR3
-      // effectful: conf is updated
       JobConf jobConf = dagUtils.createConfiguration(conf);
 
       DAG dag = setupSubmit(jobConf, tezWork, context, workToConf, false);
