@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3;
 
+import com.datamonad.mr3.api.LocalResourcePayload;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import org.apache.commons.io.FilenameUtils;
@@ -166,32 +167,6 @@ public class DAGUtils {
   private static final String MR3_DIR = "_mr3_scratch_dir";
   private static final int defaultAllInOneContainerMemoryMb = 1024;
   private static final int defaultAllInOneContainerVcores = 1;
-
-  public static final class LocalResourcePayload {
-    public static final int SHA256_LENGTH = 32;
-
-    private final ByteString contentDigest;
-    private final ByteString content;
-
-    public LocalResourcePayload(ByteString contentDigest, ByteString content) {
-      this.contentDigest = Preconditions.checkNotNull(contentDigest, "contentDigest");
-      this.content = Preconditions.checkNotNull(content, "content");
-      Preconditions.checkArgument(contentDigest.size() == SHA256_LENGTH,
-          "SHA-256 digest must contain exactly %s bytes", SHA256_LENGTH);
-    }
-
-    public ByteString getContentDigest() {
-      return contentDigest;
-    }
-
-    public ByteString getContent() {
-      return content;
-    }
-
-    public long getSize() {
-      return content.size();
-    }
-  }
 
   /**
    * Notifiers to synchronize resource localization across threads. If one thread is localizing
@@ -1158,13 +1133,13 @@ public class DAGUtils {
         content = ByteString.readFrom(input);
       }
       ByteString digest = sha256(content);
-      LocalResourcePayload payload = new LocalResourcePayload(digest, content);
+      LocalResourcePayload payload = new LocalResourcePayload(name, digest, content);
       LocalResource previousResource = resourcesByName.get(name);
       LocalResourcePayload previousPayload = contentsByName.get(name);
       if (previousResource != null || previousPayload != null) {
         Preconditions.checkArgument(previousResource != null && previousPayload != null,
             "Inconsistent local resource maps for %s", name);
-        Preconditions.checkArgument(previousPayload.getContentDigest().equals(digest),
+        Preconditions.checkArgument(previousPayload.digest().equals(digest),
             "Local resource name %s is already associated with different content", name);
         Preconditions.checkArgument(previousResource.getType() == type,
             "Local resource name %s is already associated with a different type", name);
@@ -1183,7 +1158,7 @@ public class DAGUtils {
       resource.setSize(status.getLen());
       resource.setVisibility(LocalResourceVisibility.PRIVATE);
       resource.setTimestamp(status.getModificationTime());
-      Preconditions.checkState(resource.getSize() == payload.getSize(),
+      Preconditions.checkState(resource.getSize() == payload.content().size(),
           "Resource size does not match content size for %s", name);
       resourcesByName.put(name, resource);
       contentsByName.put(name, payload);

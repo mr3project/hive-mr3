@@ -20,11 +20,11 @@ package org.apache.hadoop.hive.ql.exec.mr3;
 
 import com.datamonad.mr3.api.common.MR3Conf$;
 import com.datamonad.mr3.api.common.MR3ConfBuilder;
+import com.datamonad.mr3.api.LocalResourcePayload;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
-import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils.LocalResourcePayload;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRef;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRefImpl;
 import org.apache.hadoop.hive.ql.plan.BaseWork;

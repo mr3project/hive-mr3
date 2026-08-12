@@ -18,10 +18,11 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3;
 
-import com.google.common.base.Preconditions;
+import com.datamonad.mr3.api.LocalResourcePayload;
 import com.datamonad.mr3.api.client.DAGStatus;
 import com.datamonad.mr3.api.client.VertexStatus;
 import com.datamonad.mr3.api.common.MR3Exception;
+import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -39,7 +40,6 @@ import org.apache.hadoop.hive.ql.exec.mr3.dag.Edge;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.GroupInputEdge;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.Vertex;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.VertexGroup;
-import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils.LocalResourcePayload;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManager;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
@@ -480,8 +480,8 @@ public class MR3Task {
       for (String lrName : inputOutputLocalResources.keySet()) {
         if (amDagCommonLocalResources.containsKey(lrName)) {
           Preconditions.checkArgument(
-              inputOutputLocalResourcePayloads.get(lrName).getContentDigest().equals(
-                  amDagCommonLocalResourcePayloads.get(lrName).getContentDigest()),
+              inputOutputLocalResourcePayloads.get(lrName).digest().equals(
+                  amDagCommonLocalResourcePayloads.get(lrName).digest()),
               "Local resource name %s is associated with conflicting contents", lrName);
           LOG.info("Skipping LocalResource which is already included: {}", lrName);
           keysToRemove.add(lrName);

@@ -18,15 +18,15 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.dag;
 
-import com.google.common.base.Preconditions;
-import com.google.protobuf.ByteString;
+import com.datamonad.mr3.api.LocalResourcePayload;
 import com.datamonad.mr3.api.common.MR3Conf$;
 import com.datamonad.mr3.api.common.MR3ConfBuilder;
+import com.google.common.base.Preconditions;
+import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils;
-import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils.LocalResourcePayload;
 import org.apache.hadoop.hive.ql.exec.mr3.llap.LLAPDaemonProcessor;
 import org.apache.hadoop.hive.ql.exec.mr3.llap.LLAPDaemonVertexManagerPlugin;
 import org.apache.hadoop.mapred.JobConf;
@@ -143,7 +143,7 @@ public class DAG {
       LocalResourcePayload existing = contentsByName.get(name);
       LocalResourcePayload payload = contents.get(name);
       Preconditions.checkArgument(existing == null ||
-          existing.getContentDigest().equals(payload.getContentDigest()),
+          existing.digest().equals(payload.digest()),
           "Local resource name %s has conflicting content", name);
       localResourcesByName.putIfAbsent(name, localResources.get(name));
       contentsByName.putIfAbsent(name, payload);
@@ -223,7 +223,7 @@ public class DAG {
       DAGAPI.LocalResourceProto proto = ProtoConverters
           .convertToLocalResourceProto(entry.getKey(), entry.getValue())
           .toBuilder()
-          .setContentDigest(payload.getContentDigest())
+          .setContentDigest(payload.digest())
           .build();
       lrProtos.add(proto);
     }

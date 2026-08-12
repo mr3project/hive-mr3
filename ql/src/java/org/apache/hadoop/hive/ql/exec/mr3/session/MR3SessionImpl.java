@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.session;
 
+import com.datamonad.mr3.api.LocalResourcePayload;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
@@ -30,7 +31,6 @@ import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils;
 import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3Client;
-import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils.LocalResourcePayload;
 import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3Client.MR3ClientState;
 import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3ClientFactory;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
@@ -464,8 +464,8 @@ public class MR3SessionImpl implements MR3Session {
         amLocalResourcePayloads.put(entry.getKey(), localResourcePayloads.get(entry.getKey()));
         addtlLocalResources.put(entry.getKey(), entry.getValue());
       } else {
-        Preconditions.checkArgument(amLocalResourcePayloads.get(entry.getKey()).getContentDigest().equals(
-            localResourcePayloads.get(entry.getKey()).getContentDigest()),
+        Preconditions.checkArgument(amLocalResourcePayloads.get(entry.getKey()).digest().equals(
+            localResourcePayloads.get(entry.getKey()).digest()),
             "AM local resource name %s is already associated with different content", entry.getKey());
       }
     }
