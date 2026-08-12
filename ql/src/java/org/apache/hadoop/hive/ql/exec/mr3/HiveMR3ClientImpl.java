@@ -24,6 +24,7 @@ import com.google.protobuf.ByteString;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
+import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils.LocalResourcePayload;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRef;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRefImpl;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
@@ -107,13 +108,16 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
       final DAGAPI.DAGProto dagProto,
       final Credentials amCredentials,
       final Map<String, LocalResource> amLocalResources,
+      final Map<String, LocalResourcePayload> localResourcePayloads,
       final Map<String, BaseWork> workMap,
       final DAG dag,
       final Context ctx,
       AtomicBoolean isShutdown) throws Exception {
 
     scala.collection.immutable.Map addtlAmLrs = MR3Utils.toScalaMap(amLocalResources);
-    DAGClient dagClient = mr3Client.submitDag(addtlAmLrs, Option.apply(amCredentials), dagProto);
+    scala.collection.immutable.Map payloads = MR3Utils.toScalaMap(localResourcePayloads);
+    DAGClient dagClient = mr3Client.submitDag(
+        addtlAmLrs, Option.apply(amCredentials), dagProto, payloads);
     return new MR3JobRefImpl(hiveConf, dagClient, workMap, dag, ctx, isShutdown);
   }
 

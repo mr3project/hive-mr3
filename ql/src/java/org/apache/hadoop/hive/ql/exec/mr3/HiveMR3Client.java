@@ -22,6 +22,7 @@ import com.datamonad.mr3.api.common.MR3Exception;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
+import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils.LocalResourcePayload;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRef;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.security.Credentials;
@@ -53,6 +54,7 @@ public interface HiveMR3Client {
       DAGAPI.DAGProto dagProto,
       Credentials amCredentials,
       Map<String, LocalResource> amLocalResources,
+      Map<String, LocalResourcePayload> localResourcePayloads,
       Map<String, BaseWork> workMap,
       DAG dag,
       Context ctx,

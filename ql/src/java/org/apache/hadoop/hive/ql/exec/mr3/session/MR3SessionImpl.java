@@ -30,6 +30,7 @@ import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils;
 import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3Client;
+import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils.LocalResourcePayload;
 import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3Client.MR3ClientState;
 import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3ClientFactory;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
@@ -54,7 +55,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -95,6 +95,7 @@ public class MR3SessionImpl implements MR3Session {
   // updated in start(), close(), and submit()
   // via updateAmLocalResources()
   private Map<String, LocalResource> amLocalResources = new HashMap<String, LocalResource>();
+  private Map<String, LocalResourcePayload> amLocalResourcePayloads = new HashMap<>();
   // via updateAmCredentials()
   private Credentials amCredentials;
 
@@ -199,26 +200,8 @@ public class MR3SessionImpl implements MR3Session {
       dagUtils.addPathsToCredentials(additionalSessionCredentials, allPaths, hiveConf);
     }
 
-    // 2. read confLocalResources
-
-    // confLocalResource = specific to this MR3Session obtained from sessionConf
-    // localizeTempFilesFromConf() updates sessionConf by calling HiveConf.setVar(HIVEADDEDFILES/JARS/ARCHIVES)
-    List<LocalResource> confLocalResources = dagUtils.localizeTempFilesFromConf(sessionScratchDir, hiveConf);
-
-    // We do not add confLocalResources to additionalSessionLocalResources because
-    // dagUtils.localizeTempFilesFromConf() will be called each time a new DAG is submitted.
-
-    // 3. set initAmLocalResources
-
-    List<LocalResource> initAmLocalResources = new ArrayList<LocalResource>();
-    initAmLocalResources.addAll(confLocalResources);
-    Map<String, LocalResource> initAmLocalResourcesMap =
-        dagUtils.convertLocalResourceListToMap(initAmLocalResources);
-
-    // 4. update amLocalResource and create HiveMR3Client
-
-    updateAmLocalResources(initAmLocalResourcesMap);
-    updateAmCredentials(initAmLocalResourcesMap, hiveConf);
+    // Task configuration resources are installed with the first DAG submission so their
+    // content can be carried by SubmitDagRequestProto instead of session scratch storage.
 
     LOG.info("Creating HiveMR3Client (id: " + sessionId + ", scratch dir: " + sessionScratchDir + ")");
     hiveMr3Client = HiveMR3ClientFactory.createHiveMr3Client(
@@ -283,6 +266,7 @@ public class MR3SessionImpl implements MR3Session {
     hiveMr3Client = null;
 
     amLocalResources.clear();
+    amLocalResourcePayloads.clear();
 
     amCredentials = null;
 
@@ -341,6 +325,7 @@ public class MR3SessionImpl implements MR3Session {
   public MR3JobRef submit(
       DAG dag,
       Map<String, LocalResource> newAmLocalResources,
+      Map<String, LocalResourcePayload> newAmLocalResourcePayloads,
       Configuration mr3TaskConf,
       Map<String, BaseWork> workMap,
       Context ctx,
@@ -349,13 +334,18 @@ public class MR3SessionImpl implements MR3Session {
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_SUBMIT_DAG);
 
     HiveMR3Client currentHiveMr3Client;
-    Map<String, LocalResource> addtlAmLocalResources = null;
+    Map<String, LocalResource> addtlAmLocalResources = new HashMap<>();
+    Map<String, LocalResourcePayload> addtlLocalResourcePayloads = new HashMap<>();
     Credentials addtlAmCredentials = null;
     synchronized (this) {
       currentHiveMr3Client = hiveMr3Client;
       if (currentHiveMr3Client != null) {
         // close() has not been called
-        addtlAmLocalResources = updateAmLocalResources(newAmLocalResources);
+        addtlAmLocalResources = updateAmLocalResources(
+            newAmLocalResources, newAmLocalResourcePayloads);
+        for (String name : addtlAmLocalResources.keySet()) {
+          addtlLocalResourcePayloads.put(name, newAmLocalResourcePayloads.get(name));
+        }
         addtlAmCredentials = updateAmCredentials(newAmLocalResources, mr3TaskConf);
       }
     }
@@ -379,10 +369,14 @@ public class MR3SessionImpl implements MR3Session {
     }
     DAGAPI.DAGProto dagProto = dag.createDagProto(mr3TaskConf, dagConf, submitter, alreadyExecutedAnyDag);
 
+    Map<String, LocalResourcePayload> submitPayloads = dag.getSubmitLocalResourcePayloads();
+    submitPayloads.putAll(addtlLocalResourcePayloads);
+
     LOG.info("Submitting DAG (submitter={})", submitter);
     // close() may have been called, in which case currentHiveMr3Client.submitDag() raises Exception
     MR3JobRef mr3JobRef = currentHiveMr3Client.submitDag(
-        dagProto, addtlAmCredentials, addtlAmLocalResources, workMap, dag, ctx, isShutdown);
+        dagProto, addtlAmCredentials, addtlAmLocalResources, submitPayloads,
+        workMap, dag, ctx, isShutdown);
 
     perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_SUBMIT_DAG);
     return mr3JobRef;
@@ -458,13 +452,21 @@ public class MR3SessionImpl implements MR3Session {
    * @return Map of newly added AM LocalResources
    */
   private Map<String, LocalResource> updateAmLocalResources(
-      Map<String, LocalResource> localResources ) {
+      Map<String, LocalResource> localResources,
+      Map<String, LocalResourcePayload> localResourcePayloads) {
+    Preconditions.checkArgument(localResources.keySet().equals(localResourcePayloads.keySet()),
+        "AM local resource and payload names must match");
     Map<String, LocalResource> addtlLocalResources = new HashMap<String, LocalResource>();
 
     for (Map.Entry<String, LocalResource> entry : localResources.entrySet()) {
       if (!amLocalResources.containsKey(entry.getKey())) {
         amLocalResources.put(entry.getKey(), entry.getValue());
+        amLocalResourcePayloads.put(entry.getKey(), localResourcePayloads.get(entry.getKey()));
         addtlLocalResources.put(entry.getKey(), entry.getValue());
+      } else {
+        Preconditions.checkArgument(amLocalResourcePayloads.get(entry.getKey()).getContentDigest().equals(
+            localResourcePayloads.get(entry.getKey()).getContentDigest()),
+            "AM local resource name %s is already associated with different content", entry.getKey());
       }
     }
 

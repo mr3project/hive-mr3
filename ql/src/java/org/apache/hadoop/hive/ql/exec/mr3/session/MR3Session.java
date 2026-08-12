@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
+import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils.LocalResourcePayload;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRef;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -58,6 +59,7 @@ public interface MR3Session {
   MR3JobRef submit(
       DAG dag,
       Map<String, LocalResource> amLocalResources,
+      Map<String, LocalResourcePayload> amLocalResourcePayloads,
       Configuration mr3TaskConf,
       Map<String, BaseWork> workMap,
       Context ctx,
