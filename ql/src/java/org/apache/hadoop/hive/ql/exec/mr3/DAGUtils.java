@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3;
 
+import com.datamonad.mr3.api.LocalResourcePayload;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import org.apache.commons.io.FilenameUtils;
@@ -141,6 +142,8 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -1089,6 +1092,85 @@ public class DAGUtils {
       localResourceMap.put(getBaseName(lr), lr);
     }
     return localResourceMap;
+  }
+
+  public Map<String, LocalResource> createInlineLocalResourcesFromConf(
+      Configuration conf, Map<String, LocalResourcePayload> contentsByName) throws IOException {
+    Map<String, LocalResource> resourcesByName = new HashMap<>();
+    addInlineResources(conf, resourcesByName, contentsByName, LocalResourceType.FILE,
+        getTempFilesFromConf(conf));
+    addInlineResources(conf, resourcesByName, contentsByName, LocalResourceType.ARCHIVE,
+        getTempArchivesFromConf(conf));
+    return resourcesByName;
+  }
+
+  public Map<String, LocalResource> createInlineLocalResources(
+      Configuration conf, String[] files, Map<String, LocalResourcePayload> contentsByName)
+      throws IOException {
+    Map<String, LocalResource> resourcesByName = new HashMap<>();
+    addInlineResources(conf, resourcesByName, contentsByName, LocalResourceType.FILE, files);
+    return resourcesByName;
+  }
+
+  private void addInlineResources(Configuration conf,
+      Map<String, LocalResource> resourcesByName,
+      Map<String, LocalResourcePayload> contentsByName,
+      LocalResourceType type, String[] files) throws IOException {
+    if (files == null) {
+      return;
+    }
+    for (String file : files) {
+      if (!StringUtils.isNotBlank(file)) {
+        continue;
+      }
+      Path source = new Path(file);
+      String name = getResourceBaseName(source);
+      FileSystem sourceFs = source.toUri().getScheme() == null
+          ? FileSystem.getLocal(conf) : source.getFileSystem(conf);
+      FileStatus status = sourceFs.getFileStatus(source);
+      ByteString content;
+      try (java.io.InputStream input = sourceFs.open(source)) {
+        content = ByteString.readFrom(input);
+      }
+      ByteString digest = sha256(content);
+      LocalResourcePayload payload = new LocalResourcePayload(name, digest, content);
+      LocalResource previousResource = resourcesByName.get(name);
+      LocalResourcePayload previousPayload = contentsByName.get(name);
+      if (previousResource != null || previousPayload != null) {
+        Preconditions.checkArgument(previousResource != null && previousPayload != null,
+            "Inconsistent local resource maps for %s", name);
+        Preconditions.checkArgument(previousPayload.digest().equals(digest),
+            "Local resource name %s is already associated with different content", name);
+        Preconditions.checkArgument(previousResource.getType() == type,
+            "Local resource name %s is already associated with a different type", name);
+        continue;
+      }
+      String digestHex = com.google.common.io.BaseEncoding.base16().lowerCase().encode(digest.toByteArray());
+      URI inlineUri;
+      try {
+        inlineUri = new URI("mr3-inline", "sha256", "/" + digestHex + "/" + name, null);
+      } catch (URISyntaxException e) {
+        throw new IOException("Cannot create inline URI for local resource " + name, e);
+      }
+      LocalResource resource = Records.newRecord(LocalResource.class);
+      resource.setResource(ConverterUtils.getYarnUrlFromURI(inlineUri));
+      resource.setType(type);
+      resource.setSize(status.getLen());
+      resource.setVisibility(LocalResourceVisibility.PRIVATE);
+      resource.setTimestamp(status.getModificationTime());
+      Preconditions.checkState(resource.getSize() == payload.content().size(),
+          "Resource size does not match content size for %s", name);
+      resourcesByName.put(name, resource);
+      contentsByName.put(name, payload);
+    }
+  }
+
+  private static ByteString sha256(ByteString content) {
+    try {
+      return ByteString.copyFrom(MessageDigest.getInstance("SHA-256").digest(content.toByteArray()));
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException("SHA-256 is not available", e);
+    }
   }
 
   /*
