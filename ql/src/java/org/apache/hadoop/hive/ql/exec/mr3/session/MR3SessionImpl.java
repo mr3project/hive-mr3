@@ -209,7 +209,7 @@ public class MR3SessionImpl implements MR3Session {
     // initAmLocalResources == empty
     hiveMr3Client = HiveMR3ClientFactory.createHiveMr3Client(
         sessionId,
-        null, amLocalResources,
+        amLocalResources,
         additionalSessionCredentials, sessionLocalResources,
         hiveConf);
 

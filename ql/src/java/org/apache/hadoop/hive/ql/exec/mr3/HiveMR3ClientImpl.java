@@ -62,7 +62,6 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
   // initAmLocalResources[]: read-only
   HiveMR3ClientImpl(
       String sessionId,
-      final Credentials amCredentials,
       final Map<String, LocalResource> amLocalResources,
       final Credentials additionalSessionCredentials,
       final Map<String, LocalResource> additionalSessionLocalResources,
@@ -76,7 +75,7 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
     scala.collection.immutable.Map addtlSessionLrs = MR3Utils.toScalaMap(additionalSessionLocalResources);
     mr3Client = MR3SessionClient$.MODULE$.apply(
         appName, mr3Conf,
-        Option.apply(amCredentials), amLrs,
+        Option.empty(), amLrs,
         Option.apply(additionalSessionCredentials), addtlSessionLrs);
   }
 
