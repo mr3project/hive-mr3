@@ -106,7 +106,6 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
   @Override
   public MR3JobRef submitDag(
       final DAGAPI.DAGProto dagProto,
-      final Credentials amCredentials,
       final Map<String, LocalResource> amLocalResources,
       final Map<String, LocalResourcePayload> localResourcePayloads,
       final Map<String, BaseWork> workMap,
@@ -117,7 +116,7 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
     scala.collection.immutable.Map<String, LocalResource> addtlAmLrs = MR3Utils.toScalaMap(amLocalResources);
     scala.collection.immutable.Map<String, LocalResourcePayload> payloads = MR3Utils.toScalaMap(localResourcePayloads);
     DAGClient dagClient = mr3Client.submitDag(
-        addtlAmLrs, Option.apply(amCredentials), dagProto, payloads);
+        addtlAmLrs, dagProto, payloads);
     return new MR3JobRefImpl(hiveConf, dagClient, workMap, dag, ctx, isShutdown);
   }
 
