@@ -1148,7 +1148,7 @@ public class DAGUtils {
       String digestHex = com.google.common.io.BaseEncoding.base16().lowerCase().encode(digest.toByteArray());
       URI inlineUri;
       try {
-        inlineUri = new URI("mr3-inline", "sha256", "/" + digestHex + "/" + name, null);
+        inlineUri = new URI("mr3inline", "sha256", "/" + digestHex + "/" + name, null);
       } catch (URISyntaxException e) {
         throw new IOException("Cannot create inline URI for local resource " + name, e);
       }
