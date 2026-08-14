@@ -78,7 +78,6 @@ public class MR3SessionImpl implements MR3Session {
   private final String sessionUser;
 
   // set in start() and close()
-  // read in submit() via updateAmCredentials()
   private HiveConf sessionConf;
   // read in submit(), isRunningFromApplicationReport(), getEstimateNumTasksOrNodes()
   private HiveMR3Client hiveMr3Client;
@@ -101,9 +100,6 @@ public class MR3SessionImpl implements MR3Session {
   // localized names so DAG resources cannot override hive-exec.jar or HIVE_MR3_AUX_JARS.
   private Map<String, LocalResource> sessionLocalResources = new HashMap<>();
   private Map<String, LocalResourcePayload> sessionLocalResourcePayloads = new HashMap<>();
-  // via updateAmCredentials()
-  private Credentials amCredentials;
-
   // private List<LocalResource> amDagCommonLocalResources = new ArrayList<LocalResource>();
 
   DAGUtils dagUtils = DAGUtils.getInstance();
@@ -213,7 +209,7 @@ public class MR3SessionImpl implements MR3Session {
     // initAmLocalResources == empty
     hiveMr3Client = HiveMR3ClientFactory.createHiveMr3Client(
         sessionId,
-        amCredentials, amLocalResources,
+        amLocalResources,
         additionalSessionCredentials, sessionLocalResources,
         hiveConf);
 
@@ -284,8 +280,6 @@ public class MR3SessionImpl implements MR3Session {
     sessionLocalResources.clear();
     sessionLocalResourcePayloads.clear();
 
-    amCredentials = null;
-
     // Requirement: useGlobalMr3SessionIdFromEnv == true if and only if on 'Yarn with HA' or on K8s
     //
     // On Yarn without HA:
@@ -354,7 +348,6 @@ public class MR3SessionImpl implements MR3Session {
     Map<String, LocalResourcePayload> addtlLocalResourcePayloads = new HashMap<>();
     Map<String, LocalResource> currentSessionLocalResources = new HashMap<>();
     Map<String, LocalResourcePayload> currentSessionLocalResourcePayloads = new HashMap<>();
-    Credentials addtlAmCredentials = null;
     synchronized (this) {
       currentHiveMr3Client = hiveMr3Client;
       if (currentHiveMr3Client != null) {
@@ -366,7 +359,6 @@ public class MR3SessionImpl implements MR3Session {
         }
         currentSessionLocalResources.putAll(sessionLocalResources);
         currentSessionLocalResourcePayloads.putAll(sessionLocalResourcePayloads);
-        addtlAmCredentials = updateAmCredentials(newAmLocalResources, mr3TaskConf);
       }
     }
 
@@ -400,7 +392,7 @@ public class MR3SessionImpl implements MR3Session {
     LOG.info("Submitting DAG (submitter={})", submitter);
     // close() may have been called, in which case currentHiveMr3Client.submitDag() raises Exception
     MR3JobRef mr3JobRef = currentHiveMr3Client.submitDag(
-        dagProto, addtlAmCredentials, addtlAmLocalResources, submitPayloads,
+        dagProto, addtlAmLocalResources, submitPayloads,
         workMap, dag, ctx, isShutdown);
 
     synchronized (this) {
@@ -513,34 +505,6 @@ public class MR3SessionImpl implements MR3Session {
       amLocalResources.putIfAbsent(entry.getKey(), entry.getValue());
       amLocalResourceDigests.putIfAbsent(entry.getKey(), payload.digest());
     }
-  }
-
-  /**
-   * @param localResources to be added to Credentials
-   * @return returns Credentials for newly added LocalResources only
-   */
-  private Credentials updateAmCredentials(
-      Map<String, LocalResource> localResources, Configuration conf) throws Exception {
-    if (amCredentials == null) {
-      amCredentials = new Credentials();
-    }
-
-    Credentials addtlAmCredentials = new Credentials();
-
-    if (dagUtils.shouldAddPathsToCredentials(conf)) {
-      Set<Path> allPaths = new HashSet<Path>();
-      for (LocalResource lr: localResources.values()) {
-        allPaths.add(ConverterUtils.getPathFromYarnURL(lr.getResource()));
-      }
-      dagUtils.addPathsToCredentials(addtlAmCredentials, allPaths, sessionConf);
-
-      // hadoop-1 version of Credentials doesn't have method mergeAll()
-      // See Jira HIVE-6915 and HIVE-8782
-      // TODO: use ShimLoader.getHadoopShims().mergeCredentials(jobConf, addtlJobConf)
-      amCredentials.addAll(addtlAmCredentials);
-    }
-
-    return addtlAmCredentials;
   }
 
   private void waitUntilMr3ClientReady() throws Exception {

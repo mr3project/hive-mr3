@@ -52,7 +52,6 @@ public interface HiveMR3Client {
    */
   MR3JobRef submitDag(
       DAGAPI.DAGProto dagProto,
-      Credentials amCredentials,
       Map<String, LocalResource> amLocalResources,
       Map<String, LocalResourcePayload> localResourcePayloads,
       Map<String, BaseWork> workMap,

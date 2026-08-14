@@ -62,7 +62,6 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
   // initAmLocalResources[]: read-only
   HiveMR3ClientImpl(
       String sessionId,
-      final Credentials amCredentials,
       final Map<String, LocalResource> amLocalResources,
       final Credentials additionalSessionCredentials,
       final Map<String, LocalResource> additionalSessionLocalResources,
@@ -76,7 +75,7 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
     scala.collection.immutable.Map addtlSessionLrs = MR3Utils.toScalaMap(additionalSessionLocalResources);
     mr3Client = MR3SessionClient$.MODULE$.apply(
         appName, mr3Conf,
-        Option.apply(amCredentials), amLrs,
+        Option.empty(), amLrs,
         Option.apply(additionalSessionCredentials), addtlSessionLrs);
   }
 
@@ -106,7 +105,6 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
   @Override
   public MR3JobRef submitDag(
       final DAGAPI.DAGProto dagProto,
-      final Credentials amCredentials,
       final Map<String, LocalResource> amLocalResources,
       final Map<String, LocalResourcePayload> localResourcePayloads,
       final Map<String, BaseWork> workMap,
@@ -117,7 +115,7 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
     scala.collection.immutable.Map<String, LocalResource> addtlAmLrs = MR3Utils.toScalaMap(amLocalResources);
     scala.collection.immutable.Map<String, LocalResourcePayload> payloads = MR3Utils.toScalaMap(localResourcePayloads);
     DAGClient dagClient = mr3Client.submitDag(
-        addtlAmLrs, Option.apply(amCredentials), dagProto, payloads);
+        addtlAmLrs, dagProto, payloads);
     return new MR3JobRefImpl(hiveConf, dagClient, workMap, dag, ctx, isShutdown);
   }
 
