@@ -108,6 +108,15 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
       final Context ctx,
       AtomicBoolean isShutdown) throws Exception {
 
+    /*
+     1. For every N in amLrs:
+        payloads[N] exists
+        payloads[N].digest matches the digest used to construct amLrs[N]
+     2. For every inline N in dagProto.local_resources:
+        payloads[N] exists,
+        or N is intentionally omitted because
+        the client believes its content is already available through the AM/session resource lifecycle
+     */
     scala.collection.immutable.Map<String, LocalResource> amLrs = MR3Utils.toScalaMap(amLocalResources);
     scala.collection.immutable.Map<String, LocalResourcePayload> payloads = MR3Utils.toScalaMap(localResourcePayloads);
     DAGClient dagClient = mr3Client.submitDag(amLrs, scala.Option.empty(), dagProto, payloads);

@@ -478,9 +478,25 @@ public class MR3SessionImpl implements MR3Session {
       if (!amLocalResources.containsKey(entry.getKey())) {
         addtlLocalResources.put(entry.getKey(), entry.getValue());
       } else {
+        // AM LocalResources are cached across DAG submissions, and MR3 treats the basename as an
+        // immutable identifier for the lifetime of the MR3 session/application. Hive's DELETE
+        // JAR/FILE/ARCHIVE commands only remove a resource from the current Hive SessionState; they
+        // do not evict an already installed resource from the AM or release its basename. This is
+        // especially relevant when MR3 session sharing is enabled, because another Hive/Beeline
+        // session may have installed the existing resource.
+        //
+        // Users who update LocalResources should therefore put the version or build ID in the
+        // basename itself (for example, my_udf-1.1.0.jar). Changing only the parent directory is
+        // insufficient because /v1/my_udf.jar and /v2/my_udf.jar both have the same resource name.
         Preconditions.checkArgument(amLocalResourceDigests.get(entry.getKey()).equals(
             localResourcePayloads.get(entry.getKey()).digest()),
-            "AM local resource name %s is already associated with different content", entry.getKey());
+            "Cannot add AM local resource '%s': this basename is already associated with different "
+                + "content in the current MR3 session. MR3 local resource basenames are immutable "
+                + "for the lifetime of an MR3 session/application. DELETE JAR/FILE/ARCHIVE removes "
+                + "the Hive session registration but does not free an installed MR3 basename. In a "
+                + "shared MR3 session, another Hive/Beeline session may have installed the existing "
+                + "resource. Use a versioned basename such as '<artifact>-<version>.<extension>'; "
+                + "changing only the parent directory is insufficient. ", entry.getKey());
       }
     }
 
