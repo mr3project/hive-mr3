@@ -53,7 +53,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -69,8 +68,8 @@ public class DAG {
   final private String queryId;
 
   final private Map<String, LocalResource> localResourcesByName = new HashMap<>();
-  final private Map<String, LocalResourcePayload> contentsByName = new HashMap<>();
-  final private Set<String> payloadNames = new HashSet<>();
+  final private Map<String, ByteString> localResourceDigestsByName = new HashMap<>();
+  final private Map<String, LocalResourcePayload> submitPayloadsByName = new HashMap<>();
   final private Map<String, Vertex> vertices = new HashMap<String, Vertex>();
   final private List<VertexGroup> vertexGroups = new ArrayList<VertexGroup>();
   final private List<Edge> edges = new ArrayList<Edge>();
@@ -140,25 +139,33 @@ public class DAG {
     Preconditions.checkArgument(localResources.keySet().equals(contents.keySet()),
         "Local resource and payload names must match");
     for (String name : localResources.keySet()) {
-      LocalResourcePayload existing = contentsByName.get(name);
       LocalResourcePayload payload = contents.get(name);
-      Preconditions.checkArgument(existing == null ||
-          existing.digest().equals(payload.digest()),
-          "Local resource name %s has conflicting content", name);
-      localResourcesByName.putIfAbsent(name, localResources.get(name));
-      contentsByName.putIfAbsent(name, payload);
+      addLocalResource(name, localResources.get(name), payload.digest());
       if (includePayload) {
-        payloadNames.add(name);
+        submitPayloadsByName.putIfAbsent(name, payload);
       }
     }
   }
 
-  public Map<String, LocalResourcePayload> getSubmitLocalResourcePayloads() {
-    Map<String, LocalResourcePayload> result = new HashMap<>();
-    for (String name : payloadNames) {
-      result.put(name, contentsByName.get(name));
+  public void addLocalResourcesWithDigests(Map<String, LocalResource> localResources,
+      Map<String, ByteString> digests) {
+    Preconditions.checkArgument(localResources.keySet().equals(digests.keySet()),
+        "Local resource and digest names must match");
+    for (String name : localResources.keySet()) {
+      addLocalResource(name, localResources.get(name), digests.get(name));
     }
-    return result;
+  }
+
+  private void addLocalResource(String name, LocalResource localResource, ByteString digest) {
+    ByteString existingDigest = localResourceDigestsByName.get(name);
+    Preconditions.checkArgument(existingDigest == null || existingDigest.equals(digest),
+        "Local resource name %s has conflicting content", name);
+    localResourcesByName.putIfAbsent(name, localResource);
+    localResourceDigestsByName.putIfAbsent(name, digest);
+  }
+
+  public Map<String, LocalResourcePayload> getSubmitLocalResourcePayloads() {
+    return new HashMap<>(submitPayloadsByName);
   }
 
   public void addVertex(Vertex vertex) {
@@ -218,9 +225,9 @@ public class DAG {
 
     List<DAGAPI.LocalResourceProto> lrProtos = new ArrayList<DAGAPI.LocalResourceProto>();
     for (Map.Entry<String, LocalResource> entry : localResourcesByName.entrySet()) {
-      LocalResourcePayload payload = contentsByName.get(entry.getKey());
       DAGAPI.LocalResourceProto proto = ProtoConverters
-          .convertToLocalResourceProto(entry.getKey(), entry.getValue(), payload.digest())
+          .convertToLocalResourceProto(
+              entry.getKey(), entry.getValue(), localResourceDigestsByName.get(entry.getKey()))
           .build();
       lrProtos.add(proto);
     }

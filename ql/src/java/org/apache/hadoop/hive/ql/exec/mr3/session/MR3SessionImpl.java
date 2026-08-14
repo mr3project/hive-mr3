@@ -96,10 +96,10 @@ public class MR3SessionImpl implements MR3Session {
   private Map<String, LocalResource> amLocalResources = new HashMap<String, LocalResource>();
   // keep digests only needed after MR3 accepts LocalResources
   private Map<String, ByteString> amLocalResourceDigests = new HashMap<>();
-  // Session initialization resources are localized by YARN. Empty payloads reserve their
+  // Session initialization resources are localized by YARN. Empty digests reserve their
   // localized names so DAG resources cannot override hive-exec.jar or HIVE_MR3_AUX_JARS.
   private Map<String, LocalResource> sessionLocalResources = new HashMap<>();
-  private Map<String, LocalResourcePayload> sessionLocalResourcePayloads = new HashMap<>();
+  private Map<String, ByteString> sessionLocalResourceDigests = new HashMap<>();
   // private List<LocalResource> amDagCommonLocalResources = new ArrayList<LocalResource>();
 
   DAGUtils dagUtils = DAGUtils.getInstance();
@@ -189,10 +189,9 @@ public class MR3SessionImpl implements MR3Session {
     List<LocalResource> hiveJarLocalResources =
         dagUtils.localizeTempFiles(sessionScratchDir, hiveConf, dagUtils.getMr3SessionInitJars(hiveConf));
     sessionLocalResources = dagUtils.convertLocalResourceListToMap(hiveJarLocalResources);
-    sessionLocalResourcePayloads = new HashMap<>();
+    sessionLocalResourceDigests = new HashMap<>();
     for (String name : sessionLocalResources.keySet()) {
-      sessionLocalResourcePayloads.put(
-          name, new LocalResourcePayload(name, ByteString.EMPTY, ByteString.EMPTY));
+      sessionLocalResourceDigests.put(name, ByteString.EMPTY);
     }
 
     Credentials additionalSessionCredentials = null;  // null okay because it is passed to scala Option()
@@ -216,9 +215,7 @@ public class MR3SessionImpl implements MR3Session {
     // These resources are already installed through the session initialization path.
     // Keep sentinel entries in the AM namespace solely to reject conflicting user resources.
     amLocalResources.putAll(sessionLocalResources);
-    for (Map.Entry<String, LocalResourcePayload> entry : sessionLocalResourcePayloads.entrySet()) {
-      amLocalResourceDigests.put(entry.getKey(), entry.getValue().digest());
-    }
+    amLocalResourceDigests.putAll(sessionLocalResourceDigests);
   }
 
   private void setAmStagingDir(Path sessionScratchDir) {
@@ -278,7 +275,7 @@ public class MR3SessionImpl implements MR3Session {
     amLocalResources.clear();
     amLocalResourceDigests.clear();
     sessionLocalResources.clear();
-    sessionLocalResourcePayloads.clear();
+    sessionLocalResourceDigests.clear();
 
     // Requirement: useGlobalMr3SessionIdFromEnv == true if and only if on 'Yarn with HA' or on K8s
     //
@@ -347,7 +344,7 @@ public class MR3SessionImpl implements MR3Session {
     Map<String, LocalResource> addtlAmLocalResources = new HashMap<>();
     Map<String, LocalResourcePayload> addtlLocalResourcePayloads = new HashMap<>();
     Map<String, LocalResource> currentSessionLocalResources = new HashMap<>();
-    Map<String, LocalResourcePayload> currentSessionLocalResourcePayloads = new HashMap<>();
+    Map<String, ByteString> currentSessionLocalResourceDigests = new HashMap<>();
     synchronized (this) {
       currentHiveMr3Client = hiveMr3Client;
       if (currentHiveMr3Client != null) {
@@ -358,7 +355,7 @@ public class MR3SessionImpl implements MR3Session {
           addtlLocalResourcePayloads.put(name, newAmLocalResourcePayloads.get(name));
         }
         currentSessionLocalResources.putAll(sessionLocalResources);
-        currentSessionLocalResourcePayloads.putAll(sessionLocalResourcePayloads);
+        currentSessionLocalResourceDigests.putAll(sessionLocalResourceDigests);
       }
     }
 
@@ -375,9 +372,9 @@ public class MR3SessionImpl implements MR3Session {
     MR3Conf dagConf = createDagConf(mr3TaskConf, dagUser, dag.getQueryId(), dag.getCommonJobConf());
 
     // preserve the YARN-localized session resources in the DAG resource namespace
-    // without adding their empty sentinel payloads to SubmitDagRequestProto
-    dag.addLocalResources(
-        currentSessionLocalResources, currentSessionLocalResourcePayloads, false);
+    // without adding payloads to SubmitDagRequestProto
+    dag.addLocalResourcesWithDigests(
+        currentSessionLocalResources, currentSessionLocalResourceDigests);
 
     // sessionConf is not passed to MR3; only dagConf is passed to MR3 as a component of DAGProto.dagConf.
     String submitter = SessionState.get().getUserName();
