@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.session;
 
+import com.datamonad.mr3.api.LocalResourcePayload;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
@@ -54,7 +55,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -78,7 +78,6 @@ public class MR3SessionImpl implements MR3Session {
   private final String sessionUser;
 
   // set in start() and close()
-  // read in submit() via updateAmCredentials()
   private HiveConf sessionConf;
   // read in submit(), isRunningFromApplicationReport(), getEstimateNumTasksOrNodes()
   private HiveMR3Client hiveMr3Client;
@@ -94,11 +93,13 @@ public class MR3SessionImpl implements MR3Session {
 
   // updated in start(), close(), and submit()
   // via updateAmLocalResources()
-  private Map<String, LocalResource> amLocalResources = new HashMap<String, LocalResource>();
-  // via updateAmCredentials()
-  private Credentials amCredentials;
-
-  // private List<LocalResource> amDagCommonLocalResources = new ArrayList<LocalResource>();
+  private final Map<String, LocalResource> amLocalResources = new HashMap<String, LocalResource>();
+  // keep digests only needed after MR3 accepts LocalResources
+  private final Map<String, ByteString> amLocalResourceDigests = new HashMap<>();
+  // Session initialization resources are localized by YARN.
+  // Empty digests reserve their localized names so DAG resources cannot override hive-exec.jar or HIVE_MR3_AUX_JARS.
+  private Map<String, LocalResource> sessionLocalResources = new HashMap<>();
+  private Map<String, ByteString> sessionLocalResourceDigests = new HashMap<>();
 
   DAGUtils dagUtils = DAGUtils.getInstance();
 
@@ -186,46 +187,30 @@ public class MR3SessionImpl implements MR3Session {
     // getSessionInitJars() returns hive-exec.jar + HIVE_MR3_AUX_JARS
     List<LocalResource> hiveJarLocalResources =
         dagUtils.localizeTempFiles(sessionScratchDir, hiveConf, dagUtils.getMr3SessionInitJars(hiveConf));
-    Map<String, LocalResource> additionalSessionLocalResources =
-        dagUtils.convertLocalResourceListToMap(hiveJarLocalResources);
-
-    Credentials additionalSessionCredentials = null;  // null okay because it is passed to scala Option()
-    if (dagUtils.shouldAddPathsToCredentials(hiveConf)) {
-      additionalSessionCredentials = new Credentials();
-      Set<Path> allPaths = new HashSet<Path>();
-      for (LocalResource lr: additionalSessionLocalResources.values()) {
-        allPaths.add(ConverterUtils.getPathFromYarnURL(lr.getResource()));
-      }
-      dagUtils.addPathsToCredentials(additionalSessionCredentials, allPaths, hiveConf);
+    sessionLocalResources = dagUtils.convertLocalResourceListToMap(hiveJarLocalResources);
+    sessionLocalResourceDigests = new HashMap<>();
+    for (String name : sessionLocalResources.keySet()) {
+      sessionLocalResourceDigests.put(name, ByteString.EMPTY);
     }
 
-    // 2. read confLocalResources
-
-    // confLocalResource = specific to this MR3Session obtained from sessionConf
-    // localizeTempFilesFromConf() updates sessionConf by calling HiveConf.setVar(HIVEADDEDFILES/JARS/ARCHIVES)
-    List<LocalResource> confLocalResources = dagUtils.localizeTempFilesFromConf(sessionScratchDir, hiveConf);
-
-    // We do not add confLocalResources to additionalSessionLocalResources because
-    // dagUtils.localizeTempFilesFromConf() will be called each time a new DAG is submitted.
-
-    // 3. set initAmLocalResources
-
-    List<LocalResource> initAmLocalResources = new ArrayList<LocalResource>();
-    initAmLocalResources.addAll(confLocalResources);
-    Map<String, LocalResource> initAmLocalResourcesMap =
-        dagUtils.convertLocalResourceListToMap(initAmLocalResources);
-
-    // 4. update amLocalResource and create HiveMR3Client
-
-    updateAmLocalResources(initAmLocalResourcesMap);
-    updateAmCredentials(initAmLocalResourcesMap, hiveConf);
+    Credentials sessionCredentials = null;  // null okay because it is passed to scala Option()
+    if (dagUtils.shouldAddPathsToCredentials(hiveConf)) {
+      sessionCredentials = new Credentials();
+      Set<Path> allPaths = new HashSet<Path>();
+      for (LocalResource lr: sessionLocalResources.values()) {
+        allPaths.add(ConverterUtils.getPathFromYarnURL(lr.getResource()));
+      }
+      dagUtils.addPathsToCredentials(sessionCredentials, allPaths, hiveConf);
+    }
 
     LOG.info("Creating HiveMR3Client (id: " + sessionId + ", scratch dir: " + sessionScratchDir + ")");
     hiveMr3Client = HiveMR3ClientFactory.createHiveMr3Client(
-        sessionId,
-        amCredentials, amLocalResources,
-        additionalSessionCredentials, additionalSessionLocalResources,
-        hiveConf);
+        sessionId, sessionCredentials, sessionLocalResources, hiveConf);
+
+    // These resources are already installed through the session initialization path.
+    // Keep sentinel entries in the AM namespace solely to reject conflicting user resources.
+    amLocalResources.putAll(sessionLocalResources);
+    amLocalResourceDigests.putAll(sessionLocalResourceDigests);
   }
 
   private void setAmStagingDir(Path sessionScratchDir) {
@@ -283,8 +268,9 @@ public class MR3SessionImpl implements MR3Session {
     hiveMr3Client = null;
 
     amLocalResources.clear();
-
-    amCredentials = null;
+    amLocalResourceDigests.clear();
+    sessionLocalResources.clear();
+    sessionLocalResourceDigests.clear();
 
     // Requirement: useGlobalMr3SessionIdFromEnv == true if and only if on 'Yarn with HA' or on K8s
     //
@@ -341,6 +327,7 @@ public class MR3SessionImpl implements MR3Session {
   public MR3JobRef submit(
       DAG dag,
       Map<String, LocalResource> newAmLocalResources,
+      Map<String, LocalResourcePayload> newAmLocalResourcePayloads,
       Configuration mr3TaskConf,
       Map<String, BaseWork> workMap,
       Context ctx,
@@ -349,14 +336,21 @@ public class MR3SessionImpl implements MR3Session {
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_SUBMIT_DAG);
 
     HiveMR3Client currentHiveMr3Client;
-    Map<String, LocalResource> addtlAmLocalResources = null;
-    Credentials addtlAmCredentials = null;
+    Map<String, LocalResource> addtlAmLocalResources = new HashMap<>();
+    Map<String, LocalResourcePayload> addtlLocalResourcePayloads = new HashMap<>();
+    Map<String, LocalResource> currentSessionLocalResources = new HashMap<>();
+    Map<String, ByteString> currentSessionLocalResourceDigests = new HashMap<>();
     synchronized (this) {
       currentHiveMr3Client = hiveMr3Client;
       if (currentHiveMr3Client != null) {
         // close() has not been called
-        addtlAmLocalResources = updateAmLocalResources(newAmLocalResources);
-        addtlAmCredentials = updateAmCredentials(newAmLocalResources, mr3TaskConf);
+        addtlAmLocalResources = getAdditionalAmLocalResources(
+            newAmLocalResources, newAmLocalResourcePayloads);
+        for (String name : addtlAmLocalResources.keySet()) {
+          addtlLocalResourcePayloads.put(name, newAmLocalResourcePayloads.get(name));
+        }
+        currentSessionLocalResources.putAll(sessionLocalResources);
+        currentSessionLocalResourceDigests.putAll(sessionLocalResourceDigests);
       }
     }
 
@@ -372,6 +366,10 @@ public class MR3SessionImpl implements MR3Session {
     String dagUser = UserGroupInformation.getCurrentUser().getShortUserName();
     MR3Conf dagConf = createDagConf(mr3TaskConf, dagUser, dag.getQueryId(), dag.getCommonJobConf());
 
+    // preserve the YARN-localized session resources in the DAG resource namespace
+    // without adding payloads to SubmitDagRequestProto
+    dag.addLocalResourcesWithDigests(currentSessionLocalResources, currentSessionLocalResourceDigests);
+
     // sessionConf is not passed to MR3; only dagConf is passed to MR3 as a component of DAGProto.dagConf.
     String submitter = SessionState.get().getUserName();
     if (submitter == null) {
@@ -379,10 +377,22 @@ public class MR3SessionImpl implements MR3Session {
     }
     DAGAPI.DAGProto dagProto = dag.createDagProto(mr3TaskConf, dagConf, submitter, alreadyExecutedAnyDag);
 
+    Map<String, LocalResourcePayload> submitPayloads = dag.getSubmitLocalResourcePayloads();
+    submitPayloads.putAll(addtlLocalResourcePayloads);
+
     LOG.info("Submitting DAG (submitter={})", submitter);
     // close() may have been called, in which case currentHiveMr3Client.submitDag() raises Exception
     MR3JobRef mr3JobRef = currentHiveMr3Client.submitDag(
-        dagProto, addtlAmCredentials, addtlAmLocalResources, workMap, dag, ctx, isShutdown);
+        dagProto, addtlAmLocalResources, submitPayloads,
+        workMap, dag, ctx, isShutdown);
+
+    synchronized (this) {
+      // Do not record resources until MR3 has accepted the submission.
+      // Otherwise a failed submission would cause a retry to omit resources which the AM may never have received.
+      if (hiveMr3Client == currentHiveMr3Client) {
+        commitAmLocalResources(addtlAmLocalResources, addtlLocalResourcePayloads);
+      }
+    }
 
     perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_SUBMIT_DAG);
     return mr3JobRef;
@@ -455,48 +465,37 @@ public class MR3SessionImpl implements MR3Session {
 
   /**
    * @param localResources
-   * @return Map of newly added AM LocalResources
+   * @return Map of AM LocalResources not yet committed to this session
    */
-  private Map<String, LocalResource> updateAmLocalResources(
-      Map<String, LocalResource> localResources ) {
+  private Map<String, LocalResource> getAdditionalAmLocalResources(
+      Map<String, LocalResource> localResources,
+      Map<String, LocalResourcePayload> localResourcePayloads) {
+    Preconditions.checkArgument(localResources.keySet().equals(localResourcePayloads.keySet()),
+        "AM local resource and payload names must match");
     Map<String, LocalResource> addtlLocalResources = new HashMap<String, LocalResource>();
 
     for (Map.Entry<String, LocalResource> entry : localResources.entrySet()) {
       if (!amLocalResources.containsKey(entry.getKey())) {
-        amLocalResources.put(entry.getKey(), entry.getValue());
         addtlLocalResources.put(entry.getKey(), entry.getValue());
+      } else {
+        Preconditions.checkArgument(amLocalResourceDigests.get(entry.getKey()).equals(
+            localResourcePayloads.get(entry.getKey()).digest()),
+            "AM local resource name %s is already associated with different content", entry.getKey());
       }
     }
 
     return addtlLocalResources;
   }
 
-  /**
-   * @param localResources to be added to Credentials
-   * @return returns Credentials for newly added LocalResources only
-   */
-  private Credentials updateAmCredentials(
-      Map<String, LocalResource> localResources, Configuration conf) throws Exception {
-    if (amCredentials == null) {
-      amCredentials = new Credentials();
+  // MR3 atomically rejects conflicting name/digest associations during submitDag().
+  private void commitAmLocalResources(
+      Map<String, LocalResource> localResources,
+      Map<String, LocalResourcePayload> localResourcePayloads) {
+    for (Map.Entry<String, LocalResource> entry : localResources.entrySet()) {
+      LocalResourcePayload payload = localResourcePayloads.get(entry.getKey());
+      amLocalResources.putIfAbsent(entry.getKey(), entry.getValue());
+      amLocalResourceDigests.putIfAbsent(entry.getKey(), payload.digest());
     }
-
-    Credentials addtlAmCredentials = new Credentials();
-
-    if (dagUtils.shouldAddPathsToCredentials(conf)) {
-      Set<Path> allPaths = new HashSet<Path>();
-      for (LocalResource lr: localResources.values()) {
-        allPaths.add(ConverterUtils.getPathFromYarnURL(lr.getResource()));
-      }
-      dagUtils.addPathsToCredentials(addtlAmCredentials, allPaths, sessionConf);
-
-      // hadoop-1 version of Credentials doesn't have method mergeAll()
-      // See Jira HIVE-6915 and HIVE-8782
-      // TODO: use ShimLoader.getHadoopShims().mergeCredentials(jobConf, addtlJobConf)
-      amCredentials.addAll(addtlAmCredentials);
-    }
-
-    return addtlAmCredentials;
   }
 
   private void waitUntilMr3ClientReady() throws Exception {

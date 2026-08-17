@@ -33,18 +33,14 @@ public class HiveMR3ClientFactory {
     LOG.info("Initializing HiveMR3ClientFactory");
   }
 
-  // amLocalResources[]: read-only
   public static HiveMR3Client createHiveMr3Client(
       String sessionId,
-      Credentials amCredentials,
-      Map<String, LocalResource> amLocalResources,
-      Credentials additionalSessionCredentials,
-      Map<String, LocalResource> additionalSessionLocalResources,
+      Credentials sessionCredentials,
+      Map<String, LocalResource> sessionLocalResources,
       HiveConf hiveConf) {
     return new HiveMR3ClientImpl(
         sessionId,
-        amCredentials, amLocalResources,
-        additionalSessionCredentials, additionalSessionLocalResources,
+        sessionCredentials, sessionLocalResources,
         hiveConf);
   }
 }

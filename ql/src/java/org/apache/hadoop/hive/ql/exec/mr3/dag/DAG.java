@@ -18,9 +18,11 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.dag;
 
-import com.google.protobuf.ByteString;
+import com.datamonad.mr3.api.LocalResourcePayload;
 import com.datamonad.mr3.api.common.MR3Conf$;
 import com.datamonad.mr3.api.common.MR3ConfBuilder;
+import com.google.common.base.Preconditions;
+import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -51,7 +53,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -66,7 +67,9 @@ public class DAG {
   final private Credentials dagCredentials;
   final private String queryId;
 
-  final private Collection<LocalResource> localResources = new HashSet<LocalResource>();
+  final private Map<String, LocalResource> localResources = new HashMap<>();
+  final private Map<String, ByteString> localResourceDigests = new HashMap<>();
+  final private Map<String, LocalResourcePayload> localResourcePayloads = new HashMap<>();
   final private Map<String, Vertex> vertices = new HashMap<String, Vertex>();
   final private List<VertexGroup> vertexGroups = new ArrayList<VertexGroup>();
   final private List<Edge> edges = new ArrayList<Edge>();
@@ -131,8 +134,38 @@ public class DAG {
     dagUtils.addPathsToCredentials(dagCredentials, paths, conf);
   }
 
-  public void addLocalResources(Collection<LocalResource> localResources) {
-    this.localResources.addAll(localResources);
+  public void addLocalResources(Map<String, LocalResource> localResources,
+      Map<String, LocalResourcePayload> contents, boolean includePayload) {
+    Preconditions.checkArgument(localResources.keySet().equals(contents.keySet()),
+        "Local resource and payload names must match");
+    for (String name : localResources.keySet()) {
+      LocalResourcePayload payload = contents.get(name);
+      addLocalResource(name, localResources.get(name), payload.digest());
+      if (includePayload) {
+        localResourcePayloads.putIfAbsent(name, payload);
+      }
+    }
+  }
+
+  public void addLocalResourcesWithDigests(Map<String, LocalResource> localResources,
+      Map<String, ByteString> digests) {
+    Preconditions.checkArgument(localResources.keySet().equals(digests.keySet()),
+        "Local resource and digest names must match");
+    for (String name : localResources.keySet()) {
+      addLocalResource(name, localResources.get(name), digests.get(name));
+    }
+  }
+
+  private void addLocalResource(String name, LocalResource localResource, ByteString digest) {
+    ByteString existingDigest = localResourceDigests.get(name);
+    Preconditions.checkArgument(existingDigest == null || existingDigest.equals(digest),
+        "Local resource name %s has conflicting content", name);
+    localResources.putIfAbsent(name, localResource);
+    localResourceDigests.putIfAbsent(name, digest);
+  }
+
+  public Map<String, LocalResourcePayload> getSubmitLocalResourcePayloads() {
+    return new HashMap<>(localResourcePayloads);
   }
 
   public void addVertex(Vertex vertex) {
@@ -191,9 +224,10 @@ public class DAG {
     }
 
     List<DAGAPI.LocalResourceProto> lrProtos = new ArrayList<DAGAPI.LocalResourceProto>();
-    DAGUtils dagUtils = DAGUtils.getInstance();
-    for (LocalResource lr: localResources) {
-      lrProtos.add(ProtoConverters.convertToLocalResourceProto(dagUtils.getBaseName(lr), lr));
+    for (Map.Entry<String, LocalResource> entry : localResources.entrySet()) {
+      DAGAPI.LocalResourceProto proto = ProtoConverters.convertToLocalResourceProto(
+          entry.getKey(), entry.getValue(), localResourceDigests.get(entry.getKey()));
+      lrProtos.add(proto);
     }
 
     List<DAGAPI.ContainerGroupProto> containerGroupProtos;

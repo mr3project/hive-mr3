@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.mr3;
 
 import com.datamonad.mr3.api.common.MR3Conf$;
 import com.datamonad.mr3.api.common.MR3ConfBuilder;
+import com.datamonad.mr3.api.LocalResourcePayload;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
@@ -58,25 +59,20 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
   private final MR3SessionClient mr3Client;
   private final HiveConf hiveConf;
 
-  // initAmLocalResources[]: read-only
   HiveMR3ClientImpl(
       String sessionId,
-      final Credentials amCredentials,
-      final Map<String, LocalResource> amLocalResources,
-      final Credentials additionalSessionCredentials,
-      final Map<String, LocalResource> additionalSessionLocalResources,
+      final Credentials sessionCredentials,
+      final Map<String, LocalResource> sessionLocalResources,
       HiveConf hiveConf) {
     this.hiveConf = hiveConf;
 
     String prefix = HiveConf.getVar(hiveConf, HiveConf.ConfVars.MR3_APPLICATION_NAME_PREFIX);
     String appName = (prefix != null && !prefix.isEmpty()) ? prefix + "-" + sessionId : sessionId;
     MR3Conf mr3Conf = createMr3Conf(hiveConf);
-    scala.collection.immutable.Map amLrs = MR3Utils.toScalaMap(amLocalResources);
-    scala.collection.immutable.Map addtlSessionLrs = MR3Utils.toScalaMap(additionalSessionLocalResources);
+    scala.collection.immutable.Map<String, LocalResource> sessionLrs = MR3Utils.toScalaMap(sessionLocalResources);
     mr3Client = MR3SessionClient$.MODULE$.apply(
         appName, mr3Conf,
-        Option.apply(amCredentials), amLrs,
-        Option.apply(additionalSessionCredentials), addtlSessionLrs);
+        Option.apply(sessionCredentials), sessionLrs);
   }
 
   public ApplicationId start() throws MR3Exception {
@@ -105,15 +101,16 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
   @Override
   public MR3JobRef submitDag(
       final DAGAPI.DAGProto dagProto,
-      final Credentials amCredentials,
       final Map<String, LocalResource> amLocalResources,
+      final Map<String, LocalResourcePayload> localResourcePayloads,
       final Map<String, BaseWork> workMap,
       final DAG dag,
       final Context ctx,
       AtomicBoolean isShutdown) throws Exception {
 
-    scala.collection.immutable.Map addtlAmLrs = MR3Utils.toScalaMap(amLocalResources);
-    DAGClient dagClient = mr3Client.submitDag(addtlAmLrs, Option.apply(amCredentials), dagProto);
+    scala.collection.immutable.Map<String, LocalResource> amLrs = MR3Utils.toScalaMap(amLocalResources);
+    scala.collection.immutable.Map<String, LocalResourcePayload> payloads = MR3Utils.toScalaMap(localResourcePayloads);
+    DAGClient dagClient = mr3Client.submitDag(amLrs, scala.Option.empty(), dagProto, payloads);
     return new MR3JobRefImpl(hiveConf, dagClient, workMap, dag, ctx, isShutdown);
   }
 
