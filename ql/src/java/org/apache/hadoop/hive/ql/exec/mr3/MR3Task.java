@@ -757,8 +757,8 @@ public class MR3Task {
   private void materializeQueryResult(
       QueryResultMaterializationContext ctx, List<ByteString> outputs, Context context)
       throws IOException {
-    if (ctx.fileSinkDesc.getFilesToFetch() == null) {
-      registerInternalDagOutput(ctx, outputs, context);
+    if (ctx.fileSinkDesc.getFilesToFetch() == null
+        && tryRegisterInternalDagOutput(ctx, outputs, context)) {
       return;
     }
     Path resultDir = ctx.fileSinkDesc.getDirName();
@@ -798,20 +798,23 @@ public class MR3Task {
     }
   }
 
-  private void registerInternalDagOutput(
-      QueryResultMaterializationContext ctx, List<ByteString> outputs, Context context) throws IOException {
+  private boolean tryRegisterInternalDagOutput(
+      QueryResultMaterializationContext ctx, List<ByteString> outputs, Context context) {
     org.apache.hadoop.hive.ql.plan.TableDesc tableDesc = ctx.fileSinkDesc.getTableInfo();
     if (ctx.fileSinkDesc.isUsingBatchingSerDe()
         || tableDesc.getInputFileFormatClass() != TextInputFormat.class
         || tableDesc.getOutputFileFormatClass() != HiveIgnoreKeyTextOutputFormat.class
         || tableDesc.getSerDeClass() != LazySimpleSerDe.class) {
-      throw new IOException("Unsupported internal MR3 DAG output for resultId=" + ctx.resultId
-          + ", inputFormat=" + tableDesc.getInputFileFormatClass().getName()
-          + ", outputFormat=" + tableDesc.getOutputFileFormatClass().getName()
-          + ", serde=" + tableDesc.getSerdeClassName());
+      LOG.info("Materializing internal MR3 DAG output with its existing result contract for resultId={}, "
+              + "inputFormat={}, outputFormat={}, serde={}, batching={}",
+          ctx.resultId, tableDesc.getInputFileFormatClass().getName(),
+          tableDesc.getOutputFileFormatClass().getName(), tableDesc.getSerdeClassName(),
+          ctx.fileSinkDesc.isUsingBatchingSerDe());
+      return false;
     }
     context.registerInternalDagOutput(ctx.fileSinkDesc.getDirName(),
         new Context.InternalDagOutput(outputs, getRowSeparator(tableDesc.getProperties())));
+    return true;
   }
 
   private static int getRowSeparator(java.util.Properties tableProperties) {
