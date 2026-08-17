@@ -197,6 +197,7 @@ public class ColumnStatsAutoGatherContext {
       sem = (SemanticAnalyzer) baseSem;
     }
     QB qb = new QB(null, null, false);
+    qb.setAnalyzeRewrite(true);
     ASTNode child = ast;
     ParseContext subPCtx = sem.getParseContext();
     subPCtx.setContext(ctx);
