@@ -681,14 +681,11 @@ public abstract class TaskCompiler {
     String cols = loadFileWork.get(0).getColumns();
     String colTypes = loadFileWork.get(0).getColumnTypes();
 
-    TableDesc resultTab;
-    if (SessionState.get().isHiveServerQuery() && conf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_RESULTSET_SERIALIZE_IN_TASKS)) {
-      resultTab = PlanUtils.getDefaultQueryOutputTableDesc(cols, colTypes, ResultFileFormat.SEQUENCEFILE.toString(),
-              ThriftJDBCBinarySerDe.class);
-    } else {
-      resultTab = PlanUtils.getDefaultQueryOutputTableDesc(cols, colTypes, conf.getResultFileFormat().toString(),
-              LazySimpleSerDe.class);
-    }
+    // Column statistics are consumed internally by ColStatsProcessor, not returned as a
+    // HiveServer2 JDBC result. Keep this a round-trip row format regardless of the setting
+    // that enables task-side serialization for user-facing JDBC result sets.
+    TableDesc resultTab = PlanUtils.getDefaultQueryOutputTableDesc(
+        cols, colTypes, ResultFileFormat.TEXTFILE.toString(), LazySimpleSerDe.class);
 
     fetch = new FetchWork(loadFileWork.get(0).getSourcePath(), resultTab, outerQueryLimit);
 

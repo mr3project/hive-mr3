@@ -91,6 +91,7 @@ import org.apache.hadoop.hive.common.metrics.common.MetricsConstant;
 import org.apache.hadoop.hive.conf.Constants;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
+import org.apache.hadoop.hive.conf.HiveConf.ResultFileFormat;
 import org.apache.hadoop.hive.conf.HiveConf.StrictChecks;
 import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.TransactionalValidationListener;
@@ -8010,9 +8011,11 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
           } else if (qb.getIsQuery()) {
             Class<? extends Deserializer> serdeClass = LazySimpleSerDe.class;
             boolean isUsingThriftJDBCBinarySerDe =
-                SessionState.get().getIsUsingThriftJDBCBinarySerDe();
-            String fileFormat = PlanUtils.getQueryResultFileFormat(
-                conf, SessionState.get().isHiveServerQuery(), isUsingThriftJDBCBinarySerDe).toString();
+                !qb.isAnalyzeRewrite() && SessionState.get().getIsUsingThriftJDBCBinarySerDe();
+            String fileFormat = qb.isAnalyzeRewrite()
+                ? ResultFileFormat.TEXTFILE.toString()
+                : PlanUtils.getQueryResultFileFormat(
+                    conf, SessionState.get().isHiveServerQuery(), isUsingThriftJDBCBinarySerDe).toString();
             if (isUsingThriftJDBCBinarySerDe) {
               serdeClass = ThriftJDBCBinarySerDe.class;
               // Set the fetch formatter to be a no-op for the ListSinkOperator, since we'll
