@@ -81,6 +81,9 @@ public class NullRowsInputFormat implements InputFormat<NullWritable, NullWritab
     private boolean addPartitionCols = true;
 
     public NullRowsRecordReader(Configuration conf, InputSplit split) throws IOException {
+      if (split instanceof FileSplit) {
+        IOContextMap.get(conf).setInputPath(((FileSplit) split).getPath());
+      }
       boolean isVectorMode = Utilities.getIsVectorized(conf);
       if (LOG.isDebugEnabled()) {
         LOG.debug(getClass().getSimpleName() + " in "

@@ -85,6 +85,7 @@ import org.apache.hadoop.hive.ql.stats.StatsPublisher;
 import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.DataOutputBuffer;
+import org.apache.hadoop.mapred.FileInputFormat;
 import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.JobConf;
@@ -781,6 +782,8 @@ public class DAGUtils {
       // DummyInputSplit directly from the logical MapWork path and performs no filesystem
       // discovery, so this must not depend on the user-configured top-level input format.
       inpFormat = NullRowsInputFormat.class.getName();
+      FileInputFormat.setInputPaths(jobConf,
+          mapWork.getPathToAliases().keySet().toArray(new Path[0]));
     }
 
     jobConf.set(Utilities.MAPRED_MAPPER_CLASS, ExecMapper.class.getName());
