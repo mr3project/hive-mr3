@@ -42,6 +42,7 @@ import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManager;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRef;
+import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.AbstractOperatorDesc;
@@ -67,7 +68,10 @@ import org.apache.hadoop.hive.ql.plan.TopNKeyDesc;
 import org.apache.hadoop.hive.ql.plan.UnionWork;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.ql.session.SessionStateUtil;
+import org.apache.hadoop.hive.serde.serdeConstants;
+import org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe;
 import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.records.LocalResource;
@@ -278,7 +282,7 @@ public class MR3Task {
         }
         String dagIdStr = mr3JobRef.getDagIdStr();    // may throw MR3Exception
         collectCommitInformation(tezWork, dagStatus, dagIdStr);
-        collectDagOutputs(dagStatus);
+        collectDagOutputs(dagStatus, context);
         mr3Session.setAlreadyExecutedAnyDag();
       }
 
@@ -726,14 +730,14 @@ public class MR3Task {
     queryResultMaterializationContexts.putIfAbsent(ctx.resultId, ctx);
   }
 
-  private void collectDagOutputs(DAGStatus dagStatus) throws Exception {
+  private void collectDagOutputs(DAGStatus dagStatus, Context context) throws Exception {
     if (queryResultMaterializationContexts.isEmpty()) {
       return;
     }
     Map<String, List<ByteString>> outputsById = getDagOutputsById(dagStatus);
     for (QueryResultMaterializationContext ctx : queryResultMaterializationContexts.values()) {
       List<ByteString> outputs = outputsById.get(ctx.resultId);
-      materializeQueryResult(ctx, outputs == null ? Collections.emptyList() : outputs);
+      materializeQueryResult(ctx, outputs == null ? Collections.emptyList() : outputs, context);
     }
   }
 
@@ -750,8 +754,13 @@ public class MR3Task {
     return result;
   }
 
-  private void materializeQueryResult(QueryResultMaterializationContext ctx, List<ByteString> outputs)
+  private void materializeQueryResult(
+      QueryResultMaterializationContext ctx, List<ByteString> outputs, Context context)
       throws IOException {
+    if (ctx.fileSinkDesc.getFilesToFetch() == null) {
+      registerInternalDagOutput(ctx, outputs, context);
+      return;
+    }
     Path resultDir = ctx.fileSinkDesc.getDirName();
     assert !ctx.fileSinkDesc.isMr3QueryResultLocal() || "file".equalsIgnoreCase(resultDir.toUri().getScheme());
 
@@ -786,6 +795,31 @@ public class MR3Task {
     } catch (IOException e) {
       fs.delete(resultDir, true);
       throw e;
+    }
+  }
+
+  private void registerInternalDagOutput(
+      QueryResultMaterializationContext ctx, List<ByteString> outputs, Context context) throws IOException {
+    org.apache.hadoop.hive.ql.plan.TableDesc tableDesc = ctx.fileSinkDesc.getTableInfo();
+    if (ctx.fileSinkDesc.isUsingBatchingSerDe()
+        || tableDesc.getInputFileFormatClass() != TextInputFormat.class
+        || tableDesc.getOutputFileFormatClass() != HiveIgnoreKeyTextOutputFormat.class
+        || tableDesc.getSerDeClass() != LazySimpleSerDe.class) {
+      throw new IOException("Unsupported internal MR3 DAG output for resultId=" + ctx.resultId
+          + ", inputFormat=" + tableDesc.getInputFileFormatClass().getName()
+          + ", outputFormat=" + tableDesc.getOutputFileFormatClass().getName()
+          + ", serde=" + tableDesc.getSerdeClassName());
+    }
+    context.registerInternalDagOutput(ctx.fileSinkDesc.getDirName(),
+        new Context.InternalDagOutput(outputs, getRowSeparator(tableDesc.getProperties())));
+  }
+
+  private static int getRowSeparator(java.util.Properties tableProperties) {
+    String rowSeparatorString = tableProperties.getProperty(serdeConstants.LINE_DELIM, "\n");
+    try {
+      return Byte.parseByte(rowSeparatorString) & 0xff;
+    } catch (NumberFormatException e) {
+      return rowSeparatorString.charAt(0) & 0xff;
     }
   }
 

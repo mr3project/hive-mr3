@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql;
 
+import com.google.protobuf.ByteString;
 import java.io.DataInput;
 import java.io.IOException;
 import java.net.URI;
@@ -91,6 +92,36 @@ public class Context {
   String originalTracker = null;
   private CompilationOpContext opContext;
   private final Map<String, ContentSummary> pathToCS = new ConcurrentHashMap<String, ContentSummary>();
+  private final Map<String, InternalDagOutput> internalDagOutputs = new ConcurrentHashMap<>();
+
+  public static final class InternalDagOutput {
+    private final List<ByteString> payloads;
+    private final int rowSeparator;
+
+    public InternalDagOutput(List<ByteString> payloads, int rowSeparator) {
+      this.payloads = new ArrayList<>(payloads);
+      this.rowSeparator = rowSeparator;
+    }
+
+    public List<ByteString> getPayloads() {
+      return payloads;
+    }
+
+    public int getRowSeparator() {
+      return rowSeparator;
+    }
+  }
+
+  public void registerInternalDagOutput(Path path, InternalDagOutput output) {
+    InternalDagOutput previous = internalDagOutputs.putIfAbsent(path.toString(), output);
+    if (previous != null) {
+      throw new IllegalStateException("Internal DAG output already registered for " + path);
+    }
+  }
+
+  public InternalDagOutput removeInternalDagOutput(Path path) {
+    return internalDagOutputs.remove(path.toString());
+  }
 
   // scratch path to use for all non-local (ie. hdfs) file system tmp folders
   private final Path nonLocalScratchPath;
@@ -969,6 +1000,7 @@ public class Context {
   }
 
   public void clear(boolean deleteResultDir) throws IOException {
+    internalDagOutputs.clear();
     // First clear the other contexts created by this query
     for (Context subContext : subContexts) {
       subContext.clear();
