@@ -19,6 +19,7 @@
 package org.apache.hadoop.hive.ql.stats;
 
 import com.google.common.collect.ImmutableList;
+import com.google.protobuf.ByteString;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -41,6 +42,7 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.SetPartitionsStatsRequest;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
+import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.FetchOperator;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.lockmgr.HiveTxnManager;
@@ -52,6 +54,7 @@ import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.plan.ColumnStatsDesc;
 import org.apache.hadoop.hive.ql.plan.FetchWork;
 import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.objectinspector.InspectableObject;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
@@ -59,6 +62,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,24 +72,40 @@ public class ColStatsProcessor implements IStatsProcessor {
   private static final Logger LOG = LoggerFactory.getLogger(ColStatsProcessor.class);
 
   private FetchOperator ftOp;
+  private final Context.InternalDagOutput internalDagOutput;
+  private AbstractSerDe internalSerDe;
+  private ObjectInspector internalObjectInspector;
+  private int internalPayloadIndex;
+  private int internalPayloadOffset;
   private FetchWork fWork;
   private ColumnStatsDesc colStatDesc;
   private HiveConf conf;
   private boolean isStatsReliable;
 
   public ColStatsProcessor(ColumnStatsDesc colStats, HiveConf conf) {
+    this(colStats, conf, null);
+  }
+
+  public ColStatsProcessor(
+      ColumnStatsDesc colStats, HiveConf conf, Context.InternalDagOutput internalDagOutput) {
     this.conf = conf;
     fWork = colStats.getFWork();
     colStatDesc = colStats;
     isStatsReliable = conf.getBoolVar(ConfVars.HIVE_STATS_RELIABLE);
+    this.internalDagOutput = internalDagOutput;
   }
 
   @Override
   public void initialize(CompilationOpContext opContext) {
     try {
-      fWork.initializeForFetch(opContext);
-      JobConf job = new JobConf(conf);
-      ftOp = new FetchOperator(fWork, job);
+      if (internalDagOutput == null) {
+        fWork.initializeForFetch(opContext);
+        JobConf job = new JobConf(conf);
+        ftOp = new FetchOperator(fWork, job);
+      } else {
+        internalSerDe = fWork.getTblDesc().getDeserializer(conf);
+        internalObjectInspector = internalSerDe.getObjectInspector();
+      }
     } catch (Exception e) {
       LOG.error("Failed to initialize", e);
       throw new RuntimeException(e);
@@ -106,7 +126,7 @@ public class ColStatsProcessor implements IStatsProcessor {
 
     InspectableObject packedRow;
     long numStats = 0;
-    while ((packedRow = ftOp.getNextRow()) != null) {
+    while ((packedRow = getNextPackedRow()) != null) {
       if (packedRow.oi.getCategory() != ObjectInspector.Category.STRUCT) {
         throw new HiveException("Unexpected object type encountered while unpacking row");
       }
@@ -179,8 +199,43 @@ public class ColStatsProcessor implements IStatsProcessor {
         }
       }
     }
-    ftOp.clearFetchContext();
+    if (ftOp != null) {
+      ftOp.clearFetchContext();
+    }
     return true;
+  }
+
+  InspectableObject getNextPackedRow() throws IOException {
+    if (internalDagOutput == null) {
+      return ftOp.getNextRow();
+    }
+    List<ByteString> payloads = internalDagOutput.getPayloads();
+    while (internalPayloadIndex < payloads.size()) {
+      ByteString payload = payloads.get(internalPayloadIndex);
+      if (payload == null || internalPayloadOffset == payload.size()) {
+        payloads.set(internalPayloadIndex++, null);
+        internalPayloadOffset = 0;
+        continue;
+      }
+      int recordEnd = internalPayloadOffset;
+      byte separator = (byte) internalDagOutput.getRowSeparator();
+      while (recordEnd < payload.size() && payload.byteAt(recordEnd) != separator) {
+        recordEnd++;
+      }
+      if (recordEnd == payload.size()) {
+        throw new IOException("Internal MR3 DAG output does not end with the configured row separator");
+      }
+      byte[] record = new byte[recordEnd - internalPayloadOffset];
+      payload.copyTo(record, internalPayloadOffset, 0, record.length);
+      internalPayloadOffset = recordEnd + 1;
+      try {
+        Object row = internalSerDe.deserialize(new Text(record));
+        return new InspectableObject(row, internalObjectInspector);
+      } catch (Exception e) {
+        throw new IOException("Unable to deserialize internal MR3 DAG output", e);
+      }
+    }
+    return null;
   }
 
   private ColumnStatisticsDesc buildColumnStatsDesc(Table table, String partName, boolean isTblLevel) {

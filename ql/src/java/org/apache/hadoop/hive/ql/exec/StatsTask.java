@@ -78,7 +78,9 @@ public class StatsTask extends Task<StatsWork> implements Serializable {
       processors.add(0, t);
     }
     if (work.hasColStats()) {
-      processors.add(new ColStatsProcessor(work.getColStats(), conf));
+      Context.InternalDagOutput internalDagOutput = context.removeInternalDagOutput(
+          work.getColStats().getFWork().getTblDir());
+      processors.add(new ColStatsProcessor(work.getColStats(), conf, internalDagOutput));
     }
 
     for (IStatsProcessor p : processors) {
