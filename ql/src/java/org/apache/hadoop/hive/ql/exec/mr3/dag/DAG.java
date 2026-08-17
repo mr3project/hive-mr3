@@ -18,9 +18,11 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.dag;
 
-import com.google.protobuf.ByteString;
+import com.datamonad.mr3.api.LocalResourcePayload;
 import com.datamonad.mr3.api.common.MR3Conf$;
 import com.datamonad.mr3.api.common.MR3ConfBuilder;
+import com.google.common.base.Preconditions;
+import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -66,7 +68,9 @@ public class DAG {
   final private Credentials dagCredentials;
   final private String queryId;
 
-  final private Collection<LocalResource> localResources = new HashSet<LocalResource>();
+  final private Map<String, LocalResource> localResourcesByName = new HashMap<>();
+  final private Map<String, LocalResourcePayload> contentsByName = new HashMap<>();
+  final private Set<String> payloadNames = new HashSet<>();
   final private Map<String, Vertex> vertices = new HashMap<String, Vertex>();
   final private List<VertexGroup> vertexGroups = new ArrayList<VertexGroup>();
   final private List<Edge> edges = new ArrayList<Edge>();
@@ -131,8 +135,30 @@ public class DAG {
     dagUtils.addPathsToCredentials(dagCredentials, paths, conf);
   }
 
-  public void addLocalResources(Collection<LocalResource> localResources) {
-    this.localResources.addAll(localResources);
+  public void addLocalResources(Map<String, LocalResource> localResources,
+      Map<String, LocalResourcePayload> contents, boolean includePayload) {
+    Preconditions.checkArgument(localResources.keySet().equals(contents.keySet()),
+        "Local resource and payload names must match");
+    for (String name : localResources.keySet()) {
+      LocalResourcePayload existing = contentsByName.get(name);
+      LocalResourcePayload payload = contents.get(name);
+      Preconditions.checkArgument(existing == null ||
+          existing.digest().equals(payload.digest()),
+          "Local resource name %s has conflicting content", name);
+      localResourcesByName.putIfAbsent(name, localResources.get(name));
+      contentsByName.putIfAbsent(name, payload);
+      if (includePayload) {
+        payloadNames.add(name);
+      }
+    }
+  }
+
+  public Map<String, LocalResourcePayload> getSubmitLocalResourcePayloads() {
+    Map<String, LocalResourcePayload> result = new HashMap<>();
+    for (String name : payloadNames) {
+      result.put(name, contentsByName.get(name));
+    }
+    return result;
   }
 
   public void addVertex(Vertex vertex) {
@@ -192,8 +218,14 @@ public class DAG {
 
     List<DAGAPI.LocalResourceProto> lrProtos = new ArrayList<DAGAPI.LocalResourceProto>();
     DAGUtils dagUtils = DAGUtils.getInstance();
-    for (LocalResource lr: localResources) {
-      lrProtos.add(ProtoConverters.convertToLocalResourceProto(dagUtils.getBaseName(lr), lr));
+    for (Map.Entry<String, LocalResource> entry : localResourcesByName.entrySet()) {
+      LocalResourcePayload payload = contentsByName.get(entry.getKey());
+      DAGAPI.LocalResourceProto proto = ProtoConverters
+          .convertToLocalResourceProto(entry.getKey(), entry.getValue())
+          .toBuilder()
+          .setContentDigest(payload.digest())
+          .build();
+      lrProtos.add(proto);
     }
 
     List<DAGAPI.ContainerGroupProto> containerGroupProtos;

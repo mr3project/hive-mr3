@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.session;
 
+import com.datamonad.mr3.api.LocalResourcePayload;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -58,6 +59,7 @@ public interface MR3Session {
   MR3JobRef submit(
       DAG dag,
       Map<String, LocalResource> amLocalResources,
+      Map<String, LocalResourcePayload> amLocalResourcePayloads,
       Configuration mr3TaskConf,
       Map<String, BaseWork> workMap,
       Context ctx,

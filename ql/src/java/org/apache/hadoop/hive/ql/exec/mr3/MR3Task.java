@@ -18,9 +18,11 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3;
 
+import com.datamonad.mr3.api.LocalResourcePayload;
 import com.datamonad.mr3.api.client.DAGStatus;
 import com.datamonad.mr3.api.client.VertexStatus;
 import com.datamonad.mr3.api.common.MR3Exception;
+import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -75,7 +77,6 @@ import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.records.LocalResource;
-import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.tez.common.counters.CounterGroup;
 import org.apache.tez.common.counters.TezCounter;
 import org.apache.tez.common.counters.TezCounters;
@@ -138,6 +139,7 @@ public class MR3Task {
   private Path mr3ScratchDir = null;
   private boolean mr3ScratchDirCreated = false;
   private Map<String, LocalResource> amDagCommonLocalResources = null;
+  private Map<String, LocalResourcePayload> amDagCommonLocalResourcePayloads = null;
 
   private Map<BaseWork, Vertex> workToVertex = null;
   private Map<BaseWork, JobConf> workToConf = null;
@@ -218,7 +220,8 @@ public class MR3Task {
       // 4. submit
       try {
         mr3JobRef = mr3Session.submit(
-            dag, amDagCommonLocalResources, conf, tezWork.getWorkMap(), context, isShutdown, perfLogger);
+            dag, amDagCommonLocalResources, amDagCommonLocalResourcePayloads,
+            conf, tezWork.getWorkMap(), context, isShutdown, perfLogger);
         updateDagId(mr3JobRef);
         // mr3Session can be closed at any time, so the call may fail
         // handle only Exception from mr3Session.submit()
@@ -246,7 +249,8 @@ public class MR3Task {
           DAG newDag = setupSubmit(jobConf, tezWork, context, workToConf, true);
           // mr3Session can be closed at any time, so the call may fail
           mr3JobRef = mr3Session.submit(
-              newDag, amDagCommonLocalResources, conf, tezWork.getWorkMap(), context, isShutdown, perfLogger);
+              newDag, amDagCommonLocalResources, amDagCommonLocalResourcePayloads,
+              conf, tezWork.getWorkMap(), context, isShutdown, perfLogger);
           updateDagId(mr3JobRef);
         }
       }
@@ -373,10 +377,12 @@ public class MR3Task {
     // confLocalResource = specific to this MR3Task obtained from conf
     // localizeTempFilesFromConf() updates conf by calling HiveConf.setVar(HIVEADDEDFILES/JARS/ARCHIVES)
     // Note that we should not copy to mr3ScratchDir in order to avoid redundant localization.
-    List<LocalResource> confLocalResources = dagUtils.localizeTempFilesFromConf(sessionScratchDir, conf);
+    amDagCommonLocalResourcePayloads = new HashMap<>();
+    Map<String, LocalResource> confLocalResources = dagUtils.createInlineLocalResourcesFromConf(
+        conf, amDagCommonLocalResourcePayloads);
 
     // 2. compute amDagCommonLocalResources
-    amDagCommonLocalResources = dagUtils.convertLocalResourceListToMap(confLocalResources);
+    amDagCommonLocalResources = confLocalResources;
 
     // 3. create DAG
     DAG dag = buildDag(
@@ -430,10 +436,9 @@ public class MR3Task {
    * Converts inputOutputJars: String[] to resources: Map<String, LocalResource>
    */
   private Map<String, LocalResource> getDagLocalResources(
-      String[] dagJars, Path scratchDir, JobConf jobConf) throws Exception {
-    List<LocalResource> localResources = dagUtils.localizeTempFiles(scratchDir, jobConf, dagJars);
-
-    Map<String, LocalResource> resources = dagUtils.convertLocalResourceListToMap(localResources);
+      String[] dagJars, JobConf jobConf, Map<String, LocalResourcePayload> contentsByName) throws Exception {
+    Map<String, LocalResource> resources =
+        dagUtils.createInlineLocalResources(jobConf, dagJars, contentsByName);
     checkInputOutputLocalResources(resources);
 
     return resources;
@@ -469,20 +474,26 @@ public class MR3Task {
     String[] inputOutputJars = tezWork.configureJobConfAndExtractJars(jobConf);
 
     Map<String, LocalResource> inputOutputLocalResources;
+    Map<String, LocalResourcePayload> inputOutputLocalResourcePayloads = new HashMap<>();
     if (inputOutputJars != null && inputOutputJars.length > 0) {
-      // we create mr3ScratchDir to localize inputOutputJars[] to HDFS
-      mr3ScratchDir = dagUtils.createMr3ScratchDir(sessionScratchDir, conf, true);
-      mr3ScratchDirCreated = true;
-      inputOutputLocalResources = getDagLocalResources(inputOutputJars, mr3ScratchDir, jobConf);
+      mr3ScratchDir = dagUtils.createMr3ScratchDir(sessionScratchDir, conf, false);
+      mr3ScratchDirCreated = false;
+      inputOutputLocalResources = getDagLocalResources(
+          inputOutputJars, jobConf, inputOutputLocalResourcePayloads);
       List<String> keysToRemove = new ArrayList();
       for (String lrName : inputOutputLocalResources.keySet()) {
         if (amDagCommonLocalResources.containsKey(lrName)) {
+          Preconditions.checkArgument(
+              inputOutputLocalResourcePayloads.get(lrName).digest().equals(
+                  amDagCommonLocalResourcePayloads.get(lrName).digest()),
+              "Local resource name %s is associated with conflicting contents", lrName);
           LOG.info("Skipping LocalResource which is already included: {}", lrName);
           keysToRemove.add(lrName);
         }
       }
       for (String key: keysToRemove) {
         inputOutputLocalResources.remove(key);
+        inputOutputLocalResourcePayloads.remove(key);
       }
     } else {
       // no need to create mr3ScratchDir (because DAG Plans are passed via RPC)
@@ -529,21 +540,12 @@ public class MR3Task {
 
     // add input/output LocalResources and amDagLocalResources, and then add paths to DAG credentials
 
-    dag.addLocalResources(inputOutputLocalResources.values());
-    dag.addLocalResources(amDagCommonLocalResources.values());
+    dag.addLocalResources(inputOutputLocalResources, inputOutputLocalResourcePayloads, true);
+    dag.addLocalResources(amDagCommonLocalResources, amDagCommonLocalResourcePayloads, false);
 
     if (dagUtils.shouldAddPathsToCredentials(jobConf)) {
       LOG.info("Adding credentials for DAG: {}", dagName);
       Set<Path> allPaths = new HashSet<Path>();
-      for (LocalResource lr: inputOutputLocalResources.values()) {
-        allPaths.add(ConverterUtils.getPathFromYarnURL(lr.getResource()));
-      }
-      for (LocalResource lr: amDagCommonLocalResources.values()) {
-        allPaths.add(ConverterUtils.getPathFromYarnURL(lr.getResource()));
-      }
-      for (Path path: allPaths) {
-        LOG.info("Marking Path as needing credentials for DAG: {}", path);
-      }
       final String[] additionalCredentialsSource = HiveConf.getTrimmedStringsVar(jobConf,
           HiveConf.ConfVars.MR3_DAG_ADDITIONAL_CREDENTIALS_SOURCE);
       for (String addPath: additionalCredentialsSource) {
