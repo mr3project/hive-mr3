@@ -382,9 +382,19 @@ public class MR3SessionImpl implements MR3Session {
 
     LOG.info("Submitting DAG (submitter={})", submitter);
     // close() may have been called, in which case currentHiveMr3Client.submitDag() raises Exception
-    MR3JobRef mr3JobRef = currentHiveMr3Client.submitDag(
-        dagProto, addtlAmLocalResources, submitPayloads,
-        workMap, dag, ctx, isShutdown);
+    MR3JobRef mr3JobRef;
+    try {
+      mr3JobRef = currentHiveMr3Client.submitDag(
+          dagProto, addtlAmLocalResources, submitPayloads, workMap, dag, ctx, isShutdown);
+    } catch (Exception ex) {
+      LOG.error("Resetting LocalResources assumed to be present in DAGAppMaster");
+      synchronized (this) {
+        if (hiveMr3Client == currentHiveMr3Client) {
+          resetAmLocalResources();
+        }
+      }
+      throw ex;
+    }
 
     synchronized (this) {
       // Do not record resources until MR3 has accepted the submission.
@@ -480,10 +490,10 @@ public class MR3SessionImpl implements MR3Session {
       } else {
         // AM LocalResources are cached across DAG submissions, and MR3 treats the basename as an
         // immutable identifier for the lifetime of the MR3 session/application. Hive's DELETE
-        // JAR/FILE/ARCHIVE commands only remove a resource from the current Hive SessionState; they
-        // do not evict an already installed resource from the AM or release its basename. This is
-        // especially relevant when MR3 session sharing is enabled, because another Hive/Beeline
-        // session may have installed the existing resource.
+        // JAR/FILE/ARCHIVE commands only remove a resource from the current Hive SessionState;
+        // they do not evict an already installed resource from the AM or release its basename.
+        // This is especially relevant when MR3 session sharing is enabled, because another
+        // Hive/Beeline session may have installed the existing resource.
         //
         // Users who update LocalResources should therefore put the version or build ID in the
         // basename itself (for example, my_udf-1.1.0.jar). Changing only the parent directory is
@@ -512,6 +522,13 @@ public class MR3SessionImpl implements MR3Session {
       amLocalResources.putIfAbsent(entry.getKey(), entry.getValue());
       amLocalResourceDigests.putIfAbsent(entry.getKey(), payload.digest());
     }
+  }
+
+  private void resetAmLocalResources() {
+    amLocalResources.clear();
+    amLocalResourceDigests.clear();
+    amLocalResources.putAll(sessionLocalResources);
+    amLocalResourceDigests.putAll(sessionLocalResourceDigests);
   }
 
   private void waitUntilMr3ClientReady() throws Exception {
