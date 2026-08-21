@@ -1264,63 +1264,6 @@ public class DAGUtils {
     }
   }
 
-  /**
-   * Localizes files, archives and jars the user has instructed us
-   * to provide on the cluster as resources for execution.
-   *
-   * @param conf
-   * @return List<LocalResource> local resources to add to execution
-   * @throws IOException when hdfs operation fails
-   * @throws LoginException when getDefaultDestDir fails with the same exception
-   */
-  public List<LocalResource> localizeTempFilesFromConf(
-      Path hdfsDirPathStr, Configuration conf) throws IOException, LoginException {
-    List<LocalResource> tmpResources = new ArrayList<LocalResource>();
-
-    if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_ADD_FILES_USE_HDFS_LOCATION)) {
-      // reference HDFS based resource directly, to use distribute cache efficiently.
-      addHdfsResource(conf, tmpResources, LocalResourceType.FILE, getHdfsTempFilesFromConf(conf));
-      // local resources are session based.
-      addTempResources(conf, tmpResources, hdfsDirPathStr, LocalResourceType.FILE, getLocalTempFilesFromConf(conf));
-    } else {
-      // all resources including HDFS are session based.
-      addTempResources(conf, tmpResources, hdfsDirPathStr, LocalResourceType.FILE, getTempFilesFromConf(conf));
-    }
-
-    addTempResources(conf, tmpResources, hdfsDirPathStr, LocalResourceType.ARCHIVE,
-        getTempArchivesFromConf(conf));
-    return tmpResources;
-  }
-
-  private void addHdfsResource(Configuration conf, List<LocalResource> tmpResources,
-                               LocalResourceType type, String[] files) throws IOException {
-    for (String file: files) {
-      if (StringUtils.isNotBlank(file)) {
-        Path dest = new Path(file);
-        FileSystem destFS = dest.getFileSystem(conf);
-        LocalResource localResource = createLocalResource(destFS, dest, type,
-            LocalResourceVisibility.PRIVATE);
-        tmpResources.add(localResource);
-      }
-    }
-  }
-
-  private static String[] getHdfsTempFilesFromConf(Configuration conf) {
-    String addedFiles = Utilities.getHdfsResourceFiles(conf, SessionState.ResourceType.FILE);
-    String addedJars = Utilities.getHdfsResourceFiles(conf, SessionState.ResourceType.JAR);
-    String allFiles = addedJars + "," + addedFiles;
-    return allFiles.split(",");
-  }
-
-  private static String[] getLocalTempFilesFromConf(Configuration conf) {
-    String addedFiles = Utilities.getLocalResourceFiles(conf, SessionState.ResourceType.FILE);
-    String addedJars = Utilities.getLocalResourceFiles(conf, SessionState.ResourceType.JAR);
-    String reloadableAuxJars = SessionState.get() == null ? null : SessionState.get().getReloadableAuxJars();
-    String allFiles =
-        HiveStringUtils.joinIgnoringEmpty(new String[]{reloadableAuxJars, addedJars, addedFiles}, ',');
-    return allFiles.split(",");
-  }
-
   private String[] getTempFilesFromConf(Configuration conf) {
     String addedFiles = Utilities.getResourceFiles(conf, SessionState.ResourceType.FILE);
     if (StringUtils.isNotBlank(addedFiles)) {
