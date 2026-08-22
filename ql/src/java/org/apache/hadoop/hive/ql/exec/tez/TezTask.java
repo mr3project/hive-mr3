@@ -28,6 +28,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -52,6 +53,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.tez.monitoring.TezJobMonitor;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.parse.ExplainConfiguration.AnalyzeState;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.MergeJoinWork;
@@ -179,9 +181,31 @@ public class TezTask extends Task<TezWork> {
       this.setException(exFromMr3);
     }
     if (exFromMr3 == null) {
+      collectExplainAnalyzeRuntimeStats();
       updateNumRows();
     }
     return returnCode;
+  }
+
+  private void collectExplainAnalyzeRuntimeStats() {
+    if (context == null || context.getExplainAnalyze() != AnalyzeState.RUNNING || counters == null) {
+      return;
+    }
+    String groupName = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_COUNTER_GROUP);
+    Set<String> collectedOperatorIds = new HashSet<>();
+    for (BaseWork baseWork : work.getAllWork()) {
+      for (Operator<? extends OperatorDesc> operator : baseWork.getAllOperators()) {
+        String operatorId = operator.getOperatorId();
+        if (!collectedOperatorIds.add(operatorId)) {
+          continue;
+        }
+        String counterName = Operator.Counter.RECORDS_OUT_OPERATOR + "_" + operatorId;
+        TezCounter counter = counters.getGroup(groupName).findCounter(counterName, false);
+        if (counter != null) {
+          context.addExplainAnalyzeRuntimeStat(operatorId, counter.getValue());
+        }
+      }
+    }
   }
 
   private int executeTez() {

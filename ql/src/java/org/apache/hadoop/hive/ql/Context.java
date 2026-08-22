@@ -93,6 +93,15 @@ public class Context {
   private CompilationOpContext opContext;
   private final Map<String, ContentSummary> pathToCS = new ConcurrentHashMap<String, ContentSummary>();
   private final Map<String, InternalDagOutput> internalDagOutputs = new ConcurrentHashMap<>();
+  private final Map<String, Long> explainAnalyzeRuntimeStats = new ConcurrentHashMap<>();
+
+  public void addExplainAnalyzeRuntimeStat(String operatorId, long rowCount) {
+    explainAnalyzeRuntimeStats.merge(operatorId, rowCount, Long::sum);
+  }
+
+  public Map<String, Long> getExplainAnalyzeRuntimeStats() {
+    return new HashMap<>(explainAnalyzeRuntimeStats);
+  }
 
   public static final class InternalDagOutput {
     private final List<ByteString> payloads;

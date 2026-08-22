@@ -94,7 +94,9 @@ public class ExplainSemanticAnalyzer extends BaseSemanticAnalyzer {
         config.setAuthorize(true);
       } else if (explainOptions == HiveParser.KW_ANALYZE) {
         config.setAnalyze(AnalyzeState.RUNNING);
-        config.setExplainRootPath(ctx.getMRTmpPath());
+        if (!"tez".equals(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE))) {
+          config.setExplainRootPath(ctx.getMRTmpPath());
+        }
       } else if (explainOptions == HiveParser.KW_VECTORIZATION) {
         config.setVectorization(true);
         if (i + 1 < childCount) {
@@ -170,7 +172,10 @@ public class ExplainSemanticAnalyzer extends BaseSemanticAnalyzer {
             throw new SemanticException(e.getMessage(), e);
           }
         }
-        config.setOpIdToRuntimeNumRows(aggregateStats(config.getExplainRootPath()));
+        Map<String, Long> dagRuntimeStats = runCtx.getExplainAnalyzeRuntimeStats();
+        config.setOpIdToRuntimeNumRows(
+            "tez".equals(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_EXECUTION_ENGINE))
+                ? dagRuntimeStats : aggregateStats(config.getExplainRootPath()));
       } catch (IOException e1) {
         throw new SemanticException(e1);
       }

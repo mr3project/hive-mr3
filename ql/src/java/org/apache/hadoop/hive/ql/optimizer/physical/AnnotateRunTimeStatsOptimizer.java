@@ -78,7 +78,10 @@ public class AnnotateRunTimeStatsOptimizer implements PhysicalPlanResolver {
         }
       }
 
-      setOrAnnotateStats(ops, physicalContext.getParseContext());
+      // Tez/MR3 already transports per-operator row counters back with the DAG status.
+      // Do not additionally publish EXPLAIN ANALYZE statistics through FSStatsPublisher.
+      boolean useDagCounters = currTask instanceof TezTask;
+      setOrAnnotateStats(ops, physicalContext.getParseContext(), useDagCounters);
       return null;
     }
 
@@ -86,9 +89,16 @@ public class AnnotateRunTimeStatsOptimizer implements PhysicalPlanResolver {
 
   public static void setOrAnnotateStats(Set<Operator<? extends OperatorDesc>> ops, ParseContext pctx)
       throws SemanticException {
+    setOrAnnotateStats(ops, pctx, false);
+  }
+
+  private static void setOrAnnotateStats(Set<Operator<? extends OperatorDesc>> ops, ParseContext pctx,
+      boolean useDagCounters) throws SemanticException {
     for (Operator<? extends OperatorDesc> op : ops) {
       if (pctx.getContext().getExplainAnalyze() == AnalyzeState.RUNNING) {
-        setRuntimeStatsDir(op, pctx);
+        if (!useDagCounters) {
+          setRuntimeStatsDir(op, pctx);
+        }
       } else if (pctx.getContext().getExplainAnalyze() == AnalyzeState.ANALYZING) {
         annotateRuntimeStats(op, pctx);
       } else {
