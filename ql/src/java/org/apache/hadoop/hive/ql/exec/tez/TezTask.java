@@ -188,7 +188,7 @@ public class TezTask extends Task<TezWork> {
   }
 
   private void collectExplainAnalyzeRuntimeStats() {
-    if (context == null || context.getExplainAnalyze() != AnalyzeState.RUNNING || counters == null) {
+    if (context.getExplainAnalyze() != AnalyzeState.RUNNING) {
       return;
     }
     String groupName = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_COUNTER_GROUP);
