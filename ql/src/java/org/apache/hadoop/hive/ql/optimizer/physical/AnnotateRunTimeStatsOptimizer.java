@@ -77,13 +77,16 @@ public class AnnotateRunTimeStatsOptimizer implements PhysicalPlanResolver {
 
   public static void setOrAnnotateStats(Set<Operator<? extends OperatorDesc>> ops, ParseContext pctx)
       throws SemanticException {
+    AnalyzeState analyzeState = pctx.getContext().getExplainAnalyze();
+    if (analyzeState == AnalyzeState.RUNNING) {
+      // MR3 operators already publish their row counts as DAG counters; no plan setup is required.
+      return;
+    }
+    if (analyzeState != AnalyzeState.ANALYZING) {
+      throw new SemanticException("Unexpected stats in AnnotateWithRunTimeStatistics.");
+    }
     for (Operator<? extends OperatorDesc> op : ops) {
-      AnalyzeState analyzeState = pctx.getContext().getExplainAnalyze();
-      if (analyzeState == AnalyzeState.ANALYZING) {
-        annotateRuntimeStats(op, pctx);
-      } else if (analyzeState != AnalyzeState.RUNNING) {
-        throw new SemanticException("Unexpected stats in AnnotateWithRunTimeStatistics.");
-      }
+      annotateRuntimeStats(op, pctx);
     }
   }
 
