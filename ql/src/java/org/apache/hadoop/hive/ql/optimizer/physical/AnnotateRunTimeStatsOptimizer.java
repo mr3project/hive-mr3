@@ -82,9 +82,6 @@ public class AnnotateRunTimeStatsOptimizer implements PhysicalPlanResolver {
       // MR3 operators already publish their row counts as DAG counters; no plan setup is required.
       return;
     }
-    if (analyzeState != AnalyzeState.ANALYZING) {
-      throw new SemanticException("Unexpected stats in AnnotateWithRunTimeStatistics.");
-    }
     for (Operator<? extends OperatorDesc> op : ops) {
       annotateRuntimeStats(op, pctx);
     }
