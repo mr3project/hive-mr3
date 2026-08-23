@@ -27,11 +27,8 @@ import java.util.Stack;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Task;
-import org.apache.hadoop.hive.ql.exec.mr.MapRedTask;
 import org.apache.hadoop.hive.ql.exec.tez.TezTask;
 import org.apache.hadoop.hive.ql.lib.DefaultGraphWalker;
 import org.apache.hadoop.hive.ql.lib.SemanticDispatcher;
@@ -39,16 +36,12 @@ import org.apache.hadoop.hive.ql.lib.SemanticGraphWalker;
 import org.apache.hadoop.hive.ql.lib.Node;
 import org.apache.hadoop.hive.ql.lib.SemanticNodeProcessor;
 import org.apache.hadoop.hive.ql.lib.SemanticRule;
-import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.parse.ExplainConfiguration.AnalyzeState;
 import org.apache.hadoop.hive.ql.parse.ParseContext;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.TezWork;
-import org.apache.hadoop.hive.ql.stats.StatsCollectionContext;
-import org.apache.hadoop.hive.ql.stats.StatsPublisher;
-import org.apache.hadoop.hive.ql.stats.fs.FSStatsPublisher;
 
 public class AnnotateRunTimeStatsOptimizer implements PhysicalPlanResolver {
   private static final Logger LOG = LoggerFactory.getLogger(AnnotateRunTimeStatsOptimizer.class);
@@ -66,18 +59,16 @@ public class AnnotateRunTimeStatsOptimizer implements PhysicalPlanResolver {
     public Object dispatch(Node nd, Stack<Node> stack, Object... nodeOutputs)
         throws SemanticException {
       Task<?> currTask = (Task<?>) nd;
-      Set<Operator<? extends OperatorDesc>> ops = new HashSet<>();
-
-      if (currTask instanceof MapRedTask) {
-        MapRedTask mr = (MapRedTask) currTask;
-        ops.addAll(mr.getWork().getAllOperators());
-      } else if (currTask instanceof TezTask) {
-        TezWork work = ((TezTask) currTask).getWork();
-        for (BaseWork w : work.getAllWork()) {
-          ops.addAll(w.getAllOperators());
-        }
+      // Assume HIVE_EXECUTION_ENGINE is set to tez, so only TezTask carries executable operator work.
+      if (!(currTask instanceof TezTask)) {
+        return null;
       }
 
+      Set<Operator<? extends OperatorDesc>> ops = new HashSet<>();
+      TezWork work = ((TezTask) currTask).getWork();
+      for (BaseWork w : work.getAllWork()) {
+        ops.addAll(w.getAllOperators());
+      }
       setOrAnnotateStats(ops, physicalContext.getParseContext());
       return null;
     }
@@ -86,39 +77,13 @@ public class AnnotateRunTimeStatsOptimizer implements PhysicalPlanResolver {
 
   public static void setOrAnnotateStats(Set<Operator<? extends OperatorDesc>> ops, ParseContext pctx)
       throws SemanticException {
-    for (Operator<? extends OperatorDesc> op : ops) {
-      if (pctx.getContext().getExplainAnalyze() == AnalyzeState.RUNNING) {
-        setRuntimeStatsDir(op, pctx);
-      } else if (pctx.getContext().getExplainAnalyze() == AnalyzeState.ANALYZING) {
-        annotateRuntimeStats(op, pctx);
-      } else {
-        throw new SemanticException("Unexpected stats in AnnotateWithRunTimeStatistics.");
-      }
+    AnalyzeState analyzeState = pctx.getContext().getExplainAnalyze();
+    if (analyzeState == AnalyzeState.RUNNING) {
+      // MR3 operators already publish their row counts as DAG counters; no plan setup is required.
+      return;
     }
-  }
-
-  private static void setRuntimeStatsDir(Operator<? extends OperatorDesc> op, ParseContext pctx)
-      throws SemanticException {
-    try {
-      OperatorDesc conf = op.getConf();
-      if (conf != null) {
-        LOG.info("setRuntimeStatsDir for " + op.getOperatorId());
-        String path = new Path(pctx.getContext().getExplainConfig().getExplainRootPath(),
-            op.getOperatorId()).toString();
-        StatsPublisher statsPublisher = new FSStatsPublisher();
-        StatsCollectionContext runtimeStatsContext = new StatsCollectionContext(pctx.getConf());
-        runtimeStatsContext.setStatsTmpDir(path);
-        if (!statsPublisher.init(runtimeStatsContext)) {
-          LOG.error("StatsPublishing error: StatsPublisher is not initialized.");
-          throw new HiveException(ErrorMsg.STATSPUBLISHER_NOT_OBTAINED.getErrorCodedMsg());
-        }
-        conf.setRuntimeStatsTmpDir(path);
-      } else {
-        LOG.debug("skip setRuntimeStatsDir for " + op.getOperatorId()
-            + " because OperatorDesc is null");
-      }
-    } catch (HiveException e) {
-      throw new SemanticException(e);
+    for (Operator<? extends OperatorDesc> op : ops) {
+      annotateRuntimeStats(op, pctx);
     }
   }
 
