@@ -52,6 +52,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.tez.monitoring.TezJobMonitor;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.parse.ExplainConfiguration.AnalyzeState;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.MergeJoinWork;
@@ -179,9 +180,27 @@ public class TezTask extends Task<TezWork> {
       this.setException(exFromMr3);
     }
     if (exFromMr3 == null) {
+      collectExplainAnalyzeRuntimeStats();
       updateNumRows();
     }
     return returnCode;
+  }
+
+  private void collectExplainAnalyzeRuntimeStats() {
+    if (context.getExplainAnalyze() != AnalyzeState.RUNNING) {
+      return;
+    }
+    String groupName = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_COUNTER_GROUP);
+    for (BaseWork baseWork : work.getAllWork()) {
+      for (Operator<? extends OperatorDesc> operator : baseWork.getAllOperators()) {
+        String operatorId = operator.getOperatorId();
+        String counterName = Operator.Counter.RECORDS_OUT_OPERATOR + "_" + operatorId;
+        TezCounter counter = counters.getGroup(groupName).findCounter(counterName, false);
+        if (counter != null) {
+          context.addExplainAnalyzeRuntimeStat(operatorId, counter.getValue());
+        }
+      }
+    }
   }
 
   private int executeTez() {
