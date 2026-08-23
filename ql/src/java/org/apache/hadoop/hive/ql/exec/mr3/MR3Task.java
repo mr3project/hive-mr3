@@ -133,11 +133,6 @@ public class MR3Task {
 
   // updated in setupSubmit()
   private MR3Session mr3Session = null;
-  // mr3ScratchDir is always set to a directory on HDFS.
-  // we create mr3ScratchDir only if TezWork.configureJobConfAndExtractJars() returns a non-empty list.
-  // note that we always need mr3ScratchDir for the path to Map/Reduce Plans.
-  private Path mr3ScratchDir = null;
-  private boolean mr3ScratchDirCreated = false;
   private Map<String, LocalResource> amDagCommonLocalResources = null;
   private Map<String, LocalResourcePayload> amDagCommonLocalResourcePayloads = null;
 
@@ -242,9 +237,6 @@ public class MR3Task {
           // 1. simulate completing the current call to execute()
           Utilities.clearWork(conf);
           // no need to call cleanContextIfNecessary(cleanContext, context)
-          if (mr3ScratchDir != null && mr3ScratchDirCreated) {
-            dagUtils.cleanMr3Dir(mr3ScratchDir, conf);
-          }
           // 2. call again.
           DAG newDag = setupSubmit(jobConf, tezWork, context, workToConf, true);
           // mr3Session can be closed at any time, so the call may fail
@@ -313,12 +305,6 @@ public class MR3Task {
 
       cleanContextIfNecessary(cleanContext, context);
 
-      // TODO: clean before close()?
-      // Make sure tmp files from task can be moved in this.close(tezWork, returnCode).
-      if (mr3ScratchDir != null && mr3ScratchDirCreated) {
-        dagUtils.cleanMr3Dir(mr3ScratchDir, conf);
-      }
-
       // We know the job has been submitted, should try and close work
       if (mr3JobRef != null) {
         // returnCode will only be overwritten if close errors out
@@ -371,12 +357,10 @@ public class MR3Task {
     // sessionScratchDir is not null because mr3Session has started:
     //   if shareMr3Session == false, this MR3Task/thread owns mr3Session, which must have started.
     //   if shareMr3Session == true, close() is called only from MR3Session.shutdown() in the end.
-    // mr3ScratchDir is created in buildDag() if necessary.
-
     // 1. compute amDagCommonLocalResources[] and amDagCommonLocalResourcePayloads[]
     // confLocalResource = specific to this MR3Task obtained from conf
     // localizeTempFilesFromConf() updates conf by calling HiveConf.setVar(HIVEADDEDFILES/JARS/ARCHIVES)
-    // Note that we should not copy to mr3ScratchDir in order to avoid redundant localization.
+    // Note that we should not copy to the scratch directory in order to avoid redundant localization.
     amDagCommonLocalResourcePayloads = new HashMap<>();
     amDagCommonLocalResources = dagUtils.createInlineLocalResourcesFromConf(
         conf, amDagCommonLocalResourcePayloads);
@@ -473,8 +457,6 @@ public class MR3Task {
     Map<String, LocalResource> inputOutputLocalResources;
     Map<String, LocalResourcePayload> inputOutputLocalResourcePayloads = new HashMap<>();
     if (inputOutputJars != null && inputOutputJars.length > 0) {
-      mr3ScratchDir = dagUtils.createMr3ScratchDir(sessionScratchDir, conf, false);
-      mr3ScratchDirCreated = false;
       inputOutputLocalResources = getDagLocalResources(
           inputOutputJars, jobConf, inputOutputLocalResourcePayloads);
       List<String> keysToRemove = new ArrayList();
@@ -493,9 +475,6 @@ public class MR3Task {
         inputOutputLocalResourcePayloads.remove(key);
       }
     } else {
-      // no need to create mr3ScratchDir (because DAG Plans are passed via RPC)
-      mr3ScratchDir = dagUtils.createMr3ScratchDir(sessionScratchDir, conf, false);
-      mr3ScratchDirCreated = false;
       inputOutputLocalResources = new HashMap<String, LocalResource>();
     }
 
@@ -528,7 +507,7 @@ public class MR3Task {
         buildVertexGroupEdges(dag, tezWork, (UnionWork) w, workToVertex, workToConf);
       } else {
         buildRegularVertexEdge(
-            jobConf, dag, tezWork, w, workToVertex, workToConf, mr3ScratchDir, isSubmissionRetry);
+            jobConf, dag, tezWork, w, workToVertex, workToConf, sessionScratchDir, isSubmissionRetry);
       }
       perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_CREATE_VERTEX + w.getName());
     }

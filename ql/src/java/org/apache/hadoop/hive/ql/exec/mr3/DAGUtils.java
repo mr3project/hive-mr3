@@ -28,7 +28,6 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
@@ -36,7 +35,6 @@ import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.MapJoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
-import org.apache.hadoop.hive.ql.exec.TaskRunner;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr.ExecMapper;
 import org.apache.hadoop.hive.ql.exec.mr.ExecReducer;
@@ -46,7 +44,6 @@ import org.apache.hadoop.hive.ql.exec.mr3.dag.EdgeProperty;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.EntityDescriptor;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.GroupInputEdge;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.Vertex;
-import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.hive.ql.exec.tez.CustomEdgeConfiguration;
 import org.apache.hadoop.hive.ql.exec.tez.CustomPartitionEdge;
 import org.apache.hadoop.hive.ql.exec.tez.CustomPartitionVertex;
@@ -165,7 +162,6 @@ public class DAGUtils {
   private static final Logger LOG = LoggerFactory.getLogger(DAGUtils.class.getName());
   private static DAGUtils instance;
 
-  private static final String MR3_DIR = "_mr3_scratch_dir";
   private static final int defaultAllInOneContainerMemoryMb = 1024;
   private static final int defaultAllInOneContainerVcores = 1;
 
@@ -1587,36 +1583,7 @@ public class DAGUtils {
     return defaultValue != null && defaultValue.equals(entry.getValue());
   }
 
-  /**
-   * Creates the mr3 Scratch dir for MR3Tasks
-   */
-  public Path createMr3ScratchDir(Path scratchDir, Configuration conf, boolean createDir)
-      throws IOException {
-    UserGroupInformation ugi = Utils.getUGI();
-    String userName = ugi.getShortUserName();
-
-    // Cf. HIVE-21171
-    // ConfVars.HIVE_RPC_QUERY_PLAN == true, so we do not need mr3ScratchDir to store DAG Plans.
-    // However, we may still need mr3ScratchDir if TezWork.configureJobConfAndExtractJars() returns
-    // a non-empty list in MR3Task.
-    Path mr3ScratchDir = getMr3ScratchDir(new Path(scratchDir, userName));
-    LOG.info("mr3ScratchDir path {} for users {}, createDir={}", mr3ScratchDir, userName, createDir);
-    if (createDir) {
-      FileSystem fs = mr3ScratchDir.getFileSystem(conf);
-      fs.mkdirs(mr3ScratchDir, new FsPermission(SessionState.TASK_SCRATCH_DIR_PERMISSION));
-    }
-
-    return mr3ScratchDir;
-  }
-
-  /**
-   * Gets the mr3 Scratch dir for MR3Tasks
-   */
-  private Path getMr3ScratchDir(Path scratchDir) {
-    return new Path(scratchDir, MR3_DIR + "-" + MR3SessionManagerImpl.getInstance().getUniqueId() + "-" + TaskRunner.getTaskRunnerID());
-  }
-
-  public void cleanMr3Dir( Path scratchDir, Configuration conf ) {
+  public void cleanMr3Dir(Path scratchDir, Configuration conf) {
     try {
       FileSystem fs = scratchDir.getFileSystem(conf);
       fs.delete(scratchDir, true);
