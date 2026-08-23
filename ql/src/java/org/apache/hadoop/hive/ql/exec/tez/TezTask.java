@@ -28,7 +28,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -192,13 +191,9 @@ public class TezTask extends Task<TezWork> {
       return;
     }
     String groupName = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_COUNTER_GROUP);
-    Set<String> collectedOperatorIds = new HashSet<>();
     for (BaseWork baseWork : work.getAllWork()) {
       for (Operator<? extends OperatorDesc> operator : baseWork.getAllOperators()) {
         String operatorId = operator.getOperatorId();
-        if (!collectedOperatorIds.add(operatorId)) {
-          continue;
-        }
         String counterName = Operator.Counter.RECORDS_OUT_OPERATOR + "_" + operatorId;
         TezCounter counter = counters.getGroup(groupName).findCounter(counterName, false);
         if (counter != null) {
