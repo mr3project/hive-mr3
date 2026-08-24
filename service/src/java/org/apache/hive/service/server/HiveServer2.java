@@ -431,9 +431,7 @@ public class HiveServer2 extends CompositeService {
           builder.addServlet("jdbcjar", JdbcJarDownloadServlet.class);
           builder.setContextRootRewriteTarget(HS2_WEBUI_ROOT_URI);
           if (HiveConf.getBoolVar(hiveConf, ConfVars.HIVE_MR3_UI_CREATE_SERVER)) {
-            builder.addRewriteRule("^/mr3-ui/?$", "/mr3-ui/index.html");
-            builder.addRewriteRule(
-                "^/mr3-ui/(?!assets/)(?!.*\\.[^/]+$).+$", "/mr3-ui/index.html");
+            builder.addRewriteRule("^/mr3-ui(?:/.*)?$", "/index.html");
           }
 
           String webUIAuthMethodConfig = hiveConf.getVar(ConfVars.HIVE_SERVER2_WEBUI_AUTH_METHOD);

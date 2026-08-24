@@ -19,11 +19,7 @@
 package org.apache.hive.service.server;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
-
-import org.apache.commons.io.IOUtils;
 
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.AMProxyResource;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.ATSResource;
@@ -54,7 +50,7 @@ import org.slf4j.LoggerFactory;
  */
 final class MR3TimelineService {
   private static final Logger LOG = LoggerFactory.getLogger(MR3TimelineService.class);
-  private static final String UI_INDEX = "hive-webapps/hiveserver2/mr3-ui/index.html";
+  private static final String UI_INDEX = "hive-webapps/hiveserver2/index.html";
 
   private final HiveConf conf;
   private TimelineStore timelineStore;
@@ -144,19 +140,6 @@ final class MR3TimelineService {
     if (index == null) {
       throw new IOException("MR3-UI static asset is missing: " + UI_INDEX);
     }
-
-    try (InputStream input = index.openStream()) {
-      String contents = IOUtils.toString(input, StandardCharsets.UTF_8);
-      if (containsRootStaticAssetReference(contents)) {
-        throw new IOException("MR3-UI index.html contains a root-relative /static or /assets "
-            + "reference; build the web application with public URL /mr3-ui");
-      }
-    }
-  }
-
-  private boolean containsRootStaticAssetReference(String contents) {
-    return contents.contains("\"/static/") || contents.contains("'/static/")
-        || contents.contains("\"/assets/") || contents.contains("'/assets/");
   }
 
   private ServletHolder createJerseyServlet(Class<?> resourceClass) {
