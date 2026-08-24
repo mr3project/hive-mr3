@@ -32,9 +32,9 @@ import org.apache.hadoop.hive.ql.exec.mr3.timeline.MR3TimelineIngestionServiceIn
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.ServerResource;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineDataManager;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineStore;
-import com.sun.jersey.api.core.ClassNamesResourceConfig;
-import com.sun.jersey.api.core.ResourceConfig;
-import com.sun.jersey.spi.container.servlet.ServletContainer;
+import org.glassfish.jersey.jackson.JacksonFeature;
+import org.glassfish.jersey.server.ResourceConfig;
+import org.glassfish.jersey.servlet.ServletContainer;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hive.http.HttpServer;
 import org.eclipse.jetty.servlet.ServletHolder;
@@ -143,8 +143,9 @@ final class MR3TimelineService {
   }
 
   private ServletHolder createJerseyServlet(Class<?> resourceClass) {
-    ResourceConfig config = new ClassNamesResourceConfig(resourceClass);
-    config.getFeatures().put("com.sun.jersey.api.json.POJOMappingFeature", true);
+    ResourceConfig config = new ResourceConfig()
+        .register(resourceClass)
+        .register(JacksonFeature.class);
     return new ServletHolder(new ServletContainer(config));
   }
 
