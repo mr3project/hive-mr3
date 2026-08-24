@@ -79,6 +79,9 @@ String remoteUser = request.getRemoteUser();
                 <li><a href="/conf">Hive Configuration</a></li>
                 <li><a href="/stacks">Stack Trace</a></li>
                 <li><a href="/llap.html">Llap Daemons</a></li>
+                <% if (conf.getBoolean("hive.mr3.ui.create.server", false)) { %>
+                <li><a href="/mr3-ui/">MR3-UI</a></li>
+                <% } %>
                 <li><a href="/logconf.jsp">Configure logging</a></li>
             </ul>
           </div><!--/.nav-collapse -->

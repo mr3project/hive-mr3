@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,40 +15,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.datamonad.mr3.timeline;
 
-/**
- * A class holding a name and value pair, used for specifying filters in
- * {@link TimelineReader}.
- */
-public class NameValuePair {
-  String name;
-  Object value;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
-  public NameValuePair(String name, Object value) {
-    this.name = name;
-    this.value = value;
-  }
+import com.datamonad.mr3.api.client.AppAttemptStatus;
+import com.datamonad.mr3.api.client.DAGStatus;
+import com.datamonad.mr3.api.client.VertexStatus;
+import org.apache.hadoop.security.UserGroupInformation;
 
-  /**
-   * Get the name.
-   * @return The name.
-   */
-  public String getName() {
+/** Provides the live MR3 state needed by MR3-UI. */
+public interface MR3LiveStatusServiceInterface extends AutoCloseable {
+  CurrentAttempt getCurrentAttempt();
 
-    return name;
-  }
+  AppAttemptStatus getAppAttemptStatus();
 
-  /**
-   * Get the value.
-   * @return The value.
-   */
-  public Object getValue() {
-    return value;
-  }
+  DAGStatus getDagStatus(int dagId, boolean includeCounters, UserGroupInformation callerUGI);
+
+  VertexStatus getVertexStatus(
+      int dagId, String vertexName, boolean includeCounters, UserGroupInformation callerUGI);
 
   @Override
-  public String toString() {
-    return "{ name: " + name + ", value: " + value + " }";
-  }
+  void close();
 }

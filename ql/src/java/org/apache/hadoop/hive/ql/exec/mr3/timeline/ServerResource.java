@@ -1,6 +1,9 @@
-package com.datamonad.mr3.timeline;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import org.slf4j.LoggerFactory;
+import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.authorize.AccessControlList;
+import org.apache.hive.http.HttpServer;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.*;
@@ -59,14 +62,9 @@ public class ServerResource {
     boolean isAdmin = false;
     if (servletContext != null && !username.equals("anonymous")) {
       Object adminsAttr = servletContext.getAttribute(HttpServer.ADMINS_ACL);
-      if (adminsAttr instanceof String) {
-        String[] adminUsers = ((String) adminsAttr).split(",");
-        for (String adminUser : adminUsers) {
-          if (username.equals(adminUser.trim())) {
-            isAdmin = true;
-            break;
-          }
-        }
+      if (adminsAttr instanceof AccessControlList) {
+        isAdmin = ((AccessControlList) adminsAttr).isUserAllowed(
+            UserGroupInformation.createRemoteUser(username));
       }
     }
 

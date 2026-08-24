@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package com.datamonad.mr3.timeline.util;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline.util;
 
 
 import org.apache.hadoop.io.WritableComparator;
@@ -25,7 +25,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 
-import static com.datamonad.mr3.timeline.GenericObjectMapper.readReverseOrderedLong;
+import static org.apache.hadoop.hive.ql.exec.mr3.timeline.GenericObjectMapper.readReverseOrderedLong;
 
 public class LeveldbUtils {
 

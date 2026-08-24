@@ -1,4 +1,4 @@
-package com.datamonad.mr3.timeline;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.*;

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,23 +16,27 @@
  * limitations under the License.
  */
 
-package com.datamonad.mr3.timeline;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
-import org.apache.hadoop.conf.Configuration;
+import java.io.IOException;
+import java.util.List;
+
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
+import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
 
-public interface TimelineStore extends TimelineReader, TimelineWriter {
-
-  /**
-   * The system filter which will be automatically added to a
-   * {@link TimelineEntity}'s primary filter section when storing the entity.
-   * The filter key is case sensitive. Users are supposed not to use the key
-   * reserved by the timeline system.
-   */
-  enum SystemFilter {
-    ENTITY_OWNER
+/** Initial implementation; transport and persistence will be added later. */
+public class MR3TimelineIngestionService
+    implements MR3TimelineIngestionServiceInterface {
+  @Override
+  public TimelinePutResponse appendTimelineEntities(
+      String producerApplicationId,
+      String producerAttemptId,
+      long sequenceNumber,
+      List<TimelineEntity> entities) throws IOException {
+    return new TimelinePutResponse();
   }
 
-  void initialize(Configuration conf) throws Exception;
-  void stop() throws Exception;
+  @Override
+  public void close() {
+  }
 }

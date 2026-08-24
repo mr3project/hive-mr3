@@ -16,13 +16,13 @@
  * limitations under the License.
  */
 
-package com.datamonad.mr3.timeline;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
-import com.datamonad.mr3.api.common.MR3Conf;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import org.apache.commons.collections.map.LRUMap;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -32,9 +32,9 @@ import org.apache.hadoop.yarn.api.records.timeline.*;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEvents.EventsOfOneEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse.TimelinePutError;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
-import com.datamonad.mr3.timeline.TimelineDataManager.CheckAcl;
-import com.datamonad.mr3.timeline.util.LeveldbUtils.KeyBuilder;
-import com.datamonad.mr3.timeline.util.LeveldbUtils.KeyParser;
+import org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineDataManager.CheckAcl;
+import org.apache.hadoop.hive.ql.exec.mr3.timeline.util.LeveldbUtils.KeyBuilder;
+import org.apache.hadoop.hive.ql.exec.mr3.timeline.util.LeveldbUtils.KeyParser;
 import org.apache.hadoop.yarn.server.utils.LeveldbIterator;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.fusesource.leveldbjni.internal.NativeDB;
@@ -50,10 +50,10 @@ import java.util.Map.Entry;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import static com.datamonad.mr3.timeline.GenericObjectMapper.readReverseOrderedLong;
-import static com.datamonad.mr3.timeline.GenericObjectMapper.writeReverseOrderedLong;
-import static com.datamonad.mr3.timeline.TimelineDataManager.DEFAULT_DOMAIN_ID;
-import static com.datamonad.mr3.timeline.util.LeveldbUtils.prefixMatches;
+import static org.apache.hadoop.hive.ql.exec.mr3.timeline.GenericObjectMapper.readReverseOrderedLong;
+import static org.apache.hadoop.hive.ql.exec.mr3.timeline.GenericObjectMapper.writeReverseOrderedLong;
+import static org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineDataManager.DEFAULT_DOMAIN_ID;
+import static org.apache.hadoop.hive.ql.exec.mr3.timeline.util.LeveldbUtils.prefixMatches;
 import static org.fusesource.leveldbjni.JniDBFactory.bytes;
 
 /**
@@ -193,8 +193,8 @@ public class LeveldbTimelineStore implements TimelineStore {
 
     JniDBFactory factory = new JniDBFactory();
     Path dbPath = new Path(conf.get(
-        MR3Conf.MR3_UI_TIMELINE_SERVICE_LEVELDB_PATH(),
-        MR3Conf.MR3_UI_TIMELINE_SERVICE_LEVELDB_PATH_DEFAULT()), FILENAME);
+        HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_PATH.varname,
+        HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_PATH.defaultStrVal), FILENAME);
 
     FileSystem localFS = null;
     try {
@@ -205,8 +205,8 @@ public class LeveldbTimelineStore implements TimelineStore {
               "timeline store " + dbPath);
         }
         short umask = Short.parseShort(conf.get(
-            MR3Conf.MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK(),
-            MR3Conf.MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK_DEFAULT()), 8);
+            HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK.varname,
+            HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK.defaultStrVal), 8);
         FsPermission LEVELDB_DIR_UMASK = FsPermission.createImmutable(umask);
         localFS.setPermission(dbPath, LEVELDB_DIR_UMASK);
       }

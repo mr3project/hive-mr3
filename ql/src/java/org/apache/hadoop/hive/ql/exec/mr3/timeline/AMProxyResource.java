@@ -1,4 +1,4 @@
-package com.datamonad.mr3.timeline;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import com.datamonad.mr3.api.client.AppAttemptStatus;
 import com.datamonad.mr3.api.client.DAGStatus;
@@ -6,8 +6,6 @@ import com.datamonad.mr3.api.client.Progress;
 import com.datamonad.mr3.api.client.VertexStatus;
 import com.datamonad.mr3.api.DAGID;
 import com.datamonad.mr3.common.Utils;
-import com.datamonad.mr3.master.DAGClientHandler;
-import com.datamonad.mr3.master.DAGClientHandlerInterface;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.tez.common.counters.TezCounters;
 import org.slf4j.LoggerFactory;
@@ -34,16 +32,14 @@ public class AMProxyResource {
 
   private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(AMProxyResource.class);
 
-  private final DAGClientHandlerInterface dagClientHandler;
-  private final String appAttemptIdStr;
+  private final MR3LiveStatusServiceInterface liveStatusService;
   private final ObjectMapper mapper = new ObjectMapper();
 
   public AMProxyResource() {
-    this.dagClientHandler = DAGClientHandler.getInstance();
-    this.appAttemptIdStr = dagClientHandler.getAppAttemptIdStr();
+    this.liveStatusService = MR3LiveStatusService.getInstance();
     // instantiated per incoming request (the default per-request lifecycle in JAX-RS) by Jersey
     if (LOG.isDebugEnabled()) {
-      LOG.debug("AMProxyResource initialized with DAGClientHandler: " + appAttemptIdStr);
+      LOG.debug("AMProxyResource initialized with MR3LiveStatusService");
     }
   }
 
@@ -54,7 +50,8 @@ public class AMProxyResource {
   public ObjectNode getCurrentAppAttemptId() {
     LOG.info("AMProxyResource.getCurrentAppAttemptId()");
 
-    String currentAppAttemptId = dagClientHandler.getAppAttemptIdStr();
+    String currentAppAttemptId =
+        liveStatusService.getCurrentAttempt().getApplicationAttemptId();
     ObjectNode root = mapper.createObjectNode();
     root.put("currentAppAttemptId", currentAppAttemptId);
 
@@ -73,7 +70,7 @@ public class AMProxyResource {
 
     LOG.info("AMProxyResource.getAppAttemptInfo(): appAttemptId={}", appAttemptId);
 
-    AppAttemptStatus appAttemptStatus = dagClientHandler.getAppAttemptStatus();
+    AppAttemptStatus appAttemptStatus = liveStatusService.getAppAttemptStatus();
 
     ObjectNode root = mapper.createObjectNode();
     root.put("appAttemptStatus", convertAppAttemptStatus(mapper, appAttemptStatus));
@@ -103,7 +100,7 @@ public class AMProxyResource {
     final boolean allCounters = "*".equals(counters);
     LOG.info("AMProxyResource.getDagInfo() from {}: dagIdId={}", remoteUser, dagIdId);
 
-    DAGStatus dagStatus = dagClientHandler.getDagStatusWithDagIdId(dagIdId, allCounters, ugi);
+    DAGStatus dagStatus = liveStatusService.getDagStatus(dagIdId, allCounters, ugi);
 
     ObjectNode root = mapper.createObjectNode();
     root.put("dagStatus", convertDAGStatus(mapper, dagStatus, allCounters));
@@ -135,7 +132,7 @@ public class AMProxyResource {
     final boolean allCounters = "*".equals(counters);
     LOG.info("AMProxyResource.getVertexInfo() from {}: dagIdId={}, vertexName={}", remoteUser, dagIdId, vertexName);
 
-    VertexStatus vertexStatus = dagClientHandler.getVertexStatusWithDagIdId(dagIdId, vertexName, true, ugi);
+    VertexStatus vertexStatus = liveStatusService.getVertexStatus(dagIdId, vertexName, true, ugi);
 
     ObjectNode root = mapper.createObjectNode();
     root.put("vertexStatus", convertVertexStatus(mapper, vertexStatus, allCounters));
@@ -150,12 +147,14 @@ public class AMProxyResource {
   //
 
   private void checkAppAttemptId(String appAttemptId) {
-    if (!appAttemptId.equals(this.appAttemptIdStr)) {
+    String currentAppAttemptId =
+        liveStatusService.getCurrentAttempt().getApplicationAttemptId();
+    if (!currentAppAttemptId.equals(appAttemptId)) {
       LOG.warn("Invalid appAttemptId: {}", appAttemptId);
 
       ObjectNode err = mapper.createObjectNode()
         .put("error", "Invalid appAttemptId")
-        .put("expected", this.appAttemptIdStr)
+        .put("expected", currentAppAttemptId)
         .put("got", appAttemptId);
 
       throw new WebApplicationException(

@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package com.datamonad.mr3.timeline;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -34,7 +34,7 @@ import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEvents;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineDomain;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
-import com.datamonad.mr3.timeline.TimelineReader.Field;
+import org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineReader.Field;
 import org.apache.hadoop.yarn.util.timeline.TimelineUtils;
 import org.slf4j.LoggerFactory;
 
@@ -85,7 +85,7 @@ public class TimelineDataManager {
       store.put(domain);
     }
 
-    if (aclManager.isAclsEnabled()) {
+    if (aclManager != null && aclManager.isAclsEnabled()) {
       domain = store.getDomain(DEFAULT_DOMAIN_ID);
       domain.setWriters("MR3_APP_MASTER");
       store.put(domain);
@@ -112,7 +112,7 @@ public class TimelineDataManager {
       if (user.equals(viewer)) {
         return true;
       }
-      return aclManager.checkAccess(ugi, ACLType.AM_VIEW_ACL);
+      return aclManager != null && aclManager.checkAccess(ugi, ACLType.AM_VIEW_ACL);
     }
   }
 
