@@ -429,10 +429,11 @@ public class HiveServer2 extends CompositeService {
           }
           builder.addServlet("llap", LlapServlet.class);
           builder.addServlet("jdbcjar", JdbcJarDownloadServlet.class);
-          builder.setContextRootRewriteTarget(HS2_WEBUI_ROOT_URI);
-          if (HiveConf.getBoolVar(hiveConf, ConfVars.HIVE_MR3_UI_CREATE_SERVER)) {
-            // This is an internal rewrite: the browser URL remains /mr3-ui/.
-            // The MR3 frontend router must therefore use /mr3-ui as its base path.
+          boolean mr3UIEnabled =
+              HiveConf.getBoolVar(hiveConf, ConfVars.HIVE_MR3_UI_CREATE_SERVER);
+          builder.setContextRootRewriteTarget(mr3UIEnabled ? "/index.html" : HS2_WEBUI_ROOT_URI);
+          if (mr3UIEnabled) {
+            // Retain /mr3-ui as an alias for frontend builds that use it as their base path.
             builder.addRewriteRule("^/mr3-ui(?:/.*)?$", "/index.html");
           }
 
