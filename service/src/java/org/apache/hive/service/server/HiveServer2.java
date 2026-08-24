@@ -430,6 +430,11 @@ public class HiveServer2 extends CompositeService {
           builder.addServlet("llap", LlapServlet.class);
           builder.addServlet("jdbcjar", JdbcJarDownloadServlet.class);
           builder.setContextRootRewriteTarget(HS2_WEBUI_ROOT_URI);
+          if (HiveConf.getBoolVar(hiveConf, ConfVars.HIVE_MR3_UI_CREATE_SERVER)) {
+            builder.addRewriteRule("^/mr3-ui/?$", "/mr3-ui/index.html");
+            builder.addRewriteRule(
+                "^/mr3-ui/(?!assets/)(?!.*\\.[^/]+$).+$", "/mr3-ui/index.html");
+          }
 
           String webUIAuthMethodConfig = hiveConf.getVar(ConfVars.HIVE_SERVER2_WEBUI_AUTH_METHOD);
           WebUIAuthMethod webUIAuthMethod = getWebUIAuthMethod(webUIAuthMethodConfig);
@@ -443,7 +448,7 @@ public class HiveServer2 extends CompositeService {
           mr3TimelineService = new MR3TimelineService(hiveConf);
           mr3TimelineService.initialize(webServer);
           if (!activePassiveHA) {
-            mr3TimelineService.startActiveWriter();
+            mr3TimelineService.activate();
           }
           if (ldapAuthService != null) {
             webServer.addServlet("login", "/login", new ServletHolder(new LoginServlet(ldapAuthService)));
@@ -931,7 +936,7 @@ public class HiveServer2 extends CompositeService {
       hiveServer2.isLeader.set(true);
       if (hiveServer2.mr3TimelineService != null) {
         try {
-          hiveServer2.mr3TimelineService.startActiveWriter();
+          hiveServer2.mr3TimelineService.activate();
         } catch (IOException e) {
           throw new RuntimeException("Failed to start MR3 timeline writer", e);
         }
@@ -959,7 +964,7 @@ public class HiveServer2 extends CompositeService {
       // do not call hiveServer2.closeHiveSessions() because there is no need to close active Beeline connections
       hiveServer2.isLeader.set(false);
       if (hiveServer2.mr3TimelineService != null) {
-        hiveServer2.mr3TimelineService.stopActiveWriter();
+        hiveServer2.mr3TimelineService.deactivate();
       }
       if (!hiveServer2.getHiveConf().getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
         hiveServer2.closeAndDisallowHiveSessions();

@@ -181,6 +181,7 @@ public class HttpServer {
         new LinkedList<Pair<String, Class<? extends HttpServlet>>>();
     private boolean disableDirListing = false;
     private final Map<String, Pair<String, Filter>> globalFilters = new LinkedHashMap<>();
+    private final List<Pair<String, String>> rewriteRules = new LinkedList<>();
     private String contextPath = "/";
 
     public Builder(String name) {
@@ -308,6 +309,11 @@ public class HttpServer {
 
     public Builder setContextRootRewriteTarget(String contextRootRewriteTarget) {
       this.contextRootRewriteTarget = contextRootRewriteTarget;
+      return this;
+    }
+
+    public Builder addRewriteRule(String regex, String replacement) {
+      rewriteRules.add(Pair.create(regex, replacement));
       return this;
     }
 
@@ -641,6 +647,13 @@ public class HttpServer {
     rootRule.setTerminating(true);
 
     rwHandler.addRule(rootRule);
+    for (Pair<String, String> rule : builder.rewriteRules) {
+      RewriteRegexRule rewriteRule = new RewriteRegexRule();
+      rewriteRule.setRegex(rule.getKey());
+      rewriteRule.setReplacement(rule.getValue());
+      rewriteRule.setTerminating(true);
+      rwHandler.addRule(rewriteRule);
+    }
     rwHandler.setHandler(webAppContext);
     
     return rwHandler;

@@ -58,7 +58,7 @@ final class MR3TimelineService {
   private MR3LiveStatusServiceInterface liveStatusService;
   private MR3TimelineIngestionServiceInterface ingestionService;
   private boolean enabled;
-  private boolean writerActive;
+  private boolean active;
 
   MR3TimelineService(HiveConf conf) {
     this.conf = conf;
@@ -81,8 +81,8 @@ final class MR3TimelineService {
     enabled = true;
   }
 
-  synchronized void startActiveWriter() throws IOException {
-    if (!enabled || writerActive) {
+  synchronized void activate() throws IOException {
+    if (!enabled || active) {
       return;
     }
 
@@ -92,16 +92,16 @@ final class MR3TimelineService {
       timelineDataManager = new TimelineDataManager(timelineStore, null);
       timelineDataManager.initialize();
       ingestionService = new MR3TimelineIngestionService();
-      writerActive = true;
-      LOG.info("Started the MR3 timeline writer on the active HiveServer2 instance");
+      active = true;
+      LOG.info("Activated MR3-UI on this HiveServer2 instance");
     } catch (Exception e) {
-      stopActiveWriterAfterFailure();
+      deactivateAfterFailure();
       throw new IOException("Failed to start the MR3 timeline writer", e);
     }
   }
 
-  synchronized void stopActiveWriter() {
-    if (!writerActive && timelineStore == null) {
+  synchronized void deactivate() {
+    if (!active && timelineStore == null) {
       return;
     }
 
@@ -111,12 +111,12 @@ final class MR3TimelineService {
     }
     timelineDataManager = null;
     closeTimelineStore();
-    writerActive = false;
-    LOG.info("Stopped the MR3 timeline writer");
+    active = false;
+    LOG.info("Deactivated MR3-UI on this HiveServer2 instance");
   }
 
   synchronized void stop() {
-    stopActiveWriter();
+    deactivate();
     if (liveStatusService != null) {
       liveStatusService.close();
       liveStatusService = null;
@@ -149,10 +149,10 @@ final class MR3TimelineService {
     return new ServletHolder(new ServletContainer(config));
   }
 
-  private void stopActiveWriterAfterFailure() {
+  private void deactivateAfterFailure() {
     timelineDataManager = null;
     closeTimelineStore();
-    writerActive = false;
+    active = false;
   }
 
   private void closeTimelineStore() {
