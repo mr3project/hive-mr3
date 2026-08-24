@@ -27,7 +27,12 @@ import org.apache.hadoop.security.UserGroupInformation;
  * Live-status service. RPC-backed status retrieval will be added later.
  */
 public class MR3LiveStatusService implements MR3LiveStatusServiceInterface {
+  private static final MR3LiveStatusService INSTANCE = new MR3LiveStatusService();
   private static final CurrentAttempt INITIAL_ATTEMPT = new CurrentAttempt("");
+
+  public static MR3LiveStatusService getInstance() {
+    return INSTANCE;
+  }
 
   @Override
   public CurrentAttempt getCurrentAttempt() {

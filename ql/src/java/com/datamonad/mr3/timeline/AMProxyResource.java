@@ -36,11 +36,7 @@ public class AMProxyResource {
   private final ObjectMapper mapper = new ObjectMapper();
 
   public AMProxyResource() {
-    this(new MR3LiveStatusService());
-  }
-
-  public AMProxyResource(MR3LiveStatusServiceInterface liveStatusService) {
-    this.liveStatusService = liveStatusService;
+    this.liveStatusService = MR3LiveStatusService.getInstance();
     // instantiated per incoming request (the default per-request lifecycle in JAX-RS) by Jersey
     if (LOG.isDebugEnabled()) {
       LOG.debug("AMProxyResource initialized with MR3LiveStatusService");

@@ -32,7 +32,7 @@ import com.datamonad.mr3.timeline.MR3TimelineIngestionServiceInterface;
 import com.datamonad.mr3.timeline.ServerResource;
 import com.datamonad.mr3.timeline.TimelineDataManager;
 import com.datamonad.mr3.timeline.TimelineStore;
-import com.sun.jersey.api.core.DefaultResourceConfig;
+import com.sun.jersey.api.core.ClassNamesResourceConfig;
 import com.sun.jersey.api.core.ResourceConfig;
 import com.sun.jersey.spi.container.servlet.ServletContainer;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -71,13 +71,13 @@ final class MR3TimelineService {
     }
 
     validateStaticAssets();
-    liveStatusService = new MR3LiveStatusService();
+    liveStatusService = MR3LiveStatusService.getInstance();
     webServer.addServlet("mr3_ats", "/mr3-api/ats/*",
-        createJerseyServlet(new ATSResource(() -> timelineDataManager)));
+        createJerseyServlet(ATSResource.class));
     webServer.addServlet("mr3_proxy", "/mr3-api/proxy/*",
-        createJerseyServlet(new AMProxyResource(liveStatusService)));
+        createJerseyServlet(AMProxyResource.class));
     webServer.addServlet("mr3_server", "/mr3-api/server/*",
-        createJerseyServlet(new ServerResource()));
+        createJerseyServlet(ServerResource.class));
     enabled = true;
   }
 
@@ -89,7 +89,7 @@ final class MR3TimelineService {
     try {
       timelineStore = createTimelineStore();
       timelineStore.initialize(conf);
-      timelineDataManager = new TimelineDataManager(timelineStore, null);
+      timelineDataManager = TimelineDataManager.createInstance(timelineStore, null);
       timelineDataManager.initialize();
       ingestionService = new MR3TimelineIngestionService();
       active = true;
@@ -142,9 +142,8 @@ final class MR3TimelineService {
     }
   }
 
-  private ServletHolder createJerseyServlet(Object resource) {
-    ResourceConfig config = new DefaultResourceConfig();
-    config.getSingletons().add(resource);
+  private ServletHolder createJerseyServlet(Class<?> resourceClass) {
+    ResourceConfig config = new ClassNamesResourceConfig(resourceClass);
     config.getFeatures().put("com.sun.jersey.api.json.POJOMappingFeature", true);
     return new ServletHolder(new ServletContainer(config));
   }

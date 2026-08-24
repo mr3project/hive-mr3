@@ -64,7 +64,7 @@ public class TimelineDataManager {
   private final TimelineStore store;
   private final ACLManager aclManager;
 
-  public TimelineDataManager(TimelineStore store, ACLManager aclManager) {
+  private TimelineDataManager(TimelineStore store, ACLManager aclManager) {
     this.store = store;
     this.aclManager = aclManager;
   }
