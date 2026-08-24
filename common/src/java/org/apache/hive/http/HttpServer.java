@@ -792,9 +792,12 @@ public class HttpServer {
     Resource sharedStaticResource = Resource.newResource(webAppsPath + "/static");
     if (appStaticResource.exists()) {
       // Prefer application-specific files while retaining the shared Hive WebUI resources.
+      LOG.info("Serving application-specific static resources from {}", appStaticResource);
       staticCtx.setBaseResource(
           new ResourceCollection(appStaticResource, sharedStaticResource));
     } else {
+      LOG.info("No application-specific static resources found at {}; using shared resources",
+          appStaticResource);
       staticCtx.setBaseResource(sharedStaticResource);
     }
     staticCtx.addServlet(DefaultServlet.class, "/*");
