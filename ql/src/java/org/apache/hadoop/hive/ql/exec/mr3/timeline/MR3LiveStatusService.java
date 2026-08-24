@@ -16,24 +16,47 @@
  * limitations under the License.
  */
 
-package com.datamonad.mr3.timeline;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import com.datamonad.mr3.api.client.AppAttemptStatus;
 import com.datamonad.mr3.api.client.DAGStatus;
 import com.datamonad.mr3.api.client.VertexStatus;
 import org.apache.hadoop.security.UserGroupInformation;
 
-/** Provides the live MR3 state needed by MR3-UI. */
-public interface MR3LiveStatusServiceInterface extends AutoCloseable {
-  CurrentAttempt getCurrentAttempt();
+/**
+ * Live-status service. RPC-backed status retrieval will be added later.
+ */
+public class MR3LiveStatusService implements MR3LiveStatusServiceInterface {
+  private static final MR3LiveStatusService INSTANCE = new MR3LiveStatusService();
+  private static final CurrentAttempt INITIAL_ATTEMPT = new CurrentAttempt("");
 
-  AppAttemptStatus getAppAttemptStatus();
-
-  DAGStatus getDagStatus(int dagId, boolean includeCounters, UserGroupInformation callerUGI);
-
-  VertexStatus getVertexStatus(
-      int dagId, String vertexName, boolean includeCounters, UserGroupInformation callerUGI);
+  public static MR3LiveStatusService getInstance() {
+    return INSTANCE;
+  }
 
   @Override
-  void close();
+  public CurrentAttempt getCurrentAttempt() {
+    return INITIAL_ATTEMPT;
+  }
+
+  @Override
+  public AppAttemptStatus getAppAttemptStatus() {
+    return null;
+  }
+
+  @Override
+  public DAGStatus getDagStatus(
+      int dagId, boolean includeCounters, UserGroupInformation callerUGI) {
+    return null;
+  }
+
+  @Override
+  public VertexStatus getVertexStatus(
+      int dagId, String vertexName, boolean includeCounters, UserGroupInformation callerUGI) {
+    return null;
+  }
+
+  @Override
+  public void close() {
+  }
 }

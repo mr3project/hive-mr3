@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package com.datamonad.mr3.timeline;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -32,9 +32,9 @@ import org.apache.hadoop.yarn.api.records.timeline.*;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEvents.EventsOfOneEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse.TimelinePutError;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
-import com.datamonad.mr3.timeline.TimelineDataManager.CheckAcl;
-import com.datamonad.mr3.timeline.util.LeveldbUtils.KeyBuilder;
-import com.datamonad.mr3.timeline.util.LeveldbUtils.KeyParser;
+import org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineDataManager.CheckAcl;
+import org.apache.hadoop.hive.ql.exec.mr3.timeline.util.LeveldbUtils.KeyBuilder;
+import org.apache.hadoop.hive.ql.exec.mr3.timeline.util.LeveldbUtils.KeyParser;
 import org.apache.hadoop.yarn.server.utils.LeveldbIterator;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.fusesource.leveldbjni.internal.NativeDB;
@@ -50,10 +50,10 @@ import java.util.Map.Entry;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import static com.datamonad.mr3.timeline.GenericObjectMapper.readReverseOrderedLong;
-import static com.datamonad.mr3.timeline.GenericObjectMapper.writeReverseOrderedLong;
-import static com.datamonad.mr3.timeline.TimelineDataManager.DEFAULT_DOMAIN_ID;
-import static com.datamonad.mr3.timeline.util.LeveldbUtils.prefixMatches;
+import static org.apache.hadoop.hive.ql.exec.mr3.timeline.GenericObjectMapper.readReverseOrderedLong;
+import static org.apache.hadoop.hive.ql.exec.mr3.timeline.GenericObjectMapper.writeReverseOrderedLong;
+import static org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineDataManager.DEFAULT_DOMAIN_ID;
+import static org.apache.hadoop.hive.ql.exec.mr3.timeline.util.LeveldbUtils.prefixMatches;
 import static org.fusesource.leveldbjni.JniDBFactory.bytes;
 
 /**

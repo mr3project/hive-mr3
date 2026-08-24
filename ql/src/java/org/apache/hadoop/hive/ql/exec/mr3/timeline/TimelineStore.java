@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -16,30 +16,23 @@
  * limitations under the License.
  */
 
-package com.datamonad.mr3.timeline;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
-import java.io.IOException;
-import java.util.List;
-
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
-import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
 
-/**
- * Receives ordered batches of timeline entities from an MR3 application.
- *
- * <p>Only the active HiveServer2 instance should run the implementation that
- * writes to LevelDB. This guarantees one active writer per timeline database.
- * Because the database is local, its history follows the active HiveServer2
- * instance.</p>
- */
-public interface MR3TimelineIngestionServiceInterface extends AutoCloseable {
-  TimelinePutResponse appendTimelineEntities(
-      String producerApplicationId,
-      String producerAttemptId,
-      long sequenceNumber,
-      List<TimelineEntity> entities) throws IOException;
+public interface TimelineStore extends TimelineReader, TimelineWriter {
 
-  /** Stops accepting batches and drains or cancels queued writes. */
-  @Override
-  void close();
+  /**
+   * The system filter which will be automatically added to a
+   * {@link TimelineEntity}'s primary filter section when storing the entity.
+   * The filter key is case sensitive. Users are supposed not to use the key
+   * reserved by the timeline system.
+   */
+  enum SystemFilter {
+    ENTITY_OWNER
+  }
+
+  void initialize(Configuration conf) throws Exception;
+  void stop() throws Exception;
 }

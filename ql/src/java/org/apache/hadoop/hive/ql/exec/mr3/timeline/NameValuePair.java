@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,18 +15,40 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
-package com.datamonad.mr3.timeline;
+/**
+ * A class holding a name and value pair, used for specifying filters in
+ * {@link TimelineReader}.
+ */
+public class NameValuePair {
+  String name;
+  Object value;
 
-/** Identifies the MR3 application attempt exposed by the live-status service. */
-public final class CurrentAttempt {
-  private final String applicationAttemptId;
-
-  public CurrentAttempt(String applicationAttemptId) {
-    this.applicationAttemptId = applicationAttemptId;
+  public NameValuePair(String name, Object value) {
+    this.name = name;
+    this.value = value;
   }
 
-  public String getApplicationAttemptId() {
-    return applicationAttemptId;
+  /**
+   * Get the name.
+   * @return The name.
+   */
+  public String getName() {
+
+    return name;
+  }
+
+  /**
+   * Get the value.
+   * @return The value.
+   */
+  public Object getValue() {
+    return value;
+  }
+
+  @Override
+  public String toString() {
+    return "{ name: " + name + ", value: " + value + " }";
   }
 }

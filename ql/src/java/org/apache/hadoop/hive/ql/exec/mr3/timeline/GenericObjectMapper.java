@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.datamonad.mr3.timeline;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import java.io.IOException;
 

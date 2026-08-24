@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package com.datamonad.mr3.timeline;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -45,9 +45,9 @@ import org.apache.hadoop.yarn.api.records.timeline.TimelineDomain;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineDomains;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse.TimelinePutError;
-import com.datamonad.mr3.timeline.TimelineDataManager.CheckAcl;
+import org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineDataManager.CheckAcl;
 
-import static com.datamonad.mr3.timeline.TimelineDataManager.DEFAULT_DOMAIN_ID;
+import static org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineDataManager.DEFAULT_DOMAIN_ID;
 
 /**
  * In-memory implementation of {@link TimelineStore}. This

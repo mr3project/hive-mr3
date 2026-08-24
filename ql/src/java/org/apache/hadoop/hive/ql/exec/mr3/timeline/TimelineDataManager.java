@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package com.datamonad.mr3.timeline;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import java.io.IOException;
 import java.util.Collection;
@@ -34,7 +34,7 @@ import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEvents;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineDomain;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
-import com.datamonad.mr3.timeline.TimelineReader.Field;
+import org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineReader.Field;
 import org.apache.hadoop.yarn.util.timeline.TimelineUtils;
 import org.slf4j.LoggerFactory;
 

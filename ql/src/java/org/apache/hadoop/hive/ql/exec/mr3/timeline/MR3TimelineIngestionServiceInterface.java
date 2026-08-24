@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package com.datamonad.mr3.timeline;
+package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import java.io.IOException;
 import java.util.List;
@@ -24,19 +24,22 @@ import java.util.List;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
 
-/** Initial implementation; transport and persistence will be added later. */
-public class MR3TimelineIngestionService
-    implements MR3TimelineIngestionServiceInterface {
-  @Override
-  public TimelinePutResponse appendTimelineEntities(
+/**
+ * Receives ordered batches of timeline entities from an MR3 application.
+ *
+ * <p>Only the active HiveServer2 instance should run the implementation that
+ * writes to LevelDB. This guarantees one active writer per timeline database.
+ * Because the database is local, its history follows the active HiveServer2
+ * instance.</p>
+ */
+public interface MR3TimelineIngestionServiceInterface extends AutoCloseable {
+  TimelinePutResponse appendTimelineEntities(
       String producerApplicationId,
       String producerAttemptId,
       long sequenceNumber,
-      List<TimelineEntity> entities) throws IOException {
-    return new TimelinePutResponse();
-  }
+      List<TimelineEntity> entities) throws IOException;
 
+  /** Stops accepting batches and drains or cancels queued writes. */
   @Override
-  public void close() {
-  }
+  void close();
 }
