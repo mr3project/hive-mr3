@@ -72,6 +72,8 @@ final class MR3TimelineService {
 
     validateStaticAssets();
     liveStatusService = MR3LiveStatusService.getInstance();
+    // The embedded frontend must use these /mr3-api prefixes instead of the
+    // /ats, /proxy, and /server paths used by the standalone MR3 HTTP server.
     webServer.addServlet("mr3_ats", "/mr3-api/ats/*",
         createJerseyServlet(ATSResource.class));
     webServer.addServlet("mr3_proxy", "/mr3-api/proxy/*",
