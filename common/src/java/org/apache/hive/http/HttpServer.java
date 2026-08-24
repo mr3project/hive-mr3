@@ -98,6 +98,8 @@ import org.eclipse.jetty.servlet.FilterMapping;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
+import org.eclipse.jetty.util.resource.Resource;
+import org.eclipse.jetty.util.resource.ResourceCollection;
 import org.eclipse.jetty.util.security.Constraint;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
@@ -785,7 +787,16 @@ public class HttpServer {
       LOG.info("ASYNC_PROFILER_HOME env or -Dasync.profiler.home not specified. Disabling /prof endpoint..");
     }
     ServletContextHandler staticCtx = new ServletContextHandler(portHandler, "/static");
-    staticCtx.setResourceBase(getWebAppsPath(b.name) + "/static");
+    String webAppsPath = getWebAppsPath(b.name);
+    Resource appStaticResource = Resource.newResource(webAppsPath + "/" + b.name + "/static");
+    Resource sharedStaticResource = Resource.newResource(webAppsPath + "/static");
+    if (appStaticResource.exists()) {
+      // Prefer application-specific files while retaining the shared Hive WebUI resources.
+      staticCtx.setBaseResource(
+          new ResourceCollection(appStaticResource, sharedStaticResource));
+    } else {
+      staticCtx.setBaseResource(sharedStaticResource);
+    }
     staticCtx.addServlet(DefaultServlet.class, "/*");
     staticCtx.setDisplayName("static");
     disableDirectoryListingOnServlet(staticCtx);
