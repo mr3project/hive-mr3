@@ -46,6 +46,7 @@ import org.apache.commons.cli.ParseException;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
+import org.eclipse.jetty.servlet.ServletHolder;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.api.ACLProvider;
 import org.apache.curator.framework.api.BackgroundCallback;
@@ -178,6 +179,7 @@ public class HiveServer2 extends CompositeService {
   private ThriftCLIService thriftCLIService;
   private CuratorFramework zKClientForPrivSync = null;
   private HttpServer webServer; // Web UI
+  private MR3TimelineService mr3TimelineService;
   private TezSessionPoolManager tezSessionPoolManager;
   private WorkloadManager wm;
   private PamAuthenticator pamAuthenticator;
@@ -438,6 +440,11 @@ public class HiveServer2 extends CompositeService {
           webServer = builder.build();
           webServer.addServlet("query_page", "/query_page.html", QueryProfileServlet.class);
           webServer.addServlet("api", "/api/*", QueriesRESTfulAPIServlet.class);
+          mr3TimelineService = new MR3TimelineService(hiveConf);
+          mr3TimelineService.initialize(webServer);
+          if (!activePassiveHA) {
+            mr3TimelineService.startActiveWriter();
+          }
           if (ldapAuthService != null) {
             webServer.addServlet("login", "/login", new ServletHolder(new LoginServlet(ldapAuthService)));
           }
@@ -922,6 +929,13 @@ public class HiveServer2 extends CompositeService {
     public void isLeader() {
       LOG.info("HS2 instance {} became the LEADER. Starting/Reconnecting tez sessions..", hiveServer2.serviceUri);
       hiveServer2.isLeader.set(true);
+      if (hiveServer2.mr3TimelineService != null) {
+        try {
+          hiveServer2.mr3TimelineService.startActiveWriter();
+        } catch (IOException e) {
+          throw new RuntimeException("Failed to start MR3 timeline writer", e);
+        }
+      }
       if (parentSession != null) {
         SessionState.setCurrentSessionState(parentSession);
       }
@@ -944,6 +958,9 @@ public class HiveServer2 extends CompositeService {
       LOG.info("HS2 instance {} LOST LEADERSHIP. Stopping/Disconnecting tez sessions..", hiveServer2.serviceUri);
       // do not call hiveServer2.closeHiveSessions() because there is no need to close active Beeline connections
       hiveServer2.isLeader.set(false);
+      if (hiveServer2.mr3TimelineService != null) {
+        hiveServer2.mr3TimelineService.stopActiveWriter();
+      }
       if (!hiveServer2.getHiveConf().getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
         hiveServer2.closeAndDisallowHiveSessions();
       }
@@ -1121,6 +1138,10 @@ public class HiveServer2 extends CompositeService {
     LOG.info("Shutting down HiveServer2");
     HiveConf hiveConf = this.getHiveConf();
     super.stop();
+
+    if (mr3TimelineService != null) {
+      mr3TimelineService.stop();
+    }
 
     String engine = hiveConf != null ? hiveConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE) : "";
     if (serviceDiscovery && activePassiveHA && engine.equals("tez")) {

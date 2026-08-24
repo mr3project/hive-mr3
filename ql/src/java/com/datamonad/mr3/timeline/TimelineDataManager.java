@@ -64,7 +64,7 @@ public class TimelineDataManager {
   private final TimelineStore store;
   private final ACLManager aclManager;
 
-  private TimelineDataManager(TimelineStore store, ACLManager aclManager) {
+  public TimelineDataManager(TimelineStore store, ACLManager aclManager) {
     this.store = store;
     this.aclManager = aclManager;
   }
@@ -85,7 +85,7 @@ public class TimelineDataManager {
       store.put(domain);
     }
 
-    if (aclManager.isAclsEnabled()) {
+    if (aclManager != null && aclManager.isAclsEnabled()) {
       domain = store.getDomain(DEFAULT_DOMAIN_ID);
       domain.setWriters("MR3_APP_MASTER");
       store.put(domain);
@@ -112,7 +112,7 @@ public class TimelineDataManager {
       if (user.equals(viewer)) {
         return true;
       }
-      return aclManager.checkAccess(ugi, ACLType.AM_VIEW_ACL);
+      return aclManager != null && aclManager.checkAccess(ugi, ACLType.AM_VIEW_ACL);
     }
   }
 

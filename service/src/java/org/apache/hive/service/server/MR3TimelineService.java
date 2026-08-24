@@ -1,0 +1,170 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.hive.service.server;
+
+import java.io.IOException;
+import java.net.URL;
+
+import com.datamonad.mr3.timeline.AMProxyResource;
+import com.datamonad.mr3.timeline.ATSResource;
+import com.datamonad.mr3.timeline.MR3LiveStatusService;
+import com.datamonad.mr3.timeline.MR3TimelineIngestionService;
+import com.datamonad.mr3.timeline.LeveldbTimelineStore;
+import com.datamonad.mr3.timeline.MemoryTimelineStore;
+import com.datamonad.mr3.timeline.MR3LiveStatusServiceInterface;
+import com.datamonad.mr3.timeline.MR3TimelineIngestionServiceInterface;
+import com.datamonad.mr3.timeline.ServerResource;
+import com.datamonad.mr3.timeline.TimelineDataManager;
+import com.datamonad.mr3.timeline.TimelineStore;
+import com.sun.jersey.api.core.DefaultResourceConfig;
+import com.sun.jersey.api.core.ResourceConfig;
+import com.sun.jersey.spi.container.servlet.ServletContainer;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hive.http.HttpServer;
+import org.eclipse.jetty.servlet.ServletHolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Owns MR3-UI resources and the active HiveServer2 timeline writer.
+ *
+ * <p>MR3-UI reuses the HiveServer2 WebUI connector and security settings.
+ * The {@code mr3.ui.server.*} settings for a dedicated MR3 HTTP server are
+ * therefore intentionally not used here.</p>
+ */
+final class MR3TimelineService {
+  private static final Logger LOG = LoggerFactory.getLogger(MR3TimelineService.class);
+  private static final String UI_INDEX = "hive-webapps/hiveserver2/mr3-ui/index.html";
+
+  private final HiveConf conf;
+  private TimelineStore timelineStore;
+  private volatile TimelineDataManager timelineDataManager;
+  private MR3LiveStatusServiceInterface liveStatusService;
+  private MR3TimelineIngestionServiceInterface ingestionService;
+  private boolean enabled;
+  private boolean writerActive;
+
+  MR3TimelineService(HiveConf conf) {
+    this.conf = conf;
+  }
+
+  synchronized void initialize(HttpServer webServer) throws IOException {
+    if (!HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_MR3_UI_CREATE_SERVER)) {
+      LOG.info("MR3-UI is disabled by {}", HiveConf.ConfVars.HIVE_MR3_UI_CREATE_SERVER.varname);
+      return;
+    }
+
+    validateStaticAssets();
+    liveStatusService = new MR3LiveStatusService();
+    webServer.addServlet("mr3_ats", "/mr3-api/ats/*",
+        createJerseyServlet(new ATSResource(() -> timelineDataManager)));
+    webServer.addServlet("mr3_proxy", "/mr3-api/proxy/*",
+        createJerseyServlet(new AMProxyResource(liveStatusService)));
+    webServer.addServlet("mr3_server", "/mr3-api/server/*",
+        createJerseyServlet(new ServerResource()));
+    enabled = true;
+  }
+
+  synchronized void startActiveWriter() throws IOException {
+    if (!enabled || writerActive) {
+      return;
+    }
+
+    try {
+      timelineStore = createTimelineStore();
+      timelineStore.initialize(conf);
+      timelineDataManager = new TimelineDataManager(timelineStore, null);
+      timelineDataManager.initialize();
+      ingestionService = new MR3TimelineIngestionService();
+      writerActive = true;
+      LOG.info("Started the MR3 timeline writer on the active HiveServer2 instance");
+    } catch (Exception e) {
+      stopActiveWriterAfterFailure();
+      throw new IOException("Failed to start the MR3 timeline writer", e);
+    }
+  }
+
+  synchronized void stopActiveWriter() {
+    if (!writerActive && timelineStore == null) {
+      return;
+    }
+
+    if (ingestionService != null) {
+      ingestionService.close();
+      ingestionService = null;
+    }
+    timelineDataManager = null;
+    closeTimelineStore();
+    writerActive = false;
+    LOG.info("Stopped the MR3 timeline writer");
+  }
+
+  synchronized void stop() {
+    stopActiveWriter();
+    if (liveStatusService != null) {
+      liveStatusService.close();
+      liveStatusService = null;
+    }
+    enabled = false;
+  }
+
+  private TimelineStore createTimelineStore() {
+    String storeType = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_STORE_TYPE);
+    if ("memory".equalsIgnoreCase(storeType)) {
+      return new MemoryTimelineStore();
+    }
+    if ("leveldb".equalsIgnoreCase(storeType)) {
+      return new LeveldbTimelineStore();
+    }
+    throw new IllegalArgumentException("Unsupported MR3 timeline store type: " + storeType);
+  }
+
+  private void validateStaticAssets() throws IOException {
+    URL index = getClass().getClassLoader().getResource(UI_INDEX);
+    if (index == null) {
+      throw new IOException("MR3-UI static asset is missing: " + UI_INDEX);
+    }
+  }
+
+  private ServletHolder createJerseyServlet(Object resource) {
+    ResourceConfig config = new DefaultResourceConfig();
+    config.getSingletons().add(resource);
+    config.getFeatures().put("com.sun.jersey.api.json.POJOMappingFeature", true);
+    return new ServletHolder(new ServletContainer(config));
+  }
+
+  private void stopActiveWriterAfterFailure() {
+    timelineDataManager = null;
+    closeTimelineStore();
+    writerActive = false;
+  }
+
+  private void closeTimelineStore() {
+    if (timelineStore != null) {
+      try {
+        timelineStore.stop();
+      } catch (Exception e) {
+        LOG.warn("Failed to stop the MR3 timeline store", e);
+      } finally {
+        timelineStore = null;
+      }
+    }
+  }
+
+}

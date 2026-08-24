@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.function.Supplier;
 
 import com.datamonad.mr3.history.EntityKey;
 import com.datamonad.mr3.history.EntityType;
@@ -27,10 +28,14 @@ public class ATSResource {
 
   private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(ATSResource.class);
 
-  private final TimelineDataManager dataManager;
+  private final Supplier<TimelineDataManager> dataManagerSupplier;
 
   public ATSResource() {
-    this.dataManager = TimelineDataManager.getInstance();
+    this(TimelineDataManager::getInstance);
+  }
+
+  public ATSResource(Supplier<TimelineDataManager> dataManagerSupplier) {
+    this.dataManagerSupplier = dataManagerSupplier;
     // instantiated per incoming request (the default per-request lifecycle in JAX-RS) by Jersey
     if (LOG.isDebugEnabled()) {
       LOG.debug("ATSResource initialized with TimelineDataManager");
@@ -71,7 +76,7 @@ public class ATSResource {
     }
 
     try {
-      TimelineEntities timelineEntities = dataManager.getEntities(
+      TimelineEntities timelineEntities = dataManagerSupplier.get().getEntities(
           type, p0, secs, windowStart, windowEnd, fromId, fromTs, newLimit, fs, ugi);
       return setCurrentTimeAndtrimTimelineEntities(type, timelineEntities);
     } catch (IOException e) {
@@ -118,7 +123,7 @@ public class ATSResource {
 
     EnumSet<TimelineReader.Field> fs = parseFields(fields);
     try {
-      TimelineEntity e = dataManager.getEntity(type, id, fs, ugi);
+      TimelineEntity e = dataManagerSupplier.get().getEntity(type, id, fs, ugi);
       if (e == null) throw new WebApplicationException(Response.Status.NOT_FOUND);
       final long currentTime = System.currentTimeMillis();
       e.addOtherInfo(EntityKey.currentTime(), java.lang.Long.valueOf(currentTime));

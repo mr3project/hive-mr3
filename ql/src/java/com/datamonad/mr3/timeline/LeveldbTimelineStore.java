@@ -18,11 +18,11 @@
 
 package com.datamonad.mr3.timeline;
 
-import com.datamonad.mr3.api.common.MR3Conf;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import org.apache.commons.collections.map.LRUMap;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -193,8 +193,8 @@ public class LeveldbTimelineStore implements TimelineStore {
 
     JniDBFactory factory = new JniDBFactory();
     Path dbPath = new Path(conf.get(
-        MR3Conf.MR3_UI_TIMELINE_SERVICE_LEVELDB_PATH(),
-        MR3Conf.MR3_UI_TIMELINE_SERVICE_LEVELDB_PATH_DEFAULT()), FILENAME);
+        HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_PATH.varname,
+        HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_PATH.defaultStrVal), FILENAME);
 
     FileSystem localFS = null;
     try {
@@ -205,8 +205,8 @@ public class LeveldbTimelineStore implements TimelineStore {
               "timeline store " + dbPath);
         }
         short umask = Short.parseShort(conf.get(
-            MR3Conf.MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK(),
-            MR3Conf.MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK_DEFAULT()), 8);
+            HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK.varname,
+            HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK.defaultStrVal), 8);
         FsPermission LEVELDB_DIR_UMASK = FsPermission.createImmutable(umask);
         localFS.setPermission(dbPath, LEVELDB_DIR_UMASK);
       }
