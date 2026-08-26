@@ -98,6 +98,8 @@ import org.eclipse.jetty.servlet.FilterMapping;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
+import org.eclipse.jetty.util.resource.Resource;
+import org.eclipse.jetty.util.resource.ResourceCollection;
 import org.eclipse.jetty.util.security.Constraint;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
@@ -181,6 +183,7 @@ public class HttpServer {
         new LinkedList<Pair<String, Class<? extends HttpServlet>>>();
     private boolean disableDirListing = false;
     private final Map<String, Pair<String, Filter>> globalFilters = new LinkedHashMap<>();
+    private final List<Pair<String, String>> rewriteRules = new LinkedList<>();
     private String contextPath = "/";
 
     public Builder(String name) {
@@ -308,6 +311,11 @@ public class HttpServer {
 
     public Builder setContextRootRewriteTarget(String contextRootRewriteTarget) {
       this.contextRootRewriteTarget = contextRootRewriteTarget;
+      return this;
+    }
+
+    public Builder addRewriteRule(String regex, String replacement) {
+      rewriteRules.add(Pair.create(regex, replacement));
       return this;
     }
 
@@ -641,6 +649,13 @@ public class HttpServer {
     rootRule.setTerminating(true);
 
     rwHandler.addRule(rootRule);
+    for (Pair<String, String> rule : builder.rewriteRules) {
+      RewriteRegexRule rewriteRule = new RewriteRegexRule();
+      rewriteRule.setRegex(rule.getKey());
+      rewriteRule.setReplacement(rule.getValue());
+      rewriteRule.setTerminating(true);
+      rwHandler.addRule(rewriteRule);
+    }
     rwHandler.setHandler(webAppContext);
     
     return rwHandler;
@@ -772,7 +787,19 @@ public class HttpServer {
       LOG.info("ASYNC_PROFILER_HOME env or -Dasync.profiler.home not specified. Disabling /prof endpoint..");
     }
     ServletContextHandler staticCtx = new ServletContextHandler(portHandler, "/static");
-    staticCtx.setResourceBase(getWebAppsPath(b.name) + "/static");
+    String webAppsPath = getWebAppsPath(b.name);
+    Resource appStaticResource = Resource.newResource(webAppsPath + "/" + b.name + "/static");
+    Resource sharedStaticResource = Resource.newResource(webAppsPath + "/static");
+    if (appStaticResource.exists()) {
+      // Prefer application-specific files while retaining the shared Hive WebUI resources.
+      LOG.info("Serving application-specific static resources from {}", appStaticResource);
+      staticCtx.setBaseResource(
+          new ResourceCollection(appStaticResource, sharedStaticResource));
+    } else {
+      LOG.info("No application-specific static resources found at {}; using shared resources",
+          appStaticResource);
+      staticCtx.setBaseResource(sharedStaticResource);
+    }
     staticCtx.addServlet(DefaultServlet.class, "/*");
     staticCtx.setDisplayName("static");
     disableDirectoryListingOnServlet(staticCtx);
