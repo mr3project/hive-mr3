@@ -50,8 +50,7 @@ public class AMProxyResource {
   public ObjectNode getCurrentAppAttemptId() {
     LOG.info("AMProxyResource.getCurrentAppAttemptId()");
 
-    String currentAppAttemptId =
-        liveStatusService.getCurrentAttempt().getApplicationAttemptId();
+    String currentAppAttemptId = liveStatusService.getApplicationAttemptId();
     ObjectNode root = mapper.createObjectNode();
     root.put("currentAppAttemptId", currentAppAttemptId);
 
@@ -147,8 +146,7 @@ public class AMProxyResource {
   //
 
   private void checkAppAttemptId(String appAttemptId) {
-    String currentAppAttemptId =
-        liveStatusService.getCurrentAttempt().getApplicationAttemptId();
+    String currentAppAttemptId = liveStatusService.getApplicationAttemptId();
     if (!currentAppAttemptId.equals(appAttemptId)) {
       LOG.warn("Invalid appAttemptId: {}", appAttemptId);
 

@@ -25,7 +25,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 
 /** Provides the live MR3 state needed by MR3-UI. */
 public interface MR3LiveStatusServiceInterface extends AutoCloseable {
-  CurrentAttempt getCurrentAttempt();
+  String getApplicationAttemptId();
 
   AppAttemptStatus getAppAttemptStatus();
 
