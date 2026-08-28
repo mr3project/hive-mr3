@@ -31,6 +31,7 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.LocalResource;
+import com.datamonad.mr3.api.client.MR3SessionClient;
 
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -45,6 +46,8 @@ public interface MR3Session {
   void start(HiveConf conf) throws HiveException;
 
   void connect(HiveConf conf, ApplicationId appId) throws HiveException;
+
+  MR3SessionClient getMR3SessionClient();
 
   ApplicationId getApplicationId();
 

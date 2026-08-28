@@ -84,6 +84,11 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
     mr3Client.connect(appId);
   }
 
+  @Override
+  public MR3SessionClient getMR3SessionClient() {
+    return mr3Client;
+  }
+
   private MR3Conf createMr3Conf(HiveConf hiveConf) {
     JobConf jobConf = DAGUtils.getInstance().createConfigurationForMr3Client(hiveConf);
 
