@@ -6025,6 +6025,9 @@ public class HiveConf extends Configuration {
       "Enable MR3-UI in the HiveServer2 WebUI."),
     HIVE_MR3_UI_TIMELINE_STORE_TYPE("hive.mr3.ui.timeline.store.type", "memory",
       new StringSet("memory", "leveldb"), "Timeline store used by MR3-UI."),
+    HIVE_MR3_TIMELINE_INGESTION_INTERVAL("hive.mr3.timeline.ingestion.interval", "1s",
+      new TimeValidator(TimeUnit.SECONDS, 0L, false, Long.MAX_VALUE, false),
+      "Interval between MR3 timeline ingestion attempts."),
     HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_PATH(
       "hive.mr3.ui.timeline-service.leveldb-timeline-store.path", "/tmp/leveldb/",
       "Local base directory for the MR3-UI LevelDB timeline store."),

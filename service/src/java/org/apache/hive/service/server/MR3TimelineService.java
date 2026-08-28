@@ -88,7 +88,7 @@ final class MR3TimelineService {
       timelineDataManager = TimelineDataManager.createInstance(timelineStore, null);
       timelineDataManager.initialize();
 
-      ingestionService = new MR3TimelineIngestionService(timelineDataManager);
+      ingestionService = new MR3TimelineIngestionService(timelineDataManager, conf);
       ingestionService.start();
 
       active = true;

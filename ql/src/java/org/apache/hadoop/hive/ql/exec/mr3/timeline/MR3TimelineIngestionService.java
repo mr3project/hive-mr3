@@ -27,6 +27,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
@@ -37,14 +38,16 @@ import org.slf4j.LoggerFactory;
 public class MR3TimelineIngestionService implements AutoCloseable {
 
   private static final Logger LOG = LoggerFactory.getLogger(MR3TimelineIngestionService.class);
-  private static final long INGESTION_INTERVAL_MILLIS = 1000L;
 
   private final TimelineDataManager timelineDataManager;
+  private final long ingestionIntervalMillis;
   private ScheduledExecutorService executorService;
   private ScheduledFuture<?> ingestionTask;
 
-  public MR3TimelineIngestionService(TimelineDataManager timelineDataManager) {
+  public MR3TimelineIngestionService(TimelineDataManager timelineDataManager, HiveConf conf) {
     this.timelineDataManager = timelineDataManager;
+    this.ingestionIntervalMillis = conf.getTimeVar(
+        HiveConf.ConfVars.HIVE_MR3_TIMELINE_INGESTION_INTERVAL, TimeUnit.MILLISECONDS);
   }
 
   public synchronized void start() {
@@ -58,13 +61,13 @@ public class MR3TimelineIngestionService implements AutoCloseable {
             .setNameFormat("MR3 timeline ingestion")
             .build());
     ingestionTask = executorService.scheduleWithFixedDelay(
-        this::ingestSafely,
-        INGESTION_INTERVAL_MILLIS,
-        INGESTION_INTERVAL_MILLIS,
+        this::ingest,
+        ingestionIntervalMillis,
+        ingestionIntervalMillis,
         TimeUnit.MILLISECONDS);
   }
 
-  private void ingestSafely() {
+  private void ingest() {
     try {
       ingestTimelineEvents();
     } catch (Exception e) {
@@ -102,7 +105,7 @@ public class MR3TimelineIngestionService implements AutoCloseable {
       executorService.shutdownNow();
       try {
         if (!executorService.awaitTermination(
-            INGESTION_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)) {
+            ingestionIntervalMillis, TimeUnit.MILLISECONDS)) {
           LOG.warn("MR3 timeline ingestion worker did not stop in time");
         }
       } catch (InterruptedException e) {
