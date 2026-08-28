@@ -20,7 +20,10 @@ package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import com.datamonad.mr3.api.client.AppAttemptStatus;
 import com.datamonad.mr3.api.client.DAGStatus;
+import com.datamonad.mr3.api.client.MR3SessionClient;
 import com.datamonad.mr3.api.client.VertexStatus;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.security.UserGroupInformation;
 
 /**
@@ -28,10 +31,13 @@ import org.apache.hadoop.security.UserGroupInformation;
  */
 public class MR3LiveStatusService implements AutoCloseable {
 
-  private static final MR3LiveStatusService INSTANCE = new MR3LiveStatusService();
+  private final MR3SessionClient mr3SessionClient;
 
-  public static MR3LiveStatusService getInstance() {
-    return INSTANCE;
+  public MR3LiveStatusService() {
+    MR3Session mr3Session = MR3SessionManagerImpl.getInstance().getActiveMR3SessionForMR3UI();
+    mr3SessionClient = mr3Session == null ? null : mr3Session.getMR3SessionClient();
+    // TODO: Resolve the active MR3Session for each operation so that a long-lived service
+    // can follow replacement of the shared session.
   }
 
   public String getApplicationAttemptId() {

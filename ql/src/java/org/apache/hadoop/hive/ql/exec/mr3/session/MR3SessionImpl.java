@@ -19,6 +19,7 @@
 package org.apache.hadoop.hive.ql.exec.mr3.session;
 
 import com.datamonad.mr3.api.LocalResourcePayload;
+import com.datamonad.mr3.api.client.MR3SessionClient;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import org.apache.hadoop.conf.Configuration;
@@ -176,6 +177,11 @@ public class MR3SessionImpl implements MR3Session {
   @Override
   public synchronized ApplicationId getApplicationId() {
     return this.appId;
+  }
+
+  @Override
+  public synchronized MR3SessionClient getMR3SessionClient() {
+    return hiveMr3Client == null ? null : hiveMr3Client.getMR3SessionClient();
   }
 
   private void setupHiveMr3Client(HiveConf hiveConf) throws Exception {

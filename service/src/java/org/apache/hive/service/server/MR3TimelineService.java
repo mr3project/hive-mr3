@@ -23,7 +23,6 @@ import java.net.URL;
 
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.AMProxyResource;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.ATSResource;
-import org.apache.hadoop.hive.ql.exec.mr3.timeline.MR3LiveStatusService;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.MR3TimelineIngestionService;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.LeveldbTimelineStore;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.MemoryTimelineStore;
@@ -52,7 +51,6 @@ final class MR3TimelineService {
   private final HiveConf conf;
   private TimelineStore timelineStore;
   private volatile TimelineDataManager timelineDataManager;
-  private MR3LiveStatusService liveStatusService;
   private MR3TimelineIngestionService ingestionService;
   private boolean enabled;
   private boolean active;
@@ -66,10 +64,8 @@ final class MR3TimelineService {
       LOG.info("MR3-UI is disabled by {}", HiveConf.ConfVars.HIVE_MR3_UI_CREATE_SERVER.varname);
       return;
     }
-
     validateStaticAssets();
 
-    liveStatusService = MR3LiveStatusService.getInstance();
     webServer.addServlet("mr3_ats", "/ats/*",
         createJerseyServlet(ATSResource.class));
     webServer.addServlet("mr3_proxy", "/proxy/*",
@@ -92,7 +88,8 @@ final class MR3TimelineService {
       timelineDataManager = TimelineDataManager.createInstance(timelineStore, null);
       timelineDataManager.initialize();
 
-      ingestionService = new MR3TimelineIngestionService(timelineDataManager);
+      ingestionService = new MR3TimelineIngestionService(timelineDataManager, conf);
+      ingestionService.start();
 
       active = true;
       LOG.info("Activated MR3-UI on this HiveServer2 instance");
@@ -119,10 +116,6 @@ final class MR3TimelineService {
 
   synchronized void stop() {
     deactivate();
-    if (liveStatusService != null) {
-      liveStatusService.close();
-      liveStatusService = null;
-    }
     enabled = false;
   }
 
