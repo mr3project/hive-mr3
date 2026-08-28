@@ -33,7 +33,6 @@ import org.glassfish.jersey.jackson.JacksonFeature;
 import org.glassfish.jersey.server.ResourceConfig;
 import org.glassfish.jersey.servlet.ServletContainer;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hive.http.HttpServer;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.slf4j.Logger;
@@ -65,10 +64,6 @@ final class MR3TimelineService {
       LOG.info("MR3-UI is disabled by {}", HiveConf.ConfVars.HIVE_MR3_UI_CREATE_SERVER.varname);
       return;
     }
-    if (!MR3SessionManagerImpl.isSharedMr3Session(conf)) {
-      throw new IOException("MR3-UI requires a shared MR3Session");
-    }
-
     validateStaticAssets();
 
     webServer.addServlet("mr3_ats", "/ats/*",

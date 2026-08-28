@@ -35,13 +35,7 @@ public class MR3LiveStatusService implements AutoCloseable {
 
   public MR3LiveStatusService() {
     MR3Session mr3Session = MR3SessionManagerImpl.getInstance().getActiveMR3SessionForMR3UI();
-    if (mr3Session == null) {
-      throw new IllegalStateException("No active MR3Session is available for MR3-UI");
-    }
-    mr3SessionClient = mr3Session.getMR3SessionClient();
-    if (mr3SessionClient == null) {
-      throw new IllegalStateException("The active MR3Session has no MR3SessionClient");
-    }
+    mr3SessionClient = mr3Session == null ? null : mr3Session.getMR3SessionClient();
     // TODO: Resolve the active MR3Session for each operation so that a long-lived service
     // can follow replacement of the shared session.
   }

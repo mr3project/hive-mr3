@@ -283,10 +283,7 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
   }
 
   public synchronized MR3Session getActiveMR3SessionForMR3UI() {
-    if (!shareMr3Session) {
-      throw new IllegalStateException("MR3-UI requires a shared MR3Session");
-    }
-    return commonMr3Session;
+    return shareMr3Session ? commonMr3Session : null;
   }
 
   public static boolean isSharedMr3Session(HiveConf hiveConf) {
