@@ -70,20 +70,11 @@ final class MR3TimelineService {
 
     validateStaticAssets();
     liveStatusService = MR3LiveStatusService.getInstance();
-    // Keep the namespaced endpoints for the embedded API contract.
-    webServer.addServlet("mr3_ats", "/mr3-api/ats/*",
+    webServer.addServlet("mr3_ats", "/ats/*",
         createJerseyServlet(ATSResource.class));
-    webServer.addServlet("mr3_proxy", "/mr3-api/proxy/*",
+    webServer.addServlet("mr3_proxy", "/proxy/*",
         createJerseyServlet(AMProxyResource.class));
-    webServer.addServlet("mr3_server", "/mr3-api/server/*",
-        createJerseyServlet(ServerResource.class));
-    // Preserve the standalone MR3-UI paths so an existing frontend build can
-    // run as HiveServer2's default application without being rebuilt.
-    webServer.addServlet("mr3_ats_legacy", "/ats/*",
-        createJerseyServlet(ATSResource.class));
-    webServer.addServlet("mr3_proxy_legacy", "/proxy/*",
-        createJerseyServlet(AMProxyResource.class));
-    webServer.addServlet("mr3_server_legacy", "/server/*",
+    webServer.addServlet("mr3_server", "/server/*",
         createJerseyServlet(ServerResource.class));
     enabled = true;
   }
