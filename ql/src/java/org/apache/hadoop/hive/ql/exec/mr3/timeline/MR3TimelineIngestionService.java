@@ -19,9 +19,13 @@
 package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import com.datamonad.mr3.api.client.MR3SessionClient;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
@@ -36,35 +40,35 @@ public class MR3TimelineIngestionService implements AutoCloseable {
   private static final long INGESTION_INTERVAL_MILLIS = 1000L;
 
   private final TimelineDataManager timelineDataManager;
-  private final AtomicBoolean stopped = new AtomicBoolean();
-  private Thread ingestionThread;
+  private ScheduledExecutorService executorService;
+  private ScheduledFuture<?> ingestionTask;
 
   public MR3TimelineIngestionService(TimelineDataManager timelineDataManager) {
     this.timelineDataManager = timelineDataManager;
   }
 
   public synchronized void start() {
-    if (ingestionThread != null) {
+    if (executorService != null) {
       return;
     }
 
-    ingestionThread = new Thread(this::run, "MR3 timeline ingestion");
-    ingestionThread.setDaemon(true);
-    ingestionThread.start();
+    executorService = Executors.newSingleThreadScheduledExecutor(
+        new ThreadFactoryBuilder()
+            .setDaemon(true)
+            .setNameFormat("MR3 timeline ingestion")
+            .build());
+    ingestionTask = executorService.scheduleWithFixedDelay(
+        this::ingestSafely,
+        INGESTION_INTERVAL_MILLIS,
+        INGESTION_INTERVAL_MILLIS,
+        TimeUnit.MILLISECONDS);
   }
 
-  private void run() {
-    while (!stopped.get()) {
-      try {
-        Thread.sleep(INGESTION_INTERVAL_MILLIS);
-        ingestTimelineEvents();
-      } catch (InterruptedException e) {
-        if (stopped.get()) {
-          return;
-        }
-      } catch (Exception e) {
-        LOG.warn("Failed to ingest MR3 timeline events", e);
-      }
+  private void ingestSafely() {
+    try {
+      ingestTimelineEvents();
+    } catch (Exception e) {
+      LOG.warn("Failed to ingest MR3 timeline events", e);
     }
   }
 
@@ -90,10 +94,21 @@ public class MR3TimelineIngestionService implements AutoCloseable {
 
   @Override
   public synchronized void close() {
-    stopped.set(true);
-    if (ingestionThread != null) {
-      ingestionThread.interrupt();
-      ingestionThread = null;
+    if (ingestionTask != null) {
+      ingestionTask.cancel(true);
+      ingestionTask = null;
+    }
+    if (executorService != null) {
+      executorService.shutdownNow();
+      try {
+        if (!executorService.awaitTermination(
+            INGESTION_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)) {
+          LOG.warn("MR3 timeline ingestion worker did not stop in time");
+        }
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+      executorService = null;
     }
   }
 }
