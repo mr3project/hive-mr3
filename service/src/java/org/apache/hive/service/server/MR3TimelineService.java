@@ -89,6 +89,7 @@ final class MR3TimelineService {
       timelineDataManager.initialize();
 
       ingestionService = new MR3TimelineIngestionService(timelineDataManager);
+      ingestionService.start();
 
       active = true;
       LOG.info("Activated MR3-UI on this HiveServer2 instance");

@@ -18,18 +18,65 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
+import com.datamonad.mr3.api.client.MR3SessionClient;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
+import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class MR3TimelineIngestionService implements AutoCloseable {
 
+  private static final Logger LOG = LoggerFactory.getLogger(MR3TimelineIngestionService.class);
+  private static final long INGESTION_INTERVAL_MILLIS = 1000L;
+
   private final TimelineDataManager timelineDataManager;
+  private final AtomicBoolean stopped = new AtomicBoolean();
+  private Thread ingestionThread;
 
   public MR3TimelineIngestionService(TimelineDataManager timelineDataManager) {
     this.timelineDataManager = timelineDataManager;
+  }
+
+  public synchronized void start() {
+    if (ingestionThread != null) {
+      return;
+    }
+
+    ingestionThread = new Thread(this::run, "MR3 timeline ingestion");
+    ingestionThread.setDaemon(true);
+    ingestionThread.start();
+  }
+
+  private void run() {
+    while (!stopped.get()) {
+      try {
+        Thread.sleep(INGESTION_INTERVAL_MILLIS);
+        ingestTimelineEvents();
+      } catch (InterruptedException e) {
+        if (stopped.get()) {
+          return;
+        }
+      } catch (Exception e) {
+        LOG.warn("Failed to ingest MR3 timeline events", e);
+      }
+    }
+  }
+
+  private void ingestTimelineEvents() throws Exception {
+    MR3Session mr3Session = MR3SessionManagerImpl.getInstance().getActiveMR3SessionForMR3UI();
+    MR3SessionClient mr3SessionClient =
+        mr3Session == null ? null : mr3Session.getMR3SessionClient();
+    if (mr3SessionClient == null) {
+      return;
+    }
+
+    // TODO: Fetch timeline events from mr3SessionClient and append them to timelineDataManager.
   }
 
   public TimelinePutResponse appendTimelineEntities(
@@ -42,6 +89,11 @@ public class MR3TimelineIngestionService implements AutoCloseable {
   }
 
   @Override
-  public void close() {
+  public synchronized void close() {
+    stopped.set(true);
+    if (ingestionThread != null) {
+      ingestionThread.interrupt();
+      ingestionThread = null;
+    }
   }
 }
