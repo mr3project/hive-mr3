@@ -27,8 +27,6 @@ import org.apache.hadoop.hive.ql.exec.mr3.timeline.MR3LiveStatusService;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.MR3TimelineIngestionService;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.LeveldbTimelineStore;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.MemoryTimelineStore;
-import org.apache.hadoop.hive.ql.exec.mr3.timeline.MR3LiveStatusServiceInterface;
-import org.apache.hadoop.hive.ql.exec.mr3.timeline.MR3TimelineIngestionServiceInterface;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.ServerResource;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineDataManager;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineStore;
@@ -55,8 +53,8 @@ final class MR3TimelineService {
   private final HiveConf conf;
   private TimelineStore timelineStore;
   private volatile TimelineDataManager timelineDataManager;
-  private MR3LiveStatusServiceInterface liveStatusService;
-  private MR3TimelineIngestionServiceInterface ingestionService;
+  private MR3LiveStatusService liveStatusService;
+  private MR3TimelineIngestionService ingestionService;
   private boolean enabled;
   private boolean active;
 

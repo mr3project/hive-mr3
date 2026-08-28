@@ -26,7 +26,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 /**
  * Live-status service. RPC-backed status retrieval will be added later.
  */
-public class MR3LiveStatusService implements MR3LiveStatusServiceInterface {
+public class MR3LiveStatusService implements AutoCloseable {
   private static final MR3LiveStatusService INSTANCE = new MR3LiveStatusService();
   private static final String INITIAL_APPLICATION_ATTEMPT_ID = "";
 
@@ -34,23 +34,19 @@ public class MR3LiveStatusService implements MR3LiveStatusServiceInterface {
     return INSTANCE;
   }
 
-  @Override
   public String getApplicationAttemptId() {
     return INITIAL_APPLICATION_ATTEMPT_ID;
   }
 
-  @Override
   public AppAttemptStatus getAppAttemptStatus() {
     return null;
   }
 
-  @Override
   public DAGStatus getDagStatus(
       int dagId, boolean includeCounters, UserGroupInformation callerUGI) {
     return null;
   }
 
-  @Override
   public VertexStatus getVertexStatus(
       int dagId, String vertexName, boolean includeCounters, UserGroupInformation callerUGI) {
     return null;

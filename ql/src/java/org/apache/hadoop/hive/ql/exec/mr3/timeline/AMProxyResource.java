@@ -32,7 +32,7 @@ public class AMProxyResource {
 
   private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(AMProxyResource.class);
 
-  private final MR3LiveStatusServiceInterface liveStatusService;
+  private final MR3LiveStatusService liveStatusService;
   private final ObjectMapper mapper = new ObjectMapper();
 
   public AMProxyResource() {

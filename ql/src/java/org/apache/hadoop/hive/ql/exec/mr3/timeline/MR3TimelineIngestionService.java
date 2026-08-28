@@ -25,9 +25,7 @@ import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
 
 /** Initial implementation; transport and persistence will be added later. */
-public class MR3TimelineIngestionService
-    implements MR3TimelineIngestionServiceInterface {
-  @Override
+public class MR3TimelineIngestionService implements AutoCloseable {
   public TimelinePutResponse appendTimelineEntities(
       String producerApplicationId,
       String producerAttemptId,
