@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import com.datamonad.mr3.api.client.MR3SessionClient;
 import com.datamonad.mr3.api.common.MR3Exception;
+import com.datamonad.mr3.history.MR3TimelineDataPublisher;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.io.IOException;
 import java.util.List;
@@ -41,7 +42,8 @@ import scala.collection.JavaConverters;
 public class MR3TimelineIngestionService implements AutoCloseable {
 
   private static final Logger LOG = LoggerFactory.getLogger(MR3TimelineIngestionService.class);
-  private static final int MAX_NUM_ENTITIES_PER_REQUEST = 100;
+  private static final int MAX_NUM_ENTITIES_PER_REQUEST =
+      MR3TimelineDataPublisher.maxNumEntitiesPerRequest();
 
   private final TimelineDataManager timelineDataManager;
   private final long ingestionIntervalMillis;
