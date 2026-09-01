@@ -19,9 +19,12 @@
 package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import com.datamonad.mr3.api.client.MR3SessionClient;
+import com.datamonad.mr3.api.common.MR3Exception;
+import com.datamonad.mr3.history.MR3TimelineDataPublisher;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -34,15 +37,20 @@ import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.collection.JavaConverters;
 
 public class MR3TimelineIngestionService implements AutoCloseable {
 
   private static final Logger LOG = LoggerFactory.getLogger(MR3TimelineIngestionService.class);
+  private static final int MAX_NUM_ENTITIES_PER_REQUEST =
+      MR3TimelineDataPublisher.maxNumEntitiesPerRequest();
 
   private final TimelineDataManager timelineDataManager;
   private final long ingestionIntervalMillis;
   private ScheduledExecutorService executorService;
   private ScheduledFuture<?> ingestionTask;
+  private String applicationAttemptId;
+  private long fromIndex = 0;
 
   public MR3TimelineIngestionService(TimelineDataManager timelineDataManager, HiveConf conf) {
     this.timelineDataManager = timelineDataManager;
@@ -70,6 +78,8 @@ public class MR3TimelineIngestionService implements AutoCloseable {
   private void ingest() {
     try {
       ingestTimelineEvents();
+    } catch (MR3Exception e) {
+      LOG.warn("Failed to ingest MR3 timeline events: {}", e.getMessage());
     } catch (Exception e) {
       LOG.warn("Failed to ingest MR3 timeline events", e);
     }
@@ -82,12 +92,27 @@ public class MR3TimelineIngestionService implements AutoCloseable {
       return;
     }
 
-    // TODO: Fetch timeline events from mr3SessionClient and append them to timelineDataManager.
+    String currentApplicationAttemptId = mr3SessionClient.getAppAttemptIdStr();
+    if (!Objects.equals(applicationAttemptId, currentApplicationAttemptId)) {
+      applicationAttemptId = currentApplicationAttemptId;
+      fromIndex = 0;
+    }
+
+    int numEntities;
+    do {
+      scala.collection.immutable.List<TimelineEntity> timelineEntities =
+          mr3SessionClient.getTimelineDataEntities(fromIndex);
+      List<TimelineEntity> entities =
+          JavaConverters.seqAsJavaListConverter(timelineEntities).asJava();
+      numEntities = entities.size();
+      if (numEntities > 0) {
+        appendTimelineEntities(entities);
+        fromIndex += numEntities;
+      }
+    } while (numEntities == MAX_NUM_ENTITIES_PER_REQUEST);
   }
 
   private TimelinePutResponse appendTimelineEntities(
-      String applicationAttemptId,
-      long sequenceNumber,
       List<TimelineEntity> entities) throws IOException {
     return timelineDataManager.postEntities(entities);
   }
