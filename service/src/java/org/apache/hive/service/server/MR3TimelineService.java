@@ -29,6 +29,8 @@ import org.apache.hadoop.hive.ql.exec.mr3.timeline.MemoryTimelineStore;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.ServerResource;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineDataManager;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.TimelineStore;
+import org.apache.hadoop.hive.ql.exec.mr3.timeline.security.ACLManager;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.glassfish.jersey.jackson.JacksonFeature;
 import org.glassfish.jersey.server.ResourceConfig;
 import org.glassfish.jersey.servlet.ServletContainer;
@@ -66,12 +68,9 @@ final class MR3TimelineService {
     }
     validateStaticAssets();
 
-    webServer.addServlet("mr3_ats", "/ats/*",
-        createJerseyServlet(ATSResource.class));
-    webServer.addServlet("mr3_proxy", "/proxy/*",
-        createJerseyServlet(AMProxyResource.class));
-    webServer.addServlet("mr3_server", "/server/*",
-        createJerseyServlet(ServerResource.class));
+    webServer.addServlet("mr3_ats", "/ats/*", createJerseyServlet(ATSResource.class));
+    webServer.addServlet("mr3_proxy", "/proxy/*", createJerseyServlet(AMProxyResource.class));
+    webServer.addServlet("mr3_server", "/server/*", createJerseyServlet(ServerResource.class));
 
     enabled = true;
   }
@@ -85,7 +84,8 @@ final class MR3TimelineService {
       timelineStore = createTimelineStore();
       timelineStore.initialize(conf);
 
-      timelineDataManager = TimelineDataManager.createInstance(timelineStore, null);
+      timelineDataManager = TimelineDataManager.createInstance(timelineStore,
+          new ACLManager(UserGroupInformation.getCurrentUser().getShortUserName(), conf));
       timelineDataManager.initialize();
 
       ingestionService = new MR3TimelineIngestionService(timelineDataManager, conf);

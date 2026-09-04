@@ -25,9 +25,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.SortedSet;
 
-import com.datamonad.mr3.api.security.ACLManager;
-import com.datamonad.mr3.api.security.ACLType;
 import com.datamonad.mr3.history.EntityKey;
+import org.apache.hadoop.hive.ql.exec.mr3.timeline.security.ACLManager;
+import org.apache.hadoop.hive.ql.exec.mr3.timeline.security.ACLType;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntities;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;

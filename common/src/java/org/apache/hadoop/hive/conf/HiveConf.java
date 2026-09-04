@@ -6023,6 +6023,8 @@ public class HiveConf extends Configuration {
 
     HIVE_MR3_UI_CREATE_SERVER("hive.mr3.ui.create.server", false,
       "Enable MR3-UI in the HiveServer2 WebUI."),
+    HIVE_MR3_UI_ACLS_ENABLED("hive.mr3.ui.acl.enabled", false,
+      "Enable ACLs for MR3-UI in the HiveServer2 WebUI."),
     HIVE_MR3_UI_TIMELINE_STORE_TYPE("hive.mr3.ui.timeline.store.type", "memory",
       new StringSet("memory", "leveldb"), "Timeline store used by MR3-UI."),
     HIVE_MR3_TIMELINE_INGESTION_INTERVAL("hive.mr3.timeline.ingestion.interval", "1s",
