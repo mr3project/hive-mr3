@@ -6019,7 +6019,21 @@ public class HiveConf extends Configuration {
       "Comma-separated list of key prefixes to remove from JobConf for MR3 session"),
 
     HIVE_MR3_UI_INCLUDE_OPERATOR_EXTRA("hive.mr3.ui.include.operator.extra", false,
-      "Include the details of each operator in JSON ojbect for DAG");
+      "Include the details of each operator in JSON ojbect for DAG"),
+
+    HIVE_MR3_UI_CREATE_SERVER("hive.mr3.ui.create.server", false,
+      "Enable MR3-UI in the HiveServer2 WebUI."),
+    HIVE_MR3_UI_TIMELINE_STORE_TYPE("hive.mr3.ui.timeline.store.type", "memory",
+      new StringSet("memory", "leveldb"), "Timeline store used by MR3-UI."),
+    HIVE_MR3_TIMELINE_INGESTION_INTERVAL("hive.mr3.timeline.ingestion.interval", "1s",
+      new TimeValidator(TimeUnit.SECONDS, 0L, false, Long.MAX_VALUE, false),
+      "Interval between MR3 timeline ingestion attempts."),
+    HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_PATH(
+      "hive.mr3.ui.timeline-service.leveldb-timeline-store.path", "/tmp/leveldb/",
+      "Local base directory for the MR3-UI LevelDB timeline store."),
+    HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK(
+      "hive.mr3.ui.timeline-service.leveldb-timeline-store.dir.umask", "0700",
+      "Directory umask for the MR3-UI LevelDB timeline store.");
 
     public final String varname;
     public final String altName;

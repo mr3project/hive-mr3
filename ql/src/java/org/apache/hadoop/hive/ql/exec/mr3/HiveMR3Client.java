@@ -29,6 +29,7 @@ import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.LocalResource;
 import com.datamonad.mr3.DAGAPI;
+import com.datamonad.mr3.api.client.MR3SessionClient;
 import com.datamonad.mr3.api.common.MR3Conf;
 
 import java.util.Map;
@@ -43,6 +44,8 @@ public interface HiveMR3Client {
   ApplicationId start() throws MR3Exception;
 
   void connect(ApplicationId appId) throws MR3Exception;
+
+  MR3SessionClient getMR3SessionClient();
 
   /**
    * @param dagProto
