@@ -63,7 +63,7 @@ public class AMProxyResource {
 
   // do not check permission with ACLManager
   @GET @Path("currentAppAttemptId") @Produces(MediaType.APPLICATION_JSON)
-  public ObjectNode getCurrentAppAttemptId() {
+  public Response getCurrentAppAttemptId() {
     LOG.info("AMProxyResource.getCurrentAppAttemptId()");
 
     String currentAppAttemptId = liveStatusService.getApplicationAttemptId();
@@ -72,13 +72,13 @@ public class AMProxyResource {
 
     ObjectNode wrapper = mapper.createObjectNode();
     wrapper.set("appAttemptId", root);
-    return wrapper;
+    return jsonResponse(wrapper);
   }
 
   // do not check permission with ACLManager
   // TODO: "workers=*" is currently unused.
   @GET @Path("appAttemptInfo") @Produces(MediaType.APPLICATION_JSON)
-  public ObjectNode getAppAttemptInfo(
+  public Response getAppAttemptInfo(
       @QueryParam("appAttemptId") String appAttemptId,
       @QueryParam("workers") String workers) {
     checkAppAttemptId(appAttemptId);
@@ -92,13 +92,13 @@ public class AMProxyResource {
 
     ObjectNode wrapper = mapper.createObjectNode();
     wrapper.set("appAttempt", root);
-    return wrapper;
+    return jsonResponse(wrapper);
   }
 
   // DAG
 
   @GET @Path("dagInfo") @Produces(MediaType.APPLICATION_JSON)
-  public ObjectNode getDagInfo(
+  public Response getDagInfo(
       @QueryParam("appAttemptId") String appAttemptId,
       @QueryParam("dagIdId") String dagIdIdStr,
       @QueryParam("counters") String counters,
@@ -121,14 +121,14 @@ public class AMProxyResource {
 
     ObjectNode wrapper = mapper.createObjectNode();
     wrapper.set("dag", root);
-    return wrapper;
+    return jsonResponse(wrapper);
   }
 
   // Vertex
 
   @GET @Path("vertexInfo")
   @Produces(MediaType.APPLICATION_JSON)
-  public ObjectNode getVertexInfo(
+  public Response getVertexInfo(
       @QueryParam("appAttemptId") String appAttemptId,
       @QueryParam("dagIdId") String dagIdIdStr,
       @QueryParam("vertexName") String vertexName,
@@ -152,7 +152,7 @@ public class AMProxyResource {
 
     ObjectNode wrapper = mapper.createObjectNode();
     wrapper.set("vertex", root);
-    return wrapper;
+    return jsonResponse(wrapper);
   }
 
   //
@@ -171,10 +171,18 @@ public class AMProxyResource {
 
       throw new WebApplicationException(
         Response.status(Response.Status.NOT_FOUND)
-          .entity(err)
+          .entity(err.toString())
           .type(MediaType.APPLICATION_JSON)
           .build());
     }
+  }
+
+  // ObjectNode belongs to Jackson shaded into hive-exec.
+  // Jersey uses the unshaded Jackson provider, which would treat the shaded node as a bean
+  // and serialize its introspection properties.
+  // Convert the node with its own Jackson implementation before crossing the JAX-RS boundary.
+  private static Response jsonResponse(ObjectNode node) {
+    return Response.ok(node.toString(), MediaType.APPLICATION_JSON_TYPE).build();
   }
 
   private static ObjectNode convertAppAttemptStatus(
