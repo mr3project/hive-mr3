@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
+import com.datamonad.mr3.history.EntityKey;
 import com.datamonad.mr3.history.EntityType;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -45,9 +46,10 @@ final class TimelineEntityDiagnostics {
 
   private static String describeField(TimelineEntity entity, String fieldName, String identifierName) {
     Map<String, Object> otherInfo = entity.getOtherInfo();
-    Object value = otherInfo == null ? null : otherInfo.get(fieldName);
+    Object dagProto = otherInfo == null ? null : otherInfo.get(EntityKey.dagProto());
+    Object value = dagProto instanceof Map ? ((Map<?, ?>) dagProto).get(fieldName) : null;
     if (!(value instanceof Collection)) {
-      return value == null ? "count=0 distinct=0 duplicates={}"
+      return value == null ? "count=0 distinct=0 duplicates={} dagProtoType=" + typeName(dagProto)
           : "unexpectedType=" + value.getClass().getName();
     }
 
@@ -65,6 +67,10 @@ final class TimelineEntityDiagnostics {
       }
     }
     return "count=" + values.size() + " distinct=" + counts.size() + " duplicates=" + duplicates;
+  }
+
+  private static String typeName(Object value) {
+    return value == null ? "null" : value.getClass().getName();
   }
 
   private static String getIdentifier(Object item, String identifierName) {

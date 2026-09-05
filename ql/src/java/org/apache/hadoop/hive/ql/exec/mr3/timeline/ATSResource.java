@@ -141,7 +141,7 @@ public class ATSResource {
       final long currentTime = System.currentTimeMillis();
       e.addOtherInfo(EntityKey.currentTime(), java.lang.Long.valueOf(currentTime));
       if (TimelineEntityDiagnostics.isDag(e)) {
-        LOG.info("MR3 timeline diagnostics before detail response: {}",
+        LOG.info("xxx MR3 timeline diagnostics before detail response: {}",
             TimelineEntityDiagnostics.describeDag(e));
       }
       return e;

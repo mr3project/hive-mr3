@@ -109,7 +109,7 @@ public class MR3TimelineIngestionService implements AutoCloseable {
       if (numEntities > 0) {
         for (TimelineEntity entity : entities) {
           if (TimelineEntityDiagnostics.isDag(entity)) {
-            LOG.info("MR3 timeline diagnostics after AM call: fromIndex={} {}",
+            LOG.info("xxx MR3 timeline diagnostics after AM call: fromIndex={} {}",
                 fromIndex, TimelineEntityDiagnostics.describeDag(entity));
           }
         }
@@ -130,14 +130,14 @@ public class MR3TimelineIngestionService implements AutoCloseable {
           UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
           TimelineEntity storedEntity = timelineDataManager.getEntity(
               incomingEntity.getEntityType(), incomingEntity.getEntityId(), null, currentUser);
-          LOG.info("MR3 timeline diagnostics after store: applicationAttemptId={} sequenceNumber={} "
+          LOG.info("xxx MR3 timeline diagnostics after store: applicationAttemptId={} sequenceNumber={} "
                   + "incoming=[{}] stored=[{}]",
               applicationAttemptId, sequenceNumber,
               TimelineEntityDiagnostics.describeDag(incomingEntity),
               TimelineEntityDiagnostics.describeDag(storedEntity));
         } catch (IOException e) {
           // Diagnostics must not cause a successfully stored batch to be fetched again.
-          LOG.warn("Unable to read MR3 DAG {} after store for timeline diagnostics",
+          LOG.warn("xxx Unable to read MR3 DAG {} after store for timeline diagnostics",
               incomingEntity.getEntityId(), e);
         }
       }

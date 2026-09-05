@@ -21,6 +21,7 @@ package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import com.datamonad.mr3.history.EntityKey;
 import com.datamonad.mr3.history.EntityType;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,8 +37,10 @@ public class TestTimelineEntityDiagnostics {
     TimelineEntity entity = new TimelineEntity();
     entity.setEntityId("dag_1");
     entity.setEntityType(EntityType.MR3_DAG());
-    entity.addOtherInfo("vertices", items("vertexName", "Map 1", "Map 2", "Map 1"));
-    entity.addOtherInfo("edges", items("edgeId", "Map 1-Map 2", "Map 1-Map 2"));
+    Map<String, Object> dagProto = new HashMap<>();
+    dagProto.put("vertices", items("vertexName", "Map 1", "Map 2", "Map 1"));
+    dagProto.put("edges", items("edgeId", "Map 1-Map 2", "Map 1-Map 2"));
+    entity.addOtherInfo(EntityKey.dagProto(), dagProto);
 
     String description = TimelineEntityDiagnostics.describeDag(entity);
 
@@ -51,8 +54,8 @@ public class TestTimelineEntityDiagnostics {
     entity.setEntityId("dag_2");
     entity.setEntityType(EntityType.MR3_DAG());
 
-    assertEquals("entityId=dag_2 vertices={count=0 distinct=0 duplicates={}} "
-            + "edges={count=0 distinct=0 duplicates={}}",
+    assertEquals("entityId=dag_2 vertices={count=0 distinct=0 duplicates={} dagProtoType=null} "
+            + "edges={count=0 distinct=0 duplicates={} dagProtoType=null}",
         TimelineEntityDiagnostics.describeDag(entity));
   }
 
