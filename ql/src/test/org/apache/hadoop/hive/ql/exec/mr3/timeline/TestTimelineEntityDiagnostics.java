@@ -59,6 +59,20 @@ public class TestTimelineEntityDiagnostics {
         TimelineEntityDiagnostics.describeDag(entity));
   }
 
+  @Test
+  public void testDescribeDagHandlesJsonDagProto() {
+    TimelineEntity entity = new TimelineEntity();
+    entity.setEntityId("dag_3");
+    entity.setEntityType(EntityType.MR3_DAG());
+    entity.addOtherInfo(EntityKey.dagProto(), "{\"vertices\":[{\"vertexName\":\"Map 29\"},"
+        + "{\"vertexName\":\"Map 29\"}],\"edges\":[{\"edgeId\":\"Map 12-Map 29\"}]}");
+
+    String description = TimelineEntityDiagnostics.describeDag(entity);
+
+    assertTrue(description.contains("vertices={count=2 distinct=1 duplicates={Map 29=2}}"));
+    assertTrue(description.contains("edges={count=1 distinct=1 duplicates={}}"));
+  }
+
   private static List<Map<String, Object>> items(String key, String... identifiers) {
     List<Map<String, Object>> result = new ArrayList<>();
     for (String identifier : identifiers) {

@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import com.datamonad.mr3.history.EntityKey;
 import com.datamonad.mr3.history.EntityType;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -47,7 +48,8 @@ final class TimelineEntityDiagnostics {
   private static String describeField(TimelineEntity entity, String fieldName, String identifierName) {
     Map<String, Object> otherInfo = entity.getOtherInfo();
     Object dagProto = otherInfo == null ? null : otherInfo.get(EntityKey.dagProto());
-    Object value = dagProto instanceof Map ? ((Map<?, ?>) dagProto).get(fieldName) : null;
+    Map<?, ?> dagProtoMap = asMap(dagProto);
+    Object value = dagProtoMap == null ? null : dagProtoMap.get(fieldName);
     if (!(value instanceof Collection)) {
       return value == null ? "count=0 distinct=0 duplicates={} dagProtoType=" + typeName(dagProto)
           : "unexpectedType=" + value.getClass().getName();
@@ -71,6 +73,20 @@ final class TimelineEntityDiagnostics {
 
   private static String typeName(Object value) {
     return value == null ? "null" : value.getClass().getName();
+  }
+
+  private static Map<?, ?> asMap(Object value) {
+    if (value instanceof Map) {
+      return (Map<?, ?>) value;
+    }
+    try {
+      Object converted = value instanceof String
+          ? GenericObjectMapper.OBJECT_READER.readValue((String) value)
+          : GenericObjectMapper.read(GenericObjectMapper.write(value));
+      return converted instanceof Map ? (Map<?, ?>) converted : null;
+    } catch (IOException | RuntimeException e) {
+      return null;
+    }
   }
 
   private static String getIdentifier(Object item, String identifierName) {
