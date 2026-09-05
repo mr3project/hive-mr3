@@ -33,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
 import org.slf4j.Logger;
@@ -106,6 +107,12 @@ public class MR3TimelineIngestionService implements AutoCloseable {
           JavaConverters.seqAsJavaListConverter(timelineEntities).asJava();
       numEntities = entities.size();
       if (numEntities > 0) {
+        for (TimelineEntity entity : entities) {
+          if (TimelineEntityDiagnostics.isDag(entity)) {
+            LOG.info("xxx MR3 timeline diagnostics after AM call: fromIndex={} {}",
+                fromIndex, TimelineEntityDiagnostics.describeDag(entity));
+          }
+        }
         appendTimelineEntities(applicationAttemptId, fromIndex, entities);
         fromIndex += numEntities;
       }
@@ -116,7 +123,26 @@ public class MR3TimelineIngestionService implements AutoCloseable {
       String applicationAttemptId,
       long sequenceNumber,
       List<TimelineEntity> entities) throws IOException {
-    return timelineDataManager.postEntities(entities);
+    TimelinePutResponse response = timelineDataManager.postEntities(entities);
+    for (TimelineEntity incomingEntity : entities) {
+      if (TimelineEntityDiagnostics.isDag(incomingEntity)) {
+        try {
+          UserGroupInformation currentUser = UserGroupInformation.getCurrentUser();
+          TimelineEntity storedEntity = timelineDataManager.getEntity(
+              incomingEntity.getEntityType(), incomingEntity.getEntityId(), null, currentUser);
+          LOG.info("xxx MR3 timeline diagnostics after store: applicationAttemptId={} sequenceNumber={} "
+                  + "incoming=[{}] stored=[{}]",
+              applicationAttemptId, sequenceNumber,
+              TimelineEntityDiagnostics.describeDag(incomingEntity),
+              TimelineEntityDiagnostics.describeDag(storedEntity));
+        } catch (IOException e) {
+          // Diagnostics must not cause a successfully stored batch to be fetched again.
+          LOG.warn("xxx Unable to read MR3 DAG {} after store for timeline diagnostics",
+              incomingEntity.getEntityId(), e);
+        }
+      }
+    }
+    return response;
   }
 
   @Override

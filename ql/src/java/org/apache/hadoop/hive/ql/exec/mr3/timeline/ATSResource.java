@@ -140,6 +140,10 @@ public class ATSResource {
       if (e == null) throw new WebApplicationException(Response.Status.NOT_FOUND);
       final long currentTime = System.currentTimeMillis();
       e.addOtherInfo(EntityKey.currentTime(), java.lang.Long.valueOf(currentTime));
+      if (TimelineEntityDiagnostics.isDag(e)) {
+        LOG.info("xxx MR3 timeline diagnostics before detail response: {}",
+            TimelineEntityDiagnostics.describeDag(e));
+      }
       return e;
     } catch (IOException e) {
       throw new WebApplicationException(Response.Status.INTERNAL_SERVER_ERROR);
