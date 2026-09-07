@@ -20,54 +20,36 @@ package org.apache.hadoop.hive.ql.exec.mr3.timeline.security;
 
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.Map.Entry;
 
 /**
- * Class to manage ACLs for AM and DAGs and provides functionality to check whether
+ * Class to manage ACLs and provides functionality to check whether
  * a user is authorized to take certain actions.
  */
 public class ACLManager {
 
   private static final Logger LOG = LoggerFactory.getLogger(ACLManager.class);
+
   public static final String WILDCARD_ACL_VALUE = "*";
 
-  private final String dagUser;
-  private final String amUser;
-  private final Map<ACLType, Set<String>> users;
-  private final Map<ACLType, Set<String>> groups;
+  private final String adminUser;
   private final boolean aclsEnabled;
 
-  public ACLManager(String amUser, HiveConf hiveConf) {
-    this.amUser = amUser;
-    this.dagUser = null;
+  private final Map<ACLType, Set<String>> users;
+  private final Map<ACLType, Set<String>> groups;
+
+  public ACLManager(String adminUser, HiveConf hiveConf) {
+    this.adminUser = adminUser;
+    this.aclsEnabled = HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVE_MR3_UI_ACLS_ENABLED);
+
     this.users = new HashMap<ACLType, Set<String>>();
     this.groups = new HashMap<ACLType, Set<String>>();
-    this.aclsEnabled = HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.HIVE_MR3_UI_ACLS_ENABLED);
 
     if (aclsEnabled) {
       ACLConfigurationParser parser = new ACLConfigurationParser(hiveConf);
-      if (parser.getAllowedUsers() != null) {
-        this.users.putAll(parser.getAllowedUsers());
-      }
-      if (parser.getAllowedGroups() != null) {
-        this.groups.putAll(parser.getAllowedGroups());
-      }
-    }
-  }
-
-  public ACLManager(ACLManager amACLManager, String dagUser, HiveConf dagConf) {
-    this.amUser = amACLManager.amUser;
-    this.dagUser = dagUser;
-    this.users = amACLManager.users;
-    this.groups = amACLManager.groups;
-    this.aclsEnabled = amACLManager.aclsEnabled;
-    if (aclsEnabled) {
-      ACLConfigurationParser parser = new ACLConfigurationParser(dagConf, true);
       if (parser.getAllowedUsers() != null) {
         this.users.putAll(parser.getAllowedUsers());
       }
@@ -81,25 +63,16 @@ public class ACLManager {
     return aclsEnabled;
   }
 
-  public boolean isAdmin(UserGroupInformation ugi) {
-    String user = ugi.getShortUserName();
-    return amUser.equals(user);
-  }
-
   public boolean checkAccess(UserGroupInformation ugi, ACLType aclType) {
     if (!aclsEnabled) {
       return true;
     }
 
     String user = ugi.getShortUserName();
-    if (amUser.equals(user)) {
+    if (adminUser.equals(user)) {
       return true;
     }
-    if (EnumSet.of(ACLType.DAG_MODIFY_ACL, ACLType.DAG_VIEW_ACL).contains(aclType)) {
-      if (dagUser != null && dagUser.equals(user)) {
-        return true;
-      }
-    }
+
     if (users != null && !users.isEmpty()) {
       Set<String> set = users.get(aclType);
       if (set != null) {
@@ -132,96 +105,5 @@ public class ACLManager {
 
   public boolean checkAMModifyAccess(UserGroupInformation ugi) {
     return checkAccess(ugi, ACLType.AM_MODIFY_ACL);
-  }
-
-  public boolean checkDAGViewAccess(UserGroupInformation ugi) {
-    return checkAccess(ugi, ACLType.AM_VIEW_ACL)
-        || checkAccess(ugi, ACLType.DAG_VIEW_ACL);
-  }
-
-  public boolean checkDAGModifyAccess(UserGroupInformation ugi) {
-    return checkAccess(ugi, ACLType.AM_MODIFY_ACL)
-        || checkAccess(ugi, ACLType.DAG_MODIFY_ACL);
-  }
-
-  public Map<ApplicationAccessType, String> toYARNACls() {
-    Map<ApplicationAccessType, String> acls = new HashMap<ApplicationAccessType, String>(2);
-    if (!this.aclsEnabled) {
-      acls.put(ApplicationAccessType.VIEW_APP, "*");
-      acls.put(ApplicationAccessType.MODIFY_APP, "*");
-      return acls;
-    }
-
-    acls.put(ApplicationAccessType.VIEW_APP, amUser);
-    acls.put(ApplicationAccessType.MODIFY_APP, amUser);
-    boolean viewAclsWildCard = false;
-    boolean modifyAclsWildCard = false;
-
-    if (users != null && !users.isEmpty()) {
-      for (Entry<ACLType, Set<String>> entry : users.entrySet()) {
-        if (entry.getKey().equals(ACLType.AM_VIEW_ACL)) {
-          if (entry.getValue().contains(WILDCARD_ACL_VALUE)) {
-            acls.put(ApplicationAccessType.VIEW_APP, "*");
-            viewAclsWildCard = true;
-            continue;
-          } else if (!entry.getValue().isEmpty()) {
-            String aclsStr = acls.get(ApplicationAccessType.VIEW_APP);
-            String commaSepList = toCommaSeparatedString(entry.getValue());
-            if (!commaSepList.isEmpty()) {
-              aclsStr += "," + commaSepList;
-            }
-            acls.put(ApplicationAccessType.VIEW_APP, aclsStr);
-          }
-        } else if (entry.getKey().equals(ACLType.AM_MODIFY_ACL)) {
-          if (entry.getValue().contains(WILDCARD_ACL_VALUE)) {
-            acls.put(ApplicationAccessType.MODIFY_APP, "*");
-            modifyAclsWildCard = true;
-            continue;
-          } else if (!entry.getValue().isEmpty()) {
-            String aclsStr = acls.get(ApplicationAccessType.MODIFY_APP);
-            String commaSepList = toCommaSeparatedString(entry.getValue());
-            if (!commaSepList.isEmpty()) {
-              aclsStr += "," + commaSepList;
-            }
-            acls.put(ApplicationAccessType.MODIFY_APP, aclsStr);
-          }
-        }
-      }
-    }
-
-    if (groups != null && !groups.isEmpty()) {
-      for (Entry<ACLType, Set<String>> entry : groups.entrySet()) {
-        if (entry.getKey().equals(ACLType.AM_VIEW_ACL)
-          && !viewAclsWildCard && !entry.getValue().isEmpty()) {
-          // Append groups only if wild card not set
-          String aclsStr = acls.containsKey(ApplicationAccessType.VIEW_APP) ?
-              acls.get(ApplicationAccessType.VIEW_APP) : "";
-          aclsStr += " " + toCommaSeparatedString(entry.getValue());
-          acls.put(ApplicationAccessType.VIEW_APP, aclsStr);
-        } else if (entry.getKey().equals(ACLType.AM_MODIFY_ACL)
-            && !modifyAclsWildCard && !entry.getValue().isEmpty()) {
-          // Append groups only if wild card not set
-          String aclsStr = acls.containsKey(ApplicationAccessType.MODIFY_APP) ?
-              acls.get(ApplicationAccessType.MODIFY_APP) : "";
-          aclsStr += " " + toCommaSeparatedString(entry.getValue());
-          acls.put(ApplicationAccessType.MODIFY_APP, aclsStr);
-        }
-      }
-    }
-    return acls;
-  }
-
-  public static String toCommaSeparatedString(Collection<String> collection) {
-    StringBuilder sb = new StringBuilder();
-    boolean first = true;
-    for (String s : collection) {
-      if (!first) {
-        sb.append(",");
-      } else {
-        first = false;
-      }
-      sb.append(s);
-    }
-    return sb.toString();
   }
 }

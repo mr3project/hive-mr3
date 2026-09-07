@@ -22,12 +22,8 @@ package org.apache.hadoop.hive.ql.exec.mr3.timeline.security;
  * ACL Types
  */
 public enum ACLType {
-  /** View permissions on the Application Master */
+  /** MR3TimelineService - View permissions on MR3 Application Master */
   AM_VIEW_ACL,
-  /** Modify permissions on the Application Master */
+  /** MR3TimelineService - Modify permissions on MR3 Application Master */
   AM_MODIFY_ACL,
-  /** View permissions on the DAG */
-  DAG_VIEW_ACL,
-  /** Modify permissions on the DAG */
-  DAG_MODIFY_ACL
 }

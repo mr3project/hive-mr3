@@ -84,15 +84,16 @@ final class MR3TimelineService {
       timelineStore = createTimelineStore();
       timelineStore.initialize(conf);
 
-      timelineDataManager = TimelineDataManager.createInstance(timelineStore,
-          new ACLManager(UserGroupInformation.getCurrentUser().getShortUserName(), conf));
+      String adminUser = UserGroupInformation.getCurrentUser().getShortUserName();
+      timelineDataManager = TimelineDataManager.createInstance(
+          timelineStore, new ACLManager(adminUser, conf));
       timelineDataManager.initialize();
 
       ingestionService = new MR3TimelineIngestionService(timelineDataManager, conf);
       ingestionService.start();
 
       active = true;
-      LOG.info("Activated MR3-UI on this HiveServer2 instance");
+      LOG.info("Activated MR3-UI on this HiveServer2 instance: {}", adminUser);
     } catch (Exception e) {
       deactivateAfterFailure();
       throw new IOException("Failed to start the MR3 timeline writer", e);

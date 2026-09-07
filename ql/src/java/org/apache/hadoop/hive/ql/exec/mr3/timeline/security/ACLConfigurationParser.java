@@ -24,7 +24,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.Map.Entry;
 import java.util.regex.Pattern;
 
 /**
@@ -34,13 +33,9 @@ public class ACLConfigurationParser {
 
   private static final Logger LOG = LoggerFactory.getLogger(ACLConfigurationParser.class);
 
-  // ACLManager, additional AM users
-  private final String MR3_AM_VIEW_ACLS = "mr3.am.view-acls";
-  private final String MR3_AM_MODIFY_ACLS = "mr3.am.modify-acls";
-
-  // ACLManager, additional DAG users
-  private final String MR3_AM_DAG_VIEW_ACLS = "mr3.am.dag.view-acls";
-  private final String MR3_AM_DAG_MODIFY_ACLS = "mr3.am.dag.modify-acls";
+  // ACLManager, additional users
+  private final String HIVE_MR3_AM_VIEW_ACLS = "hive.mr3.am.view-acls";
+  private final String HIVE_MR3_AM_MODIFY_ACLS = "hive.mr3.am.modify-acls";
 
   private final HiveConf hiveConf;
   private final Map<ACLType, Set<String>> allowedUsers;
@@ -49,24 +44,15 @@ public class ACLConfigurationParser {
   private static final Pattern splitPattern = Pattern.compile("\\s+");
 
   public ACLConfigurationParser(HiveConf hiveConf) {
-    this(hiveConf, false);
-  }
-
-  public ACLConfigurationParser(HiveConf hiveConf, boolean dagACLs) {
     this.hiveConf = hiveConf;
     allowedUsers = new HashMap<ACLType, Set<String>>(2);
     allowedGroups = new HashMap<ACLType, Set<String>>(2);
-    parse(dagACLs);
+    parse();
   }
 
-  private void parse(boolean dagACLs) {
-    if (!dagACLs) {
-      parseACLType(MR3_AM_VIEW_ACLS, ACLType.AM_VIEW_ACL);
-      parseACLType(MR3_AM_MODIFY_ACLS, ACLType.AM_MODIFY_ACL);
-    } else {
-      parseACLType(MR3_AM_DAG_VIEW_ACLS, ACLType.DAG_VIEW_ACL);
-      parseACLType(MR3_AM_DAG_MODIFY_ACLS, ACLType.DAG_MODIFY_ACL);
-    }
+  private void parse() {
+    parseACLType(HIVE_MR3_AM_VIEW_ACLS, ACLType.AM_VIEW_ACL);
+    parseACLType(HIVE_MR3_AM_MODIFY_ACLS, ACLType.AM_MODIFY_ACL);
   }
 
   private boolean isWildCard(String aclStr) {
@@ -116,7 +102,6 @@ public class ACLConfigurationParser {
       allowedGroups.put(aclType,
           Sets.newLinkedHashSet(Arrays.asList(getTrimmedStrings(groupListStr))));
     }
-
   }
 
   public Map<ACLType, Set<String>> getAllowedUsers() {
@@ -125,26 +110,6 @@ public class ACLConfigurationParser {
 
   public Map<ACLType, Set<String>> getAllowedGroups() {
     return Collections.unmodifiableMap(allowedGroups);
-  }
-
-  public void addAllowedUsers(Map<ACLType, Set<String>> additionalAllowedUsers) {
-    for (Entry<ACLType, Set<String>> entry : additionalAllowedUsers.entrySet()) {
-      if (allowedUsers.containsKey(entry.getKey())) {
-        allowedUsers.get(entry.getKey()).addAll(entry.getValue());
-      } else {
-        allowedUsers.put(entry.getKey(), entry.getValue());
-      }
-    }
-  }
-
-  public void addAllowedGroups(Map<ACLType, Set<String>> additionalAllowedGroups) {
-    for (Entry<ACLType, Set<String>> entry : additionalAllowedGroups.entrySet()) {
-      if (allowedGroups.containsKey(entry.getKey())) {
-        allowedGroups.get(entry.getKey()).addAll(entry.getValue());
-      } else {
-        allowedGroups.put(entry.getKey(), entry.getValue());
-      }
-    }
   }
 
   private String[] getTrimmedStrings(String str) {
