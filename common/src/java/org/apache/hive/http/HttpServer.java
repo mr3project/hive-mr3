@@ -177,6 +177,7 @@ public class HttpServer {
     private String allowedHeaders;
     private PamAuthenticator pamAuthenticator;
     private String contextRootRewriteTarget = "/index.html";
+    private String contextRootRewritePathRegex;
     private boolean xFrameEnabled;
     private XFrameOption xFrameOption = XFrameOption.SAMEORIGIN;
     private final List<Pair<String, Class<? extends HttpServlet>>> servlets =
@@ -310,6 +311,15 @@ public class HttpServer {
 
     public Builder setContextRootRewriteTarget(String contextRootRewriteTarget) {
       this.contextRootRewriteTarget = contextRootRewriteTarget;
+      return this;
+    }
+
+    /**
+     * Sets the request-path regular expression that should be served by the context root target.
+     * This is useful for browser routes owned by a single-page application.
+     */
+    public Builder setContextRootRewritePathRegex(String pathRegex) {
+      contextRootRewritePathRegex = pathRegex;
       return this;
     }
 
@@ -623,8 +633,9 @@ public class HttpServer {
    * handler for the rewritten requests.
    *
    * <p>This method creates a {@link RewriteHandler} that rewrites requests to the root path
-   * ("/") to a new target URI specified by the {@code builder.contextRootRewriteTarget}. 
-   * The URI rewrite is applied before forwarding the request to the given {@link WebAppContext}.</p>
+   * ("/"), as well as any configured client-side application paths, to a new target URI specified
+   * by the {@code builder.contextRootRewriteTarget}. The URI rewrite is applied before forwarding
+   * the request to the given {@link WebAppContext}.</p>
    *
    * @param builder The builder object containing configuration values, such as the 
    *                target for URI rewrite.
@@ -643,6 +654,14 @@ public class HttpServer {
     rootRule.setTerminating(true);
 
     rwHandler.addRule(rootRule);
+
+    if (builder.contextRootRewritePathRegex != null) {
+      RewriteRegexRule pathRule = new RewriteRegexRule();
+      pathRule.setRegex(builder.contextRootRewritePathRegex);
+      pathRule.setReplacement(builder.contextRootRewriteTarget);
+      pathRule.setTerminating(true);
+      rwHandler.addRule(pathRule);
+    }
     rwHandler.setHandler(webAppContext);
     
     return rwHandler;
