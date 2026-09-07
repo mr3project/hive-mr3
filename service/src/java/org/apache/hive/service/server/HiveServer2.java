@@ -432,6 +432,11 @@ public class HiveServer2 extends CompositeService {
           boolean mr3UIEnabled =
               HiveConf.getBoolVar(hiveConf, ConfVars.HIVE_MR3_UI_CREATE_SERVER);
           builder.setContextRootRewriteTarget(mr3UIEnabled ? "/index.html" : HS2_WEBUI_ROOT_URI);
+          if (mr3UIEnabled) {
+            // MR3-UI uses browser-side routing. Direct requests for those routes must load the
+            // application entry point before its router can render the requested page.
+            builder.setContextRootRewritePathRegex("^/(?:applications|dags|analysis)(?:/.*)?$");
+          }
 
           String webUIAuthMethodConfig = hiveConf.getVar(ConfVars.HIVE_SERVER2_WEBUI_AUTH_METHOD);
           WebUIAuthMethod webUIAuthMethod = getWebUIAuthMethod(webUIAuthMethodConfig);
