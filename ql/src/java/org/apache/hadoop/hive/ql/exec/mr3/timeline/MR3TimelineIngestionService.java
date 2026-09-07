@@ -156,8 +156,8 @@ public class MR3TimelineIngestionService implements AutoCloseable {
       String applicationAttemptId, long timeoutMillis) throws InterruptedException {
     long endTimeMillis = System.currentTimeMillis() + timeoutMillis;
     synchronized (APP_ATTEMPT_TERMINATION_LOCK) {
-      while (ingestionServiceRunning
-          && !Boolean.TRUE.equals(APP_ATTEMPT_TERMINATED.get(applicationAttemptId))) {
+      while (ingestionServiceRunning &&
+             !Boolean.TRUE.equals(APP_ATTEMPT_TERMINATED.get(applicationAttemptId))) {
         long remainingMillis = endTimeMillis - System.currentTimeMillis();
         if (remainingMillis <= 0) {
           return false;

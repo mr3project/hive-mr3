@@ -1141,10 +1141,6 @@ public class HiveServer2 extends CompositeService {
     HiveConf hiveConf = this.getHiveConf();
     super.stop();
 
-    if (mr3TimelineService != null) {
-      mr3TimelineService.stop();
-    }
-
     String engine = hiveConf != null ? hiveConf.getVar(ConfVars.HIVE_EXECUTION_ENGINE) : "";
     if (serviceDiscovery && activePassiveHA && engine.equals("tez")) {
       watcherThreadExecutor.shutdownNow();
@@ -1207,6 +1203,10 @@ public class HiveServer2 extends CompositeService {
       } catch(Exception ex) {
         LOG.error("MR3 session pool manager failed to stop during HiveServer2 shutdown.", ex);
       }
+    }
+
+    if (mr3TimelineService != null) {
+      mr3TimelineService.stop();
     }
 
     if (cliService != null) {
