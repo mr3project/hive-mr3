@@ -56,10 +56,10 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
   private boolean serviceDiscovery = false;
   private boolean activePassiveHA = false;
 
-  private volatile boolean shareMr3Session = false;
+  private boolean shareMr3Session = false;
   private UserGroupInformation commonUgi = null;
   private SessionState commonSessionState = null;
-  private volatile MR3Session commonMr3Session = null;
+  private MR3Session commonMr3Session = null;
 
   private MR3ZooKeeper mr3ZooKeeper = null;
 
@@ -282,7 +282,7 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
     return shareMr3Session;
   }
 
-  public MR3Session getActiveMR3SessionForMR3UI() {
+  public synchronized MR3Session getActiveMR3SessionForMR3UI() {
     return shareMr3Session ? commonMr3Session : null;
   }
 

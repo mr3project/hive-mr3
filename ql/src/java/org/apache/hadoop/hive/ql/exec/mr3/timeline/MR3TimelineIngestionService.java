@@ -56,6 +56,7 @@ public class MR3TimelineIngestionService implements AutoCloseable {
   private final long ingestionIntervalMillis;
   private ScheduledExecutorService executorService;
   private ScheduledFuture<?> ingestionTask;
+  private MR3SessionClient mr3SessionClient;
   private String applicationAttemptId;
   private long fromIndex = 0;
 
@@ -87,15 +88,19 @@ public class MR3TimelineIngestionService implements AutoCloseable {
     try {
       ingestTimelineEvents();
     } catch (MR3Exception e) {
+      mr3SessionClient = null;
       LOG.warn("Failed to ingest MR3 timeline events: {}", e.getMessage());
     } catch (Exception e) {
+      mr3SessionClient = null;
       LOG.warn("Failed to ingest MR3 timeline events", e);
     }
   }
 
   private void ingestTimelineEvents() throws Exception {
-    MR3Session mr3Session = MR3SessionManagerImpl.getInstance().getActiveMR3SessionForMR3UI();
-    MR3SessionClient mr3SessionClient = mr3Session == null ? null : mr3Session.getMR3SessionClient();
+    if (mr3SessionClient == null) {
+      MR3Session mr3Session = MR3SessionManagerImpl.getInstance().getActiveMR3SessionForMR3UI();
+      mr3SessionClient = mr3Session == null ? null : mr3Session.getMR3SessionClient();
+    }
     if (mr3SessionClient == null) {
       return;
     }
@@ -106,6 +111,7 @@ public class MR3TimelineIngestionService implements AutoCloseable {
       fromIndex = 0;
     }
 
+    boolean receivedTerminalEntity = false;
     int numEntities;
     do {
       scala.collection.immutable.List<TimelineEntity> timelineEntities =
@@ -122,11 +128,17 @@ public class MR3TimelineIngestionService implements AutoCloseable {
               APP_ATTEMPT_TERMINATED.put(entity.getEntityId(), true);
               APP_ATTEMPT_TERMINATION_LOCK.notifyAll();
             }
+            if (entity.getEntityId().equals(applicationAttemptId)) {
+              receivedTerminalEntity = true;
+            }
           }
         }
         fromIndex += numEntities;
       }
     } while (numEntities == MAX_NUM_ENTITIES_PER_REQUEST);
+    if (receivedTerminalEntity) {
+      mr3SessionClient = null;
+    }
   }
 
   private TimelinePutResponse appendTimelineEntities(
