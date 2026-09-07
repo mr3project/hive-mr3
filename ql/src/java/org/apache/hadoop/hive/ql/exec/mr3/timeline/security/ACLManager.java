@@ -100,10 +100,10 @@ public class ACLManager {
   }
 
   public boolean checkAMViewAccess(UserGroupInformation ugi) {
-    return checkAccess(ugi, ACLType.AM_VIEW_ACL);
+    return checkAccess(ugi, ACLType.MR3_UI_VIEW_ACL);
   }
 
   public boolean checkAMModifyAccess(UserGroupInformation ugi) {
-    return checkAccess(ugi, ACLType.AM_MODIFY_ACL);
+    return checkAccess(ugi, ACLType.MR3_UI_MODIFY_ACL);
   }
 }

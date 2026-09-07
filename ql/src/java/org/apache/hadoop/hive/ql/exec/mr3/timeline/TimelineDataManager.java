@@ -112,7 +112,7 @@ public class TimelineDataManager {
       if (user.equals(viewer)) {
         return true;
       }
-      return aclManager != null && aclManager.checkAccess(ugi, ACLType.AM_VIEW_ACL);
+      return aclManager != null && aclManager.checkAccess(ugi, ACLType.MR3_UI_VIEW_ACL);
     }
   }
 
