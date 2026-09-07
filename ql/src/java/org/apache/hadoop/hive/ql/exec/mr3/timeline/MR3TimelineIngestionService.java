@@ -20,10 +20,14 @@ package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import com.datamonad.mr3.api.client.MR3SessionClient;
 import com.datamonad.mr3.api.common.MR3Exception;
+import com.datamonad.mr3.history.EntityKey;
+import com.datamonad.mr3.history.EntityType;
 import com.datamonad.mr3.history.MR3TimelineDataPublisher;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -44,6 +48,9 @@ public class MR3TimelineIngestionService implements AutoCloseable {
   private static final Logger LOG = LoggerFactory.getLogger(MR3TimelineIngestionService.class);
   private static final int MAX_NUM_ENTITIES_PER_REQUEST =
       MR3TimelineDataPublisher.maxNumEntitiesPerRequest();
+  private static final Object APP_ATTEMPT_TERMINATION_LOCK = new Object();
+  private static final Map<String, Boolean> APP_ATTEMPT_TERMINATED = new HashMap<>();
+  private static volatile boolean ingestionServiceRunning;
 
   private final TimelineDataManager timelineDataManager;
   private final long ingestionIntervalMillis;
@@ -73,6 +80,7 @@ public class MR3TimelineIngestionService implements AutoCloseable {
         ingestionIntervalMillis,
         ingestionIntervalMillis,
         TimeUnit.MILLISECONDS);
+    ingestionServiceRunning = true;
   }
 
   private void ingest() {
@@ -107,6 +115,15 @@ public class MR3TimelineIngestionService implements AutoCloseable {
       numEntities = entities.size();
       if (numEntities > 0) {
         appendTimelineEntities(applicationAttemptId, fromIndex, entities);
+        for (TimelineEntity entity : entities) {
+          if (EntityType.MR3_APP_ATTEMPT().equals(entity.getEntityType())
+              && entity.getOtherInfo().containsKey(EntityKey.endTime())) {
+            synchronized (APP_ATTEMPT_TERMINATION_LOCK) {
+              APP_ATTEMPT_TERMINATED.put(entity.getEntityId(), true);
+              APP_ATTEMPT_TERMINATION_LOCK.notifyAll();
+            }
+          }
+        }
         fromIndex += numEntities;
       }
     } while (numEntities == MAX_NUM_ENTITIES_PER_REQUEST);
@@ -119,8 +136,32 @@ public class MR3TimelineIngestionService implements AutoCloseable {
     return timelineDataManager.postEntities(entities);
   }
 
+  public static boolean isRunning() {
+    return ingestionServiceRunning;
+  }
+
+  public static boolean waitForAppAttemptTermination(
+      String applicationAttemptId, long timeoutMillis) throws InterruptedException {
+    long endTimeMillis = System.currentTimeMillis() + timeoutMillis;
+    synchronized (APP_ATTEMPT_TERMINATION_LOCK) {
+      while (ingestionServiceRunning
+          && !Boolean.TRUE.equals(APP_ATTEMPT_TERMINATED.get(applicationAttemptId))) {
+        long remainingMillis = endTimeMillis - System.currentTimeMillis();
+        if (remainingMillis <= 0) {
+          return false;
+        }
+        APP_ATTEMPT_TERMINATION_LOCK.wait(remainingMillis);
+      }
+      return Boolean.TRUE.equals(APP_ATTEMPT_TERMINATED.get(applicationAttemptId));
+    }
+  }
+
   @Override
   public synchronized void close() {
+    synchronized (APP_ATTEMPT_TERMINATION_LOCK) {
+      ingestionServiceRunning = false;
+      APP_ATTEMPT_TERMINATION_LOCK.notifyAll();
+    }
     if (ingestionTask != null) {
       ingestionTask.cancel(true);
       ingestionTask = null;

@@ -81,7 +81,7 @@ public class MR3SessionImpl implements MR3Session {
   // set in start() and close()
   private HiveConf sessionConf;
   // read in submit(), isRunningFromApplicationReport(), getEstimateNumTasksOrNodes()
-  private HiveMR3Client hiveMr3Client;
+  private volatile HiveMR3Client hiveMr3Client;
 
   private ApplicationId appId;
 
@@ -180,8 +180,9 @@ public class MR3SessionImpl implements MR3Session {
   }
 
   @Override
-  public synchronized MR3SessionClient getMR3SessionClient() {
-    return hiveMr3Client == null ? null : hiveMr3Client.getMR3SessionClient();
+  public MR3SessionClient getMR3SessionClient() {
+    HiveMR3Client client = hiveMr3Client;
+    return client == null ? null : client.getMR3SessionClient();
   }
 
   private void setupHiveMr3Client(HiveConf hiveConf) throws Exception {

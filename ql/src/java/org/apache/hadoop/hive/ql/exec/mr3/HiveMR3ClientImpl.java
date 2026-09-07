@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRef;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRefImpl;
+import org.apache.hadoop.hive.ql.exec.mr3.timeline.MR3TimelineIngestionService;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.security.Credentials;
@@ -47,10 +48,12 @@ import org.slf4j.LoggerFactory;
 import scala.Option;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class HiveMR3ClientImpl implements HiveMR3Client {
   protected static final Logger LOG = LoggerFactory.getLogger(HiveMR3ClientImpl.class);
+  private static final long APP_TERMINATION_EVENT_TIMEOUT_MILLIS = TimeUnit.MINUTES.toMillis(1);
 
   // HiveMR3Client can be shared by several threads (from MR3Tasks), and can be closed by any of these
   // threads at any time. After mr3Client.close() is called, all subsequent calls to mr3Client end up
@@ -136,8 +139,27 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
     try {
       if (terminateApplication) {
         LOG.info("HiveMR3Client.close() terminates the current Application");
+        String applicationAttemptId = mr3Client.getAppAttemptIdStr();
         mr3Client.shutdownAppMasterToTerminateApplication();
+        if (MR3TimelineIngestionService.isRunning()) {
+          boolean received = MR3TimelineIngestionService.waitForAppAttemptTermination(
+              applicationAttemptId, APP_TERMINATION_EVENT_TIMEOUT_MILLIS);
+          if (received) {
+            LOG.info("Received the terminal TimelineEntity for MR3 ApplicationAttempt: "
+                + applicationAttemptId);
+          } else if (MR3TimelineIngestionService.isRunning()) {
+            LOG.warn("Timed out waiting for the terminal TimelineEntity for MR3 ApplicationAttempt: "
+                + applicationAttemptId);
+          }
+        }
       }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      LOG.warn("Interrupted while waiting for the terminal TimelineEntity", e);
+    } catch (Exception e) {
+      LOG.warn("Failed to terminate MR3 Application", e);
+    }
+    try {
       LOG.info("HiveMR3Client.close() closes MR3SessionClient");
       mr3Client.close();
     } catch (Exception e) {
