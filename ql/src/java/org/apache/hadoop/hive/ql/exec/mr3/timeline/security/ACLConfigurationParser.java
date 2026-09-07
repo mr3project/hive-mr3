@@ -34,8 +34,9 @@ public class ACLConfigurationParser {
   private static final Logger LOG = LoggerFactory.getLogger(ACLConfigurationParser.class);
 
   // ACLManager, additional users
-  private final String HIVE_MR3_AM_VIEW_ACLS = "hive.mr3.am.view-acls";
-  private final String HIVE_MR3_AM_MODIFY_ACLS = "hive.mr3.am.modify-acls";
+  private final String HIVE_MR3_UI_VIEW_ACLS = "hive.mr3.ui.view-acls";
+  // TODO: currently not used
+  private final String HIVE_MR3_UI_MODIFY_ACLS = "hive.mr3.ui.modify-acls";
 
   private final HiveConf hiveConf;
   private final Map<ACLType, Set<String>> allowedUsers;
@@ -51,8 +52,8 @@ public class ACLConfigurationParser {
   }
 
   private void parse() {
-    parseACLType(HIVE_MR3_AM_VIEW_ACLS, ACLType.AM_VIEW_ACL);
-    parseACLType(HIVE_MR3_AM_MODIFY_ACLS, ACLType.AM_MODIFY_ACL);
+    parseACLType(HIVE_MR3_UI_VIEW_ACLS, ACLType.MR3_UI_VIEW_ACL);
+    parseACLType(HIVE_MR3_UI_MODIFY_ACLS, ACLType.MR3_UI_MODIFY_ACL);
   }
 
   private boolean isWildCard(String aclStr) {
