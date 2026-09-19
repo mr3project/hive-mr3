@@ -34,6 +34,8 @@ import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils;
 import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3Client;
 import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3Client.MR3ClientState;
 import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3ClientFactory;
+import org.apache.hadoop.hive.ql.exec.mr3.MR3QueryTiming;
+import org.apache.hadoop.hive.ql.exec.mr3.MR3Task;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRef;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
@@ -339,6 +341,7 @@ public class MR3SessionImpl implements MR3Session {
       Context ctx,
       AtomicBoolean isShutdown,
       PerfLogger perfLogger) throws Exception {
+    final long submitStartTime = System.currentTimeMillis();
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_SUBMIT_DAG);
 
     HiveMR3Client currentHiveMr3Client;
@@ -381,7 +384,9 @@ public class MR3SessionImpl implements MR3Session {
     if (submitter == null) {
       submitter = "(unknown)";
     }
-    DAGAPI.DAGProto dagProto = dag.createDagProto(mr3TaskConf, dagConf, submitter, alreadyExecutedAnyDag);
+
+    DAGAPI.DAGProto.Builder dagProtoBuilder = dag.createDagProto(
+        mr3TaskConf, dagConf, submitter, alreadyExecutedAnyDag);
 
     Map<String, LocalResourcePayload> submitPayloads = dag.getSubmitLocalResourcePayloads();
     submitPayloads.putAll(addtlLocalResourcePayloads);
@@ -390,8 +395,15 @@ public class MR3SessionImpl implements MR3Session {
     // close() may have been called, in which case currentHiveMr3Client.submitDag() raises Exception
     MR3JobRef mr3JobRef;
     try {
+      long submitInvocationTime = System.currentTimeMillis();
+      long compileStartTime = mr3TaskConf.getLong(MR3Task.HIVE_CONF_COMPILE_START_TIME, 0L);
+      long compileEndTime = mr3TaskConf.getLong(MR3Task.HIVE_CONF_COMPILE_END_TIME, compileStartTime);
+      MR3QueryTiming queryTiming = new MR3QueryTiming(
+          compileStartTime, compileEndTime, submitStartTime, submitInvocationTime);
+      queryTiming.addSubmissionAttributes(dagProtoBuilder);
+
       mr3JobRef = currentHiveMr3Client.submitDag(
-          dagProto, addtlAmLocalResources, submitPayloads, workMap, dag, ctx, isShutdown);
+          dagProtoBuilder.build(), addtlAmLocalResources, submitPayloads, workMap, dag, ctx, isShutdown, queryTiming);
     } catch (Exception ex) {
       LOG.error("Resetting LocalResources assumed to be present in DAGAppMaster");
       synchronized (this) {

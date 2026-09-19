@@ -105,7 +105,6 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
         .setBoolean(MR3Conf$.MODULE$.MR3_AM_SESSION_MODE(), true).build();
   }
 
-  // Exception if mr3Client is already closed
   @Override
   public MR3JobRef submitDag(
       final DAGAPI.DAGProto dagProto,
@@ -114,7 +113,8 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
       final Map<String, BaseWork> workMap,
       final DAG dag,
       final Context ctx,
-      AtomicBoolean isShutdown) throws Exception {
+      AtomicBoolean isShutdown,
+      MR3QueryTiming queryTiming) throws Exception {
 
     /*
      1. For every N in amLrs:
@@ -128,7 +128,8 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
     scala.collection.immutable.Map<String, LocalResource> amLrs = MR3Utils.toScalaMap(amLocalResources);
     scala.collection.immutable.Map<String, LocalResourcePayload> payloads = MR3Utils.toScalaMap(localResourcePayloads);
     DAGClient dagClient = mr3Client.submitDag(amLrs, scala.Option.empty(), dagProto, payloads);
-    return new MR3JobRefImpl(hiveConf, dagClient, workMap, dag, ctx, isShutdown);
+    return new MR3JobRefImpl(hiveConf, dagClient, workMap, dag, ctx, isShutdown,
+        queryTiming, mr3Client);
   }
 
   // terminateApplication is irrelevant to whether start() has been called or connect() has been called.
