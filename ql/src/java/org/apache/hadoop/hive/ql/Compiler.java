@@ -505,6 +505,9 @@ public class Compiler {
 
   private void cleanUp(Throwable compileException, boolean parsed, boolean deferClose) {
     double duration = perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.COMPILE) / 1000.00;
+    long compileEndTime = perfLogger.getEndTime(PerfLogger.COMPILE);
+    long stepStartTime = System.currentTimeMillis();
+    LOG.error("xxx compileEndTime set; elapsedSinceCompileEndMs=0");
     // Trigger post compilation hook. Note that if the compilation fails here then
     // before/after execution hook will never be executed.
     if (parsed) {
@@ -514,9 +517,17 @@ public class Compiler {
         LOG.warn("Failed when invoking query after-compilation hook.", e);
       }
     }
+    long now = System.currentTimeMillis();
+    LOG.error("xxx after-compilation hook finished; stepDurationMs={}; elapsedSinceCompileEndMs={}",
+        now - stepStartTime, now - compileEndTime);
+    stepStartTime = now;
 
     ImmutableMap<String, Long> compileHMSTimings = Hive.dumpMetaCallTimingWithoutEx("compilation");
     driverContext.getQueryDisplay().setHmsTimings(QueryDisplay.Phase.COMPILATION, compileHMSTimings);
+    now = System.currentTimeMillis();
+    LOG.error("xxx compilation HMS timing processing finished; stepDurationMs={}; elapsedSinceCompileEndMs={}",
+        now - stepStartTime, now - compileEndTime);
+    stepStartTime = now;
 
     if (driverState.isAborted()) {
       driverState.compilationInterruptedWithLocking(deferClose);
@@ -527,5 +538,8 @@ public class Compiler {
       LOG.info("Completed compiling command(queryId={}); Time taken: {} seconds", driverContext.getQueryId(),
           duration);
     }
+    now = System.currentTimeMillis();
+    LOG.error("xxx compiler cleanup finished; stepDurationMs={}; elapsedSinceCompileEndMs={}",
+        now - stepStartTime, now - compileEndTime);
   }
 }

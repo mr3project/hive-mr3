@@ -192,6 +192,9 @@ public class MR3Task {
   }
 
   public int execute(Context contextFromTezTask, TezWork tezWork) {
+    long compileEndTime = conf.getLong(HIVE_CONF_COMPILE_END_TIME, 0L);
+    LOG.error("xxx MR3Task.execute entered with TezWork; elapsedSinceCompileEndMs={}",
+        System.currentTimeMillis() - compileEndTime);
     int returnCode = 1;   // 1 == error
     boolean cleanContext = false;
     Context context = null;

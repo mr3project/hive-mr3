@@ -164,8 +164,16 @@ public class TezTask extends Task<TezWork> {
   private java.util.concurrent.atomic.AtomicBoolean isShutdownMr3 = new java.util.concurrent.atomic.AtomicBoolean(false);
 
   private int executeMr3() {
+    long compileEndTime = conf.getLong(
+        org.apache.hadoop.hive.ql.exec.mr3.MR3Task.HIVE_CONF_COMPILE_END_TIME, 0L);
+    long stepStartTime = System.currentTimeMillis();
+    LOG.error("xxx TezTask.executeMr3 entered; elapsedSinceCompileEndMs={}",
+        stepStartTime - compileEndTime);
     org.apache.hadoop.hive.ql.exec.mr3.MR3Task mr3Task =
       new org.apache.hadoop.hive.ql.exec.mr3.MR3Task(conf, console, isShutdownMr3);
+    long now = System.currentTimeMillis();
+    LOG.error("xxx MR3Task constructed; stepDurationMs={}; elapsedSinceCompileEndMs={}",
+        now - stepStartTime, now - compileEndTime);
     int returnCode = mr3Task.execute(context, this.getWork());
     if (mr3Task.getDagIdStr() != null) {
       this.jobID = mr3Task.getDagIdStr();

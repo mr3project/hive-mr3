@@ -174,11 +174,27 @@ public class Driver implements IDriver {
       } else {
         driverContext.getPlan().setQueryStartTime(driverContext.getQueryDisplay().getQueryStartTime());
       }
+      long compileEndTime = SessionState.get().getConf().getLong(MR3Task.HIVE_CONF_COMPILE_END_TIME, 0L);
+      long stepStartTime = System.currentTimeMillis();
+      LOG.error("xxx Driver finished compilation path; elapsedSinceCompileEndMs={}",
+          stepStartTime - compileEndTime);
 
       DriverUtils.checkInterrupted(driverState, driverContext, "at acquiring the lock.", null, null);
+      long now = System.currentTimeMillis();
+      LOG.error("xxx pre-lock interruption check finished; stepDurationMs={}; elapsedSinceCompileEndMs={}",
+          now - stepStartTime, now - compileEndTime);
+      stepStartTime = now;
 
       lockAndRespond();
+      now = System.currentTimeMillis();
+      LOG.error("xxx query lock acquisition finished; stepDurationMs={}; elapsedSinceCompileEndMs={}",
+          now - stepStartTime, now - compileEndTime);
+      stepStartTime = now;
       validateCurrentSnapshot();
+      now = System.currentTimeMillis();
+      LOG.error("xxx current snapshot validation finished; stepDurationMs={}; elapsedSinceCompileEndMs={}",
+          now - stepStartTime, now - compileEndTime);
+      stepStartTime = now;
 
       // Reset the PerfLogger so that it doesn't retain any previous values.
       // Any value from compilation phase can be obtained through the map set in queryDisplay during compilation.
@@ -187,6 +203,9 @@ public class Driver implements IDriver {
       // the reason that we set the txn manager for the cxt here is because each query has its own ctx object.
       // The txn mgr is shared across the same instance of Driver, which can run multiple queries.
       context.setHiveTxnManager(driverContext.getTxnManager());
+      now = System.currentTimeMillis();
+      LOG.error("xxx execution PerfLogger and transaction context setup finished; stepDurationMs={}; "
+          + "elapsedSinceCompileEndMs={}", now - stepStartTime, now - compileEndTime);
       
       execute();
 
@@ -498,9 +517,19 @@ public class Driver implements IDriver {
 
     Compiler compiler = new Compiler(context, driverContext, driverState);
     QueryPlan plan = compiler.compile(command, deferClose);
+    long compileEndTime = SessionState.getPerfLogger(false).getEndTime(PerfLogger.COMPILE);
+    long stepStartTime = System.currentTimeMillis();
+    LOG.error("xxx Compiler.compile returned; elapsedSinceCompileEndMs={}", stepStartTime - compileEndTime);
     driverContext.setPlan(plan);
+    long now = System.currentTimeMillis();
+    LOG.error("xxx QueryPlan installed in DriverContext; stepDurationMs={}; elapsedSinceCompileEndMs={}",
+        now - stepStartTime, now - compileEndTime);
+    stepStartTime = now;
 
     compileFinished(deferClose);
+    now = System.currentTimeMillis();
+    LOG.error("xxx Driver compileFinished finished; stepDurationMs={}; elapsedSinceCompileEndMs={}",
+        now - stepStartTime, now - compileEndTime);
 
     // Before resetting SessionState.PerfLogger, we store compile start/end times in SessionState's HiveConf.
     PerfLogger currentPerfLogger = SessionState.getPerfLogger(false);
