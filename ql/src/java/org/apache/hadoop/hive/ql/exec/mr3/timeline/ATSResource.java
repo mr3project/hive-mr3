@@ -109,6 +109,9 @@ public class ATSResource {
       if (isMr3Dag) {
         // remove dagProto to reduce the size
         current.addOtherInfo(EntityKey.dagProto(), null);
+        // Query previews can be relatively large and are only used on the DAG detail page.
+        current.getOtherInfo().remove("dagAttribute.query.column.schema");
+        current.getOtherInfo().remove("dagAttribute.query.column.results");
       }
       results.addEntity(current);
     }
