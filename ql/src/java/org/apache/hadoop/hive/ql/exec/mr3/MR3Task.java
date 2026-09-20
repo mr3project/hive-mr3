@@ -190,11 +190,8 @@ public class MR3Task {
   }
 
   public int execute(Context contextFromTezTask, TezWork tezWork, QueryDisplay queryDisplay) {
-    Map<String, Long> compileStartTimes = queryDisplay.getPerfLogStarts(QueryDisplay.Phase.COMPILATION);
     Map<String, Long> compileEndTimes = queryDisplay.getPerfLogEnds(QueryDisplay.Phase.COMPILATION);
-    long defaultCompileTime = queryDisplay.getQueryStartTime();
-    long compileStartTime = compileStartTimes == null ? defaultCompileTime :
-        compileStartTimes.getOrDefault(PerfLogger.COMPILE, defaultCompileTime);
+    long compileStartTime = queryDisplay.getQueryStartTime();
     long compileEndTime = compileEndTimes == null ? compileStartTime :
         compileEndTimes.getOrDefault(PerfLogger.COMPILE, compileStartTime);
     int returnCode = 1;   // 1 == error
