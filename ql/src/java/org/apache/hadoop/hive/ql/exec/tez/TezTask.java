@@ -166,7 +166,8 @@ public class TezTask extends Task<TezWork> {
   private int executeMr3() {
     org.apache.hadoop.hive.ql.exec.mr3.MR3Task mr3Task =
       new org.apache.hadoop.hive.ql.exec.mr3.MR3Task(conf, console, isShutdownMr3);
-    int returnCode = mr3Task.execute(context, this.getWork(), queryDisplay);
+    int returnCode = mr3Task.execute(
+        context, this.getWork(), queryDisplay, getQueryPlan().getResultSchema());
     if (mr3Task.getDagIdStr() != null) {
       this.jobID = mr3Task.getDagIdStr();
     }
