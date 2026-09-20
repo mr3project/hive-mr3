@@ -60,7 +60,8 @@ public interface HiveMR3Client {
       Map<String, BaseWork> workMap,
       DAG dag,
       Context ctx,
-      AtomicBoolean isShutdown) throws Exception;
+      AtomicBoolean isShutdown,
+      MR3QueryTiming queryTiming) throws Exception;
 
   /**
    * @return MR3 client state

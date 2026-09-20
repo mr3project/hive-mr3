@@ -67,7 +67,9 @@ public interface MR3Session {
       Map<String, BaseWork> workMap,
       Context ctx,
       AtomicBoolean isShutdown,
-      PerfLogger perfLogger) throws Exception;
+      PerfLogger perfLogger,
+      long compileStartTime,
+      long compileEndTime) throws Exception;
 
   /**
    * @return session id.

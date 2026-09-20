@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.QueryDisplay;
 import org.apache.hadoop.hive.ql.exec.mr3.MR3Task;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManager;
@@ -218,7 +219,7 @@ public class MR3DistCp extends Configured implements Tool {
       }
 
       MR3Task mr3Task = new MR3Task(hiveConf, new SessionState.LogHelper(LOG), new AtomicBoolean(false));
-      int returnCode = mr3Task.execute(null, tezWork);  // blocking
+      int returnCode = mr3Task.execute(null, tezWork, new QueryDisplay());  // blocking
 
       // TODO: Restore speculative execution if necessary (when hiveConf is shared)
 

@@ -24,6 +24,7 @@ import com.datamonad.mr3.api.client.DAGState$;
 import com.datamonad.mr3.api.client.DAGStatus;
 import com.datamonad.mr3.api.client.Progress;
 import com.datamonad.mr3.api.client.VertexStatus;
+import com.datamonad.mr3.api.client.MR3SessionClient;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hadoop.hive.common.log.InPlaceUpdate;
 import org.apache.hadoop.hive.common.log.ProgressMonitor;
@@ -31,6 +32,7 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
+import org.apache.hadoop.hive.ql.exec.mr3.MR3QueryTiming;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManager;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
@@ -112,6 +114,8 @@ public class MR3JobMonitor {
   private final AtomicBoolean isShutdown;
   private final boolean hiveServer2InPlaceProgressEnabled;
   private final UpdateFunction updateFunction;
+  private final MR3QueryTiming queryTiming;
+  private final MR3SessionClient sessionClient;
   /**
    * Have to use the same instance to render else the number lines printed earlier is lost and the
    * screen will print the table again and again.
@@ -125,14 +129,16 @@ public class MR3JobMonitor {
 
   public MR3JobMonitor(
       Map<String, BaseWork> workMap, final DAGClient dagClient, HiveConf conf, DAG dag,
-      Context ctx,
-      AtomicBoolean isShutdown) {
+      Context ctx, AtomicBoolean isShutdown, MR3QueryTiming queryTiming,
+      MR3SessionClient sessionClient) {
     this.workMap = workMap;
     this.dagClient = dagClient;
     this.hiveConf = conf;
     this.dag = dag;
     this.context = ctx;
     this.isShutdown = isShutdown;
+    this.queryTiming = queryTiming;
+    this.sessionClient = sessionClient;
     console = SessionState.getConsole();
     inPlaceUpdate = new InPlaceUpdate(LogHelper.getInfoStream());
     hiveServer2InPlaceProgressEnabled = hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_INPLACE_PROGRESS);
@@ -187,7 +193,6 @@ public class MR3JobMonitor {
       shutdownList.add(dagClient);
     }
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_RUN_DAG);
-    perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_SUBMIT_TO_RUNNING);
     DAGState$.Value lastState = null;
     String lastReport = null;
     boolean running = false;
@@ -224,13 +229,15 @@ public class MR3JobMonitor {
               this.executionStartTime = System.currentTimeMillis();
             } else if (state == DAGState$.MODULE$.Running()) {
               if (!running) {
-                perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_SUBMIT_TO_RUNNING);
                 console.printInfo("Status: Running\n");
                 this.executionStartTime = System.currentTimeMillis();
                 running = true;
               }
               lastReport = updateStatus(dagStatus, lastReport);
             } else if (state == DAGState$.MODULE$.Succeeded()) {
+              if (queryTiming != null) {
+                queryTiming.observeTerminal(System.currentTimeMillis());
+              }
               if (!running) {
                 this.executionStartTime = monitorStartTime;
               }
@@ -239,6 +246,9 @@ public class MR3JobMonitor {
               running = false;
               done = true;
             } else if (state == DAGState$.MODULE$.Killed()) {
+              if (queryTiming != null) {
+                queryTiming.observeTerminal(System.currentTimeMillis());
+              }
               if (!running) {
                 this.executionStartTime = monitorStartTime;
               }
@@ -248,6 +258,9 @@ public class MR3JobMonitor {
               done = true;
               rc = 1;
             } else if (state == DAGState$.MODULE$.Failed()) {
+              if (queryTiming != null) {
+                queryTiming.observeTerminal(System.currentTimeMillis());
+              }
               if (!running) {
                 this.executionStartTime = monitorStartTime;
               }
@@ -294,8 +307,24 @@ public class MR3JobMonitor {
     }
 
     perfLogger.perfLogEnd(CLASS_NAME, PerfLogger.MR3_RUN_DAG);
+    publishCompletionAttributes();
     printSummary(success, dagStatus);
     return rc;
+  }
+
+  private void publishCompletionAttributes() {
+    if (queryTiming == null || sessionClient == null || dagClient.dagIdStr().isEmpty()) {
+      return;
+    }
+    try {
+      java.util.Map<String, String> attributes = new java.util.HashMap<>();
+      attributes.put(MR3QueryTiming.TOTAL, Long.toString(queryTiming.getTotalTimeMs()));
+      sessionClient.updateFinishedDagAttributes(
+          dagClient.dagIdStr().get(),
+          org.apache.hadoop.hive.ql.exec.mr3.MR3Utils.toScalaMap(attributes));
+    } catch (Exception e) {
+      LOG.warn("Failed to publish completion attributes for DAG {}", dagClient.dagIdStr(), e);
+    }
   }
 
   private scala.Option<DAGStatus> dagClientGetDagStatusWait() throws InterruptedException {
@@ -352,7 +381,7 @@ public class MR3JobMonitor {
       Map<String, VertexStatus> vertexStatusMap =
           JavaConversions$.MODULE$.mapAsJavaMap(status.vertexStatusMap());
 
-      new QueryExecutionBreakdownSummary(perfLogger).print(console);
+      new QueryExecutionBreakdownSummary(queryTiming).print(console);
       new DAGSummary(vertexStatusMap, status, hiveConf, dag, perfLogger).print(console);
 
       if (HiveConf.getBoolVar(hiveConf, HiveConf.ConfVars.LLAP_IO_ENABLED, false)) {

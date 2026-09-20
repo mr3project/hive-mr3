@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
+import org.apache.hadoop.hive.ql.QueryDisplay;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorUtils;
@@ -114,9 +115,6 @@ import static org.apache.hadoop.hive.ql.exec.tez.TezTask.ICEBERG_SERIALIZED_TABL
  */
 public class MR3Task {
 
-  public static final String HIVE_CONF_COMPILE_START_TIME = "hive.conf.compile.start.time";
-  public static final String HIVE_CONF_COMPILE_END_TIME = "hive.conf.compile.end.time";
-
   private static final String CLASS_NAME = MR3Task.class.getName();
   private final PerfLogger perfLogger = SessionState.getPerfLogger();
   private static final Logger LOG = LoggerFactory.getLogger(MR3Task.class);
@@ -191,7 +189,11 @@ public class MR3Task {
     }
   }
 
-  public int execute(Context contextFromTezTask, TezWork tezWork) {
+  public int execute(Context contextFromTezTask, TezWork tezWork, QueryDisplay queryDisplay) {
+    Map<String, Long> compileEndTimes = queryDisplay.getPerfLogEnds(QueryDisplay.Phase.COMPILATION);
+    long compileStartTime = queryDisplay.getQueryStartTime();
+    long compileEndTime = compileEndTimes == null ? compileStartTime :
+        compileEndTimes.getOrDefault(PerfLogger.COMPILE, compileStartTime);
     int returnCode = 1;   // 1 == error
     boolean cleanContext = false;
     Context context = null;
@@ -216,7 +218,8 @@ public class MR3Task {
       try {
         mr3JobRef = mr3Session.submit(
             dag, amDagCommonLocalResources, amDagCommonLocalResourcePayloads,
-            conf, tezWork.getWorkMap(), context, isShutdown, perfLogger);
+            conf, tezWork.getWorkMap(), context, isShutdown, perfLogger,
+            compileStartTime, compileEndTime);
         updateDagId(mr3JobRef);
         // mr3Session can be closed at any time, so the call may fail
         // handle only Exception from mr3Session.submit()
@@ -242,7 +245,8 @@ public class MR3Task {
           // mr3Session can be closed at any time, so the call may fail
           mr3JobRef = mr3Session.submit(
               newDag, amDagCommonLocalResources, amDagCommonLocalResourcePayloads,
-              conf, tezWork.getWorkMap(), context, isShutdown, perfLogger);
+              conf, tezWork.getWorkMap(), context, isShutdown, perfLogger,
+              compileStartTime, compileEndTime);
           updateDagId(mr3JobRef);
         }
       }
