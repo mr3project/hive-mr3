@@ -73,6 +73,11 @@ import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.ql.session.SessionStateUtil;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils;
+import org.apache.hadoop.hive.serde2.objectinspector.StructField;
+import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.security.Credentials;
@@ -282,7 +287,15 @@ public class MR3Task {
         }
         String dagIdStr = mr3JobRef.getDagIdStr();    // may throw MR3Exception
         collectCommitInformation(tezWork, dagStatus, dagIdStr);
-        collectDagOutputs(dagStatus, context);
+        Map<String, String> resultPreviewAttributes = collectDagOutputs(dagStatus, context);
+        if (!resultPreviewAttributes.isEmpty()) {
+          try {
+            mr3Session.getMR3SessionClient().updateFinishedDagAttributes(
+                dagIdStr, MR3Utils.toScalaMap(resultPreviewAttributes));
+          } catch (Exception e) {
+            LOG.warn("Failed to publish query-result preview for DAG {}", dagIdStr, e);
+          }
+        }
         mr3Session.setAlreadyExecutedAnyDag();
       }
 
@@ -712,14 +725,88 @@ public class MR3Task {
     queryResultMaterializationContexts.putIfAbsent(ctx.resultId, ctx);
   }
 
-  private void collectDagOutputs(DAGStatus dagStatus, Context context) throws Exception {
+  private Map<String, String> collectDagOutputs(DAGStatus dagStatus, Context context) throws Exception {
     if (queryResultMaterializationContexts.isEmpty()) {
-      return;
+      return Collections.emptyMap();
     }
     Map<String, List<ByteString>> outputsById = getDagOutputsById(dagStatus);
+    Map<String, String> previewAttributes = Collections.emptyMap();
     for (QueryResultMaterializationContext ctx : queryResultMaterializationContexts.values()) {
       List<ByteString> outputs = outputsById.get(ctx.resultId);
-      materializeQueryResult(ctx, outputs == null ? Collections.emptyList() : outputs, context);
+      List<ByteString> resultOutputs = outputs == null ? Collections.emptyList() : outputs;
+      if (previewAttributes.isEmpty()) {
+        previewAttributes = buildResultPreview(ctx, resultOutputs);
+      }
+      materializeQueryResult(ctx, resultOutputs, context);
+    }
+    return previewAttributes;
+  }
+
+  private Map<String, String> buildResultPreview(
+      QueryResultMaterializationContext ctx, List<ByteString> outputs) {
+    org.apache.hadoop.hive.ql.plan.TableDesc tableDesc = ctx.fileSinkDesc.getTableInfo();
+    if (ctx.fileSinkDesc.isUsingBatchingSerDe() || tableDesc.getSerDeClass() != LazySimpleSerDe.class) {
+      LOG.info("Skipping query-result preview for resultId={}: serde={}, batching={}",
+          ctx.resultId, tableDesc.getSerdeClassName(), ctx.fileSinkDesc.isUsingBatchingSerDe());
+      return Collections.emptyMap();
+    }
+    try {
+      LazySimpleSerDe serde = new LazySimpleSerDe();
+      serde.initialize(conf, tableDesc.getProperties(), null);
+      ObjectInspector inspector = serde.getObjectInspector();
+      if (!(inspector instanceof StructObjectInspector)) {
+        LOG.info("Skipping query-result preview for resultId={}: non-struct object inspector", ctx.resultId);
+        return Collections.emptyMap();
+      }
+      StructObjectInspector structInspector = (StructObjectInspector) inspector;
+      List<? extends StructField> fields = structInspector.getAllStructFieldRefs();
+      JSONArray schema = new JSONArray();
+      for (StructField field : fields) {
+        schema.put(new JSONObject()
+            .put("name", field.getFieldName())
+            .put("type", field.getFieldObjectInspector().getTypeName()));
+      }
+
+      JSONArray rows = new JSONArray();
+      int rowSeparator = getRowSeparator(tableDesc.getProperties());
+      boolean truncated = false;
+      outer:
+      for (ByteString output : outputs) {
+        int rowStart = 0;
+        for (int i = 0; i < output.size(); ++i) {
+          if ((output.byteAt(i) & 0xff) != rowSeparator) {
+            continue;
+          }
+          if (rows.length() == 100) {
+            truncated = true;
+            break outer;
+          }
+          BytesWritable writable = new BytesWritable();
+          writable.set(output.substring(rowStart, i).toByteArray(), 0, i - rowStart);
+          Object row = serde.deserialize(writable);
+          JSONArray cells = new JSONArray();
+          for (StructField field : fields) {
+            Object value = structInspector.getStructFieldData(row, field);
+            if (value == null) {
+              cells.put(JSONObject.NULL);
+            } else {
+              Object standardValue = ObjectInspectorUtils.copyToStandardJavaObject(
+                  value, field.getFieldObjectInspector());
+              cells.put(String.valueOf(standardValue));
+            }
+          }
+          rows.put(cells);
+          rowStart = i + 1;
+        }
+      }
+      Map<String, String> result = new HashMap<>();
+      result.put("query.column.schema", schema.toString());
+      result.put("query.column.results", new JSONObject()
+          .put("rows", rows).put("truncated", truncated).toString());
+      return result;
+    } catch (Exception e) {
+      LOG.warn("Skipping query-result preview for resultId={} because decoding failed", ctx.resultId, e);
+      return Collections.emptyMap();
     }
   }
 
