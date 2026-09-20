@@ -41,7 +41,6 @@ import org.apache.hadoop.hive.ql.exec.TaskFactory;
 import org.apache.hadoop.hive.ql.exec.TaskResult;
 import org.apache.hadoop.hive.ql.exec.TaskRunner;
 import org.apache.hadoop.hive.ql.exec.Utilities;
-import org.apache.hadoop.hive.ql.exec.mr3.MR3Task;
 import org.apache.hadoop.hive.ql.history.HiveHistory.Keys;
 import org.apache.hadoop.hive.ql.hooks.HookContext;
 import org.apache.hadoop.hive.ql.hooks.PrivateHookContext;
@@ -84,17 +83,11 @@ public class Executor {
   }
 
   public void execute() throws CommandProcessorException {
-    long compileEndTime = driverContext.getConf().getLong(MR3Task.HIVE_CONF_COMPILE_END_TIME, 0L);
-    long stepStartTime = System.currentTimeMillis();
-    LOG.error("xxx Executor.execute entered; elapsedSinceCompileEndMs={}", stepStartTime - compileEndTime);
     SessionState.getPerfLogger().perfLogBegin(CLASS_NAME, PerfLogger.DRIVER_EXECUTE);
 
     boolean noName = Strings.isNullOrEmpty(driverContext.getConf().get(MRJobConfig.JOB_NAME));
 
     checkState();
-    long now = System.currentTimeMillis();
-    LOG.error("xxx Executor initial setup and state check finished; stepDurationMs={}; elapsedSinceCompileEndMs={}",
-        now - stepStartTime, now - compileEndTime);
 
     // Whether there's any error occurred during query execution. Used for query lifetime hook.
     boolean executionError = false;
@@ -105,20 +98,10 @@ public class Executor {
       // TODO: should this use getUserFromAuthenticator?
       hookContext = new PrivateHookContext(driverContext, context);
 
-      stepStartTime = System.currentTimeMillis();
       preExecutionActions();
-      now = System.currentTimeMillis();
-      LOG.error("xxx pre-execution actions finished; stepDurationMs={}; elapsedSinceCompileEndMs={}",
-          now - stepStartTime, now - compileEndTime);
-      stepStartTime = now;
       preExecutionCacheActions();
-      now = System.currentTimeMillis();
-      LOG.error("xxx pre-execution cache actions finished; stepDurationMs={}; elapsedSinceCompileEndMs={}",
-          now - stepStartTime, now - compileEndTime);
       // Disable HMS cache so any metadata calls during execution get fresh responses.
       driverContext.getQueryState().disableHMSCache();
-      LOG.error("xxx about to run tasks; elapsedSinceCompileEndMs={}",
-          System.currentTimeMillis() - compileEndTime);
       runTasks(noName);
       driverContext.getQueryState().enableHMSCache();
       postExecutionCacheActions();
@@ -156,8 +139,6 @@ public class Executor {
   }
 
   private void preExecutionActions() throws Exception {
-    long compileEndTime = driverContext.getConf().getLong(MR3Task.HIVE_CONF_COMPILE_END_TIME, 0L);
-    long stepStartTime = System.currentTimeMillis();
     // compile and execute can get called from different threads in case of HS2
     // so clear timing in this thread's Hive object before proceeding.
     Hive.get().clearMetaCallTiming();
@@ -167,24 +148,12 @@ public class Executor {
     SessionState.get().getHiveHistory().startQuery(driverContext.getQueryString(), driverContext.getQueryId());
     SessionState.get().getHiveHistory().logPlanProgress(driverContext.getPlan());
     driverContext.setResStream(null);
-    long now = System.currentTimeMillis();
-    LOG.error("xxx execution metadata and Hive history setup finished; stepDurationMs={}; "
-        + "elapsedSinceCompileEndMs={}", now - stepStartTime, now - compileEndTime);
-    stepStartTime = now;
 
     hookContext.setHookType(HookContext.HookType.PRE_EXEC_HOOK);
     driverContext.getHookRunner().runPreHooks(hookContext);
-    now = System.currentTimeMillis();
-    LOG.error("xxx pre-execution hooks finished; stepDurationMs={}; elapsedSinceCompileEndMs={}",
-        now - stepStartTime, now - compileEndTime);
-    stepStartTime = now;
 
     // Trigger query hooks before query execution.
     driverContext.getHookRunner().runBeforeExecutionHook(driverContext.getQueryString(), hookContext);
-    now = System.currentTimeMillis();
-    LOG.error("xxx before-execution hook finished; stepDurationMs={}; elapsedSinceCompileEndMs={}",
-        now - stepStartTime, now - compileEndTime);
-    stepStartTime = now;
 
     setQueryDisplays(driverContext.getPlan().getRootTasks());
 
@@ -197,10 +166,6 @@ public class Executor {
         SessionState.getPerfLogger());
 
     taskQueue.prepare(driverContext.getPlan());
-    now = System.currentTimeMillis();
-    LOG.error("xxx query display and task queue preparation finished; stepDurationMs={}; "
-        + "elapsedSinceCompileEndMs={}", now - stepStartTime, now - compileEndTime);
-    stepStartTime = now;
 
     context.setHDFSCleanup(true);
 
@@ -220,9 +185,6 @@ public class Executor {
         task.updateTaskMetrics(metrics);
       }
     }
-    now = System.currentTimeMillis();
-    LOG.error("xxx root tasks added to runnable queue; stepDurationMs={}; elapsedSinceCompileEndMs={}",
-        now - stepStartTime, now - compileEndTime);
   }
 
   private void setQueryDisplays(List<Task<?>> tasks) {
@@ -370,9 +332,6 @@ public class Executor {
   }
 
   private TaskRunner launchTask(Task<?> task, boolean noName, String jobName, int jobCount) throws HiveException {
-    long compileEndTime = driverContext.getConf().getLong(MR3Task.HIVE_CONF_COMPILE_END_TIME, 0L);
-    long stepStartTime = System.currentTimeMillis();
-    LOG.error("xxx launching task {}; elapsedSinceCompileEndMs={}", task.getId(), stepStartTime - compileEndTime);
     SessionState.get().getHiveHistory().startTask(driverContext.getQueryId(), task, task.getClass().getName());
 
     if (task.isMapRedTask() && !(task instanceof ConditionalTask)) {
@@ -384,15 +343,8 @@ public class Executor {
     }
 
     task.initialize(driverContext.getQueryState(), driverContext.getPlan(), taskQueue, context);
-    long now = System.currentTimeMillis();
-    LOG.error("xxx task {} history and initialization finished; stepDurationMs={}; elapsedSinceCompileEndMs={}",
-        task.getId(), now - stepStartTime, now - compileEndTime);
-    stepStartTime = now;
     TaskRunner taskRun = new TaskRunner(task, taskQueue);
     taskQueue.launching(taskRun);
-    now = System.currentTimeMillis();
-    LOG.error("xxx task {} runner registered; stepDurationMs={}; elapsedSinceCompileEndMs={}",
-        task.getId(), now - stepStartTime, now - compileEndTime);
 
     if (HiveConf.getBoolVar(task.getConf(), HiveConf.ConfVars.EXEC_PARALLEL) && task.canExecuteInParallel()) {
       LOG.info("Starting task [" + task + "] in parallel");

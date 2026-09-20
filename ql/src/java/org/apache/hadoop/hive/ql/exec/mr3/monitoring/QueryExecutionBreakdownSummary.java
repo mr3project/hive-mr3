@@ -18,10 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.monitoring;
 
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.exec.mr3.MR3Task;
 import org.apache.hadoop.hive.ql.exec.mr3.MR3QueryTiming;
-import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.session.SessionState;
 
 import java.text.DecimalFormat;
@@ -57,10 +54,6 @@ class QueryExecutionBreakdownSummary implements PrintSummary {
     console.printInfo(SEPARATOR);
     console.printInfo(execBreakdownHeader);
     console.printInfo(SEPARATOR);
-
-    HiveConf sessionConf = SessionState.get().getConf();
-    long compileStartTime = sessionConf.getLong(MR3Task.HIVE_CONF_COMPILE_START_TIME, 0L);
-    long compileEndTime = sessionConf.getLong(MR3Task.HIVE_CONF_COMPILE_END_TIME, 0L);
 
     // parse, analyze, optimize and compile
     long compile = queryTiming.getCompileQueryDurationMs();

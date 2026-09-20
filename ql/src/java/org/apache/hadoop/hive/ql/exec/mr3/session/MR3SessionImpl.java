@@ -35,7 +35,6 @@ import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3Client;
 import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3Client.MR3ClientState;
 import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3ClientFactory;
 import org.apache.hadoop.hive.ql.exec.mr3.MR3QueryTiming;
-import org.apache.hadoop.hive.ql.exec.mr3.MR3Task;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRef;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
@@ -340,7 +339,9 @@ public class MR3SessionImpl implements MR3Session {
       Map<String, BaseWork> workMap,
       Context ctx,
       AtomicBoolean isShutdown,
-      PerfLogger perfLogger) throws Exception {
+      PerfLogger perfLogger,
+      long compileStartTime,
+      long compileEndTime) throws Exception {
     final long submitStartTime = System.currentTimeMillis();
     perfLogger.perfLogBegin(CLASS_NAME, PerfLogger.MR3_SUBMIT_DAG);
 
@@ -396,8 +397,6 @@ public class MR3SessionImpl implements MR3Session {
     MR3JobRef mr3JobRef;
     try {
       long submitInvocationTime = System.currentTimeMillis();
-      long compileStartTime = mr3TaskConf.getLong(MR3Task.HIVE_CONF_COMPILE_START_TIME, 0L);
-      long compileEndTime = mr3TaskConf.getLong(MR3Task.HIVE_CONF_COMPILE_END_TIME, compileStartTime);
       MR3QueryTiming queryTiming = new MR3QueryTiming(
           compileStartTime, compileEndTime, submitStartTime, submitInvocationTime);
       queryTiming.addSubmissionAttributes(dagProtoBuilder);
