@@ -25,10 +25,12 @@ import com.datamonad.mr3.api.common.MR3Exception;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.exec.mr3.monitoring.MR3JobMonitor;
+import org.apache.hadoop.hive.ql.exec.mr3.MR3QueryTiming;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import com.datamonad.mr3.api.client.DAGClient;
+import com.datamonad.mr3.api.client.MR3SessionClient;
 import org.apache.tez.common.counters.TezCounters;
 
 import java.util.Map;
@@ -40,14 +42,12 @@ public class MR3JobRefImpl implements MR3JobRef {
   private final MR3JobMonitor monitor;
 
   public MR3JobRefImpl(
-      HiveConf hiveConf,
-      DAGClient dagClient,
-      Map<String, BaseWork> workMap,
-      DAG dag,
-      Context ctx,
-      AtomicBoolean isShutdown) {
+      HiveConf hiveConf, DAGClient dagClient, Map<String, BaseWork> workMap,
+      DAG dag, Context ctx, AtomicBoolean isShutdown, MR3QueryTiming queryTiming,
+      MR3SessionClient sessionClient) {
     this.dagClient = dagClient;
-    this.monitor = new MR3JobMonitor(workMap, dagClient, hiveConf, dag, ctx, isShutdown);
+    this.monitor = new MR3JobMonitor(workMap, dagClient, hiveConf, dag, ctx, isShutdown,
+        queryTiming, sessionClient);
   }
 
   @Override

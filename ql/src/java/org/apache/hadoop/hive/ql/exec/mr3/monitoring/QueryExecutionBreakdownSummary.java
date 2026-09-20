@@ -18,9 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.monitoring;
 
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.exec.mr3.MR3Task;
-import org.apache.hadoop.hive.ql.log.PerfLogger;
+import org.apache.hadoop.hive.ql.exec.mr3.MR3QueryTiming;
 import org.apache.hadoop.hive.ql.session.SessionState;
 
 import java.text.DecimalFormat;
@@ -33,17 +31,12 @@ class QueryExecutionBreakdownSummary implements PrintSummary {
   private static final String OPERATION = "OPERATION";
   private static final String DURATION = "DURATION";
 
-
   private DecimalFormat decimalFormat = new DecimalFormat("#0.00");
-  private PerfLogger perfLogger;
 
-  private final Long dagSubmitStartTime;
-  private final Long submitToRunningDuration;
+  private final MR3QueryTiming queryTiming;
 
-  QueryExecutionBreakdownSummary(PerfLogger perfLogger) {
-    this.perfLogger = perfLogger;
-    this.dagSubmitStartTime = perfLogger.getStartTime(PerfLogger.MR3_SUBMIT_DAG);
-    this.submitToRunningDuration = perfLogger.getDuration(PerfLogger.MR3_SUBMIT_TO_RUNNING);
+  QueryExecutionBreakdownSummary(MR3QueryTiming queryTiming) {
+    this.queryTiming = queryTiming;
   }
 
   private String formatNumber(long number) {
@@ -62,16 +55,12 @@ class QueryExecutionBreakdownSummary implements PrintSummary {
     console.printInfo(execBreakdownHeader);
     console.printInfo(SEPARATOR);
 
-    HiveConf sessionConf = SessionState.get().getConf();
-    long compileStartTime = sessionConf.getLong(MR3Task.HIVE_CONF_COMPILE_START_TIME, 0l);
-    long compileEndTime = sessionConf.getLong(MR3Task.HIVE_CONF_COMPILE_END_TIME, 0l);
-
     // parse, analyze, optimize and compile
-    long compile = compileEndTime - compileStartTime;
+    long compile = queryTiming.getCompileQueryDurationMs();
     console.printInfo(format("Compile Query", compile));
 
     // prepare plan for submission (building DAG, adding resources, creating scratch dirs etc.)
-    long totalDAGPrep = dagSubmitStartTime - compileEndTime;
+    long totalDAGPrep = queryTiming.getPreparePlanDurationMs();
     console.printInfo(format("Prepare Plan", totalDAGPrep));
 
     // submit to accept dag (if session is closed, this will include re-opening of session time,
@@ -79,22 +68,12 @@ class QueryExecutionBreakdownSummary implements PrintSummary {
     // "Submit Plan" includes the time for calling 1) DAG.createDagProto() and MR3Client.submitDag().
     // MR3Client.submitDag() returns after DAGAppMaster.submitDag() returns in MR3.
     // DAG may transition to Running before DAGAppMaster.submitDag() returns.
-    long submitToAccept = perfLogger.getStartTime(PerfLogger.MR3_RUN_DAG) - dagSubmitStartTime;
+    long submitToAccept = queryTiming.getSubmitPlanDurationMs();
     console.printInfo(format("Submit Plan", submitToAccept));
 
-    // accept to start dag (schedule wait time, resource wait time etc.)
-    // "Start DAG" reports 0 if DAG transitions to Running during "Submit Plan".
-    console.printInfo(format("Start DAG", submitToRunningDuration));
-
-    // time to actually run the dag (actual dag runtime)
-    final long startToEnd;
-    if (submitToRunningDuration == 0) {
-      startToEnd = perfLogger.getDuration(PerfLogger.MR3_RUN_DAG);
-    } else {
-      startToEnd = perfLogger.getEndTime(PerfLogger.MR3_RUN_DAG) -
-          perfLogger.getEndTime(PerfLogger.MR3_SUBMIT_TO_RUNNING);
-    }
+    final long startToEnd = queryTiming.getRunDagDurationMs();
     console.printInfo(format("Run DAG", startToEnd));
+    console.printInfo(format("Total Time", queryTiming.getTotalTimeMs()));
     console.printInfo(SEPARATOR);
     console.printInfo("");
   }

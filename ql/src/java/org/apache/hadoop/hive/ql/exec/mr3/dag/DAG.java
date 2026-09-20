@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.mr3.DAGUtils;
+import org.apache.hadoop.hive.ql.exec.mr3.MR3QueryTiming;
 import org.apache.hadoop.hive.ql.exec.mr3.llap.LLAPDaemonProcessor;
 import org.apache.hadoop.hive.ql.exec.mr3.llap.LLAPDaemonVertexManagerPlugin;
 import org.apache.hadoop.mapred.JobConf;
@@ -204,7 +205,7 @@ public class DAG {
     edges.add(edge);
   }
 
-  public DAGAPI.DAGProto createDagProto(
+  public DAGAPI.DAGProto.Builder createDagProto(
       Configuration mr3TaskConf, MR3Conf dagConf, String submitter,
       boolean alreadyExecutedAnyDag) throws IOException {
     this.vcoresDivisor = HiveConf.getIntVar(mr3TaskConf, HiveConf.ConfVars.MR3_RESOURCE_VCORES_DIVISOR);
@@ -301,7 +302,7 @@ public class DAG {
     DAGAPI.ConfigurationProto commonJobConfProto = Utils$.MODULE$.createConfProto(commonJobConf);
 
     // We should call setDagConf(). Otherwise we would end up using DAGAppMaster.MR3Conf in MR3.
-    DAGAPI.DAGProto dagProto = DAGAPI.DAGProto.newBuilder()
+    DAGAPI.DAGProto.Builder dagProtoBuilder = DAGAPI.DAGProto.newBuilder()
         .setName(name)
         .setSubmitter(submitter)
         .setCredentials(CommonUtils.convertCredentialsToByteString(dagCredentials))
@@ -313,10 +314,8 @@ public class DAG {
         .addAllLocalResources(lrProtos)
         .addAllContainerGroups(containerGroupProtos)
         .setDagConf(dagConfProto)
-        .setCommonJobConf(commonJobConfProto)
-        .build();
-
-    return dagProto;
+        .setCommonJobConf(commonJobConfProto);
+    return dagProtoBuilder;
   }
 
   private ContainerGroupScheme getContainerGroupScheme(Configuration conf) {

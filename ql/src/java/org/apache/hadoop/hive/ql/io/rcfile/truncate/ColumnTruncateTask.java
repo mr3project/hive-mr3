@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.JavaUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.Context;
+import org.apache.hadoop.hive.ql.QueryDisplay;
 import org.apache.hadoop.hive.ql.TaskQueue;
 import org.apache.hadoop.hive.ql.QueryPlan;
 import org.apache.hadoop.hive.ql.QueryState;
@@ -219,7 +220,7 @@ public class ColumnTruncateTask extends Task<ColumnTruncateWork> implements Seri
     }
 
     MR3Task mr3Task = new MR3Task(conf, new SessionState.LogHelper(LOG), new AtomicBoolean(false));
-    return mr3Task.execute(null, tezWork);
+    return mr3Task.execute(null, tezWork, new QueryDisplay());
 
     // TODO: Restore speculative execution if necessary (when conf is shared)
   }

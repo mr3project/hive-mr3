@@ -116,7 +116,6 @@ public class PerfLogger {
   public static final String HIVE_GET_NOT_NULL_CONSTRAINT = "getNotNullConstraints";
   public static final String HIVE_GET_TABLE_CONSTRAINTS = "getTableConstraints";
 
-  public static final String MR3_SUBMIT_TO_RUNNING = "MR3SubmitToRunningDag";
   public static final String MR3_BUILD_DAG = "MR3BuildDag";
   public static final String MR3_SUBMIT_DAG = "MR3SubmitDag";
   public static final String MR3_RUN_DAG = "MR3RunDag";
