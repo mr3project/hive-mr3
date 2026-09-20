@@ -30,6 +30,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.Schema;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.QueryDisplay;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
@@ -195,6 +197,11 @@ public class MR3Task {
   }
 
   public int execute(Context contextFromTezTask, TezWork tezWork, QueryDisplay queryDisplay) {
+    return execute(contextFromTezTask, tezWork, queryDisplay, null);
+  }
+
+  public int execute(
+      Context contextFromTezTask, TezWork tezWork, QueryDisplay queryDisplay, Schema resultSchema) {
     Map<String, Long> compileEndTimes = queryDisplay.getPerfLogEnds(QueryDisplay.Phase.COMPILATION);
     long compileStartTime = queryDisplay.getQueryStartTime();
     long compileEndTime = compileEndTimes == null ? compileStartTime :
@@ -287,7 +294,7 @@ public class MR3Task {
         }
         String dagIdStr = mr3JobRef.getDagIdStr();    // may throw MR3Exception
         collectCommitInformation(tezWork, dagStatus, dagIdStr);
-        Map<String, String> resultPreviewAttributes = collectDagOutputs(dagStatus, context);
+        Map<String, String> resultPreviewAttributes = collectDagOutputs(dagStatus, context, resultSchema);
         if (!resultPreviewAttributes.isEmpty()) {
           try {
             mr3Session.getMR3SessionClient().updateFinishedDagAttributes(
@@ -725,7 +732,8 @@ public class MR3Task {
     queryResultMaterializationContexts.putIfAbsent(ctx.resultId, ctx);
   }
 
-  private Map<String, String> collectDagOutputs(DAGStatus dagStatus, Context context) throws Exception {
+  private Map<String, String> collectDagOutputs(
+      DAGStatus dagStatus, Context context, Schema resultSchema) throws Exception {
     if (queryResultMaterializationContexts.isEmpty()) {
       return Collections.emptyMap();
     }
@@ -735,7 +743,7 @@ public class MR3Task {
       List<ByteString> outputs = outputsById.get(ctx.resultId);
       List<ByteString> resultOutputs = outputs == null ? Collections.emptyList() : outputs;
       if (previewAttributes.isEmpty()) {
-        previewAttributes = buildResultPreview(ctx, resultOutputs);
+        previewAttributes = buildResultPreview(ctx, resultOutputs, resultSchema);
       }
       materializeQueryResult(ctx, resultOutputs, context);
     }
@@ -743,7 +751,7 @@ public class MR3Task {
   }
 
   private Map<String, String> buildResultPreview(
-      QueryResultMaterializationContext ctx, List<ByteString> outputs) {
+      QueryResultMaterializationContext ctx, List<ByteString> outputs, Schema resultSchema) {
     org.apache.hadoop.hive.ql.plan.TableDesc tableDesc = ctx.fileSinkDesc.getTableInfo();
     if (ctx.fileSinkDesc.isUsingBatchingSerDe() || tableDesc.getSerDeClass() != LazySimpleSerDe.class) {
       LOG.info("Skipping query-result preview for resultId={}: serde={}, batching={}",
@@ -760,11 +768,15 @@ public class MR3Task {
       }
       StructObjectInspector structInspector = (StructObjectInspector) inspector;
       List<? extends StructField> fields = structInspector.getAllStructFieldRefs();
+      List<FieldSchema> resultFields = resultSchema == null ? null : resultSchema.getFieldSchemas();
+      assert resultFields == null || resultFields.size() == fields.size();
       JSONArray schema = new JSONArray();
-      for (StructField field : fields) {
+      for (int i = 0; i < fields.size(); ++i) {
+        StructField field = fields.get(i);
         schema.put(new JSONObject()
-            .put("name", field.getFieldName())
-            .put("type", field.getFieldObjectInspector().getTypeName()));
+            .put("name", resultFields == null ? field.getFieldName() : resultFields.get(i).getName())
+            .put("type", resultFields == null
+                ? field.getFieldObjectInspector().getTypeName() : resultFields.get(i).getType()));
       }
 
       JSONArray rows = new JSONArray();
