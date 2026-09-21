@@ -128,8 +128,7 @@ public class HiveMR3ClientImpl implements HiveMR3Client {
     scala.collection.immutable.Map<String, LocalResource> amLrs = MR3Utils.toScalaMap(amLocalResources);
     scala.collection.immutable.Map<String, LocalResourcePayload> payloads = MR3Utils.toScalaMap(localResourcePayloads);
     DAGClient dagClient = mr3Client.submitDag(amLrs, scala.Option.empty(), dagProto, payloads);
-    return new MR3JobRefImpl(hiveConf, dagClient, workMap, dag, ctx, isShutdown,
-        queryTiming, mr3Client);
+    return new MR3JobRefImpl(hiveConf, dagClient, workMap, dag, ctx, isShutdown, queryTiming);
   }
 
   // terminateApplication is irrelevant to whether start() has been called or connect() has been called.

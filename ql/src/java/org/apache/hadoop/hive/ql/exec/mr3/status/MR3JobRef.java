@@ -23,6 +23,8 @@ import org.apache.tez.common.counters.TezCounters;
 import com.datamonad.mr3.api.client.VertexStatus;
 import com.datamonad.mr3.api.common.MR3Exception;
 
+import java.util.Map;
+
 public interface MR3JobRef {
 
   // JobId == ApplicationID
@@ -37,6 +39,7 @@ public interface MR3JobRef {
   // Invariant: must be called after monitorJob() returns
   String getDiagnostics();
   TezCounters getDagCounters();
+  Map<String, String> getFinishedDagAttributes();
 
   DAGStatus getDagStatus();
   String getDagIdStr() throws MR3Exception;
