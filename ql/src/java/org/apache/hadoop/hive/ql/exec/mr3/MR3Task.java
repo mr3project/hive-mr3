@@ -212,6 +212,7 @@ public class MR3Task {
     boolean cleanContext = false;
     Context context = null;
     MR3JobRef mr3JobRef = null;
+    Map<String, String> finishedDagAttributes = null;
     Map<BaseWork, JobConf> workToConf = new HashMap<BaseWork, JobConf>();
 
     console.printInfo("MR3Task.execute(): " + tezWork.getName());
@@ -271,6 +272,7 @@ public class MR3Task {
       // console.printInfo(
       //     "Status: Running (Executing on MR3 DAGAppMaster with ApplicationID " + mr3JobRef.getJobId() + ")");
       returnCode = mr3JobRef.monitorJob();
+      finishedDagAttributes = mr3JobRef.getFinishedDagAttributes();
       setTerminalDagStatus(returnCode);
       if (returnCode != 0) {
         this.setException(new HiveException(mr3JobRef.getDiagnostics()));
@@ -296,15 +298,7 @@ public class MR3Task {
         }
         String dagIdStr = mr3JobRef.getDagIdStr();    // may throw MR3Exception
         collectCommitInformation(tezWork, dagStatus, dagIdStr);
-        Map<String, String> resultPreviewAttributes = collectDagOutputs(dagStatus, context, resultSchema);
-        if (!resultPreviewAttributes.isEmpty()) {
-          try {
-            mr3Session.getMR3SessionClient().updateFinishedDagAttributes(
-                dagIdStr, MR3Utils.toScalaMap(resultPreviewAttributes));
-          } catch (Exception e) {
-            LOG.warn("Failed to publish query-result preview for DAG {}", dagIdStr, e);
-          }
-        }
+        finishedDagAttributes.putAll(collectDagOutputs(dagStatus, context, resultSchema));
         mr3Session.setAlreadyExecutedAnyDag();
       }
 
@@ -319,6 +313,16 @@ public class MR3Task {
       this.setException(new HiveException(sw.toString()));
       returnCode = 1;   // indicates failure
     } finally {
+      if (mr3JobRef != null && finishedDagAttributes != null && !finishedDagAttributes.isEmpty()) {
+        try {
+          String dagIdStr = mr3JobRef.getDagIdStr();
+          mr3Session.getMR3SessionClient().updateFinishedDagAttributes(
+              dagIdStr, MR3Utils.toScalaMap(finishedDagAttributes));
+        } catch (Exception e) {
+          LOG.warn("Failed to publish finished DAG attributes", e);
+        }
+      }
+
       Utilities.clearWork(conf);
 
       // Clear gWorkMap
