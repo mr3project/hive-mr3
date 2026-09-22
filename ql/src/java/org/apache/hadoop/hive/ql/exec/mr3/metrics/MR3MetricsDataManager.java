@@ -28,6 +28,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.security.ACLManager;
 import org.apache.hadoop.security.UserGroupInformation;
 
@@ -35,47 +36,60 @@ public class MR3MetricsDataManager {
 
   private static volatile MR3MetricsDataManager instance;
 
-  private final MetricsStore store;
-  private final ACLManager aclManager;
-  private final int configuredMaxPoints;
-
-  public MR3MetricsDataManager(MetricsStore store, ACLManager aclManager, int configuredMaxPoints) {
-    this.store = store;
-    this.aclManager = aclManager;
-    this.configuredMaxPoints = configuredMaxPoints;
-  }
-
-  public static void setInstance(MR3MetricsDataManager value) {
-    instance = value;
-  }
-
   public static MR3MetricsDataManager getInstance() {
-    if (instance == null) throw new IllegalStateException("MR3 metrics service is not active");
+    MR3MetricsDataManager current = instance;
+    if (current == null) {
+      throw new IllegalStateException("MR3 metrics service is not active");
+    }
+    return current;
+  }
+
+  public static MR3MetricsDataManager createInstance(
+      MetricsStore store, ACLManager aclManager, int restMaxPoints) {
+    instance = new MR3MetricsDataManager(store, aclManager, restMaxPoints);
     return instance;
   }
 
+  public static void clearInstance() {
+    instance = null;
+  }
+
+  private final MetricsStore metricsStore;
+  private final ACLManager aclManager;
+  private final int restMaxPoints;
+
+  public MR3MetricsDataManager(MetricsStore metricsStore, ACLManager aclManager, int restMaxPoints) {
+    this.metricsStore = metricsStore;
+    this.aclManager = aclManager;
+    this.restMaxPoints = restMaxPoints;
+  }
+
   public MetricsResponse application(
-      String attemptId, long start, long end, Integer maxPoints,
+      String attemptId,
+      long start, long end, Integer maxPoints,
       String fields, UserGroupInformation user) throws Exception {
     int limit = validate(attemptId, start, end, maxPoints, user);
     Set<String> selected = parseFields(fields, APPLICATION_FIELDS);
-    List<MR3MetricSnapshot> values = store.getApplicationSnapshots(attemptId, start, end, limit);
+    List<MR3MetricSnapshot> values = metricsStore.getApplicationSnapshots(attemptId, start, end, limit);
     return response(attemptId, null, values, selected);
   }
 
   public MetricsResponse containerGroup(
       String attemptId, String group, long start, long end,
       Integer maxPoints, String fields, UserGroupInformation user) throws Exception {
-    if (group == null || group.isEmpty()) throw new IllegalArgumentException("containerGroupId is required");
+    if (group == null || group.isEmpty()) {
+      throw new IllegalArgumentException("containerGroupId is required");
+    }
+
     int limit = validate(attemptId, start, end, maxPoints, user);
     Set<String> selected = parseFields(fields, CONTAINER_FIELDS);
-    List<MR3MetricSnapshot> values = store.getContainerGroupSnapshots(attemptId, group, start, end, limit);
+    List<MR3MetricSnapshot> values = metricsStore.getContainerGroupSnapshots(attemptId, group, start, end, limit);
     return response(attemptId, group, values, selected);
   }
 
   public Set<String> containerGroups(String attemptId, UserGroupInformation user) throws Exception {
     validate(attemptId, 0L, 0L, 1, user);
-    return store.listContainerGroupIds(attemptId);
+    return metricsStore.listContainerGroupIds(attemptId);
   }
 
   private int validate(
@@ -87,12 +101,12 @@ public class MR3MetricsDataManager {
       throw new IllegalArgumentException("startTime must not exceed endTime");
     }
 
-    int limit = requested == null ? configuredMaxPoints : requested;
-    if (limit <= 0 || limit > configuredMaxPoints) {
-      throw new IllegalArgumentException("maxPoints must be between 1 and " + configuredMaxPoints);
+    int limit = requested == null ? restMaxPoints : requested;
+    if (limit <= 0 || limit > restMaxPoints) {
+      throw new IllegalArgumentException("maxPoints must be between 1 and " + restMaxPoints);
     }
 
-    if (!aclManager.checkAMViewAccess(user) || !store.hasAttempt(attemptId)) {
+    if (!aclManager.checkAMViewAccess(user) || !metricsStore.hasAttempt(attemptId)) {
       throw new AttemptNotFoundException();
     }
     return limit;
@@ -120,14 +134,19 @@ public class MR3MetricsDataManager {
       value.put("timestampMillis", snapshot.timestampMillis());
       if (snapshot instanceof ApplicationMetricSnapshot) {
         ApplicationMetricSnapshot s = (ApplicationMetricSnapshot) snapshot;
-        put(value, fields, "runningDags", s.runningDags()); put(value, fields, "totalDags", s.totalDags());
-        put(value, fields, "succeededDags", s.succeededDags()); put(value, fields, "failedDags", s.failedDags());
+        put(value, fields, "runningDags", s.runningDags());
+        put(value, fields, "totalDags", s.totalDags());
+        put(value, fields, "succeededDags", s.succeededDags());
+        put(value, fields, "failedDags", s.failedDags());
         put(value, fields, "killedDags", s.killedDags());
       } else {
         ContainerGroupMetricSnapshot s = (ContainerGroupMetricSnapshot) snapshot;
-        put(value, fields, "containers", s.containers()); put(value, fields, "queuedTasks", s.queuedTasks());
-        put(value, fields, "runningTasks", s.runningTasks()); put(value, fields, "nodes", s.nodes());
-        put(value, fields, "heapBytesMax", s.heapBytesMax()); put(value, fields, "heapBytesUsed", s.heapBytesUsed());
+        put(value, fields, "containers", s.containers());
+        put(value, fields, "queuedTasks", s.queuedTasks());
+        put(value, fields, "runningTasks", s.runningTasks());
+        put(value, fields, "nodes", s.nodes());
+        put(value, fields, "heapBytesMax", s.heapBytesMax());
+        put(value, fields, "heapBytesUsed", s.heapBytesUsed());
         put(value, fields, "heapWindowBytesMax", s.heapWindowBytesMax());
         put(value, fields, "heapWindowBytesUsed", s.heapWindowBytesUsed());
         put(value, fields, "heapWindowUsagePercent", s.heapWindowUsagePercent());
@@ -149,13 +168,29 @@ public class MR3MetricsDataManager {
   }
 
   private static final Set<String> APPLICATION_FIELDS = new LinkedHashSet<>(Arrays.asList(
-      "runningDags", "totalDags", "succeededDags", "failedDags", "killedDags"));
+      "runningDags",
+      "totalDags",
+      "succeededDags",
+      "failedDags",
+      "killedDags"));
 
   private static final Set<String> CONTAINER_FIELDS = new LinkedHashSet<>(Arrays.asList(
-      "containers", "queuedTasks", "runningTasks", "nodes", "heapBytesMax", "heapBytesUsed",
-      "heapWindowBytesMax", "heapWindowBytesUsed", "heapWindowUsagePercent",
-      "autoScaleOutThresholdPercent", "autoScaleInThresholdPercent", "containersTotal",
-      "completedTasksTotal", "succeededTasksTotal", "failedTasksTotal", "killedTasksTotal"));
+      "containers",
+      "queuedTasks",
+      "runningTasks",
+      "nodes",
+      "heapBytesMax",
+      "heapBytesUsed",
+      "heapWindowBytesMax",
+      "heapWindowBytesUsed",
+      "heapWindowUsagePercent",
+      "autoScaleOutThresholdPercent",
+      "autoScaleInThresholdPercent",
+      "containersTotal",
+      "completedTasksTotal",
+      "succeededTasksTotal",
+      "failedTasksTotal",
+      "killedTasksTotal"));
 
   public static final class MetricsResponse {
     public final String applicationAttemptId;
