@@ -21,7 +21,11 @@ package org.apache.hive.service.server;
 import java.io.IOException;
 import java.net.URL;
 
+import org.apache.hadoop.hive.ql.exec.mr3.metrics.LeveldbMetricsStore;
+import org.apache.hadoop.hive.ql.exec.mr3.metrics.MR3MetricsDataManager;
+import org.apache.hadoop.hive.ql.exec.mr3.metrics.MR3MetricsIngestionService;
 import org.apache.hadoop.hive.ql.exec.mr3.metrics.MR3MetricsResource;
+import org.apache.hadoop.hive.ql.exec.mr3.metrics.MetricsStore;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.AMProxyResource;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.ATSResource;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.MR3TimelineIngestionService;
@@ -42,13 +46,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Owns MR3-UI resources and the active HiveServer2 timeline writer.
+ * Owns MR3-UI resources and the active HiveServer2 timeline and metrics writers.
  *
  * MR3-UI reuses the HiveServer2 WebUI connector and security settings.
  */
-final class MR3TimelineService {
+final class MR3TimelineMetricsService {
 
-  private static final Logger LOG = LoggerFactory.getLogger(MR3TimelineService.class);
+  private static final Logger LOG = LoggerFactory.getLogger(MR3TimelineMetricsService.class);
   private static final String UI_INDEX = "hive-webapps/hiveserver2/index.html";
 
   private final HiveConf conf;
@@ -57,12 +61,15 @@ final class MR3TimelineService {
   private volatile TimelineDataManager timelineDataManager;
   private MR3TimelineIngestionService timelineIngestionService;
 
-  private MR3MetricsService metricsService;
+  private MetricsStore metricsStore;
+  // Unlike TimelineDataManager which owns write-side behavior,
+  // we do not directly reference MR3MetricsDataManager which is just a read-side facade.
+  private MR3MetricsIngestionService metricsIngestionService;
 
   private boolean enabled;
   private boolean active;
 
-  MR3TimelineService(HiveConf conf) {
+  MR3TimelineMetricsService(HiveConf conf) {
     this.conf = conf;
   }
 
@@ -98,32 +105,29 @@ final class MR3TimelineService {
       timelineIngestionService = new MR3TimelineIngestionService(timelineDataManager, conf);
       timelineIngestionService.start();
 
-      metricsService = new MR3MetricsService(conf);
-      metricsService.activate();
+      metricsStore = createMetricsStore();
+      metricsStore.initialize(conf);
+
+      int restMaxPoints = HiveConf.getIntVar(conf, HiveConf.ConfVars.HIVE_MR3_UI_METRICS_REST_MAX_POINTS);
+      MR3MetricsDataManager.createInstance(
+          metricsStore, new ACLManager(adminUser, conf), restMaxPoints);
+
+      metricsIngestionService = new MR3MetricsIngestionService(metricsStore, conf);
+      metricsIngestionService.start();
 
       active = true;
       LOG.info("Activated MR3-UI on this HiveServer2 instance: {}", adminUser);
     } catch (Exception e) {
       deactivateAfterFailure();
-      throw new IOException("Failed to start the MR3 timeline writer", e);
+      throw new IOException("Failed to start the MR3 timeline and metrics writers", e);
     }
   }
 
   synchronized void deactivate() {
-    if (!active && timelineStore == null) {
+    if (!active && timelineStore == null && metricsStore == null) {
       return;
     }
-
-    if (timelineIngestionService != null) {
-      timelineIngestionService.close();
-      timelineIngestionService = null;
-    }
-    if (metricsService != null) {
-      metricsService.deactivate();
-      metricsService = null;
-    }
-    timelineDataManager = null;
-    closeTimelineStore();
+    cleanup();
     active = false;
     LOG.info("Deactivated MR3-UI on this HiveServer2 instance");
   }
@@ -144,6 +148,14 @@ final class MR3TimelineService {
     throw new IllegalArgumentException("Unsupported MR3 timeline store type: " + storeType);
   }
 
+  private MetricsStore createMetricsStore() {
+    String storeType = HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_MR3_UI_METRICS_STORE_TYPE);
+    if ("leveldb".equalsIgnoreCase(storeType)) {
+      return new LeveldbMetricsStore();
+    }
+    throw new IllegalArgumentException("Unsupported MR3 metrics store type: " + storeType);
+  }
+
   private void validateStaticAssets() throws IOException {
     URL index = getClass().getClassLoader().getResource(UI_INDEX);
     if (index == null) {
@@ -159,17 +171,26 @@ final class MR3TimelineService {
   }
 
   private void deactivateAfterFailure() {
+    cleanup();
+    active = false;
+  }
+
+  private void cleanup() {
     if (timelineIngestionService != null) {
       timelineIngestionService.close();
       timelineIngestionService = null;
     }
-    if (metricsService != null) {
-      metricsService.deactivate();
-      metricsService = null;
+    if (metricsIngestionService != null) {
+      metricsIngestionService.close();
+      metricsIngestionService = null;
     }
+
+    TimelineDataManager.clearInstance();
     timelineDataManager = null;
+    MR3MetricsDataManager.clearInstance();
+
     closeTimelineStore();
-    active = false;
+    closeMetricsStore();
   }
 
   private void closeTimelineStore() {
@@ -184,4 +205,15 @@ final class MR3TimelineService {
     }
   }
 
+  private void closeMetricsStore() {
+    if (metricsStore != null) {
+      try {
+        metricsStore.stop();
+      } catch (Exception e) {
+        LOG.warn("Failed to stop the MR3 metrics store", e);
+      } finally {
+        metricsStore = null;
+      }
+    }
+  }
 }

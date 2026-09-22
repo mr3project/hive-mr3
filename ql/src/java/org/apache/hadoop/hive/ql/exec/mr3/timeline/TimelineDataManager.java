@@ -50,15 +50,23 @@ public class TimelineDataManager {
 
   public static final String DEFAULT_DOMAIN_ID = "DEFAULT";
 
-  private static TimelineDataManager instance;
+  private static volatile TimelineDataManager instance;
 
   public static TimelineDataManager getInstance() {
-    return instance;
+    TimelineDataManager current = instance;
+    if (current == null) {
+      throw new IllegalStateException("MR3 timeline service is not active");
+    }
+    return current;
   }
 
   public static TimelineDataManager createInstance(TimelineStore store, ACLManager aclManager) {
     instance = new TimelineDataManager(store, aclManager);
     return instance;
+  }
+
+  public static void clearInstance() {
+    instance = null;
   }
 
   private final TimelineStore store;
