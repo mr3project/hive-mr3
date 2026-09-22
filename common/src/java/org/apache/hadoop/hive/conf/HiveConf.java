@@ -6049,7 +6049,7 @@ public class HiveConf extends Configuration {
     HIVE_MR3_UI_METRICS_RETENTION_DURATION("hive.mr3.ui.metrics.retention.duration", "7d",
       new TimeValidator(TimeUnit.HOURS, 1L, true, Long.MAX_VALUE, false),
       "Keep native MR3 metric entries for this duration."),
-    HIVE_MR3_UI_METRICS_REST_MAX_POINTS("hive.mr3.ui.metrics.rest.max.points", 10000,
+    HIVE_MR3_UI_METRICS_REST_MAX_POINTS("hive.mr3.ui.metrics.rest.max.points", 1000,
       new RangeValidator(1, Integer.MAX_VALUE),
       "Maximum metric points returned by one native MR3 metrics REST request.");
 

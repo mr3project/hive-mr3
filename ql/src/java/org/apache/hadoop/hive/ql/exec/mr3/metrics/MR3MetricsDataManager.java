@@ -21,7 +21,6 @@ package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 import com.datamonad.mr3.api.client.ApplicationMetricSnapshot;
 import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
 import com.datamonad.mr3.api.client.MR3MetricSnapshot;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -60,6 +59,7 @@ public class MR3MetricsDataManager {
   private final int restMaxPoints;
 
   public MR3MetricsDataManager(MetricsStore metricsStore, ACLManager aclManager, int restMaxPoints) {
+    assert restMaxPoints > 0;
     this.metricsStore = metricsStore;
     this.aclManager = aclManager;
     this.restMaxPoints = restMaxPoints;
@@ -67,47 +67,38 @@ public class MR3MetricsDataManager {
 
   public MetricsResponse application(
       String attemptId,
-      long start, long end, Integer maxPoints,
+      long start, long end,
       String fields, UserGroupInformation user) throws Exception {
-    int limit = validate(attemptId, start, end, maxPoints, user);
+    validate(attemptId, start, end, user);
     Set<String> selected = parseFields(fields, APPLICATION_FIELDS);
-    List<MR3MetricSnapshot> values = metricsStore.getApplicationSnapshots(attemptId, start, end, limit);
+    List<MR3MetricSnapshot> values =
+        metricsStore.getApplicationSnapshots(attemptId, start, end, restMaxPoints);
     return response(attemptId, values, selected);
   }
 
   public MetricsResponse container(
       String attemptId,
-      long start, long end, Integer maxPoints,
+      long start, long end,
       String fields, UserGroupInformation user) throws Exception {
-    int limit = validate(attemptId, start, end, maxPoints, user);
+    validate(attemptId, start, end, user);
     Set<String> selected = parseFields(fields, CONTAINER_FIELDS);
-    List<MR3MetricSnapshot> values = metricsStore.getContainerSnapshots(attemptId, start, end, limit);
+    List<MR3MetricSnapshot> values =
+        metricsStore.getContainerSnapshots(attemptId, start, end, restMaxPoints);
     return response(attemptId, values, selected);
   }
 
-  private int validate(
-      String attemptId, long start, long end, Integer requested, UserGroupInformation user) throws Exception {
+  private void validate(
+      String attemptId, long start, long end, UserGroupInformation user) throws Exception {
     if (attemptId == null || attemptId.isEmpty()) {
-      throw new IllegalArgumentException("ApplicationAttemptID is required");
+      throw new IllegalArgumentException("attemptId is required");
     }
     if (start > end) {
       throw new IllegalArgumentException("startTime must not exceed endTime");
     }
 
-    int limit = requested == null ? restMaxPoints : Math.min(requested, restMaxPoints);
-    if (limit <= 0) {
-      throw new IllegalArgumentException("maxPoints must be greater than 0");
+    if (!aclManager.checkAMViewAccess(user) || !metricsStore.hasAttempt(attemptId)) {
+      throw new AttemptNotFoundException();
     }
-
-    if (!metricsStore.hasAttempt(attemptId)) {
-      throw new IllegalArgumentException("ApplicationAttemptID not found: " + attemptId);
-    }
-
-    if (!aclManager.checkAMViewAccess(user)) {
-      throw new IllegalArgumentException("Cannot access MR3MetricsDataManager: " + user);
-    }
-
-    return limit;
   }
 
   private static Set<String> parseFields(String fields, Set<String> allowed) {
@@ -199,4 +190,6 @@ public class MR3MetricsDataManager {
       this.snapshots = snapshots;
     }
   }
+
+  public static final class AttemptNotFoundException extends Exception {}
 }

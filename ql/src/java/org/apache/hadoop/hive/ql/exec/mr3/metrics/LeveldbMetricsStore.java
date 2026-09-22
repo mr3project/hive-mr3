@@ -26,6 +26,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -160,21 +161,26 @@ public class LeveldbMetricsStore implements MetricsStore {
   private List<MR3MetricSnapshot> scan(
       String attemptId, byte subtype,
       long startTime, long endTime, int maxPoints) throws Exception {
+    if (maxPoints <= 0) {
+      throw new IllegalArgumentException("maxPoints must be greater than 0");
+    }
     byte[] prefix = samplePrefix(attemptId, subtype);
     List<MR3MetricSnapshot> result = new ArrayList<>();
     try (DBIterator iterator = db.iterator()) {
-      iterator.seek(sampleKey(attemptId, subtype, startTime, 0L));
-      while (iterator.hasNext()) {
-        Map.Entry<byte[], byte[]> entry = iterator.next();
+      byte[] lastKey = sampleKey(attemptId, subtype, endTime, Long.MAX_VALUE);
+      byte[] exclusiveUpperBound = Arrays.copyOf(lastKey, lastKey.length + 1);
+      iterator.seek(exclusiveUpperBound);
+      while (iterator.hasPrev() && result.size() < maxPoints) {
+        Map.Entry<byte[], byte[]> entry = iterator.prev();
         if (!startsWith(entry.getKey(), prefix)) break;
         MR3MetricSnapshot snapshot = MetricProtoUtils.decode(entry.getValue());
-        if (snapshot.timestampMillis() > endTime) break;
-        if (result.size() == maxPoints) {
-          throw new IllegalArgumentException("Metric query exceeds the maximum point count");
-        }
+        assert snapshot.timestampMillis() <= endTime;
+        if (snapshot.timestampMillis() < startTime) break;
         result.add(snapshot);
       }
     }
+    Collections.reverse(result);
+    assert result.size() <= maxPoints;
     return result;
   }
 
