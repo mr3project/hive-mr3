@@ -19,7 +19,6 @@
 package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 
 import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
-import com.datamonad.mr3.api.client.IndexedMetricSnapshot;
 import com.datamonad.mr3.api.client.MR3MetricSnapshot;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -75,27 +74,31 @@ public class LeveldbMetricsStore implements MetricsStore {
   }
 
   @Override
-  public synchronized void appendBatch(String attemptId, List<IndexedMetricSnapshot> snapshots)
-      throws Exception {
+  public synchronized void appendBatch(String attemptId, long fromIndex,
+      List<MR3MetricSnapshot> snapshots) throws Exception {
+    assert fromIndex >= 0;
     try (WriteBatch writes = db.createWriteBatch()) {
       writes.put(attemptKey(attemptId), new byte[0]);
-      for (IndexedMetricSnapshot indexed : snapshots) {
-        byte[] value = MetricProtoUtils.encode(indexed);
-        byte[] dedupKey = dedupKey(attemptId, indexed.publisherIndex());
+      for (int i = 0; i < snapshots.size(); ++i) {
+        MR3MetricSnapshot snapshot = snapshots.get(i);
+        long snapshotIndex = fromIndex + i;
+        assert snapshot != null;
+        assert snapshotIndex >= fromIndex;
+        byte[] value = MetricProtoUtils.encode(snapshot);
+        byte[] dedupKey = dedupKey(attemptId, snapshotIndex);
         byte[] oldValue = db.get(dedupKey);
         if (oldValue != null) {
           if (!Arrays.equals(oldValue, value)) {
-            throw new IOException("Conflicting metric snapshot for publisher index " +
-                indexed.publisherIndex() + " in " + attemptId);
+            throw new IOException("Conflicting metric snapshot for ingestion index " +
+                snapshotIndex + " in " + attemptId);
           }
           continue;
         }
-        MR3MetricSnapshot snapshot = indexed.snapshot();
         String group = snapshot instanceof ContainerGroupMetricSnapshot
             ? ((ContainerGroupMetricSnapshot) snapshot).containerGroupId() : "";
         byte subtype = (byte) (snapshot instanceof ContainerGroupMetricSnapshot ? 2 : 1);
         writes.put(sampleKey(attemptId, subtype, group, snapshot.timestampMillis(),
-            indexed.publisherIndex()), value);
+            snapshotIndex), value);
         writes.put(dedupKey, value);
         if (!group.isEmpty()) {
           writes.put(groupKey(attemptId, group), new byte[0]);
@@ -107,33 +110,33 @@ public class LeveldbMetricsStore implements MetricsStore {
   }
 
   @Override
-  public synchronized List<IndexedMetricSnapshot> getApplicationSnapshots(String attemptId,
+  public synchronized List<MR3MetricSnapshot> getApplicationSnapshots(String attemptId,
       long startTime, long endTime, int maxPoints) throws Exception {
     return scan(attemptId, (byte) 1, "", startTime, endTime, maxPoints);
   }
 
   @Override
-  public synchronized List<IndexedMetricSnapshot> getContainerGroupSnapshots(String attemptId,
+  public synchronized List<MR3MetricSnapshot> getContainerGroupSnapshots(String attemptId,
       String group, long startTime, long endTime, int maxPoints) throws Exception {
     return scan(attemptId, (byte) 2, group, startTime, endTime, maxPoints);
   }
 
   @Override
-  public synchronized IndexedMetricSnapshot getLatestApplicationSnapshot(String attemptId)
+  public synchronized MR3MetricSnapshot getLatestApplicationSnapshot(String attemptId)
       throws Exception {
     return latest(attemptId, (byte) 1, "");
   }
 
   @Override
-  public synchronized IndexedMetricSnapshot getLatestContainerGroupSnapshot(String attemptId,
+  public synchronized MR3MetricSnapshot getLatestContainerGroupSnapshot(String attemptId,
       String group) throws Exception {
     return latest(attemptId, (byte) 2, group);
   }
 
-  private IndexedMetricSnapshot latest(String attemptId, byte subtype, String group)
+  private MR3MetricSnapshot latest(String attemptId, byte subtype, String group)
       throws Exception {
     byte[] prefix = samplePrefix(attemptId, subtype, group);
-    IndexedMetricSnapshot latest = null;
+    MR3MetricSnapshot latest = null;
     try (DBIterator iterator = db.iterator()) {
       iterator.seek(prefix);
       while (iterator.hasNext()) {
@@ -145,17 +148,17 @@ public class LeveldbMetricsStore implements MetricsStore {
     return latest;
   }
 
-  private List<IndexedMetricSnapshot> scan(String attemptId, byte subtype, String group,
+  private List<MR3MetricSnapshot> scan(String attemptId, byte subtype, String group,
       long startTime, long endTime, int maxPoints) throws Exception {
     byte[] prefix = samplePrefix(attemptId, subtype, group);
-    List<IndexedMetricSnapshot> result = new ArrayList<>();
+    List<MR3MetricSnapshot> result = new ArrayList<>();
     try (DBIterator iterator = db.iterator()) {
       iterator.seek(sampleKey(attemptId, subtype, group, startTime, 0L));
       while (iterator.hasNext()) {
         Map.Entry<byte[], byte[]> entry = iterator.next();
         if (!startsWith(entry.getKey(), prefix)) break;
-        IndexedMetricSnapshot snapshot = MetricProtoUtils.decode(entry.getValue());
-        if (snapshot.snapshot().timestampMillis() > endTime) break;
+        MR3MetricSnapshot snapshot = MetricProtoUtils.decode(entry.getValue());
+        if (snapshot.timestampMillis() > endTime) break;
         if (result.size() == maxPoints) {
           throw new IllegalArgumentException("Metric query exceeds the maximum point count");
         }
@@ -197,13 +200,13 @@ public class LeveldbMetricsStore implements MetricsStore {
       while (iterator.hasNext()) {
         Map.Entry<byte[], byte[]> entry = iterator.next();
         if (entry.getKey()[0] != SAMPLE) break;
-        IndexedMetricSnapshot snapshot = MetricProtoUtils.decode(entry.getValue());
-        if (snapshot.snapshot().timestampMillis() < cutoff) {
+        MR3MetricSnapshot snapshot = MetricProtoUtils.decode(entry.getValue());
+        if (snapshot.timestampMillis() < cutoff) {
           deletes.delete(entry.getKey());
           // Removing the dedup entry permits an expired sample to be inserted again only if
           // the still-running publisher redelivers it; it will then expire on the next pass.
           String attempt = readAttempt(entry.getKey());
-          deletes.delete(dedupKey(attempt, snapshot.publisherIndex()));
+          deletes.delete(dedupKey(attempt, readIndex(entry.getKey())));
         }
       }
       db.write(deletes);
@@ -250,6 +253,11 @@ public class LeveldbMetricsStore implements MetricsStore {
   }
   private static String readAttempt(byte[] key) throws IOException {
     return new java.io.DataInputStream(new java.io.ByteArrayInputStream(key, 1, key.length - 1)).readUTF();
+  }
+  private static long readIndex(byte[] key) throws IOException {
+    assert key.length >= Long.BYTES;
+    return new java.io.DataInputStream(new java.io.ByteArrayInputStream(
+        key, key.length - Long.BYTES, Long.BYTES)).readLong() ^ Long.MIN_VALUE;
   }
   private static boolean startsWith(byte[] value, byte[] prefix) {
     if (value.length < prefix.length) return false;

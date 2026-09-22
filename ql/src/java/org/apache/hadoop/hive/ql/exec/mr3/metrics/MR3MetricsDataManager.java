@@ -20,7 +20,7 @@ package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 
 import com.datamonad.mr3.api.client.ApplicationMetricSnapshot;
 import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
-import com.datamonad.mr3.api.client.IndexedMetricSnapshot;
+import com.datamonad.mr3.api.client.MR3MetricSnapshot;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -53,7 +53,7 @@ public class MR3MetricsDataManager {
       String fields, UserGroupInformation user) throws Exception {
     int limit = validate(attemptId, start, end, maxPoints, user);
     Set<String> selected = parseFields(fields, APPLICATION_FIELDS);
-    List<IndexedMetricSnapshot> values = store.getApplicationSnapshots(attemptId, start, end, limit);
+    List<MR3MetricSnapshot> values = store.getApplicationSnapshots(attemptId, start, end, limit);
     return response(attemptId, null, values, selected);
   }
 
@@ -62,7 +62,7 @@ public class MR3MetricsDataManager {
     if (group == null || group.isEmpty()) throw new IllegalArgumentException("containerGroupId is required");
     int limit = validate(attemptId, start, end, maxPoints, user);
     Set<String> selected = parseFields(fields, CONTAINER_FIELDS);
-    List<IndexedMetricSnapshot> values = store.getContainerGroupSnapshots(attemptId, group, start, end, limit);
+    List<MR3MetricSnapshot> values = store.getContainerGroupSnapshots(attemptId, group, start, end, limit);
     return response(attemptId, group, values, selected);
   }
 
@@ -95,19 +95,19 @@ public class MR3MetricsDataManager {
   }
 
   private static MetricsResponse response(String attemptId, String group,
-      List<IndexedMetricSnapshot> values, Set<String> fields) {
+      List<MR3MetricSnapshot> values, Set<String> fields) {
     List<Map<String, Object>> snapshots = new ArrayList<>();
-    for (IndexedMetricSnapshot indexed : values) {
+    for (MR3MetricSnapshot snapshot : values) {
       Map<String, Object> value = new LinkedHashMap<>();
-      value.put("publisherIndex", indexed.publisherIndex());
-      value.put("timestampMillis", indexed.snapshot().timestampMillis());
-      if (indexed.snapshot() instanceof ApplicationMetricSnapshot) {
-        ApplicationMetricSnapshot s = (ApplicationMetricSnapshot) indexed.snapshot();
+      value.put("timestampMillis", snapshot.timestampMillis());
+      if (snapshot instanceof ApplicationMetricSnapshot) {
+        ApplicationMetricSnapshot s = (ApplicationMetricSnapshot) snapshot;
         put(value, fields, "runningDags", s.runningDags()); put(value, fields, "totalDags", s.totalDags());
         put(value, fields, "succeededDags", s.succeededDags()); put(value, fields, "failedDags", s.failedDags());
         put(value, fields, "killedDags", s.killedDags());
       } else {
-        ContainerGroupMetricSnapshot s = (ContainerGroupMetricSnapshot) indexed.snapshot();
+        assert snapshot instanceof ContainerGroupMetricSnapshot;
+        ContainerGroupMetricSnapshot s = (ContainerGroupMetricSnapshot) snapshot;
         put(value, fields, "containers", s.containers()); put(value, fields, "queuedTasks", s.queuedTasks());
         put(value, fields, "runningTasks", s.runningTasks()); put(value, fields, "nodes", s.nodes());
         put(value, fields, "heapBytesMax", s.heapBytesMax()); put(value, fields, "heapBytesUsed", s.heapBytesUsed());

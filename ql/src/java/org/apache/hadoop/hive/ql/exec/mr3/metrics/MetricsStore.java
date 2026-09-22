@@ -18,20 +18,21 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 
-import com.datamonad.mr3.api.client.IndexedMetricSnapshot;
+import com.datamonad.mr3.api.client.MR3MetricSnapshot;
 import java.util.List;
 import java.util.Set;
 import org.apache.hadoop.hive.conf.HiveConf;
 
 public interface MetricsStore {
   void initialize(HiveConf conf) throws Exception;
-  void appendBatch(String applicationAttemptId, List<IndexedMetricSnapshot> snapshots) throws Exception;
-  List<IndexedMetricSnapshot> getApplicationSnapshots(String applicationAttemptId, long startTime,
+  void appendBatch(String applicationAttemptId, long fromIndex,
+      List<MR3MetricSnapshot> snapshots) throws Exception;
+  List<MR3MetricSnapshot> getApplicationSnapshots(String applicationAttemptId, long startTime,
       long endTime, int maxPoints) throws Exception;
-  List<IndexedMetricSnapshot> getContainerGroupSnapshots(String applicationAttemptId,
+  List<MR3MetricSnapshot> getContainerGroupSnapshots(String applicationAttemptId,
       String containerGroupId, long startTime, long endTime, int maxPoints) throws Exception;
-  IndexedMetricSnapshot getLatestApplicationSnapshot(String applicationAttemptId) throws Exception;
-  IndexedMetricSnapshot getLatestContainerGroupSnapshot(String applicationAttemptId,
+  MR3MetricSnapshot getLatestApplicationSnapshot(String applicationAttemptId) throws Exception;
+  MR3MetricSnapshot getLatestContainerGroupSnapshot(String applicationAttemptId,
       String containerGroupId) throws Exception;
   Set<String> listContainerGroupIds(String applicationAttemptId) throws Exception;
   boolean hasAttempt(String applicationAttemptId) throws Exception;

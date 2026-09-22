@@ -20,29 +20,29 @@ package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 
 import com.datamonad.mr3.api.client.ApplicationMetricSnapshot;
 import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
-import com.datamonad.mr3.api.client.IndexedMetricSnapshot;
 import com.datamonad.mr3.api.client.MR3MetricSnapshot;
 import com.datamonad.mr3.client.DAGClientHandlerProtocolRPC.ApplicationMetricSnapshotProto;
 import com.datamonad.mr3.client.DAGClientHandlerProtocolRPC.ContainerGroupMetricSnapshotProto;
-import com.datamonad.mr3.client.DAGClientHandlerProtocolRPC.IndexedMetricSnapshotProto;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
 final class MetricProtoUtils {
   private MetricProtoUtils() {}
 
-  static byte[] encode(IndexedMetricSnapshot indexed) {
-    IndexedMetricSnapshotProto.Builder builder = IndexedMetricSnapshotProto.newBuilder()
-        .setPublisherIndex(indexed.publisherIndex());
-    MR3MetricSnapshot snapshot = indexed.snapshot();
+  static byte[] encode(MR3MetricSnapshot snapshot) throws IOException {
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     if (snapshot instanceof ApplicationMetricSnapshot) {
       ApplicationMetricSnapshot s = (ApplicationMetricSnapshot) snapshot;
-      builder.setApplication(ApplicationMetricSnapshotProto.newBuilder()
+      bytes.write(1);
+      ApplicationMetricSnapshotProto.newBuilder()
           .setTimestampMillis(s.timestampMillis()).setRunningDags(s.runningDags())
           .setTotalDags(s.totalDags()).setSucceededDags(s.succeededDags())
-          .setFailedDags(s.failedDags()).setKilledDags(s.killedDags()));
+          .setFailedDags(s.failedDags()).setKilledDags(s.killedDags()).build().writeTo(bytes);
     } else if (snapshot instanceof ContainerGroupMetricSnapshot) {
       ContainerGroupMetricSnapshot s = (ContainerGroupMetricSnapshot) snapshot;
-      builder.setContainerGroup(ContainerGroupMetricSnapshotProto.newBuilder()
+      bytes.write(2);
+      ContainerGroupMetricSnapshotProto.newBuilder()
           .setTimestampMillis(s.timestampMillis()).setContainerGroupId(s.containerGroupId())
           .setContainers(s.containers()).setQueuedTasks(s.queuedTasks()).setRunningTasks(s.runningTasks())
           .setNodes(s.nodes()).setHeapBytesMax(s.heapBytesMax()).setHeapBytesUsed(s.heapBytesUsed())
@@ -52,32 +52,32 @@ final class MetricProtoUtils {
           .setAutoScaleInThresholdPercent(s.autoScaleInThresholdPercent())
           .setContainersTotal(s.containersTotal()).setCompletedTasksTotal(s.completedTasksTotal())
           .setSucceededTasksTotal(s.succeededTasksTotal()).setFailedTasksTotal(s.failedTasksTotal())
-          .setKilledTasksTotal(s.killedTasksTotal()));
+          .setKilledTasksTotal(s.killedTasksTotal()).build().writeTo(bytes);
     } else {
       throw new IllegalArgumentException("Unknown MR3 metric snapshot type: " + snapshot.getClass());
     }
-    return builder.build().toByteArray();
+    return bytes.toByteArray();
   }
 
-  static IndexedMetricSnapshot decode(byte[] bytes) throws IOException {
-    IndexedMetricSnapshotProto indexed = IndexedMetricSnapshotProto.parseFrom(bytes);
-    MR3MetricSnapshot snapshot;
-    if (indexed.hasApplication() && !indexed.hasContainerGroup()) {
-      ApplicationMetricSnapshotProto s = indexed.getApplication();
-      snapshot = new ApplicationMetricSnapshot(s.getTimestampMillis(), s.getRunningDags(),
+  static MR3MetricSnapshot decode(byte[] bytes) throws IOException {
+    if (bytes.length == 0) {
+      throw new IOException("Empty metric snapshot payload");
+    }
+    ByteArrayInputStream input = new ByteArrayInputStream(bytes, 1, bytes.length - 1);
+    if (bytes[0] == 1) {
+      ApplicationMetricSnapshotProto s = ApplicationMetricSnapshotProto.parseFrom(input);
+      return new ApplicationMetricSnapshot(s.getTimestampMillis(), s.getRunningDags(),
           s.getTotalDags(), s.getSucceededDags(), s.getFailedDags(), s.getKilledDags());
-    } else if (!indexed.hasApplication() && indexed.hasContainerGroup()) {
-      ContainerGroupMetricSnapshotProto s = indexed.getContainerGroup();
-      snapshot = new ContainerGroupMetricSnapshot(s.getTimestampMillis(), s.getContainerGroupId(),
+    } else if (bytes[0] == 2) {
+      ContainerGroupMetricSnapshotProto s = ContainerGroupMetricSnapshotProto.parseFrom(input);
+      return new ContainerGroupMetricSnapshot(s.getTimestampMillis(), s.getContainerGroupId(),
           s.getContainers(), s.getQueuedTasks(), s.getRunningTasks(), s.getNodes(),
           s.getHeapBytesMax(), s.getHeapBytesUsed(), s.getHeapWindowBytesMax(),
           s.getHeapWindowBytesUsed(), s.getHeapWindowUsagePercent(),
           s.getAutoScaleOutThresholdPercent(), s.getAutoScaleInThresholdPercent(),
           s.getContainersTotal(), s.getCompletedTasksTotal(), s.getSucceededTasksTotal(),
           s.getFailedTasksTotal(), s.getKilledTasksTotal());
-    } else {
-      throw new IOException("Metric snapshot must contain exactly one typed payload");
     }
-    return new IndexedMetricSnapshot(indexed.getPublisherIndex(), snapshot);
+    throw new IOException("Unknown metric snapshot type: " + bytes[0]);
   }
 }

@@ -18,10 +18,8 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 
-import com.datamonad.mr3.api.client.IndexedMetricSnapshot;
+import com.datamonad.mr3.api.client.MR3MetricSnapshot;
 import com.datamonad.mr3.api.client.MR3SessionClient;
-import com.datamonad.mr3.api.common.MR3Exception;
-import java.io.IOException;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.List;
 import java.util.Objects;
@@ -44,7 +42,7 @@ public class MR3MetricsIngestionService implements AutoCloseable {
   private ScheduledFuture<?> task;
   private MR3SessionClient client;
   private String attemptId;
-  private long nextSnapshotIndex;
+  private long fromIndex;
 
   public MR3MetricsIngestionService(MetricsStore store, HiveConf conf) {
     this.store = store;
@@ -53,6 +51,9 @@ public class MR3MetricsIngestionService implements AutoCloseable {
   }
 
   public synchronized void start() {
+    if (executor != null) {
+      return;
+    }
     executor = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
         .setDaemon(true).setNameFormat("MR3 metrics ingestion").build());
     task = executor.scheduleWithFixedDelay(this::ingestSafely, intervalMillis,
@@ -77,36 +78,19 @@ public class MR3MetricsIngestionService implements AutoCloseable {
     String currentAttempt = client.getAppAttemptIdStr();
     if (!Objects.equals(attemptId, currentAttempt)) {
       attemptId = currentAttempt;
-      nextSnapshotIndex = 0L;
+      fromIndex = 0L;
     }
 
     while (true) {
-      scala.collection.immutable.List<IndexedMetricSnapshot> received;
-      try {
-        received = client.getMetricSnapshots(nextSnapshotIndex);
-      } catch (MR3Exception e) {
-        client = null;
-        throw e;
-      }
-      List<IndexedMetricSnapshot> snapshots = JavaConverters.seqAsJavaListConverter(
+      scala.collection.immutable.List<MR3MetricSnapshot> received =
+          client.getMetricSnapshots(fromIndex);
+      List<MR3MetricSnapshot> snapshots = JavaConverters.seqAsJavaListConverter(
           received).asJava();
       if (snapshots.isEmpty()) return;
-
-      long firstReturnedIndex = snapshots.get(0).publisherIndex();
-      if (firstReturnedIndex > nextSnapshotIndex) {
-        LOG.warn("Native MR3 metric history gap for {}: requested {}, first returned {}",
-            attemptId, nextSnapshotIndex, firstReturnedIndex);
-        nextSnapshotIndex = firstReturnedIndex;
-      }
-      for (int i = 0; i < snapshots.size(); ++i) {
-        long expectedIndex = nextSnapshotIndex + i;
-        if (snapshots.get(i).publisherIndex() != expectedIndex) {
-          throw new IOException("Non-contiguous MR3 metric publisher indexes: expected " +
-              expectedIndex + ", received " + snapshots.get(i).publisherIndex());
-        }
-      }
-      store.appendBatch(attemptId, snapshots);
-      nextSnapshotIndex += snapshots.size();
+      assert snapshots.stream().allMatch(Objects::nonNull);
+      store.appendBatch(attemptId, fromIndex, snapshots);
+      fromIndex += snapshots.size();
+      assert fromIndex > 0;
     }
   }
 
