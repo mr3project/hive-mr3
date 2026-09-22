@@ -46,6 +46,7 @@ import scala.collection.JavaConverters;
 public class MR3TimelineIngestionService implements AutoCloseable {
 
   private static final Logger LOG = LoggerFactory.getLogger(MR3TimelineIngestionService.class);
+
   private static final int MAX_NUM_ENTITIES_PER_REQUEST =
       MR3TimelineDataPublisher.maxNumEntitiesPerRequest();
   private static final Object APP_ATTEMPT_TERMINATION_LOCK = new Object();
@@ -58,7 +59,7 @@ public class MR3TimelineIngestionService implements AutoCloseable {
   private ScheduledFuture<?> ingestionTask;
   private MR3SessionClient mr3SessionClient;
   private String applicationAttemptId;
-  private long fromIndex = 0;
+  private long fromIndex = 0L;
 
   public MR3TimelineIngestionService(TimelineDataManager timelineDataManager, HiveConf conf) {
     this.timelineDataManager = timelineDataManager;
@@ -77,14 +78,12 @@ public class MR3TimelineIngestionService implements AutoCloseable {
             .setNameFormat("MR3 timeline ingestion")
             .build());
     ingestionTask = executorService.scheduleWithFixedDelay(
-        this::ingest,
-        ingestionIntervalMillis,
-        ingestionIntervalMillis,
-        TimeUnit.MILLISECONDS);
+        this::ingestSafely,
+        ingestionIntervalMillis, ingestionIntervalMillis, TimeUnit.MILLISECONDS);
     ingestionServiceRunning = true;
   }
 
-  private void ingest() {
+  private void ingestSafely() {
     try {
       ingestTimelineEvents();
     } catch (MR3Exception e) {
