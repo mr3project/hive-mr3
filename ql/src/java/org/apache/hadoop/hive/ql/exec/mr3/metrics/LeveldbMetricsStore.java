@@ -57,8 +57,8 @@ public class LeveldbMetricsStore implements MetricsStore {
   @Override
   public synchronized void initialize(HiveConf conf) throws Exception {
     retentionMillis = conf.getTimeVar(
-        HiveConf.ConfVars.HIVE_MR3_METRICS_RETENTION_DURATION, TimeUnit.MILLISECONDS);
-    Path path = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_MR3_METRICS_LEVELDB_PATH));
+        HiveConf.ConfVars.HIVE_MR3_UI_METRICS_RETENTION_DURATION, TimeUnit.MILLISECONDS);
+    Path path = new Path(HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_MR3_UI_METRICS_LEVELDB_PATH));
     FileSystem fs = null;
     try {
       fs = FileSystem.getLocal(conf);

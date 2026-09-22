@@ -21,6 +21,7 @@ package org.apache.hive.service.server;
 import java.io.IOException;
 import java.net.URL;
 
+import org.apache.hadoop.hive.ql.exec.mr3.metrics.MR3MetricsResource;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.AMProxyResource;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.ATSResource;
 import org.apache.hadoop.hive.ql.exec.mr3.timeline.MR3TimelineIngestionService;
@@ -54,13 +55,13 @@ final class MR3TimelineService {
   private TimelineStore timelineStore;
   private volatile TimelineDataManager timelineDataManager;
   private MR3TimelineIngestionService ingestionService;
+  private MR3MetricsService metricsService;
+
   private boolean enabled;
   private boolean active;
-  private final MR3MetricsService metricsService;
 
   MR3TimelineService(HiveConf conf) {
     this.conf = conf;
-    this.metricsService = new MR3MetricsService(conf);
   }
 
   synchronized void initialize(HttpServer webServer) throws IOException {
@@ -73,7 +74,8 @@ final class MR3TimelineService {
     webServer.addServlet("mr3_ats", "/ats/*", createJerseyServlet(ATSResource.class));
     webServer.addServlet("mr3_proxy", "/proxy/*", createJerseyServlet(AMProxyResource.class));
     webServer.addServlet("mr3_server", "/server/*", createJerseyServlet(ServerResource.class));
-    metricsService.initialize(webServer);
+    webServer.addServlet("mr3_metrics", "/metrics/mr3/*",
+        createJerseyServlet(MR3MetricsResource.class));
 
     enabled = true;
   }
@@ -94,6 +96,7 @@ final class MR3TimelineService {
 
       ingestionService = new MR3TimelineIngestionService(timelineDataManager, conf);
       ingestionService.start();
+      metricsService = new MR3MetricsService(conf);
       metricsService.activate();
 
       active = true;
@@ -113,7 +116,10 @@ final class MR3TimelineService {
       ingestionService.close();
       ingestionService = null;
     }
-    metricsService.deactivate();
+    if (metricsService != null) {
+      metricsService.deactivate();
+      metricsService = null;
+    }
     timelineDataManager = null;
     closeTimelineStore();
     active = false;
@@ -151,6 +157,14 @@ final class MR3TimelineService {
   }
 
   private void deactivateAfterFailure() {
+    if (ingestionService != null) {
+      ingestionService.close();
+      ingestionService = null;
+    }
+    if (metricsService != null) {
+      metricsService.deactivate();
+      metricsService = null;
+    }
     timelineDataManager = null;
     closeTimelineStore();
     active = false;

@@ -47,7 +47,7 @@ public class MR3MetricsIngestionService implements AutoCloseable {
   public MR3MetricsIngestionService(MetricsStore store, HiveConf conf) {
     this.store = store;
     intervalMillis = conf.getTimeVar(
-        HiveConf.ConfVars.HIVE_MR3_METRICS_INGESTION_INTERVAL, TimeUnit.MILLISECONDS);
+        HiveConf.ConfVars.HIVE_MR3_UI_METRICS_INGESTION_INTERVAL, TimeUnit.MILLISECONDS);
   }
 
   public synchronized void start() {
