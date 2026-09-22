@@ -35,7 +35,6 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
@@ -97,9 +96,7 @@ public class MR3TimelineIngestionService implements AutoCloseable {
 
   private void ingestTimelineEvents() throws Exception {
     if (mr3SessionClient == null) {
-      // deadlock --> HiveMR3ClientImpl.close() must not be currently being executed because of synchronized{}
-      MR3Session mr3Session = MR3SessionManagerImpl.getInstance().getActiveMR3SessionForMR3UI();  // in synchronized{}
-      mr3SessionClient = mr3Session == null ? null : mr3Session.getMR3SessionClient();            // in synchronized{}
+      mr3SessionClient = MR3SessionManagerImpl.getInstance().getActiveMR3SessionClientForMR3UI();
     }
     if (mr3SessionClient == null) {
       return;

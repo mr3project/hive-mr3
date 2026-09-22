@@ -28,7 +28,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +41,6 @@ public class MR3MetricsIngestionService implements AutoCloseable {
   private final long ingestionIntervalMillis;
   private ScheduledExecutorService executorService;
   private ScheduledFuture<?> ingestionTask;
-  private MR3SessionClient mr3SessionClient;
   private String applicationAttemptId;
   private long fromIndex = 0L;
 
@@ -78,10 +76,8 @@ public class MR3MetricsIngestionService implements AutoCloseable {
   private void ingestMetric() throws Exception {
     store.expire();
 
-    if (mr3SessionClient == null) {
-      MR3Session session = MR3SessionManagerImpl.getInstance().getActiveMR3SessionForMR3UI();
-      mr3SessionClient = session == null ? null : session.getMR3SessionClient();
-    }
+    MR3SessionClient mr3SessionClient =
+        MR3SessionManagerImpl.getInstance().getActiveMR3SessionClientForMR3UI();
     if (mr3SessionClient == null) {
       return;
     }
