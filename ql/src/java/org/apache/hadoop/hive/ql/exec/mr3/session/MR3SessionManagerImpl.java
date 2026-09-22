@@ -376,20 +376,21 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
         if (shareMr3Session) {
           if (mr3Session == commonMr3Session) {   // reference equality
             SessionState currentSessionState = SessionState.get();  // cache SessionState
-            MR3Session newMr3Session = commonUgi.doAs(new PrivilegedExceptionAction<MR3Session>() {
+            commonUgi.doAs(new PrivilegedExceptionAction<Void>() {
               @Override
-              public MR3Session run() throws Exception {
+              public Void run() throws Exception {
                 SessionState.setCurrentSessionState(commonSessionState);
-                MR3Session createdMr3Session = new MR3SessionImpl(true, commonUgi.getShortUserName());
-                createdMr3Session.start(hiveConf);  // may raise Exception
-                return createdMr3Session;
+                MR3Session newMr3Session = new MR3SessionImpl(true, commonUgi.getShortUserName());
+                newMr3Session.start(hiveConf);  // may raise Exception
+                // assign only if newSession.start() returns without raising Exception
+                commonMr3Session = newMr3Session;
+                mr3SessionClientForUI = commonMr3Session.getMR3SessionClient();
+                return null;
               }
             });
             // now it is safe to close the previous commonMr3Session
             mr3Session.close(true);
             createdSessions.remove(mr3Session);
-            commonMr3Session = newMr3Session;
-            mr3SessionClientForUI = commonMr3Session.getMR3SessionClient();
             // register commonMr3Session
             SessionState.setCurrentSessionState(currentSessionState);   // restore SessionState
             createdSessions.add(commonMr3Session);
