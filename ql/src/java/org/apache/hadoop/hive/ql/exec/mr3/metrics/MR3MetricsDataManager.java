@@ -21,6 +21,7 @@ package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 import com.datamonad.mr3.api.client.ApplicationMetricSnapshot;
 import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
 import com.datamonad.mr3.api.client.MR3MetricSnapshot;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -75,8 +76,9 @@ public class MR3MetricsDataManager {
   }
 
   public MetricsResponse container(
-      String attemptId, long start, long end,
-      Integer maxPoints, String fields, UserGroupInformation user) throws Exception {
+      String attemptId,
+      long start, long end, Integer maxPoints,
+      String fields, UserGroupInformation user) throws Exception {
     int limit = validate(attemptId, start, end, maxPoints, user);
     Set<String> selected = parseFields(fields, CONTAINER_FIELDS);
     List<MR3MetricSnapshot> values = metricsStore.getContainerSnapshots(attemptId, start, end, limit);
@@ -86,20 +88,25 @@ public class MR3MetricsDataManager {
   private int validate(
       String attemptId, long start, long end, Integer requested, UserGroupInformation user) throws Exception {
     if (attemptId == null || attemptId.isEmpty()) {
-      throw new IllegalArgumentException("attemptId is required");
+      throw new IllegalArgumentException("ApplicationAttemptID is required");
     }
     if (start > end) {
       throw new IllegalArgumentException("startTime must not exceed endTime");
     }
 
-    int limit = requested == null ? restMaxPoints : requested;
-    if (limit <= 0 || limit > restMaxPoints) {
-      throw new IllegalArgumentException("maxPoints must be between 1 and " + restMaxPoints);
+    int limit = requested == null ? restMaxPoints : Math.min(requested, restMaxPoints);
+    if (limit <= 0) {
+      throw new IllegalArgumentException("maxPoints must be greater than 0");
     }
 
-    if (!aclManager.checkAMViewAccess(user) || !metricsStore.hasAttempt(attemptId)) {
-      throw new AttemptNotFoundException();
+    if (!metricsStore.hasAttempt(attemptId)) {
+      throw new IllegalArgumentException("ApplicationAttemptID not found: " + attemptId);
     }
+
+    if (!aclManager.checkAMViewAccess(user)) {
+      throw new IllegalArgumentException("Cannot access MR3MetricsDataManager: " + user);
+    }
+
     return limit;
   }
 
@@ -192,6 +199,4 @@ public class MR3MetricsDataManager {
       this.snapshots = snapshots;
     }
   }
-
-  public static final class AttemptNotFoundException extends Exception {}
 }

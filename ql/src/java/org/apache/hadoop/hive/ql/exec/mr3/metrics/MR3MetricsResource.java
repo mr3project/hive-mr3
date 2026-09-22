@@ -40,10 +40,9 @@ public class MR3MetricsResource {
       @QueryParam("endTime") Long end, @QueryParam("fields") String fields,
       @QueryParam("maxPoints") Integer maxPoints, @Context HttpServletRequest request) {
     try {
-      return manager.application(attemptId, required(start, "startTime"), required(end, "endTime"),
-          maxPoints, fields, user(request));
-    } catch (MR3MetricsDataManager.AttemptNotFoundException e) {
-      throw new WebApplicationException(Response.Status.NOT_FOUND);
+      return manager.application(attemptId,
+          required(start, "startTime"), required(end, "endTime"), maxPoints,
+          fields, user(request));
     } catch (IllegalArgumentException e) {
       throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build());
     } catch (Exception e) {
@@ -58,10 +57,9 @@ public class MR3MetricsResource {
       @QueryParam("fields") String fields, @QueryParam("maxPoints") Integer maxPoints,
       @Context HttpServletRequest request) {
     try {
-      return manager.container(attemptId, required(start, "startTime"),
-          required(end, "endTime"), maxPoints, fields, user(request));
-    } catch (MR3MetricsDataManager.AttemptNotFoundException e) {
-      throw new WebApplicationException(Response.Status.NOT_FOUND);
+      return manager.container(attemptId,
+          required(start, "startTime"), required(end, "endTime"), maxPoints,
+          fields, user(request));
     } catch (IllegalArgumentException e) {
       throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build());
     } catch (Exception e) {
@@ -70,7 +68,9 @@ public class MR3MetricsResource {
   }
 
   private static long required(Long value, String name) {
-    if (value == null) throw new IllegalArgumentException(name + " is required");
+    if (value == null) {
+      throw new IllegalArgumentException(name + " is required");
+    }
     return value;
   }
 
