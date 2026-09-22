@@ -22,7 +22,6 @@ import com.datamonad.mr3.api.client.AppAttemptStatus;
 import com.datamonad.mr3.api.client.DAGStatus;
 import com.datamonad.mr3.api.client.MR3SessionClient;
 import com.datamonad.mr3.api.client.VertexStatus;
-import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 
 import org.slf4j.Logger;
@@ -38,8 +37,7 @@ public class MR3LiveStatusService implements AutoCloseable {
   private final MR3SessionClient mr3SessionClient;
 
   public MR3LiveStatusService() {
-    MR3Session mr3Session = MR3SessionManagerImpl.getInstance().getActiveMR3SessionForMR3UI();
-    mr3SessionClient = mr3Session == null ? null : mr3Session.getMR3SessionClient();
+    mr3SessionClient = MR3SessionManagerImpl.getInstance().getActiveMR3SessionClientForMR3UI();
     if (mr3SessionClient == null) {
       LOG.warn("MR3SessionClient unavailable");
     }

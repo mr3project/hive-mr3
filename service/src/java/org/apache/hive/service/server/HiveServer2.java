@@ -143,8 +143,6 @@ import org.apache.zookeeper.ZooDefs.Ids;
 import org.apache.zookeeper.ZooDefs.Perms;
 import org.apache.zookeeper.data.ACL;
 
-import org.eclipse.jetty.servlet.ServletHolder;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -179,7 +177,7 @@ public class HiveServer2 extends CompositeService {
   private ThriftCLIService thriftCLIService;
   private CuratorFramework zKClientForPrivSync = null;
   private HttpServer webServer; // Web UI
-  private MR3TimelineService mr3TimelineService;
+  private MR3TimelineMetricsService mr3TimelineService;
   private TezSessionPoolManager tezSessionPoolManager;
   private WorkloadManager wm;
   private PamAuthenticator pamAuthenticator;
@@ -447,7 +445,7 @@ public class HiveServer2 extends CompositeService {
           webServer = builder.build();
           webServer.addServlet("query_page", "/query_page.html", QueryProfileServlet.class);
           webServer.addServlet("api", "/api/*", QueriesRESTfulAPIServlet.class);
-          mr3TimelineService = new MR3TimelineService(hiveConf);
+          mr3TimelineService = new MR3TimelineMetricsService(hiveConf);
           mr3TimelineService.initialize(webServer);
           if (!activePassiveHA) {
             mr3TimelineService.activate();

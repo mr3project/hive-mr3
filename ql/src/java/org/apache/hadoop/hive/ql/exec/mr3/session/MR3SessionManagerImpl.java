@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.session;
 
+import com.datamonad.mr3.api.client.MR3SessionClient;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.mr3.HiveMR3ClientFactory;
@@ -60,6 +61,7 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
   private UserGroupInformation commonUgi = null;
   private SessionState commonSessionState = null;
   private MR3Session commonMr3Session = null;
+  private volatile MR3SessionClient mr3SessionClientForUI = null;
 
   private MR3ZooKeeper mr3ZooKeeper = null;
 
@@ -161,8 +163,10 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
 
     if (!(serviceDiscovery && activePassiveHA) && shareMr3Session) {
       commonMr3Session = createSession(hiveConf, true);
+      mr3SessionClientForUI = commonMr3Session.getMR3SessionClient();
     } else {
       commonMr3Session = null;  // to be created at the request of HiveServer2
+      mr3SessionClientForUI = null;
     }
 
     serverUniqueId = UUID.randomUUID().toString();
@@ -201,11 +205,14 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
         commonMr3Session.close(false);
         createdSessions.remove(commonMr3Session);
         commonMr3Session = null;  // connectSession() may raise HiveException
+        mr3SessionClientForUI = null;
 
         commonMr3Session = connectSession(this.hiveConf, appId);
+        mr3SessionClientForUI = commonMr3Session.getMR3SessionClient();
       }
     } else {
       commonMr3Session = connectSession(this.hiveConf, appId);
+      mr3SessionClientForUI = commonMr3Session.getMR3SessionClient();
     }
   }
 
@@ -223,6 +230,7 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
         commonMr3Session.close(true);
         createdSessions.remove(commonMr3Session);
         commonMr3Session = null;
+        mr3SessionClientForUI = null;
       } else {
         LOG.warn("Ignore closeApplication(): " + commonMr3Session.getApplicationId() + " != " + appId);
       }
@@ -258,9 +266,11 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
       commonMr3Session.close(false);
       createdSessions.remove(commonMr3Session);
       commonMr3Session = null;  // createSession() may raise HiveException
+      mr3SessionClientForUI = null;
     }
 
     commonMr3Session = createSession(hiveConf, true);
+    mr3SessionClientForUI = commonMr3Session.getMR3SessionClient();
     return commonMr3Session.getApplicationId().toString();
   }
 
@@ -282,8 +292,8 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
     return shareMr3Session;
   }
 
-  public synchronized MR3Session getActiveMR3SessionForMR3UI() {
-    return shareMr3Session ? commonMr3Session : null;
+  public MR3SessionClient getActiveMR3SessionClientForMR3UI() {
+    return mr3SessionClientForUI;
   }
 
   public static boolean isSharedMr3Session(HiveConf hiveConf) {
@@ -372,8 +382,9 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
                 SessionState.setCurrentSessionState(commonSessionState);
                 MR3Session newMr3Session = new MR3SessionImpl(true, commonUgi.getShortUserName());
                 newMr3Session.start(hiveConf);  // may raise Exception
-                // assign to commonMr3Session only if newSession.start() returns without raising Exception
+                // assign only if newSession.start() returns without raising Exception
                 commonMr3Session = newMr3Session;
+                mr3SessionClientForUI = commonMr3Session.getMR3SessionClient();
                 return null;
               }
             });
@@ -457,6 +468,8 @@ public class MR3SessionManagerImpl implements MR3SessionManager {
       }
       createdSessions.clear();
     }
+    commonMr3Session = null;
+    mr3SessionClientForUI = null;
     if (mr3ZooKeeper != null) {
       mr3ZooKeeper.close();
       mr3ZooKeeper = null;
