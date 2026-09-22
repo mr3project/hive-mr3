@@ -6038,7 +6038,22 @@ public class HiveConf extends Configuration {
       "Local base directory for the MR3-UI LevelDB timeline store."),
     HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK(
       "hive.mr3.ui.timeline-service.leveldb-timeline-store.dir.umask", "0700",
-      "Directory umask for the MR3-UI LevelDB timeline store.");
+      "Directory umask for the MR3-UI LevelDB timeline store."),
+    HIVE_MR3_METRICS_ENABLED("hive.mr3.metrics.enabled", false,
+      "Enable native MR3 metrics collection and REST access."),
+    HIVE_MR3_METRICS_INGESTION_INTERVAL("hive.mr3.metrics.ingestion.interval", "1s",
+      new TimeValidator(TimeUnit.SECONDS, 0L, false, Long.MAX_VALUE, false),
+      "Interval between native MR3 metrics ingestion attempts."),
+    HIVE_MR3_METRICS_STORE_TYPE("hive.mr3.metrics.store.type", "leveldb",
+      new StringSet("leveldb"), "Native MR3 metrics store implementation."),
+    HIVE_MR3_METRICS_LEVELDB_PATH("hive.mr3.metrics.leveldb.path", "/tmp/mr3-metrics/",
+      "Local path for the native MR3 metrics LevelDB store."),
+    HIVE_MR3_METRICS_RETENTION_DURATION("hive.mr3.metrics.retention.duration", "7d",
+      new TimeValidator(TimeUnit.HOURS, 1L, true, Long.MAX_VALUE, false),
+      "Keep native MR3 metric entries for this duration."),
+    HIVE_MR3_METRICS_REST_MAX_POINTS("hive.mr3.metrics.rest.max.points", 10000,
+      new RangeValidator(1, Integer.MAX_VALUE),
+      "Maximum metric points returned by one native MR3 metrics REST request.");
 
     public final String varname;
     public final String altName;

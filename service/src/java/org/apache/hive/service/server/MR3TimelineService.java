@@ -56,9 +56,11 @@ final class MR3TimelineService {
   private MR3TimelineIngestionService ingestionService;
   private boolean enabled;
   private boolean active;
+  private final MR3MetricsService metricsService;
 
   MR3TimelineService(HiveConf conf) {
     this.conf = conf;
+    this.metricsService = new MR3MetricsService(conf);
   }
 
   synchronized void initialize(HttpServer webServer) throws IOException {
@@ -71,6 +73,7 @@ final class MR3TimelineService {
     webServer.addServlet("mr3_ats", "/ats/*", createJerseyServlet(ATSResource.class));
     webServer.addServlet("mr3_proxy", "/proxy/*", createJerseyServlet(AMProxyResource.class));
     webServer.addServlet("mr3_server", "/server/*", createJerseyServlet(ServerResource.class));
+    metricsService.initialize(webServer);
 
     enabled = true;
   }
@@ -91,6 +94,7 @@ final class MR3TimelineService {
 
       ingestionService = new MR3TimelineIngestionService(timelineDataManager, conf);
       ingestionService.start();
+      metricsService.activate();
 
       active = true;
       LOG.info("Activated MR3-UI on this HiveServer2 instance: {}", adminUser);
@@ -109,6 +113,7 @@ final class MR3TimelineService {
       ingestionService.close();
       ingestionService = null;
     }
+    metricsService.deactivate();
     timelineDataManager = null;
     closeTimelineStore();
     active = false;
