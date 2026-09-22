@@ -26,6 +26,7 @@ import com.datamonad.mr3.client.DAGClientHandlerProtocolRPC.ContainerGroupMetric
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
 
 final class MetricProtoUtils {
   private MetricProtoUtils() {}
@@ -46,6 +47,7 @@ final class MetricProtoUtils {
           .writeTo(bytes);
     } else {
       ContainerGroupMetricSnapshot s = (ContainerGroupMetricSnapshot) snapshot;
+      assert DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME.equals(s.containerGroupId());
       bytes.write(LeveldbMetricsStore.CONTAINER_GROUP_SUBTYPE);
       ContainerGroupMetricSnapshotProto.newBuilder()
           .setTimestampMillis(s.timestampMillis())
@@ -88,6 +90,7 @@ final class MetricProtoUtils {
           s.getKilledDags());
     } else if (bytes[0] == LeveldbMetricsStore.CONTAINER_GROUP_SUBTYPE) {
       ContainerGroupMetricSnapshotProto s = ContainerGroupMetricSnapshotProto.parseFrom(input);
+      assert DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME.equals(s.getContainerGroupId());
       return new ContainerGroupMetricSnapshot(
           s.getTimestampMillis(),
           s.getContainerGroupId(),

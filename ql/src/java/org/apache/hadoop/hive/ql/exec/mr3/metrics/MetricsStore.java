@@ -20,7 +20,6 @@ package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 
 import com.datamonad.mr3.api.client.MR3MetricSnapshot;
 import java.util.List;
-import java.util.Set;
 import org.apache.hadoop.hive.conf.HiveConf;
 
 public interface MetricsStore {
@@ -32,15 +31,12 @@ public interface MetricsStore {
   List<MR3MetricSnapshot> getApplicationSnapshots(
       String applicationAttemptId, long startTime, long endTime, int maxPoints) throws Exception;
 
-  List<MR3MetricSnapshot> getContainerGroupSnapshots(
-      String applicationAttemptId, String containerGroupId, long startTime, long endTime, int maxPoints) throws Exception;
+  List<MR3MetricSnapshot> getContainerSnapshots(
+      String applicationAttemptId, long startTime, long endTime, int maxPoints) throws Exception;
 
   MR3MetricSnapshot getLatestApplicationSnapshot(String applicationAttemptId) throws Exception;
 
-  MR3MetricSnapshot getLatestContainerGroupSnapshot(
-      String applicationAttemptId, String containerGroupId) throws Exception;
-
-  Set<String> listContainerGroupIds(String applicationAttemptId) throws Exception;
+  MR3MetricSnapshot getLatestContainerSnapshot(String applicationAttemptId) throws Exception;
 
   boolean hasAttempt(String applicationAttemptId) throws Exception;
 

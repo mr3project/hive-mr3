@@ -24,17 +24,15 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
 import org.apache.hadoop.io.IOUtils;
 import org.fusesource.leveldbjni.JniDBFactory;
 import org.iq80.leveldb.DB;
@@ -54,7 +52,6 @@ public class LeveldbMetricsStore implements MetricsStore {
   private static final byte SAMPLE = 'S';
   private static final byte DEDUP = 'D';
   private static final byte ATTEMPT = 'A';
-  private static final byte GROUP = 'G';
 
   private DB db;
   private long retentionMillis;
@@ -91,6 +88,17 @@ public class LeveldbMetricsStore implements MetricsStore {
         MR3MetricSnapshot snapshot = snapshots.get(i);
         long snapshotIndex = fromIndex + i;
 
+        boolean isContainer = snapshot instanceof ContainerGroupMetricSnapshot;
+        if (isContainer) {
+          String containerGroupId = ((ContainerGroupMetricSnapshot) snapshot).containerGroupId();
+          if (!DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME.equals(containerGroupId)) {
+            LOG.warn("Ignoring malformed MR3 metric snapshot for attempt {} at index {}: " +
+                    "expected container group {}, but found {}",
+                attemptId, snapshotIndex, DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME, containerGroupId);
+            continue;
+          }
+        }
+
         byte[] value = MetricProtoUtils.encode(snapshot);
         byte[] dedupKey = dedupKey(attemptId, snapshotIndex);
         byte[] oldValue = db.get(dedupKey);
@@ -102,16 +110,10 @@ public class LeveldbMetricsStore implements MetricsStore {
           continue;
         }
 
-        boolean isContainerGroup = snapshot instanceof ContainerGroupMetricSnapshot;
-        String containerGroupId = isContainerGroup ? ((ContainerGroupMetricSnapshot) snapshot).containerGroupId() : "";
-        byte subtype = (byte) (isContainerGroup ? CONTAINER_GROUP_SUBTYPE : APPLICATION_SUBTYPE);
+        byte subtype = (byte) (isContainer ? CONTAINER_GROUP_SUBTYPE : APPLICATION_SUBTYPE);
         writes.put(sampleKey(
-            attemptId, subtype, containerGroupId, snapshot.timestampMillis(), snapshotIndex), value);
+            attemptId, subtype, snapshot.timestampMillis(), snapshotIndex), value);
         writes.put(dedupKey, value);
-
-        if (!containerGroupId.isEmpty()) {
-          writes.put(groupKey(attemptId, containerGroupId), new byte[0]);
-        }
       }
       db.write(writes);
     }
@@ -121,30 +123,28 @@ public class LeveldbMetricsStore implements MetricsStore {
   @Override
   public synchronized List<MR3MetricSnapshot> getApplicationSnapshots(
       String attemptId, long startTime, long endTime, int maxPoints) throws Exception {
-    return scan(attemptId, APPLICATION_SUBTYPE, "", startTime, endTime, maxPoints);
+    return scan(attemptId, APPLICATION_SUBTYPE, startTime, endTime, maxPoints);
   }
 
   @Override
-  public synchronized List<MR3MetricSnapshot> getContainerGroupSnapshots(
-      String attemptId, String group, long startTime, long endTime, int maxPoints) throws Exception {
-    return scan(attemptId, CONTAINER_GROUP_SUBTYPE, group, startTime, endTime, maxPoints);
+  public synchronized List<MR3MetricSnapshot> getContainerSnapshots(
+      String attemptId, long startTime, long endTime, int maxPoints) throws Exception {
+    return scan(attemptId, CONTAINER_GROUP_SUBTYPE, startTime, endTime, maxPoints);
   }
 
   @Override
   public synchronized MR3MetricSnapshot getLatestApplicationSnapshot(String attemptId)
       throws Exception {
-    return latest(attemptId, APPLICATION_SUBTYPE, "");
+    return latest(attemptId, APPLICATION_SUBTYPE);
   }
 
   @Override
-  public synchronized MR3MetricSnapshot getLatestContainerGroupSnapshot(
-      String attemptId, String group) throws Exception {
-    return latest(attemptId, CONTAINER_GROUP_SUBTYPE, group);
+  public synchronized MR3MetricSnapshot getLatestContainerSnapshot(String attemptId) throws Exception {
+    return latest(attemptId, CONTAINER_GROUP_SUBTYPE);
   }
 
-  private MR3MetricSnapshot latest(
-      String attemptId, byte subtype, String group) throws Exception {
-    byte[] prefix = samplePrefix(attemptId, subtype, group);
+  private MR3MetricSnapshot latest(String attemptId, byte subtype) throws Exception {
+    byte[] prefix = samplePrefix(attemptId, subtype);
     MR3MetricSnapshot latest = null;
     try (DBIterator iterator = db.iterator()) {
       iterator.seek(prefix);
@@ -158,12 +158,12 @@ public class LeveldbMetricsStore implements MetricsStore {
   }
 
   private List<MR3MetricSnapshot> scan(
-      String attemptId, byte subtype, String group,
+      String attemptId, byte subtype,
       long startTime, long endTime, int maxPoints) throws Exception {
-    byte[] prefix = samplePrefix(attemptId, subtype, group);
+    byte[] prefix = samplePrefix(attemptId, subtype);
     List<MR3MetricSnapshot> result = new ArrayList<>();
     try (DBIterator iterator = db.iterator()) {
-      iterator.seek(sampleKey(attemptId, subtype, group, startTime, 0L));
+      iterator.seek(sampleKey(attemptId, subtype, startTime, 0L));
       while (iterator.hasNext()) {
         Map.Entry<byte[], byte[]> entry = iterator.next();
         if (!startsWith(entry.getKey(), prefix)) break;
@@ -176,24 +176,6 @@ public class LeveldbMetricsStore implements MetricsStore {
       }
     }
     return result;
-  }
-
-  @Override
-  public synchronized Set<String> listContainerGroupIds(String attemptId) throws Exception {
-    byte[] prefix = keyPrefix(GROUP, attemptId);
-    Set<String> groups = new LinkedHashSet<>();
-    try (DBIterator iterator = db.iterator()) {
-      iterator.seek(prefix);
-      while (iterator.hasNext()) {
-        Map.Entry<byte[], byte[]> entry = iterator.next();
-        if (!startsWith(entry.getKey(), prefix)) {
-          break;
-        }
-        groups.add(new String(
-            entry.getKey(), prefix.length, entry.getKey().length - prefix.length, StandardCharsets.UTF_8));
-      }
-    }
-    return groups;
   }
 
   @Override
@@ -240,36 +222,28 @@ public class LeveldbMetricsStore implements MetricsStore {
   }
 
   private static byte[] dedupKey(String attempt, long index) throws IOException {
-    return key(DEDUP, attempt, null, (byte) 0, 0L, index);
+    return key(DEDUP, attempt, (byte) 0, 0L, index);
   }
 
-  private static byte[] groupKey(String attempt, String group) throws IOException {
-    byte[] prefix = keyPrefix(GROUP, attempt);
-    byte[] suffix = group.getBytes(StandardCharsets.UTF_8);
-    byte[] key = Arrays.copyOf(prefix, prefix.length + suffix.length);
-    System.arraycopy(suffix, 0, key, prefix.length, suffix.length);
-    return key;
+  private static byte[] samplePrefix(String attempt, byte subtype) throws IOException {
+    return key(SAMPLE, attempt, subtype, null, null);
   }
 
-  private static byte[] samplePrefix(String attempt, byte subtype, String group) throws IOException {
-    return key(SAMPLE, attempt, group, subtype, null, null);
-  }
-
-  private static byte[] sampleKey(String attempt, byte subtype, String group, long timestamp,
+  private static byte[] sampleKey(String attempt, byte subtype, long timestamp,
       long index) throws IOException {
-    return key(SAMPLE, attempt, group, subtype, timestamp, index);
+    return key(SAMPLE, attempt, subtype, timestamp, index);
   }
 
   private static byte[] keyPrefix(byte kind, String attempt) throws IOException {
-    return key(kind, attempt, null, (byte) 0, null, null);
+    return key(kind, attempt, (byte) 0, null, null);
   }
 
   private static byte[] key(
-      byte kind, String attempt, String group, byte subtype, Long timestamp, Long index) throws IOException {
+      byte kind, String attempt, byte subtype, Long timestamp, Long index) throws IOException {
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     DataOutputStream out = new DataOutputStream(bytes);
     out.writeByte(kind); out.writeUTF(attempt);
-    if (group != null) { out.writeByte(subtype); out.writeUTF(group); }
+    if (kind == SAMPLE) out.writeByte(subtype);
     if (timestamp != null) out.writeLong(timestamp ^ Long.MIN_VALUE);
     if (index != null) out.writeLong(index ^ Long.MIN_VALUE);
     out.close();

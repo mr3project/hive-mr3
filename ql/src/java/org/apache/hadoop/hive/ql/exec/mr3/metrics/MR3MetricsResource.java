@@ -51,29 +51,15 @@ public class MR3MetricsResource {
     }
   }
 
-  @GET @Path("container-group")
-  public MR3MetricsDataManager.MetricsResponse containerGroup(
-      @QueryParam("attemptId") String attemptId, @QueryParam("containerGroupId") String group,
+  @GET @Path("container")
+  public MR3MetricsDataManager.MetricsResponse container(
+      @QueryParam("attemptId") String attemptId,
       @QueryParam("startTime") Long start, @QueryParam("endTime") Long end,
       @QueryParam("fields") String fields, @QueryParam("maxPoints") Integer maxPoints,
       @Context HttpServletRequest request) {
     try {
-      return manager.containerGroup(attemptId, group, required(start, "startTime"),
+      return manager.container(attemptId, required(start, "startTime"),
           required(end, "endTime"), maxPoints, fields, user(request));
-    } catch (MR3MetricsDataManager.AttemptNotFoundException e) {
-      throw new WebApplicationException(Response.Status.NOT_FOUND);
-    } catch (IllegalArgumentException e) {
-      throw new WebApplicationException(Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build());
-    } catch (Exception e) {
-      throw new WebApplicationException(Response.Status.INTERNAL_SERVER_ERROR);
-    }
-  }
-
-  @GET @Path("container-groups")
-  public java.util.Set<String> containerGroups(@QueryParam("attemptId") String attemptId,
-      @Context HttpServletRequest request) {
-    try {
-      return manager.containerGroups(attemptId, user(request));
     } catch (MR3MetricsDataManager.AttemptNotFoundException e) {
       throw new WebApplicationException(Response.Status.NOT_FOUND);
     } catch (IllegalArgumentException e) {

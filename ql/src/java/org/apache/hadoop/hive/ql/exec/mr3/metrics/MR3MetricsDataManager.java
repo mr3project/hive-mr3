@@ -71,25 +71,16 @@ public class MR3MetricsDataManager {
     int limit = validate(attemptId, start, end, maxPoints, user);
     Set<String> selected = parseFields(fields, APPLICATION_FIELDS);
     List<MR3MetricSnapshot> values = metricsStore.getApplicationSnapshots(attemptId, start, end, limit);
-    return response(attemptId, null, values, selected);
+    return response(attemptId, values, selected);
   }
 
-  public MetricsResponse containerGroup(
-      String attemptId, String group, long start, long end,
+  public MetricsResponse container(
+      String attemptId, long start, long end,
       Integer maxPoints, String fields, UserGroupInformation user) throws Exception {
-    if (group == null || group.isEmpty()) {
-      throw new IllegalArgumentException("containerGroupId is required");
-    }
-
     int limit = validate(attemptId, start, end, maxPoints, user);
     Set<String> selected = parseFields(fields, CONTAINER_FIELDS);
-    List<MR3MetricSnapshot> values = metricsStore.getContainerGroupSnapshots(attemptId, group, start, end, limit);
-    return response(attemptId, group, values, selected);
-  }
-
-  public Set<String> containerGroups(String attemptId, UserGroupInformation user) throws Exception {
-    validate(attemptId, 0L, 0L, 1, user);
-    return metricsStore.listContainerGroupIds(attemptId);
+    List<MR3MetricSnapshot> values = metricsStore.getContainerSnapshots(attemptId, start, end, limit);
+    return response(attemptId, values, selected);
   }
 
   private int validate(
@@ -126,7 +117,7 @@ public class MR3MetricsDataManager {
     return selected;
   }
 
-  private static MetricsResponse response(String attemptId, String group,
+  private static MetricsResponse response(String attemptId,
       List<MR3MetricSnapshot> values, Set<String> fields) {
     List<Map<String, Object>> snapshots = new ArrayList<>();
     for (MR3MetricSnapshot snapshot : values) {
@@ -160,7 +151,7 @@ public class MR3MetricsDataManager {
       }
       snapshots.add(value);
     }
-    return new MetricsResponse(attemptId, group, snapshots);
+    return new MetricsResponse(attemptId, snapshots);
   }
 
   private static void put(Map<String, Object> value, Set<String> fields, String name, Object field) {
@@ -194,12 +185,10 @@ public class MR3MetricsDataManager {
 
   public static final class MetricsResponse {
     public final String applicationAttemptId;
-    public final String containerGroupId;
     public final List<Map<String, Object>> snapshots;
 
-    MetricsResponse(String applicationAttemptId, String containerGroupId, List<Map<String, Object>> snapshots) {
+    MetricsResponse(String applicationAttemptId, List<Map<String, Object>> snapshots) {
       this.applicationAttemptId = applicationAttemptId;
-      this.containerGroupId = containerGroupId;
       this.snapshots = snapshots;
     }
   }
