@@ -38,10 +38,11 @@ public class MR3MetricsResource {
   public MR3MetricsDataManager.MetricsResponse application(
       @QueryParam("attemptId") String attemptId, @QueryParam("startTime") Long start,
       @QueryParam("endTime") Long end, @QueryParam("fields") String fields,
-      @QueryParam("maxPoints") Integer maxPoints, @Context HttpServletRequest request) {
+      @Context HttpServletRequest request) {
     try {
-      return manager.application(attemptId, required(start, "startTime"), required(end, "endTime"),
-          maxPoints, fields, user(request));
+      return manager.application(attemptId,
+          required(start, "startTime"), required(end, "endTime"),
+          fields, user(request));
     } catch (MR3MetricsDataManager.AttemptNotFoundException e) {
       throw new WebApplicationException(Response.Status.NOT_FOUND);
     } catch (IllegalArgumentException e) {
@@ -55,11 +56,12 @@ public class MR3MetricsResource {
   public MR3MetricsDataManager.MetricsResponse container(
       @QueryParam("attemptId") String attemptId,
       @QueryParam("startTime") Long start, @QueryParam("endTime") Long end,
-      @QueryParam("fields") String fields, @QueryParam("maxPoints") Integer maxPoints,
+      @QueryParam("fields") String fields,
       @Context HttpServletRequest request) {
     try {
-      return manager.container(attemptId, required(start, "startTime"),
-          required(end, "endTime"), maxPoints, fields, user(request));
+      return manager.container(attemptId,
+          required(start, "startTime"), required(end, "endTime"),
+          fields, user(request));
     } catch (MR3MetricsDataManager.AttemptNotFoundException e) {
       throw new WebApplicationException(Response.Status.NOT_FOUND);
     } catch (IllegalArgumentException e) {
@@ -70,7 +72,9 @@ public class MR3MetricsResource {
   }
 
   private static long required(Long value, String name) {
-    if (value == null) throw new IllegalArgumentException(name + " is required");
+    if (value == null) {
+      throw new IllegalArgumentException(name + " is required");
+    }
     return value;
   }
 

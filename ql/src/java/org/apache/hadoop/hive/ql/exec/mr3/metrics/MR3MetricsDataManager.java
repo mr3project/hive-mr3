@@ -59,6 +59,7 @@ public class MR3MetricsDataManager {
   private final int restMaxPoints;
 
   public MR3MetricsDataManager(MetricsStore metricsStore, ACLManager aclManager, int restMaxPoints) {
+    assert restMaxPoints > 0;
     this.metricsStore = metricsStore;
     this.aclManager = aclManager;
     this.restMaxPoints = restMaxPoints;
@@ -66,25 +67,28 @@ public class MR3MetricsDataManager {
 
   public MetricsResponse application(
       String attemptId,
-      long start, long end, Integer maxPoints,
+      long start, long end,
       String fields, UserGroupInformation user) throws Exception {
-    int limit = validate(attemptId, start, end, maxPoints, user);
+    validate(attemptId, start, end, user);
     Set<String> selected = parseFields(fields, APPLICATION_FIELDS);
-    List<MR3MetricSnapshot> values = metricsStore.getApplicationSnapshots(attemptId, start, end, limit);
+    List<MR3MetricSnapshot> values =
+        metricsStore.getApplicationSnapshots(attemptId, start, end, restMaxPoints);
     return response(attemptId, values, selected);
   }
 
   public MetricsResponse container(
-      String attemptId, long start, long end,
-      Integer maxPoints, String fields, UserGroupInformation user) throws Exception {
-    int limit = validate(attemptId, start, end, maxPoints, user);
+      String attemptId,
+      long start, long end,
+      String fields, UserGroupInformation user) throws Exception {
+    validate(attemptId, start, end, user);
     Set<String> selected = parseFields(fields, CONTAINER_FIELDS);
-    List<MR3MetricSnapshot> values = metricsStore.getContainerSnapshots(attemptId, start, end, limit);
+    List<MR3MetricSnapshot> values =
+        metricsStore.getContainerSnapshots(attemptId, start, end, restMaxPoints);
     return response(attemptId, values, selected);
   }
 
-  private int validate(
-      String attemptId, long start, long end, Integer requested, UserGroupInformation user) throws Exception {
+  private void validate(
+      String attemptId, long start, long end, UserGroupInformation user) throws Exception {
     if (attemptId == null || attemptId.isEmpty()) {
       throw new IllegalArgumentException("attemptId is required");
     }
@@ -92,15 +96,9 @@ public class MR3MetricsDataManager {
       throw new IllegalArgumentException("startTime must not exceed endTime");
     }
 
-    int limit = requested == null ? restMaxPoints : requested;
-    if (limit <= 0 || limit > restMaxPoints) {
-      throw new IllegalArgumentException("maxPoints must be between 1 and " + restMaxPoints);
-    }
-
     if (!aclManager.checkAMViewAccess(user) || !metricsStore.hasAttempt(attemptId)) {
       throw new AttemptNotFoundException();
     }
-    return limit;
   }
 
   private static Set<String> parseFields(String fields, Set<String> allowed) {
