@@ -27,8 +27,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -83,7 +85,7 @@ public class LeveldbMetricsStore implements MetricsStore {
       String attemptId, long fromIndex, List<MR3MetricSnapshot> snapshots) throws Exception {
     assert fromIndex >= 0;
     try (WriteBatch writes = db.createWriteBatch()) {
-      writes.put(attemptKey(attemptId), new byte[0]);
+      boolean hasAcceptedSnapshot = false;
 
       for (int i = 0; i < snapshots.size(); ++i) {
         MR3MetricSnapshot snapshot = snapshots.get(i);
@@ -99,6 +101,7 @@ public class LeveldbMetricsStore implements MetricsStore {
             continue;
           }
         }
+        hasAcceptedSnapshot = true;
 
         byte[] value = MetricProtoUtils.encode(snapshot);
         byte[] dedupKey = dedupKey(attemptId, snapshotIndex);
@@ -115,6 +118,9 @@ public class LeveldbMetricsStore implements MetricsStore {
         writes.put(sampleKey(
             attemptId, subtype, snapshot.timestampMillis(), snapshotIndex), value);
         writes.put(dedupKey, value);
+      }
+      if (hasAcceptedSnapshot) {
+        writes.put(attemptKey(attemptId), new byte[0]);
       }
       db.write(writes);
     }
@@ -203,18 +209,33 @@ public class LeveldbMetricsStore implements MetricsStore {
     }
     nextExpirationMillis = now + Math.min(TimeUnit.HOURS.toMillis(1), retentionMillis);
     long cutoff = System.currentTimeMillis() - retentionMillis;
-    try (DBIterator iterator = db.iterator(); WriteBatch deletes = db.createWriteBatch()) {
-      iterator.seek(new byte[] {SAMPLE});
-      while (iterator.hasNext()) {
-        Map.Entry<byte[], byte[]> entry = iterator.next();
-        if (entry.getKey()[0] != SAMPLE) break;
-        MR3MetricSnapshot snapshot = MetricProtoUtils.decode(entry.getValue());
-        if (snapshot.timestampMillis() < cutoff) {
-          deletes.delete(entry.getKey());
-          // Removing the dedup entry permits an expired sample to be inserted again only if
-          // the still-running publisher redelivers it; it will then expire on the next pass.
+    Set<String> retainedAttempts = new HashSet<>();
+    try (WriteBatch deletes = db.createWriteBatch()) {
+      try (DBIterator iterator = db.iterator()) {
+        iterator.seek(new byte[] {SAMPLE});
+        while (iterator.hasNext()) {
+          Map.Entry<byte[], byte[]> entry = iterator.next();
+          if (entry.getKey()[0] != SAMPLE) break;
           String attempt = readAttempt(entry.getKey());
-          deletes.delete(dedupKey(attempt, readIndex(entry.getKey())));
+          MR3MetricSnapshot snapshot = MetricProtoUtils.decode(entry.getValue());
+          if (snapshot.timestampMillis() < cutoff) {
+            deletes.delete(entry.getKey());
+            // Removing the dedup entry permits an expired sample to be inserted again only if
+            // the still-running publisher redelivers it; it will then expire on the next pass.
+            deletes.delete(dedupKey(attempt, readIndex(entry.getKey())));
+          } else {
+            retainedAttempts.add(attempt);
+          }
+        }
+      }
+      try (DBIterator iterator = db.iterator()) {
+        iterator.seek(new byte[] {ATTEMPT});
+        while (iterator.hasNext()) {
+          Map.Entry<byte[], byte[]> entry = iterator.next();
+          if (entry.getKey()[0] != ATTEMPT) break;
+          if (!retainedAttempts.contains(readAttempt(entry.getKey()))) {
+            deletes.delete(entry.getKey());
+          }
         }
       }
       db.write(deletes);
