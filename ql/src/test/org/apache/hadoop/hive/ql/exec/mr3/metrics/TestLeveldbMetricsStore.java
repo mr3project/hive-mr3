@@ -24,6 +24,7 @@ import com.datamonad.mr3.api.client.MR3MetricSnapshot;
 import java.io.File;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.junit.Rule;
@@ -80,6 +81,29 @@ public class TestLeveldbMetricsStore {
       store.appendBatch(attempt, 0L, Collections.singletonList(
           containerSnapshot(System.currentTimeMillis(), "unexpected-container-group")));
       assertFalse(store.hasAttempt(attempt));
+    } finally {
+      store.stop();
+    }
+  }
+
+  @Test
+  public void testScanReturnsEarliestMaxPoints() throws Exception {
+    HiveConf conf = createConf();
+    LeveldbMetricsStore store = new LeveldbMetricsStore();
+    store.initialize(conf);
+    try {
+      String attempt = "appattempt_3_1_1";
+      long now = System.currentTimeMillis();
+      store.appendBatch(attempt, 0L, Arrays.asList(
+          applicationSnapshot(now),
+          applicationSnapshot(now + 1),
+          applicationSnapshot(now + 2)));
+
+      List<MR3MetricSnapshot> snapshots = store.getApplicationSnapshots(
+          attempt, now, now + 2, 2);
+      assertEquals(2, snapshots.size());
+      assertEquals(now, snapshots.get(0).timestampMillis());
+      assertEquals(now + 1, snapshots.get(1).timestampMillis());
     } finally {
       store.stop();
     }

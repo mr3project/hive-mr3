@@ -24,10 +24,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -173,10 +171,10 @@ public class LeveldbMetricsStore implements MetricsStore {
     }
 
     byte[] prefix = samplePrefix(attemptId, subtype);
-    Deque<MR3MetricSnapshot> result = new ArrayDeque<>(maxPoints);
+    List<MR3MetricSnapshot> result = new ArrayList<>(maxPoints);
     try (DBIterator iterator = db.iterator()) {
       iterator.seek(sampleKey(attemptId, subtype, startTime, Long.MIN_VALUE));
-      while (iterator.hasNext()) {
+      while (iterator.hasNext() && result.size() < maxPoints) {
         Map.Entry<byte[], byte[]> entry = iterator.next();
         if (!startsWith(entry.getKey(), prefix)) {
           break;
@@ -186,15 +184,12 @@ public class LeveldbMetricsStore implements MetricsStore {
         if (snapshot.timestampMillis() > endTime) {
           break;
         }
-        result.addLast(snapshot);
-        if (result.size() > maxPoints) {
-          result.removeFirst();
-        }
+        result.add(snapshot);
         assert result.size() <= maxPoints;
       }
     }
 
-    return new ArrayList<>(result);
+    return result;
   }
 
   @Override

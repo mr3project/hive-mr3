@@ -28,9 +28,17 @@ public interface MetricsStore {
   void appendBatch(
       String applicationAttemptId, long fromIndex, List<MR3MetricSnapshot> snapshots) throws Exception;
 
+  /**
+   * Returns up to {@code maxPoints} of the earliest application snapshots in the inclusive time
+   * range, ordered chronologically.
+   */
   List<MR3MetricSnapshot> getApplicationSnapshots(
       String applicationAttemptId, long startTime, long endTime, int maxPoints) throws Exception;
 
+  /**
+   * Returns up to {@code maxPoints} of the earliest container snapshots in the inclusive time
+   * range, ordered chronologically.
+   */
   List<MR3MetricSnapshot> getContainerSnapshots(
       String applicationAttemptId, long startTime, long endTime, int maxPoints) throws Exception;
 
