@@ -93,6 +93,12 @@ public class MR3MetricsDataManager {
     if (attemptId == null || attemptId.isEmpty()) {
       throw new IllegalArgumentException("ApplicationAttemptID is required");
     }
+    if (start < 0) {
+      throw new IllegalArgumentException("startTime must not be negative");
+    }
+    if (end < 0) {
+      throw new IllegalArgumentException("endTime must not be negative");
+    }
     if (start > end) {
       throw new IllegalArgumentException("startTime must not exceed endTime");
     }
