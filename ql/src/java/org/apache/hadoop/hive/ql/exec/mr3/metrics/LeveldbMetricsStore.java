@@ -24,9 +24,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -172,28 +173,28 @@ public class LeveldbMetricsStore implements MetricsStore {
     }
 
     byte[] prefix = samplePrefix(attemptId, subtype);
-    List<MR3MetricSnapshot> result = new ArrayList<>();
+    Deque<MR3MetricSnapshot> result = new ArrayDeque<>(maxPoints);
     try (DBIterator iterator = db.iterator()) {
-      byte[] lastKey = sampleKey(attemptId, subtype, endTime, Long.MAX_VALUE);
-      byte[] exclusiveUpperBound = Arrays.copyOf(lastKey, lastKey.length + 1);
-      iterator.seek(exclusiveUpperBound);
-
-      while (iterator.hasPrev() && result.size() < maxPoints) {
-        Map.Entry<byte[], byte[]> entry = iterator.prev();
+      iterator.seek(sampleKey(attemptId, subtype, startTime, Long.MIN_VALUE));
+      while (iterator.hasNext()) {
+        Map.Entry<byte[], byte[]> entry = iterator.next();
         if (!startsWith(entry.getKey(), prefix)) {
           break;
         }
 
         MR3MetricSnapshot snapshot = MetricProtoUtils.decode(entry.getValue());
-        if (snapshot.timestampMillis() < startTime) {
+        if (snapshot.timestampMillis() > endTime) {
           break;
         }
-        result.add(snapshot);
+        result.addLast(snapshot);
+        if (result.size() > maxPoints) {
+          result.removeFirst();
+        }
+        assert result.size() <= maxPoints;
       }
     }
-    Collections.reverse(result);
 
-    return result;
+    return new ArrayList<>(result);
   }
 
   @Override
