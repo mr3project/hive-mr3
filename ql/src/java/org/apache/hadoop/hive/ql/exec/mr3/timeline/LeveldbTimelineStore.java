@@ -320,7 +320,7 @@ public class LeveldbTimelineStore implements TimelineStore {
     public EntityDeletionThread(Configuration conf) {
       ttl = HiveConf.getTimeVar(conf,
           HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_RETENTION_DURATION, TimeUnit.MILLISECONDS);
-      ttlInterval = Math.min(TimeUnit.HOURS.toMillis(1), ttl);
+      ttlInterval = TimeUnit.HOURS.toMillis(1);
       LOG.info("Starting deletion thread with ttl " + ttl + " and cycle " +
           "interval " + ttlInterval);
     }
