@@ -66,7 +66,7 @@ public class MR3TimelineIngestionService implements AutoCloseable {
   public MR3TimelineIngestionService(TimelineDataManager timelineDataManager, HiveConf conf) {
     this.timelineDataManager = timelineDataManager;
     this.ingestionIntervalMillis = conf.getTimeVar(
-        HiveConf.ConfVars.HIVE_MR3_TIMELINE_INGESTION_INTERVAL, TimeUnit.MILLISECONDS);
+        HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_INGESTION_INTERVAL, TimeUnit.MILLISECONDS);
   }
 
   public synchronized void start() {
