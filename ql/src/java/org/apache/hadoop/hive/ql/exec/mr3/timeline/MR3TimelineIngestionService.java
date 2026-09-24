@@ -54,11 +54,13 @@ public class MR3TimelineIngestionService implements AutoCloseable {
 
   private final TimelineDataManager timelineDataManager;
   private final long ingestionIntervalMillis;
+  private final Object ingestionOperationLock = new Object();
   private ScheduledExecutorService executorService;
   private ScheduledFuture<?> ingestionTask;
   private MR3SessionClient mr3SessionClient;
   private String applicationAttemptId;
   private long fromIndex = 0L;
+  private boolean stopping;
 
   public MR3TimelineIngestionService(TimelineDataManager timelineDataManager, HiveConf conf) {
     this.timelineDataManager = timelineDataManager;
@@ -111,26 +113,32 @@ public class MR3TimelineIngestionService implements AutoCloseable {
     boolean receivedTerminalEntity = false;
     int numEntities;
     do {
-      scala.collection.immutable.List<TimelineEntity> timelineEntities =
-          mr3SessionClient.getTimelineDataEntities(fromIndex);
-      List<TimelineEntity> entities =
-          JavaConverters.seqAsJavaListConverter(timelineEntities).asJava();
-      numEntities = entities.size();
-      if (numEntities > 0) {
-        appendTimelineEntities(applicationAttemptId, entities);
-        for (TimelineEntity entity : entities) {
-          if (EntityType.MR3_APP_ATTEMPT().equals(entity.getEntityType()) &&
-              entity.getOtherInfo().containsKey(EntityKey.endTime())) {
-            synchronized (APP_ATTEMPT_TERMINATION_LOCK) {
-              APP_ATTEMPT_TERMINATED.put(entity.getEntityId(), true);
-              APP_ATTEMPT_TERMINATION_LOCK.notifyAll();
-            }
-            if (entity.getEntityId().equals(applicationAttemptId)) {
-              receivedTerminalEntity = true;
+      synchronized (ingestionOperationLock) {
+        if (stopping) {
+          return;
+        }
+
+        scala.collection.immutable.List<TimelineEntity> timelineEntities =
+            mr3SessionClient.getTimelineDataEntities(fromIndex);
+        List<TimelineEntity> entities =
+            JavaConverters.seqAsJavaListConverter(timelineEntities).asJava();
+        numEntities = entities.size();
+        if (numEntities > 0) {
+          appendTimelineEntities(applicationAttemptId, entities);
+          for (TimelineEntity entity : entities) {
+            if (EntityType.MR3_APP_ATTEMPT().equals(entity.getEntityType()) &&
+                entity.getOtherInfo().containsKey(EntityKey.endTime())) {
+              synchronized (APP_ATTEMPT_TERMINATION_LOCK) {
+                APP_ATTEMPT_TERMINATED.put(entity.getEntityId(), true);
+                APP_ATTEMPT_TERMINATION_LOCK.notifyAll();
+              }
+              if (entity.getEntityId().equals(applicationAttemptId)) {
+                receivedTerminalEntity = true;
+              }
             }
           }
+          fromIndex += numEntities;
         }
-        fromIndex += numEntities;
       }
     } while (numEntities == MAX_NUM_ENTITIES_PER_REQUEST);
     if (receivedTerminalEntity) {
@@ -166,16 +174,19 @@ public class MR3TimelineIngestionService implements AutoCloseable {
 
   @Override
   public synchronized void close() {
+    synchronized (ingestionOperationLock) {
+      stopping = true;
+    }
     synchronized (APP_ATTEMPT_TERMINATION_LOCK) {
       ingestionServiceRunning = false;
       APP_ATTEMPT_TERMINATION_LOCK.notifyAll();
     }
     if (ingestionTask != null) {
-      ingestionTask.cancel(true);
+      ingestionTask.cancel(false);
       ingestionTask = null;
     }
     if (executorService != null) {
-      executorService.shutdownNow();
+      executorService.shutdown();
       try {
         if (!executorService.awaitTermination(
             ingestionIntervalMillis, TimeUnit.MILLISECONDS)) {
