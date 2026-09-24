@@ -47,6 +47,7 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -159,16 +160,6 @@ public class LeveldbTimelineStore implements TimelineStore {
   @SuppressWarnings("unchecked")
   @Override
   public void initialize(Configuration conf) throws Exception {
-    Preconditions.checkArgument(conf.getLong(
-        YarnConfiguration.TIMELINE_SERVICE_TTL_MS,
-        YarnConfiguration.DEFAULT_TIMELINE_SERVICE_TTL_MS) > 0,
-        "%s property value should be greater than zero",
-        YarnConfiguration.TIMELINE_SERVICE_TTL_MS);
-    Preconditions.checkArgument(conf.getLong(
-        YarnConfiguration.TIMELINE_SERVICE_LEVELDB_TTL_INTERVAL_MS,
-        YarnConfiguration.DEFAULT_TIMELINE_SERVICE_LEVELDB_TTL_INTERVAL_MS) > 0,
-        "%s property value should be greater than zero",
-        YarnConfiguration.TIMELINE_SERVICE_LEVELDB_TTL_INTERVAL_MS);
     Preconditions.checkArgument(conf.getLong(
         YarnConfiguration.TIMELINE_SERVICE_LEVELDB_READ_CACHE_SIZE,
         YarnConfiguration.DEFAULT_TIMELINE_SERVICE_LEVELDB_READ_CACHE_SIZE) >= 0,
@@ -327,11 +318,9 @@ public class LeveldbTimelineStore implements TimelineStore {
     private final long ttlInterval;
 
     public EntityDeletionThread(Configuration conf) {
-      ttl  = conf.getLong(YarnConfiguration.TIMELINE_SERVICE_TTL_MS,
-          YarnConfiguration.DEFAULT_TIMELINE_SERVICE_TTL_MS);
-      ttlInterval = conf.getLong(
-          YarnConfiguration.TIMELINE_SERVICE_LEVELDB_TTL_INTERVAL_MS,
-          YarnConfiguration.DEFAULT_TIMELINE_SERVICE_LEVELDB_TTL_INTERVAL_MS);
+      ttl = HiveConf.getTimeVar(conf,
+          HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_RETENTION_DURATION, TimeUnit.MILLISECONDS);
+      ttlInterval = Math.min(TimeUnit.HOURS.toMillis(1), ttl);
       LOG.info("Starting deletion thread with ttl " + ttl + " and cycle " +
           "interval " + ttlInterval);
     }
