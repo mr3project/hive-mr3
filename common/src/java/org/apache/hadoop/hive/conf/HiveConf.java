@@ -6039,6 +6039,9 @@ public class HiveConf extends Configuration {
     HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK(
       "hive.mr3.ui.timeline-service.leveldb-timeline-store.dir.umask", "0700",
       "Directory umask for the MR3-UI LevelDB timeline store."),
+    HIVE_MR3_UI_TIMELINE_RETENTION_DURATION("hive.mr3.ui.timeline.retention.duration", "7d",
+      new TimeValidator(TimeUnit.HOURS, 1L, true, Long.MAX_VALUE, false),
+      "Keep native MR3 timeline entries for this duration."),
     HIVE_MR3_UI_METRICS_INGESTION_INTERVAL("hive.mr3.ui.metrics.ingestion.interval", "1s",
       new TimeValidator(TimeUnit.SECONDS, 0L, false, Long.MAX_VALUE, false),
       "Interval between native MR3 metrics ingestion attempts."),
