@@ -6028,25 +6028,33 @@ public class HiveConf extends Configuration {
     HIVE_MR3_UI_QUERY_RESULT_MAX_ROWS("hive.mr3.ui.query.result.max.rows", 100,
       new RangeValidator(1, Integer.MAX_VALUE),
       "Maximum number of query-result rows included in an MR3-UI DAG preview."),
-    HIVE_MR3_UI_TIMELINE_STORE_TYPE("hive.mr3.ui.timeline.store.type", "memory",
-      new StringSet("memory", "leveldb"), "Timeline store used by MR3-UI."),
-    HIVE_MR3_TIMELINE_INGESTION_INTERVAL("hive.mr3.timeline.ingestion.interval", "1s",
+    // MR3 timeline
+    HIVE_MR3_UI_TIMELINE_INGESTION_INTERVAL("hive.mr3.ui.timeline.ingestion.interval", "1s",
       new TimeValidator(TimeUnit.SECONDS, 0L, false, Long.MAX_VALUE, false),
       "Interval between MR3 timeline ingestion attempts."),
-    HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_PATH(
-      "hive.mr3.ui.timeline-service.leveldb-timeline-store.path", "/tmp/leveldb/",
+    HIVE_MR3_UI_TIMELINE_STORE_TYPE("hive.mr3.ui.timeline.store.type", "memory",
+      new StringSet("memory", "leveldb"), "Timeline store used by MR3-UI."),
+    HIVE_MR3_UI_TIMELINE_LEVELDB_PATH(
+      "hive.mr3.ui.timeline.leveldb.path", "/tmp/mr3-timeline/",
       "Local base directory for the MR3-UI LevelDB timeline store."),
-    HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK(
-      "hive.mr3.ui.timeline-service.leveldb-timeline-store.dir.umask", "0700",
+    HIVE_MR3_UI_TIMELINE_LEVELDB_DIR_UMASK(
+      "hive.mr3.ui.timeline.leveldb.dir.umask", "0700",
       "Directory umask for the MR3-UI LevelDB timeline store."),
+    HIVE_MR3_UI_TIMELINE_RETENTION_DURATION(
+      "hive.mr3.ui.timeline.retention.duration", "7d",
+      new TimeValidator(TimeUnit.HOURS, 1L, true, Long.MAX_VALUE, false),
+      "Keep native MR3 timeline entries for this duration."),
+    // MR3 metrics
     HIVE_MR3_UI_METRICS_INGESTION_INTERVAL("hive.mr3.ui.metrics.ingestion.interval", "1s",
       new TimeValidator(TimeUnit.SECONDS, 0L, false, Long.MAX_VALUE, false),
       "Interval between native MR3 metrics ingestion attempts."),
     HIVE_MR3_UI_METRICS_STORE_TYPE("hive.mr3.ui.metrics.store.type", "leveldb",
       new StringSet("leveldb"), "Native MR3 metrics store implementation."),
-    HIVE_MR3_UI_METRICS_LEVELDB_PATH("hive.mr3.ui.metrics.leveldb.path", "/tmp/mr3-metrics/",
+    HIVE_MR3_UI_METRICS_LEVELDB_PATH(
+      "hive.mr3.ui.metrics.leveldb.path", "/tmp/mr3-metrics/",
       "Local path for the native MR3 metrics LevelDB store."),
-    HIVE_MR3_UI_METRICS_RETENTION_DURATION("hive.mr3.ui.metrics.retention.duration", "7d",
+    HIVE_MR3_UI_METRICS_RETENTION_DURATION(
+      "hive.mr3.ui.metrics.retention.duration", "7d",
       new TimeValidator(TimeUnit.HOURS, 1L, true, Long.MAX_VALUE, false),
       "Keep native MR3 metric entries for this duration."),
     HIVE_MR3_UI_METRICS_REST_MAX_POINTS("hive.mr3.ui.metrics.rest.max.points", 1000,

@@ -47,6 +47,7 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -160,16 +161,6 @@ public class LeveldbTimelineStore implements TimelineStore {
   @Override
   public void initialize(Configuration conf) throws Exception {
     Preconditions.checkArgument(conf.getLong(
-        YarnConfiguration.TIMELINE_SERVICE_TTL_MS,
-        YarnConfiguration.DEFAULT_TIMELINE_SERVICE_TTL_MS) > 0,
-        "%s property value should be greater than zero",
-        YarnConfiguration.TIMELINE_SERVICE_TTL_MS);
-    Preconditions.checkArgument(conf.getLong(
-        YarnConfiguration.TIMELINE_SERVICE_LEVELDB_TTL_INTERVAL_MS,
-        YarnConfiguration.DEFAULT_TIMELINE_SERVICE_LEVELDB_TTL_INTERVAL_MS) > 0,
-        "%s property value should be greater than zero",
-        YarnConfiguration.TIMELINE_SERVICE_LEVELDB_TTL_INTERVAL_MS);
-    Preconditions.checkArgument(conf.getLong(
         YarnConfiguration.TIMELINE_SERVICE_LEVELDB_READ_CACHE_SIZE,
         YarnConfiguration.DEFAULT_TIMELINE_SERVICE_LEVELDB_READ_CACHE_SIZE) >= 0,
         "%s property value should be greater than or equal to zero",
@@ -193,8 +184,8 @@ public class LeveldbTimelineStore implements TimelineStore {
 
     JniDBFactory factory = new JniDBFactory();
     Path dbPath = new Path(conf.get(
-        HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_PATH.varname,
-        HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_PATH.defaultStrVal), FILENAME);
+        HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_LEVELDB_PATH.varname,
+        HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_LEVELDB_PATH.defaultStrVal), FILENAME);
 
     FileSystem localFS = null;
     try {
@@ -205,8 +196,8 @@ public class LeveldbTimelineStore implements TimelineStore {
               "timeline store " + dbPath);
         }
         short umask = Short.parseShort(conf.get(
-            HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK.varname,
-            HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_SERVICE_LEVELDB_DIR_UMASK.defaultStrVal), 8);
+            HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_LEVELDB_DIR_UMASK.varname,
+            HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_LEVELDB_DIR_UMASK.defaultStrVal), 8);
         FsPermission LEVELDB_DIR_UMASK = FsPermission.createImmutable(umask);
         localFS.setPermission(dbPath, LEVELDB_DIR_UMASK);
       }
@@ -327,13 +318,10 @@ public class LeveldbTimelineStore implements TimelineStore {
     private final long ttlInterval;
 
     public EntityDeletionThread(Configuration conf) {
-      ttl  = conf.getLong(YarnConfiguration.TIMELINE_SERVICE_TTL_MS,
-          YarnConfiguration.DEFAULT_TIMELINE_SERVICE_TTL_MS);
-      ttlInterval = conf.getLong(
-          YarnConfiguration.TIMELINE_SERVICE_LEVELDB_TTL_INTERVAL_MS,
-          YarnConfiguration.DEFAULT_TIMELINE_SERVICE_LEVELDB_TTL_INTERVAL_MS);
-      LOG.info("Starting deletion thread with ttl " + ttl + " and cycle " +
-          "interval " + ttlInterval);
+      ttl = HiveConf.getTimeVar(conf,
+          HiveConf.ConfVars.HIVE_MR3_UI_TIMELINE_RETENTION_DURATION, TimeUnit.MILLISECONDS);
+      ttlInterval = TimeUnit.HOURS.toMillis(1);
+      LOG.info("Starting deletion thread with ttl {} and cycle interval {}", ttl, ttlInterval);
     }
 
     @Override
