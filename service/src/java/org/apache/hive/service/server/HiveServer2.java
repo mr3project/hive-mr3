@@ -177,7 +177,7 @@ public class HiveServer2 extends CompositeService {
   private ThriftCLIService thriftCLIService;
   private CuratorFramework zKClientForPrivSync = null;
   private HttpServer webServer; // Web UI
-  private MR3TimelineMetricsService mr3TimelineService;
+  private MR3TimelineMetricsService mr3TimelineMetricsService;
   private TezSessionPoolManager tezSessionPoolManager;
   private WorkloadManager wm;
   private PamAuthenticator pamAuthenticator;
@@ -445,10 +445,10 @@ public class HiveServer2 extends CompositeService {
           webServer = builder.build();
           webServer.addServlet("query_page", "/query_page.html", QueryProfileServlet.class);
           webServer.addServlet("api", "/api/*", QueriesRESTfulAPIServlet.class);
-          mr3TimelineService = new MR3TimelineMetricsService(hiveConf);
-          mr3TimelineService.initialize(webServer);
+          mr3TimelineMetricsService = new MR3TimelineMetricsService(hiveConf);
+          mr3TimelineMetricsService.initialize(webServer);
           if (!activePassiveHA) {
-            mr3TimelineService.activate();
+            mr3TimelineMetricsService.activate();
           }
           if (ldapAuthService != null) {
             webServer.addServlet("login", "/login", new ServletHolder(new LoginServlet(ldapAuthService)));
@@ -934,9 +934,9 @@ public class HiveServer2 extends CompositeService {
     public void isLeader() {
       LOG.info("HS2 instance {} became the LEADER. Starting/Reconnecting tez sessions..", hiveServer2.serviceUri);
       hiveServer2.isLeader.set(true);
-      if (hiveServer2.mr3TimelineService != null) {
+      if (hiveServer2.mr3TimelineMetricsService != null) {
         try {
-          hiveServer2.mr3TimelineService.activate();
+          hiveServer2.mr3TimelineMetricsService.activate();
         } catch (IOException e) {
           throw new RuntimeException("Failed to start MR3 timeline writer", e);
         }
@@ -963,8 +963,8 @@ public class HiveServer2 extends CompositeService {
       LOG.info("HS2 instance {} LOST LEADERSHIP. Stopping/Disconnecting tez sessions..", hiveServer2.serviceUri);
       // do not call hiveServer2.closeHiveSessions() because there is no need to close active Beeline connections
       hiveServer2.isLeader.set(false);
-      if (hiveServer2.mr3TimelineService != null) {
-        hiveServer2.mr3TimelineService.deactivate();
+      if (hiveServer2.mr3TimelineMetricsService != null) {
+        hiveServer2.mr3TimelineMetricsService.deactivate();
       }
       if (!hiveServer2.getHiveConf().getVar(ConfVars.HIVE_EXECUTION_ENGINE).equals("tez")) {
         hiveServer2.closeAndDisallowHiveSessions();
@@ -1208,8 +1208,8 @@ public class HiveServer2 extends CompositeService {
       }
     }
 
-    if (mr3TimelineService != null) {
-      mr3TimelineService.stop();
+    if (mr3TimelineMetricsService != null) {
+      mr3TimelineMetricsService.stop();
     }
 
     if (cliService != null) {

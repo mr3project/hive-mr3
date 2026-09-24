@@ -44,6 +44,9 @@ public class MR3MetricsIngestionService implements AutoCloseable {
   private String applicationAttemptId;
   private long fromIndex = 0L;
 
+  private final Object ingestionOperationLock = new Object();
+  private boolean stopping;
+
   public MR3MetricsIngestionService(MetricsStore store, HiveConf conf) {
     this.store = store;
     ingestionIntervalMillis = conf.getTimeVar(
@@ -74,7 +77,12 @@ public class MR3MetricsIngestionService implements AutoCloseable {
   }
 
   private void ingestMetric() throws Exception {
-    store.expire();
+    synchronized (ingestionOperationLock) {
+      if (stopping) {
+        return;
+      }
+      store.expire();
+    }
 
     MR3SessionClient mr3SessionClient =
         MR3SessionManagerImpl.getInstance().getActiveMR3SessionClientForMR3UI();
@@ -89,26 +97,35 @@ public class MR3MetricsIngestionService implements AutoCloseable {
     }
 
     while (true) {
-      scala.collection.immutable.List<MR3MetricSnapshot> received =
-          mr3SessionClient.getMetricSnapshots(fromIndex);
-      List<MR3MetricSnapshot> snapshots = JavaConverters.seqAsJavaListConverter(
-          received).asJava();
-      if (snapshots.isEmpty()) {
-        return;
+      synchronized (ingestionOperationLock) {
+        if (stopping) {
+          return;
+        }
+
+        scala.collection.immutable.List<MR3MetricSnapshot> received =
+            mr3SessionClient.getMetricSnapshots(fromIndex);
+        List<MR3MetricSnapshot> snapshots = JavaConverters.seqAsJavaListConverter(
+            received).asJava();
+        if (snapshots.isEmpty()) {
+          return;
+        }
+        store.appendBatch(applicationAttemptId, fromIndex, snapshots);
+        fromIndex += snapshots.size();
       }
-      store.appendBatch(applicationAttemptId, fromIndex, snapshots);
-      fromIndex += snapshots.size();
     }
   }
 
   @Override
   public synchronized void close() {
+    synchronized (ingestionOperationLock) {
+      stopping = true;
+    }
     if (ingestionTask != null) {
-      ingestionTask.cancel(true);
+      ingestionTask.cancel(false);
       ingestionTask = null;
     }
     if (executorService != null) {
-      executorService.shutdownNow();
+      executorService.shutdown();
       try {
         executorService.awaitTermination(ingestionIntervalMillis, TimeUnit.MILLISECONDS);
       } catch (InterruptedException e) {
