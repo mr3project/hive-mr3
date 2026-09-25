@@ -21,8 +21,6 @@ package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 import com.datamonad.mr3.api.client.ApplicationMetricSnapshot;
 import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
 import com.datamonad.mr3.api.client.MR3MetricSnapshot;
-import com.datamonad.mr3.client.DAGClientHandlerProtocolRPC.ApplicationMetricSnapshotProto;
-import com.datamonad.mr3.client.DAGClientHandlerProtocolRPC.ContainerGroupMetricSnapshotProto;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -35,9 +33,7 @@ final class MetricProtoUtils {
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
     if (snapshot instanceof ApplicationMetricSnapshot) {
       ApplicationMetricSnapshot s = (ApplicationMetricSnapshot) snapshot;
-      bytes.write(LeveldbMetricsStore.APPLICATION_SUBTYPE);
-      ApplicationMetricSnapshotProto.newBuilder()
-          .setTimestampMillis(s.timestampMillis())
+      MR3Metrics.ApplicationSnapshot.newBuilder()
           .setRunningDags(s.runningDags())
           .setTotalDags(s.totalDags())
           .setSucceededDags(s.succeededDags())
@@ -48,10 +44,7 @@ final class MetricProtoUtils {
     } else {
       ContainerGroupMetricSnapshot s = (ContainerGroupMetricSnapshot) snapshot;
       assert DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME.equals(s.containerGroupId());
-      bytes.write(LeveldbMetricsStore.CONTAINER_GROUP_SUBTYPE);
-      ContainerGroupMetricSnapshotProto.newBuilder()
-          .setTimestampMillis(s.timestampMillis())
-          .setContainerGroupId(s.containerGroupId())
+      MR3Metrics.ContainerGroupSnapshot.newBuilder()
           .setContainers(s.containers())
           .setQueuedTasks(s.queuedTasks())
           .setRunningTasks(s.runningTasks())
@@ -74,43 +67,16 @@ final class MetricProtoUtils {
     return bytes.toByteArray();
   }
 
-  static MR3MetricSnapshot decode(byte[] bytes) throws IOException {
-    if (bytes.length == 0) {
-      throw new IOException("Empty metric snapshot payload");
+  static MetricSnapshotMessage decode(byte subtype, long timestampMillis, byte[] bytes)
+      throws IOException {
+    ByteArrayInputStream input = new ByteArrayInputStream(bytes);
+    if (subtype == LeveldbMetricsStore.APPLICATION_SUBTYPE) {
+      MR3Metrics.ApplicationSnapshot s = MR3Metrics.ApplicationSnapshot.parseFrom(input);
+      return new MetricSnapshotMessage(timestampMillis, s);
+    } else if (subtype == LeveldbMetricsStore.CONTAINER_GROUP_SUBTYPE) {
+      MR3Metrics.ContainerGroupSnapshot s = MR3Metrics.ContainerGroupSnapshot.parseFrom(input);
+      return new MetricSnapshotMessage(timestampMillis, s);
     }
-    ByteArrayInputStream input = new ByteArrayInputStream(bytes, 1, bytes.length - 1);
-    if (bytes[0] == LeveldbMetricsStore.APPLICATION_SUBTYPE) {
-      ApplicationMetricSnapshotProto s = ApplicationMetricSnapshotProto.parseFrom(input);
-      return new ApplicationMetricSnapshot(
-          s.getTimestampMillis(),
-          s.getRunningDags(),
-          s.getTotalDags(),
-          s.getSucceededDags(),
-          s.getFailedDags(),
-          s.getKilledDags());
-    } else if (bytes[0] == LeveldbMetricsStore.CONTAINER_GROUP_SUBTYPE) {
-      ContainerGroupMetricSnapshotProto s = ContainerGroupMetricSnapshotProto.parseFrom(input);
-      assert DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME.equals(s.getContainerGroupId());
-      return new ContainerGroupMetricSnapshot(
-          s.getTimestampMillis(),
-          s.getContainerGroupId(),
-          s.getContainers(),
-          s.getQueuedTasks(),
-          s.getRunningTasks(),
-          s.getNodes(),
-          s.getHeapBytesMax(),
-          s.getHeapBytesUsed(),
-          s.getHeapWindowBytesMax(),
-          s.getHeapWindowBytesUsed(),
-          s.getHeapWindowUsagePercent(),
-          s.getAutoScaleOutThresholdPercent(),
-          s.getAutoScaleInThresholdPercent(),
-          s.getContainersTotal(),
-          s.getCompletedTasksTotal(),
-          s.getSucceededTasksTotal(),
-          s.getFailedTasksTotal(),
-          s.getKilledTasksTotal());
-    }
-    throw new IOException("Unknown metric snapshot type: " + bytes[0]);
+    throw new IOException("Unknown metric snapshot type: " + subtype);
   }
 }

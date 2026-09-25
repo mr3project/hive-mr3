@@ -25,7 +25,6 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -52,7 +51,6 @@ public class LeveldbMetricsStore implements MetricsStore {
   public static final byte CONTAINER_GROUP_SUBTYPE = 2;
 
   private static final byte SAMPLE = 'S';
-  private static final byte DEDUP = 'D';
   private static final byte ATTEMPT = 'A';
 
   private DB db;
@@ -103,20 +101,9 @@ public class LeveldbMetricsStore implements MetricsStore {
         hasAcceptedSnapshot = true;
 
         byte[] value = MetricProtoUtils.encode(snapshot);
-        byte[] dedupKey = dedupKey(attemptId, snapshotIndex);
-        byte[] oldValue = db.get(dedupKey);
-        if (oldValue != null) {
-          if (!Arrays.equals(oldValue, value)) {
-            throw new IOException("Conflicting metric snapshot for ingestion index " +
-                snapshotIndex + " in " + attemptId);
-          }
-          continue;
-        }
-
         byte subtype = (byte) (isContainer ? CONTAINER_GROUP_SUBTYPE : APPLICATION_SUBTYPE);
         writes.put(sampleKey(
             attemptId, subtype, snapshot.timestampMillis(), snapshotIndex), value);
-        writes.put(dedupKey, value);
       }
       if (hasAcceptedSnapshot) {
         writes.put(attemptKey(attemptId), new byte[0]);
@@ -127,43 +114,44 @@ public class LeveldbMetricsStore implements MetricsStore {
   }
 
   @Override
-  public synchronized List<MR3MetricSnapshot> getApplicationSnapshots(
+  public synchronized List<MetricSnapshotMessage> getApplicationSnapshots(
       String attemptId, long startTime, long endTime, int maxPoints) throws Exception {
     return scan(attemptId, APPLICATION_SUBTYPE, startTime, endTime, maxPoints);
   }
 
   @Override
-  public synchronized List<MR3MetricSnapshot> getContainerSnapshots(
+  public synchronized List<MetricSnapshotMessage> getContainerSnapshots(
       String attemptId, long startTime, long endTime, int maxPoints) throws Exception {
     return scan(attemptId, CONTAINER_GROUP_SUBTYPE, startTime, endTime, maxPoints);
   }
 
   @Override
-  public synchronized MR3MetricSnapshot getLatestApplicationSnapshot(String attemptId)
+  public synchronized MetricSnapshotMessage getLatestApplicationSnapshot(String attemptId)
       throws Exception {
     return latest(attemptId, APPLICATION_SUBTYPE);
   }
 
   @Override
-  public synchronized MR3MetricSnapshot getLatestContainerSnapshot(String attemptId) throws Exception {
+  public synchronized MetricSnapshotMessage getLatestContainerSnapshot(String attemptId)
+      throws Exception {
     return latest(attemptId, CONTAINER_GROUP_SUBTYPE);
   }
 
-  private MR3MetricSnapshot latest(String attemptId, byte subtype) throws Exception {
+  private MetricSnapshotMessage latest(String attemptId, byte subtype) throws Exception {
     byte[] prefix = samplePrefix(attemptId, subtype);
-    MR3MetricSnapshot latest = null;
+    MetricSnapshotMessage latest = null;
     try (DBIterator iterator = db.iterator()) {
       iterator.seek(prefix);
       while (iterator.hasNext()) {
         Map.Entry<byte[], byte[]> entry = iterator.next();
         if (!startsWith(entry.getKey(), prefix)) break;
-        latest = MetricProtoUtils.decode(entry.getValue());
+        latest = MetricProtoUtils.decode(subtype, readTimestamp(entry.getKey()), entry.getValue());
       }
     }
     return latest;
   }
 
-  private List<MR3MetricSnapshot> scan(
+  private List<MetricSnapshotMessage> scan(
       String attemptId, byte subtype,
       long startTime, long endTime, int maxPoints) throws Exception {
     if (maxPoints <= 0) {
@@ -171,7 +159,7 @@ public class LeveldbMetricsStore implements MetricsStore {
     }
 
     byte[] prefix = samplePrefix(attemptId, subtype);
-    List<MR3MetricSnapshot> result = new ArrayList<>(maxPoints);
+    List<MetricSnapshotMessage> result = new ArrayList<>(maxPoints);
     try (DBIterator iterator = db.iterator()) {
       iterator.seek(sampleKey(attemptId, subtype, startTime, Long.MIN_VALUE));
       while (iterator.hasNext() && result.size() < maxPoints) {
@@ -180,11 +168,11 @@ public class LeveldbMetricsStore implements MetricsStore {
           break;
         }
 
-        MR3MetricSnapshot snapshot = MetricProtoUtils.decode(entry.getValue());
-        if (snapshot.timestampMillis() > endTime) {
+        long timestampMillis = readTimestamp(entry.getKey());
+        if (timestampMillis > endTime) {
           break;
         }
-        result.add(snapshot);
+        result.add(MetricProtoUtils.decode(subtype, timestampMillis, entry.getValue()));
         assert result.size() <= maxPoints;
       }
     }
@@ -213,12 +201,8 @@ public class LeveldbMetricsStore implements MetricsStore {
           Map.Entry<byte[], byte[]> entry = iterator.next();
           if (entry.getKey()[0] != SAMPLE) break;
           String attempt = readAttempt(entry.getKey());
-          MR3MetricSnapshot snapshot = MetricProtoUtils.decode(entry.getValue());
-          if (snapshot.timestampMillis() < cutoff) {
+          if (readTimestamp(entry.getKey()) < cutoff) {
             deletes.delete(entry.getKey());
-            // Removing the dedup entry permits an expired sample to be inserted again only if
-            // the still-running publisher redelivers it; it will then expire on the next pass.
-            deletes.delete(dedupKey(attempt, readIndex(entry.getKey())));
           } else {
             retainedAttempts.add(attempt);
           }
@@ -248,10 +232,6 @@ public class LeveldbMetricsStore implements MetricsStore {
 
   private static byte[] attemptKey(String attempt) throws IOException {
     return keyPrefix(ATTEMPT, attempt);
-  }
-
-  private static byte[] dedupKey(String attempt, long index) throws IOException {
-    return key(DEDUP, attempt, (byte) 0, 0L, index);
   }
 
   private static byte[] samplePrefix(String attempt, byte subtype) throws IOException {
@@ -289,10 +269,10 @@ public class LeveldbMetricsStore implements MetricsStore {
     return new java.io.DataInputStream(new java.io.ByteArrayInputStream(key, 1, key.length - 1)).readUTF();
   }
 
-  private static long readIndex(byte[] key) throws IOException {
-    assert key.length >= Long.BYTES;
+  private static long readTimestamp(byte[] key) throws IOException {
+    assert key.length >= 2 * Long.BYTES;
     return new java.io.DataInputStream(new java.io.ByteArrayInputStream(
-        key, key.length - Long.BYTES, Long.BYTES)).readLong() ^ Long.MIN_VALUE;
+        key, key.length - 2 * Long.BYTES, Long.BYTES)).readLong() ^ Long.MIN_VALUE;
   }
 
   private static boolean startsWith(byte[] value, byte[] prefix) {

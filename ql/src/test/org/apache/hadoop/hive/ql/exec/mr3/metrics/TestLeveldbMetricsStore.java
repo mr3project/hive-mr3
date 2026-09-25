@@ -99,11 +99,52 @@ public class TestLeveldbMetricsStore {
           applicationSnapshot(now + 1),
           applicationSnapshot(now + 2)));
 
-      List<MR3MetricSnapshot> snapshots = store.getApplicationSnapshots(
+      List<MetricSnapshotMessage> snapshots = store.getApplicationSnapshots(
           attempt, now, now + 2, 2);
       assertEquals(2, snapshots.size());
       assertEquals(now, snapshots.get(0).timestampMillis());
       assertEquals(now + 1, snapshots.get(1).timestampMillis());
+    } finally {
+      store.stop();
+    }
+  }
+
+  @Test
+  public void testContainerSnapshotRoundTripAndReplay() throws Exception {
+    HiveConf conf = createConf();
+    LeveldbMetricsStore store = new LeveldbMetricsStore();
+    store.initialize(conf);
+    try {
+      String attempt = "appattempt_4_1_1";
+      long timestamp = System.currentTimeMillis();
+      MR3MetricSnapshot snapshot = containerSnapshot(
+          timestamp, org.apache.hadoop.hive.ql.exec.mr3.dag.DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME);
+      store.appendBatch(attempt, 0L, Collections.singletonList(snapshot));
+      store.appendBatch(attempt, 0L, Collections.singletonList(snapshot));
+
+      List<MetricSnapshotMessage> snapshots = store.getContainerSnapshots(
+          attempt, timestamp, timestamp, 10);
+      assertEquals(1, snapshots.size());
+      MetricSnapshotMessage stored = snapshots.get(0);
+      assertEquals(timestamp, stored.timestampMillis());
+      MR3Metrics.ContainerGroupSnapshot value =
+          (MR3Metrics.ContainerGroupSnapshot) stored.snapshot();
+      assertEquals(1, value.getContainers());
+      assertEquals(0, value.getQueuedTasks());
+      assertEquals(1, value.getRunningTasks());
+      assertEquals(1, value.getNodes());
+      assertEquals(100L, value.getHeapBytesMax());
+      assertEquals(50L, value.getHeapBytesUsed());
+      assertEquals(100L, value.getHeapWindowBytesMax());
+      assertEquals(50L, value.getHeapWindowBytesUsed());
+      assertEquals(50, value.getHeapWindowUsagePercent());
+      assertEquals(80, value.getAutoScaleOutThresholdPercent());
+      assertEquals(20, value.getAutoScaleInThresholdPercent());
+      assertEquals(1L, value.getContainersTotal());
+      assertEquals(1L, value.getCompletedTasksTotal());
+      assertEquals(1L, value.getSucceededTasksTotal());
+      assertEquals(0L, value.getFailedTasksTotal());
+      assertEquals(0L, value.getKilledTasksTotal());
     } finally {
       store.stop();
     }
@@ -127,7 +168,7 @@ public class TestLeveldbMetricsStore {
         timestamp, containerGroupId,
         1, 0, 1, 1,
         100L, 50L, 100L, 50L,
-        50.0f, 80.0f, 20.0f,
+        50, 80, 20,
         1L, 1L, 1L, 0L, 0L);
   }
 }

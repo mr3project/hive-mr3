@@ -32,19 +32,19 @@ public interface MetricsStore {
    * Returns up to {@code maxPoints} of the earliest application snapshots in the inclusive time
    * range, ordered chronologically.
    */
-  List<MR3MetricSnapshot> getApplicationSnapshots(
+  List<MetricSnapshotMessage> getApplicationSnapshots(
       String applicationAttemptId, long startTime, long endTime, int maxPoints) throws Exception;
 
   /**
    * Returns up to {@code maxPoints} of the earliest container snapshots in the inclusive time
    * range, ordered chronologically.
    */
-  List<MR3MetricSnapshot> getContainerSnapshots(
+  List<MetricSnapshotMessage> getContainerSnapshots(
       String applicationAttemptId, long startTime, long endTime, int maxPoints) throws Exception;
 
-  MR3MetricSnapshot getLatestApplicationSnapshot(String applicationAttemptId) throws Exception;
+  MetricSnapshotMessage getLatestApplicationSnapshot(String applicationAttemptId) throws Exception;
 
-  MR3MetricSnapshot getLatestContainerSnapshot(String applicationAttemptId) throws Exception;
+  MetricSnapshotMessage getLatestContainerSnapshot(String applicationAttemptId) throws Exception;
 
   boolean hasAttempt(String applicationAttemptId) throws Exception;
 

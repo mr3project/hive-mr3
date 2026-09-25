@@ -1,0 +1,48 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+syntax = "proto2";
+
+option java_package = "org.apache.hadoop.hive.ql.exec.mr3.metrics";
+option java_outer_classname = "MR3Metrics";
+
+message ApplicationSnapshot {
+  required uint64 running_dags = 1;
+  required uint64 total_dags = 2;
+  required uint64 succeeded_dags = 3;
+  required uint64 failed_dags = 4;
+  required uint64 killed_dags = 5;
+}
+
+message ContainerGroupSnapshot {
+  required uint32 containers = 1;
+  required uint32 queued_tasks = 2;
+  required uint32 running_tasks = 3;
+  required uint32 nodes = 4;
+  required uint64 heap_bytes_max = 5;
+  required uint64 heap_bytes_used = 6;
+  required uint64 heap_window_bytes_max = 7;
+  required uint64 heap_window_bytes_used = 8;
+  required uint32 heap_window_usage_percent = 9;
+  required uint32 auto_scale_out_threshold_percent = 10;
+  required uint32 auto_scale_in_threshold_percent = 11;
+  required uint64 containers_total = 12;
+  required uint64 completed_tasks_total = 13;
+  required uint64 succeeded_tasks_total = 14;
+  required uint64 failed_tasks_total = 15;
+  required uint64 killed_tasks_total = 16;
+}
