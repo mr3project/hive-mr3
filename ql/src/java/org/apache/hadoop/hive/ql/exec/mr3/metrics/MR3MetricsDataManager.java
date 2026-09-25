@@ -18,10 +18,6 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 
-import com.datamonad.mr3.api.client.ApplicationMetricSnapshot;
-import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
-import com.datamonad.mr3.api.client.MR3MetricSnapshot;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -72,7 +68,7 @@ public class MR3MetricsDataManager {
       String fields, UserGroupInformation user) throws Exception {
     validate(attemptId, start, end, user);
     Set<String> selected = parseFields(fields, APPLICATION_FIELDS);
-    List<MR3MetricSnapshot> values =
+    List<MetricSnapshotMessage> values =
         metricsStore.getApplicationSnapshots(attemptId, start, end, restMaxPoints);
     return response(attemptId, values, selected);
   }
@@ -83,7 +79,7 @@ public class MR3MetricsDataManager {
       String fields, UserGroupInformation user) throws Exception {
     validate(attemptId, start, end, user);
     Set<String> selected = parseFields(fields, CONTAINER_FIELDS);
-    List<MR3MetricSnapshot> values =
+    List<MetricSnapshotMessage> values =
         metricsStore.getContainerSnapshots(attemptId, start, end, restMaxPoints);
     return response(attemptId, values, selected);
   }
@@ -123,36 +119,36 @@ public class MR3MetricsDataManager {
   }
 
   private static MetricsResponse response(String attemptId,
-      List<MR3MetricSnapshot> values, Set<String> fields) {
+                                          List<MetricSnapshotMessage> values, Set<String> fields) {
     List<Map<String, Object>> snapshots = new ArrayList<>();
-    for (MR3MetricSnapshot snapshot : values) {
+    for (MetricSnapshotMessage snapshot : values) {
       Map<String, Object> value = new LinkedHashMap<>();
       value.put("timestampMillis", snapshot.timestampMillis());
-      if (snapshot instanceof ApplicationMetricSnapshot) {
-        ApplicationMetricSnapshot s = (ApplicationMetricSnapshot) snapshot;
-        put(value, fields, "runningDags", s.runningDags());
-        put(value, fields, "totalDags", s.totalDags());
-        put(value, fields, "succeededDags", s.succeededDags());
-        put(value, fields, "failedDags", s.failedDags());
-        put(value, fields, "killedDags", s.killedDags());
+      if (snapshot.snapshot() instanceof MR3Metrics.ApplicationSnapshot) {
+        MR3Metrics.ApplicationSnapshot s = (MR3Metrics.ApplicationSnapshot) snapshot.snapshot();
+        put(value, fields, "runningDags", s.getRunningDags());
+        put(value, fields, "totalDags", s.getTotalDags());
+        put(value, fields, "succeededDags", s.getSucceededDags());
+        put(value, fields, "failedDags", s.getFailedDags());
+        put(value, fields, "killedDags", s.getKilledDags());
       } else {
-        ContainerGroupMetricSnapshot s = (ContainerGroupMetricSnapshot) snapshot;
-        put(value, fields, "containers", s.containers());
-        put(value, fields, "queuedTasks", s.queuedTasks());
-        put(value, fields, "runningTasks", s.runningTasks());
-        put(value, fields, "nodes", s.nodes());
-        put(value, fields, "heapBytesMax", s.heapBytesMax());
-        put(value, fields, "heapBytesUsed", s.heapBytesUsed());
-        put(value, fields, "heapWindowBytesMax", s.heapWindowBytesMax());
-        put(value, fields, "heapWindowBytesUsed", s.heapWindowBytesUsed());
-        put(value, fields, "heapWindowUsagePercent", s.heapWindowUsagePercent());
-        put(value, fields, "autoScaleOutThresholdPercent", s.autoScaleOutThresholdPercent());
-        put(value, fields, "autoScaleInThresholdPercent", s.autoScaleInThresholdPercent());
-        put(value, fields, "containersTotal", s.containersTotal());
-        put(value, fields, "completedTasksTotal", s.completedTasksTotal());
-        put(value, fields, "succeededTasksTotal", s.succeededTasksTotal());
-        put(value, fields, "failedTasksTotal", s.failedTasksTotal());
-        put(value, fields, "killedTasksTotal", s.killedTasksTotal());
+        MR3Metrics.ContainerGroupSnapshot s = (MR3Metrics.ContainerGroupSnapshot) snapshot.snapshot();
+        put(value, fields, "containers", s.getContainers());
+        put(value, fields, "queuedTasks", s.getQueuedTasks());
+        put(value, fields, "runningTasks", s.getRunningTasks());
+        put(value, fields, "nodes", s.getNodes());
+        put(value, fields, "heapBytesMax", s.getHeapBytesMax());
+        put(value, fields, "heapBytesUsed", s.getHeapBytesUsed());
+        put(value, fields, "heapWindowBytesMax", s.getHeapWindowBytesMax());
+        put(value, fields, "heapWindowBytesUsed", s.getHeapWindowBytesUsed());
+        put(value, fields, "heapWindowUsagePercent", s.getHeapWindowUsagePercent());
+        put(value, fields, "autoScaleOutThresholdPercent", s.getAutoScaleOutThresholdPercent());
+        put(value, fields, "autoScaleInThresholdPercent", s.getAutoScaleInThresholdPercent());
+        put(value, fields, "containersTotal", s.getContainersTotal());
+        put(value, fields, "completedTasksTotal", s.getCompletedTasksTotal());
+        put(value, fields, "succeededTasksTotal", s.getSucceededTasksTotal());
+        put(value, fields, "failedTasksTotal", s.getFailedTasksTotal());
+        put(value, fields, "killedTasksTotal", s.getKilledTasksTotal());
       }
       snapshots.add(value);
     }
