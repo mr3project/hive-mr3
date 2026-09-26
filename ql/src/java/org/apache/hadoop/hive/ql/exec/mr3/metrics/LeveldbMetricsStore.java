@@ -19,7 +19,7 @@
 package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 
 import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
-import com.datamonad.mr3.api.client.MR3MetricSnapshot;
+import com.datamonad.mr3.api.client.ApplicationMetricSnapshot;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -52,6 +52,7 @@ public class LeveldbMetricsStore implements MetricsStore {
 
   private static final byte SAMPLE = 'S';
   private static final byte ATTEMPT = 'A';
+  private static final byte APP_REVERSE = 'R';
 
   private DB db;
   private long retentionMillis;
@@ -78,32 +79,46 @@ public class LeveldbMetricsStore implements MetricsStore {
   }
 
   @Override
-  public synchronized void appendBatch(
-      String attemptId, long fromIndex, List<MR3MetricSnapshot> snapshots) throws Exception {
+  public synchronized void appendApplicationBatch(String attemptId, long fromIndex,
+      List<ApplicationMetricSnapshot> snapshots) throws Exception {
+    assert fromIndex >= 0;
+    try (WriteBatch writes = db.createWriteBatch()) {
+      for (int i = 0; i < snapshots.size(); ++i) {
+        ApplicationMetricSnapshot snapshot = snapshots.get(i);
+        long snapshotIndex = fromIndex + i;
+        byte[] value = MetricProtoUtils.encode(snapshot);
+        writes.put(sampleKey(
+            attemptId, APPLICATION_SUBTYPE, snapshot.timestampMillis(), snapshotIndex), value);
+        writes.put(reverseApplicationKey(
+            attemptId, snapshot.timestampMillis(), snapshotIndex), value);
+      }
+      if (!snapshots.isEmpty()) {
+        writes.put(attemptKey(attemptId), new byte[0]);
+      }
+      db.write(writes);
+    }
+    expire();
+  }
+
+  @Override
+  public synchronized void appendContainerBatch(String attemptId, long fromIndex,
+      List<ContainerGroupMetricSnapshot> snapshots) throws Exception {
     assert fromIndex >= 0;
     try (WriteBatch writes = db.createWriteBatch()) {
       boolean hasAcceptedSnapshot = false;
-
       for (int i = 0; i < snapshots.size(); ++i) {
-        MR3MetricSnapshot snapshot = snapshots.get(i);
+        ContainerGroupMetricSnapshot snapshot = snapshots.get(i);
         long snapshotIndex = fromIndex + i;
-
-        boolean isContainer = snapshot instanceof ContainerGroupMetricSnapshot;
-        if (isContainer) {
-          String containerGroupId = ((ContainerGroupMetricSnapshot) snapshot).containerGroupId();
-          if (!DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME.equals(containerGroupId)) {
-            LOG.warn("Ignoring malformed MR3 metric snapshot for attempt {} at index {}: " +
-                    "expected container group {}, but found {}",
-                attemptId, snapshotIndex, DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME, containerGroupId);
-            continue;
-          }
+        if (!DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME.equals(snapshot.containerGroupId())) {
+          LOG.warn("Ignoring malformed MR3 metric snapshot for attempt {} at index {}: " +
+                  "expected container group {}, but found {}",
+              attemptId, snapshotIndex, DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME,
+              snapshot.containerGroupId());
+          continue;
         }
         hasAcceptedSnapshot = true;
-
-        byte[] value = MetricProtoUtils.encode(snapshot);
-        byte subtype = (byte) (isContainer ? CONTAINER_GROUP_SUBTYPE : APPLICATION_SUBTYPE);
-        writes.put(sampleKey(
-            attemptId, subtype, snapshot.timestampMillis(), snapshotIndex), value);
+        writes.put(sampleKey(attemptId, CONTAINER_GROUP_SUBTYPE,
+            snapshot.timestampMillis(), snapshotIndex), MetricProtoUtils.encode(snapshot));
       }
       if (hasAcceptedSnapshot) {
         writes.put(attemptKey(attemptId), new byte[0]);
@@ -147,6 +162,24 @@ public class LeveldbMetricsStore implements MetricsStore {
   public synchronized MetricSnapshotMessage getLatestContainerSnapshot(String attemptId)
       throws Exception {
     return latest(attemptId, CONTAINER_GROUP_SUBTYPE);
+  }
+
+  @Override
+  public synchronized MetricSnapshotMessage getApplicationSnapshotBefore(
+      String attemptId, long timestamp) throws Exception {
+    if (timestamp == Long.MIN_VALUE) return null;
+    byte[] prefix = keyPrefix(APP_REVERSE, attemptId);
+    try (DBIterator iterator = db.iterator()) {
+      iterator.seek(reverseApplicationKey(attemptId, timestamp - 1, Long.MAX_VALUE));
+      if (iterator.hasNext()) {
+        Map.Entry<byte[], byte[]> entry = iterator.next();
+        if (startsWith(entry.getKey(), prefix)) {
+          return MetricProtoUtils.decode(APPLICATION_SUBTYPE,
+              readReverseTimestamp(entry.getKey()), entry.getValue());
+        }
+      }
+    }
+    return null;
   }
 
   private MetricSnapshotMessage latest(String attemptId, byte subtype) throws Exception {
@@ -247,6 +280,10 @@ public class LeveldbMetricsStore implements MetricsStore {
           String attempt = readAttempt(entry.getKey());
           if (readTimestamp(entry.getKey()) < cutoff) {
             deletes.delete(entry.getKey());
+            if (readSubtype(entry.getKey()) == APPLICATION_SUBTYPE) {
+              deletes.delete(reverseApplicationKey(
+                  attempt, readTimestamp(entry.getKey()), readIndex(entry.getKey())));
+            }
           } else {
             retainedAttempts.add(attempt);
           }
@@ -291,6 +328,17 @@ public class LeveldbMetricsStore implements MetricsStore {
     return key(kind, attempt, (byte) 0, null, null);
   }
 
+  private static byte[] reverseApplicationKey(String attempt, long timestamp, long index)
+      throws IOException {
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    DataOutputStream out = new DataOutputStream(bytes);
+    out.writeByte(APP_REVERSE); out.writeUTF(attempt);
+    out.writeLong(~(timestamp ^ Long.MIN_VALUE));
+    out.writeLong(~(index ^ Long.MIN_VALUE));
+    out.close();
+    return bytes.toByteArray();
+  }
+
   private static byte[] key(
       byte kind, String attempt, byte subtype, Long timestamp, Long index) throws IOException {
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -317,6 +365,23 @@ public class LeveldbMetricsStore implements MetricsStore {
     assert key.length >= 2 * Long.BYTES;
     return new java.io.DataInputStream(new java.io.ByteArrayInputStream(
         key, key.length - 2 * Long.BYTES, Long.BYTES)).readLong() ^ Long.MIN_VALUE;
+  }
+
+  private static byte readSubtype(byte[] key) throws IOException {
+    java.io.DataInputStream in = new java.io.DataInputStream(
+        new java.io.ByteArrayInputStream(key, 1, key.length - 1));
+    in.readUTF();
+    return in.readByte();
+  }
+
+  private static long readIndex(byte[] key) throws IOException {
+    return new java.io.DataInputStream(new java.io.ByteArrayInputStream(
+        key, key.length - Long.BYTES, Long.BYTES)).readLong() ^ Long.MIN_VALUE;
+  }
+
+  private static long readReverseTimestamp(byte[] key) throws IOException {
+    return (~new java.io.DataInputStream(new java.io.ByteArrayInputStream(
+        key, key.length - 2 * Long.BYTES, Long.BYTES)).readLong()) ^ Long.MIN_VALUE;
   }
 
   private static boolean startsWith(byte[] value, byte[] prefix) {

@@ -37,10 +37,12 @@ public class MR3MetricsResource {
   @GET @Path("application")
   public MR3MetricsDataManager.MetricsResponse application(
       @QueryParam("attemptId") String attemptId, @QueryParam("startTime") Long start,
-      @QueryParam("endTime") Long end, @QueryParam("fields") String fields,
+      @QueryParam("endTime") Long end,
+      @QueryParam("applicationStartTime") Long applicationStartTime,
+      @QueryParam("fields") String fields,
       @Context HttpServletRequest request) {
     try {
-      return manager.application(attemptId,
+      return manager.application(attemptId, required(applicationStartTime, "applicationStartTime"),
           required(start, "startTime"), required(end, "endTime"),
           fields, user(request));
     } catch (MR3MetricsDataManager.AttemptNotFoundException e) {
