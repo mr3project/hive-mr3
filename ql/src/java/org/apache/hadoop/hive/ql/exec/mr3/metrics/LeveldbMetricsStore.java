@@ -132,6 +132,12 @@ public class LeveldbMetricsStore implements MetricsStore {
   }
 
   @Override
+  public synchronized MetricSnapshotPage getContainerSnapshotsPage(
+      String attemptId, long startTime, long endTime, int maxPoints) throws Exception {
+    return scanPage(attemptId, CONTAINER_GROUP_SUBTYPE, startTime, endTime, maxPoints);
+  }
+
+  @Override
   public synchronized MetricSnapshotMessage getLatestApplicationSnapshot(String attemptId)
       throws Exception {
     return latest(attemptId, APPLICATION_SUBTYPE);
@@ -204,18 +210,17 @@ public class LeveldbMetricsStore implements MetricsStore {
 
         long timestampMillis = readTimestamp(entry.getKey());
         if (timestampMillis > endTime) break;
-        if (result.size() == maxPoints) {
-          long lastTimestamp = result.get(result.size() - 1).timestampMillis();
-          if (timestampMillis > lastTimestamp) {
+        if (result.size() >= maxPoints) {
+          long boundaryTimestamp = result.get(maxPoints - 1).timestampMillis();
+          if (timestampMillis > boundaryTimestamp) {
             hasMore = true;
             break;
           }
-          continue;
+          assert timestampMillis == boundaryTimestamp;
         }
         result.add(MetricProtoUtils.decode(subtype, timestampMillis, entry.getValue()));
       }
     }
-    assert result.size() <= maxPoints;
     return new MetricSnapshotPage(result, hasMore);
   }
 
