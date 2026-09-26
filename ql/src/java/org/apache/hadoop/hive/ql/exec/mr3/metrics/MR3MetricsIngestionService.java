@@ -39,10 +39,12 @@ public class MR3MetricsIngestionService implements AutoCloseable {
 
   private final MetricsStore store;
   private final long ingestionIntervalMillis;
+  private final Object ingestionOperationLock = new Object();
   private ScheduledExecutorService executorService;
   private ScheduledFuture<?> ingestionTask;
   private String applicationAttemptId;
   private long fromIndex = 0L;
+  private boolean stopping;
 
   private final Object ingestionOperationLock = new Object();
   private boolean stopping;

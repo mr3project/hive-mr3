@@ -54,11 +54,13 @@ public class MR3TimelineIngestionService implements AutoCloseable {
 
   private final TimelineDataManager timelineDataManager;
   private final long ingestionIntervalMillis;
+  private final Object ingestionOperationLock = new Object();
   private ScheduledExecutorService executorService;
   private ScheduledFuture<?> ingestionTask;
   private MR3SessionClient mr3SessionClient;
   private String applicationAttemptId;
   private long fromIndex = 0L;
+  private boolean stopping;
 
   private final Object ingestionOperationLock = new Object();
   private boolean stopping;
