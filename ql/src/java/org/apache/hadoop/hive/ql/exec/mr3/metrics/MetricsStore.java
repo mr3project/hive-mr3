@@ -36,10 +36,26 @@ public interface MetricsStore {
       String applicationAttemptId, long startTime, long endTime, int maxPoints) throws Exception;
 
   /**
+   * Returns a page of application snapshots and whether a later page exists. All snapshots with
+   * the timestamp at the {@code maxPoints} boundary are included, so the page may exceed
+   * {@code maxPoints}.
+   */
+  MetricSnapshotPage getApplicationSnapshotsPage(
+      String applicationAttemptId, long startTime, long endTime, int maxPoints) throws Exception;
+
+  /**
    * Returns up to {@code maxPoints} of the earliest container snapshots in the inclusive time
    * range, ordered chronologically.
    */
   List<MetricSnapshotMessage> getContainerSnapshots(
+      String applicationAttemptId, long startTime, long endTime, int maxPoints) throws Exception;
+
+  /**
+   * Returns a page of container snapshots and whether a later page exists. All snapshots with the
+   * timestamp at the {@code maxPoints} boundary are included, so the page may exceed
+   * {@code maxPoints}.
+   */
+  MetricSnapshotPage getContainerSnapshotsPage(
       String applicationAttemptId, long startTime, long endTime, int maxPoints) throws Exception;
 
   MetricSnapshotMessage getLatestApplicationSnapshot(String applicationAttemptId) throws Exception;
