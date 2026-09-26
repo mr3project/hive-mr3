@@ -110,6 +110,36 @@ public class TestLeveldbMetricsStore {
   }
 
   @Test
+  public void testApplicationPage() throws Exception {
+    HiveConf conf = createConf();
+    LeveldbMetricsStore store = new LeveldbMetricsStore();
+    store.initialize(conf);
+    try {
+      String attempt = "appattempt_3_2_1";
+      long now = System.currentTimeMillis();
+      store.appendBatch(attempt, 0L, Arrays.asList(
+          applicationSnapshot(now),
+          applicationSnapshot(now + 1),
+          applicationSnapshot(now + 2),
+          applicationSnapshot(now + 3)));
+
+      MetricSnapshotPage firstPage =
+          store.getApplicationSnapshotsPage(attempt, now + 2, now + 3, 1);
+      assertEquals(1, firstPage.snapshots().size());
+      assertEquals(now + 2, firstPage.snapshots().get(0).timestampMillis());
+      assertTrue(firstPage.hasMore());
+
+      MetricSnapshotPage lastPage =
+          store.getApplicationSnapshotsPage(attempt, now + 3, now + 3, 1);
+      assertEquals(1, lastPage.snapshots().size());
+      assertEquals(now + 3, lastPage.snapshots().get(0).timestampMillis());
+      assertFalse(lastPage.hasMore());
+    } finally {
+      store.stop();
+    }
+  }
+
+  @Test
   public void testContainerSnapshotRoundTripAndReplay() throws Exception {
     HiveConf conf = createConf();
     LeveldbMetricsStore store = new LeveldbMetricsStore();

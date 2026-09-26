@@ -68,9 +68,17 @@ public class MR3MetricsDataManager {
       String fields, UserGroupInformation user) throws Exception {
     validate(attemptId, start, end, user);
     Set<String> selected = parseFields(fields, APPLICATION_FIELDS);
-    List<MetricSnapshotMessage> values =
-        metricsStore.getApplicationSnapshots(attemptId, start, end, restMaxPoints);
-    return response(attemptId, values, selected);
+    MetricSnapshotPage page =
+        metricsStore.getApplicationSnapshotsPage(attemptId, start, end, restMaxPoints);
+    Long nextStartTime = null;
+    if (page.hasMore()) {
+      assert !page.snapshots().isEmpty();
+      long lastTimestamp = page.snapshots().get(page.snapshots().size() - 1).timestampMillis();
+      assert lastTimestamp < Long.MAX_VALUE;
+      nextStartTime = lastTimestamp + 1;
+    }
+    return response(
+        attemptId, page.snapshots(), selected, page.hasMore(), nextStartTime);
   }
 
   public MetricsResponse container(
@@ -81,7 +89,7 @@ public class MR3MetricsDataManager {
     Set<String> selected = parseFields(fields, CONTAINER_FIELDS);
     List<MetricSnapshotMessage> values =
         metricsStore.getContainerSnapshots(attemptId, start, end, restMaxPoints);
-    return response(attemptId, values, selected);
+    return response(attemptId, values, selected, false, null);
   }
 
   private void validate(
@@ -119,7 +127,8 @@ public class MR3MetricsDataManager {
   }
 
   private static MetricsResponse response(String attemptId,
-                                          List<MetricSnapshotMessage> values, Set<String> fields) {
+                                          List<MetricSnapshotMessage> values, Set<String> fields,
+                                          boolean hasMore, Long nextStartTime) {
     List<Map<String, Object>> snapshots = new ArrayList<>();
     for (MetricSnapshotMessage snapshot : values) {
       Map<String, Object> value = new LinkedHashMap<>();
@@ -152,7 +161,7 @@ public class MR3MetricsDataManager {
       }
       snapshots.add(value);
     }
-    return new MetricsResponse(attemptId, snapshots);
+    return new MetricsResponse(attemptId, snapshots, hasMore, nextStartTime);
   }
 
   private static void put(Map<String, Object> value, Set<String> fields, String name, Object field) {
@@ -187,10 +196,15 @@ public class MR3MetricsDataManager {
   public static final class MetricsResponse {
     public final String applicationAttemptId;
     public final List<Map<String, Object>> snapshots;
+    public final boolean hasMore;
+    public final Long nextStartTime;
 
-    MetricsResponse(String applicationAttemptId, List<Map<String, Object>> snapshots) {
+    MetricsResponse(String applicationAttemptId, List<Map<String, Object>> snapshots,
+                    boolean hasMore, Long nextStartTime) {
       this.applicationAttemptId = applicationAttemptId;
       this.snapshots = snapshots;
+      this.hasMore = hasMore;
+      this.nextStartTime = nextStartTime;
     }
   }
 

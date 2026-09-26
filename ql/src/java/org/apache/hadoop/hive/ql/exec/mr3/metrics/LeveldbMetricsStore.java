@@ -120,6 +120,12 @@ public class LeveldbMetricsStore implements MetricsStore {
   }
 
   @Override
+  public synchronized MetricSnapshotPage getApplicationSnapshotsPage(
+      String attemptId, long startTime, long endTime, int maxPoints) throws Exception {
+    return scanPage(attemptId, APPLICATION_SUBTYPE, startTime, endTime, maxPoints);
+  }
+
+  @Override
   public synchronized List<MetricSnapshotMessage> getContainerSnapshots(
       String attemptId, long startTime, long endTime, int maxPoints) throws Exception {
     return scan(attemptId, CONTAINER_GROUP_SUBTYPE, startTime, endTime, maxPoints);
@@ -178,6 +184,39 @@ public class LeveldbMetricsStore implements MetricsStore {
     }
 
     return result;
+  }
+
+  private MetricSnapshotPage scanPage(
+      String attemptId, byte subtype,
+      long startTime, long endTime, int maxPoints) throws Exception {
+    if (maxPoints <= 0) {
+      throw new IllegalArgumentException("maxPoints must be greater than 0");
+    }
+
+    byte[] prefix = samplePrefix(attemptId, subtype);
+    List<MetricSnapshotMessage> result = new ArrayList<>(maxPoints);
+    boolean hasMore = false;
+    try (DBIterator iterator = db.iterator()) {
+      iterator.seek(sampleKey(attemptId, subtype, startTime, Long.MIN_VALUE));
+      while (iterator.hasNext()) {
+        Map.Entry<byte[], byte[]> entry = iterator.next();
+        if (!startsWith(entry.getKey(), prefix)) break;
+
+        long timestampMillis = readTimestamp(entry.getKey());
+        if (timestampMillis > endTime) break;
+        if (result.size() == maxPoints) {
+          long lastTimestamp = result.get(result.size() - 1).timestampMillis();
+          if (timestampMillis > lastTimestamp) {
+            hasMore = true;
+            break;
+          }
+          continue;
+        }
+        result.add(MetricProtoUtils.decode(subtype, timestampMillis, entry.getValue()));
+      }
+    }
+    assert result.size() <= maxPoints;
+    return new MetricSnapshotPage(result, hasMore);
   }
 
   @Override

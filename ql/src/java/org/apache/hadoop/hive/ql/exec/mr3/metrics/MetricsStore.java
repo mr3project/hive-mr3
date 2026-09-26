@@ -35,6 +35,9 @@ public interface MetricsStore {
   List<MetricSnapshotMessage> getApplicationSnapshots(
       String applicationAttemptId, long startTime, long endTime, int maxPoints) throws Exception;
 
+  MetricSnapshotPage getApplicationSnapshotsPage(
+      String applicationAttemptId, long startTime, long endTime, int maxPoints) throws Exception;
+
   /**
    * Returns up to {@code maxPoints} of the earliest container snapshots in the inclusive time
    * range, ordered chronologically.
