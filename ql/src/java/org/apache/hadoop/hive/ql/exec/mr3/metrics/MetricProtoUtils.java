@@ -20,7 +20,6 @@ package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 
 import com.datamonad.mr3.api.client.ApplicationMetricSnapshot;
 import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
-import com.datamonad.mr3.api.client.MR3MetricSnapshot;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -29,41 +28,41 @@ import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
 final class MetricProtoUtils {
   private MetricProtoUtils() {}
 
-  static byte[] encode(MR3MetricSnapshot snapshot) throws IOException {
+  static byte[] encode(ApplicationMetricSnapshot snapshot) throws IOException {
     ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-    if (snapshot instanceof ApplicationMetricSnapshot) {
-      ApplicationMetricSnapshot s = (ApplicationMetricSnapshot) snapshot;
-      MR3Metrics.ApplicationSnapshot.newBuilder()
-          .setRunningDags(s.runningDags())
-          .setTotalDags(s.totalDags())
-          .setSucceededDags(s.succeededDags())
-          .setFailedDags(s.failedDags())
-          .setKilledDags(s.killedDags())
+    MR3Metrics.ApplicationSnapshot.newBuilder()
+          .setRunningDags(snapshot.runningDags())
+          .setTotalDags(snapshot.totalDags())
+          .setSucceededDags(snapshot.succeededDags())
+          .setFailedDags(snapshot.failedDags())
+          .setKilledDags(snapshot.killedDags())
           .build()
           .writeTo(bytes);
-    } else {
-      ContainerGroupMetricSnapshot s = (ContainerGroupMetricSnapshot) snapshot;
-      assert DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME.equals(s.containerGroupId());
-      MR3Metrics.ContainerGroupSnapshot.newBuilder()
-          .setContainers(s.containers())
-          .setQueuedTasks(s.queuedTasks())
-          .setRunningTasks(s.runningTasks())
-          .setNodes(s.nodes())
-          .setHeapBytesMax(s.heapBytesMax())
-          .setHeapBytesUsed(s.heapBytesUsed())
-          .setHeapWindowBytesMax(s.heapWindowBytesMax())
-          .setHeapWindowBytesUsed(s.heapWindowBytesUsed())
-          .setHeapWindowUsagePercent(s.heapWindowUsagePercent())
-          .setAutoScaleOutThresholdPercent(s.autoScaleOutThresholdPercent())
-          .setAutoScaleInThresholdPercent(s.autoScaleInThresholdPercent())
-          .setContainersTotal(s.containersTotal())
-          .setCompletedTasksTotal(s.completedTasksTotal())
-          .setSucceededTasksTotal(s.succeededTasksTotal())
-          .setFailedTasksTotal(s.failedTasksTotal())
-          .setKilledTasksTotal(s.killedTasksTotal())
+    return bytes.toByteArray();
+  }
+
+  static byte[] encode(ContainerGroupMetricSnapshot snapshot) throws IOException {
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    assert DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME.equals(snapshot.containerGroupId());
+    MR3Metrics.ContainerGroupSnapshot.newBuilder()
+          .setContainers(snapshot.containers())
+          .setQueuedTasks(snapshot.queuedTasks())
+          .setRunningTasks(snapshot.runningTasks())
+          .setNodes(snapshot.nodes())
+          .setHeapBytesMax(snapshot.heapBytesMax())
+          .setHeapBytesUsed(snapshot.heapBytesUsed())
+          .setHeapWindowBytesMax(snapshot.heapWindowBytesMax())
+          .setHeapWindowBytesUsed(snapshot.heapWindowBytesUsed())
+          .setHeapWindowUsagePercent(snapshot.heapWindowUsagePercent())
+          .setAutoScaleOutThresholdPercent(snapshot.autoScaleOutThresholdPercent())
+          .setAutoScaleInThresholdPercent(snapshot.autoScaleInThresholdPercent())
+          .setContainersTotal(snapshot.containersTotal())
+          .setCompletedTasksTotal(snapshot.completedTasksTotal())
+          .setSucceededTasksTotal(snapshot.succeededTasksTotal())
+          .setFailedTasksTotal(snapshot.failedTasksTotal())
+          .setKilledTasksTotal(snapshot.killedTasksTotal())
           .build()
           .writeTo(bytes);
-    }
     return bytes.toByteArray();
   }
 

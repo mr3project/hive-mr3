@@ -18,7 +18,8 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 
-import com.datamonad.mr3.api.client.MR3MetricSnapshot;
+import com.datamonad.mr3.api.client.ApplicationMetricSnapshot;
+import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
 import com.datamonad.mr3.api.client.MR3SessionClient;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.List;
@@ -42,7 +43,8 @@ public class MR3MetricsIngestionService implements AutoCloseable {
   private ScheduledExecutorService executorService;
   private ScheduledFuture<?> ingestionTask;
   private String applicationAttemptId;
-  private long fromIndex = 0L;
+  private long applicationFromIndex = 0L;
+  private long containerFromIndex = 0L;
 
   private final Object ingestionOperationLock = new Object();
   private boolean stopping;
@@ -93,24 +95,45 @@ public class MR3MetricsIngestionService implements AutoCloseable {
     String currentApplicationAttemptId = mr3SessionClient.getAppAttemptIdStr();
     if (!Objects.equals(applicationAttemptId, currentApplicationAttemptId)) {
       applicationAttemptId = currentApplicationAttemptId;
-      fromIndex = 0L;
+      applicationFromIndex = 0L;
+      containerFromIndex = 0L;
     }
 
+    ingestApplications(mr3SessionClient);
+    ingestContainers(mr3SessionClient);
+  }
+
+  private void ingestApplications(MR3SessionClient client) throws Exception {
     while (true) {
       synchronized (ingestionOperationLock) {
         if (stopping) {
           return;
         }
 
-        scala.collection.immutable.List<MR3MetricSnapshot> received =
-            mr3SessionClient.getMetricSnapshots(fromIndex);
-        List<MR3MetricSnapshot> snapshots = JavaConverters.seqAsJavaListConverter(
+        scala.collection.immutable.List<ApplicationMetricSnapshot> received =
+            client.getApplicationMetricSnapshots(applicationFromIndex);
+        List<ApplicationMetricSnapshot> snapshots = JavaConverters.seqAsJavaListConverter(
             received).asJava();
         if (snapshots.isEmpty()) {
           return;
         }
-        store.appendBatch(applicationAttemptId, fromIndex, snapshots);
-        fromIndex += snapshots.size();
+        store.appendApplicationBatch(applicationAttemptId, applicationFromIndex, snapshots);
+        applicationFromIndex += snapshots.size();
+      }
+    }
+  }
+
+  private void ingestContainers(MR3SessionClient client) throws Exception {
+    while (true) {
+      synchronized (ingestionOperationLock) {
+        if (stopping) return;
+        scala.collection.immutable.List<ContainerGroupMetricSnapshot> received =
+            client.getContainerMetricSnapshots(containerFromIndex);
+        List<ContainerGroupMetricSnapshot> snapshots = JavaConverters.seqAsJavaListConverter(
+            received).asJava();
+        if (snapshots.isEmpty()) return;
+        store.appendContainerBatch(applicationAttemptId, containerFromIndex, snapshots);
+        containerFromIndex += snapshots.size();
       }
     }
   }

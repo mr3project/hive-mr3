@@ -18,15 +18,19 @@
 
 package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 
-import com.datamonad.mr3.api.client.MR3MetricSnapshot;
+import com.datamonad.mr3.api.client.ApplicationMetricSnapshot;
+import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
 import java.util.List;
 import org.apache.hadoop.hive.conf.HiveConf;
 
 public interface MetricsStore {
   void initialize(HiveConf conf) throws Exception;
 
-  void appendBatch(
-      String applicationAttemptId, long fromIndex, List<MR3MetricSnapshot> snapshots) throws Exception;
+  void appendApplicationBatch(String applicationAttemptId, long fromIndex,
+      List<ApplicationMetricSnapshot> snapshots) throws Exception;
+
+  void appendContainerBatch(String applicationAttemptId, long fromIndex,
+      List<ContainerGroupMetricSnapshot> snapshots) throws Exception;
 
   /**
    * Returns up to {@code maxPoints} of the earliest application snapshots in the inclusive time
@@ -59,6 +63,9 @@ public interface MetricsStore {
       String applicationAttemptId, long startTime, long endTime, int maxPoints) throws Exception;
 
   MetricSnapshotMessage getLatestApplicationSnapshot(String applicationAttemptId) throws Exception;
+
+  MetricSnapshotMessage getApplicationSnapshotBefore(
+      String applicationAttemptId, long timestamp) throws Exception;
 
   MetricSnapshotMessage getLatestContainerSnapshot(String applicationAttemptId) throws Exception;
 

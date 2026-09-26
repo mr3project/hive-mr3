@@ -64,13 +64,19 @@ public class MR3MetricsDataManager {
 
   public MetricsResponse application(
       String attemptId,
-      long start, long end,
+      long applicationStartTime, long start, long end,
       String fields, UserGroupInformation user) throws Exception {
     validate(attemptId, start, end, user);
+    if (applicationStartTime < 0 || applicationStartTime > start) {
+      throw new IllegalArgumentException(
+          "applicationStartTime must be between 0 and startTime");
+    }
     Set<String> selected = parseFields(fields, APPLICATION_FIELDS);
     MetricSnapshotPage page =
         metricsStore.getApplicationSnapshotsPage(attemptId, start, end, restMaxPoints);
-    return response(attemptId, page, selected);
+    MetricSnapshotMessage predecessor = start > applicationStartTime
+        ? metricsStore.getApplicationSnapshotBefore(attemptId, start) : null;
+    return response(attemptId, page, selected, predecessor);
   }
 
   public MetricsResponse container(
@@ -81,7 +87,7 @@ public class MR3MetricsDataManager {
     Set<String> selected = parseFields(fields, CONTAINER_FIELDS);
     MetricSnapshotPage page =
         metricsStore.getContainerSnapshotsPage(attemptId, start, end, restMaxPoints);
-    return response(attemptId, page, selected);
+    return response(attemptId, page, selected, null);
   }
 
   private void validate(
@@ -119,7 +125,8 @@ public class MR3MetricsDataManager {
   }
 
   private static MetricsResponse response(
-      String attemptId, MetricSnapshotPage page, Set<String> fields) {
+      String attemptId, MetricSnapshotPage page, Set<String> fields,
+      MetricSnapshotMessage predecessor) {
     Long nextStartTime = null;
     if (page.hasMore()) {
       assert !page.snapshots().isEmpty();
@@ -128,7 +135,17 @@ public class MR3MetricsDataManager {
       nextStartTime = lastTimestamp + 1;
     }
     List<Map<String, Object>> snapshots = new ArrayList<>();
+    if (predecessor != null) {
+      addSnapshot(snapshots, predecessor, fields);
+    }
     for (MetricSnapshotMessage snapshot : page.snapshots()) {
+      addSnapshot(snapshots, snapshot, fields);
+    }
+    return new MetricsResponse(attemptId, snapshots, page.hasMore(), nextStartTime);
+  }
+
+  private static void addSnapshot(List<Map<String, Object>> snapshots,
+      MetricSnapshotMessage snapshot, Set<String> fields) {
       Map<String, Object> value = new LinkedHashMap<>();
       value.put("timestampMillis", snapshot.timestampMillis());
       if (snapshot.snapshot() instanceof MR3Metrics.ApplicationSnapshot) {
@@ -158,8 +175,6 @@ public class MR3MetricsDataManager {
         put(value, fields, "killedTasksTotal", s.getKilledTasksTotal());
       }
       snapshots.add(value);
-    }
-    return new MetricsResponse(attemptId, snapshots, page.hasMore(), nextStartTime);
   }
 
   private static void put(Map<String, Object> value, Set<String> fields, String name, Object field) {

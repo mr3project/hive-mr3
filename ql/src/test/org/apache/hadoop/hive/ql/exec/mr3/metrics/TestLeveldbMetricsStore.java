@@ -20,7 +20,6 @@ package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 
 import com.datamonad.mr3.api.client.ApplicationMetricSnapshot;
 import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
-import com.datamonad.mr3.api.client.MR3MetricSnapshot;
 import java.io.File;
 import java.util.Arrays;
 import java.util.Collections;
@@ -49,10 +48,10 @@ public class TestLeveldbMetricsStore {
 
     LeveldbMetricsStore store = new LeveldbMetricsStore();
     store.initialize(conf);
-    store.appendBatch(partiallyRetainedAttempt, 0L, Arrays.asList(
+    store.appendApplicationBatch(partiallyRetainedAttempt, 0L, Arrays.asList(
         applicationSnapshot(now - TimeUnit.HOURS.toMillis(2)),
         applicationSnapshot(now)));
-    store.appendBatch(expiredAttempt, 0L, Collections.singletonList(
+    store.appendApplicationBatch(expiredAttempt, 0L, Collections.singletonList(
         applicationSnapshot(now - TimeUnit.HOURS.toMillis(2))));
     store.stop();
 
@@ -78,7 +77,7 @@ public class TestLeveldbMetricsStore {
     store.initialize(conf);
     try {
       String attempt = "appattempt_2_1_1";
-      store.appendBatch(attempt, 0L, Collections.singletonList(
+      store.appendContainerBatch(attempt, 0L, Collections.singletonList(
           containerSnapshot(System.currentTimeMillis(), "unexpected-container-group")));
       assertFalse(store.hasAttempt(attempt));
     } finally {
@@ -94,7 +93,7 @@ public class TestLeveldbMetricsStore {
     try {
       String attempt = "appattempt_3_1_1";
       long now = System.currentTimeMillis();
-      store.appendBatch(attempt, 0L, Arrays.asList(
+      store.appendApplicationBatch(attempt, 0L, Arrays.asList(
           applicationSnapshot(now),
           applicationSnapshot(now + 1),
           applicationSnapshot(now + 2)));
@@ -117,7 +116,7 @@ public class TestLeveldbMetricsStore {
     try {
       String attempt = "appattempt_3_2_1";
       long now = System.currentTimeMillis();
-      store.appendBatch(attempt, 0L, Arrays.asList(
+      store.appendApplicationBatch(attempt, 0L, Arrays.asList(
           applicationSnapshot(now),
           applicationSnapshot(now + 1),
           applicationSnapshot(now + 2),
@@ -140,6 +139,30 @@ public class TestLeveldbMetricsStore {
   }
 
   @Test
+  public void testApplicationPredecessorUsesLatestTimestampAndGreatestIndex() throws Exception {
+    HiveConf conf = createConf();
+    LeveldbMetricsStore store = new LeveldbMetricsStore();
+    store.initialize(conf);
+    try {
+      String attempt = "appattempt_3_4_1";
+      long now = System.currentTimeMillis();
+      store.appendApplicationBatch(attempt, 0L, Arrays.asList(
+          applicationSnapshot(now, 10),
+          applicationSnapshot(now + 1, 20),
+          applicationSnapshot(now + 1, 30),
+          applicationSnapshot(now + 2, 40)));
+
+      MetricSnapshotMessage predecessor =
+          store.getApplicationSnapshotBefore(attempt, now + 2);
+      assertEquals(now + 1, predecessor.timestampMillis());
+      assertEquals(30, ((MR3Metrics.ApplicationSnapshot) predecessor.snapshot()).getTotalDags());
+      assertEquals(null, store.getApplicationSnapshotBefore(attempt, now));
+    } finally {
+      store.stop();
+    }
+  }
+
+  @Test
   public void testPageIncludesAllSnapshotsAtBoundaryTimestamp() throws Exception {
     HiveConf conf = createConf();
     LeveldbMetricsStore store = new LeveldbMetricsStore();
@@ -147,7 +170,7 @@ public class TestLeveldbMetricsStore {
     try {
       String attempt = "appattempt_3_3_1";
       long now = System.currentTimeMillis();
-      store.appendBatch(attempt, 0L, Arrays.asList(
+      store.appendApplicationBatch(attempt, 0L, Arrays.asList(
           applicationSnapshot(now),
           applicationSnapshot(now),
           applicationSnapshot(now + 1)));
@@ -177,7 +200,7 @@ public class TestLeveldbMetricsStore {
     try {
       String attempt = "appattempt_4_2_1";
       long now = System.currentTimeMillis();
-      store.appendBatch(attempt, 0L, Arrays.asList(
+      store.appendContainerBatch(attempt, 0L, Arrays.asList(
           containerSnapshot(now,
               org.apache.hadoop.hive.ql.exec.mr3.dag.DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME),
           containerSnapshot(now + 1,
@@ -201,10 +224,10 @@ public class TestLeveldbMetricsStore {
     try {
       String attempt = "appattempt_4_1_1";
       long timestamp = System.currentTimeMillis();
-      MR3MetricSnapshot snapshot = containerSnapshot(
+      ContainerGroupMetricSnapshot snapshot = containerSnapshot(
           timestamp, org.apache.hadoop.hive.ql.exec.mr3.dag.DAG.ALL_IN_ONE_CONTAINER_GROUP_NAME);
-      store.appendBatch(attempt, 0L, Collections.singletonList(snapshot));
-      store.appendBatch(attempt, 0L, Collections.singletonList(snapshot));
+      store.appendContainerBatch(attempt, 0L, Collections.singletonList(snapshot));
+      store.appendContainerBatch(attempt, 0L, Collections.singletonList(snapshot));
 
       List<MetricSnapshotMessage> snapshots = store.getContainerSnapshots(
           attempt, timestamp, timestamp, 10);
@@ -243,11 +266,15 @@ public class TestLeveldbMetricsStore {
     return conf;
   }
 
-  private static MR3MetricSnapshot applicationSnapshot(long timestamp) {
+  private static ApplicationMetricSnapshot applicationSnapshot(long timestamp) {
     return new ApplicationMetricSnapshot(timestamp, 1, 2, 1, 0, 0);
   }
 
-  private static MR3MetricSnapshot containerSnapshot(long timestamp, String containerGroupId) {
+  private static ApplicationMetricSnapshot applicationSnapshot(long timestamp, long totalDags) {
+    return new ApplicationMetricSnapshot(timestamp, 1, totalDags, 1, 0, 0);
+  }
+
+  private static ContainerGroupMetricSnapshot containerSnapshot(long timestamp, String containerGroupId) {
     return new ContainerGroupMetricSnapshot(
         timestamp, containerGroupId,
         1, 0, 1, 1,
