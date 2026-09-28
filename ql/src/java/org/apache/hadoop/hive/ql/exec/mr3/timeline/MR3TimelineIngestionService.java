@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.mr3.timeline;
 
 import com.datamonad.mr3.api.client.MR3SessionClient;
 import com.datamonad.mr3.api.common.MR3Exception;
+import com.datamonad.mr3.api.common.MR3StaleIndexException;
 import com.datamonad.mr3.history.EntityKey;
 import com.datamonad.mr3.history.EntityType;
 import com.datamonad.mr3.history.MR3TimelineDataPublisher;
@@ -112,18 +113,26 @@ public class MR3TimelineIngestionService implements AutoCloseable {
     }
 
     boolean receivedTerminalEntity = false;
-    int numEntities;
-    do {
+    while (true) {
       synchronized (ingestionOperationLock) {
         if (stopping) {
           return;
         }
 
-        scala.collection.immutable.List<TimelineEntity> timelineEntities =
-            mr3SessionClient.getTimelineDataEntities(fromIndex);
+        scala.collection.immutable.List<TimelineEntity> timelineEntities;
+        try {
+          timelineEntities = mr3SessionClient.getTimelineDataEntities(fromIndex);
+        } catch (MR3StaleIndexException e) {
+          long currentStartIndex = e.currentStartIndex();
+          assert currentStartIndex > fromIndex;
+          LOG.warn("Skipping expired MR3 timeline entity indexes [{}, {})",
+              fromIndex, currentStartIndex);
+          fromIndex = currentStartIndex;
+          continue;
+        }
         List<TimelineEntity> entities =
             JavaConverters.seqAsJavaListConverter(timelineEntities).asJava();
-        numEntities = entities.size();
+        int numEntities = entities.size();
         if (numEntities > 0) {
           appendTimelineEntities(applicationAttemptId, entities);
           for (TimelineEntity entity : entities) {
@@ -140,8 +149,11 @@ public class MR3TimelineIngestionService implements AutoCloseable {
           }
           fromIndex += numEntities;
         }
+        if (numEntities < MAX_NUM_ENTITIES_PER_REQUEST) {
+          break;
+        }
       }
-    } while (numEntities == MAX_NUM_ENTITIES_PER_REQUEST);
+    }
     if (receivedTerminalEntity) {
       mr3SessionClient = null;
     }

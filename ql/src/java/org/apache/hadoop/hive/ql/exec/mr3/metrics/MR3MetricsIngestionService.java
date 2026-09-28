@@ -21,6 +21,7 @@ package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 import com.datamonad.mr3.api.client.ApplicationMetricSnapshot;
 import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
 import com.datamonad.mr3.api.client.MR3SessionClient;
+import com.datamonad.mr3.api.common.MR3StaleIndexException;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.List;
 import java.util.Objects;
@@ -110,8 +111,17 @@ public class MR3MetricsIngestionService implements AutoCloseable {
           return;
         }
 
-        scala.collection.immutable.List<ApplicationMetricSnapshot> received =
-            client.getApplicationMetricSnapshots(applicationFromIndex);
+        scala.collection.immutable.List<ApplicationMetricSnapshot> received;
+        try {
+          received = client.getApplicationMetricSnapshots(applicationFromIndex);
+        } catch (MR3StaleIndexException e) {
+          long currentStartIndex = e.currentStartIndex();
+          assert currentStartIndex > applicationFromIndex;
+          LOG.warn("Skipping expired MR3 application metric snapshot indexes [{}, {})",
+              applicationFromIndex, currentStartIndex);
+          applicationFromIndex = currentStartIndex;
+          continue;
+        }
         List<ApplicationMetricSnapshot> snapshots = JavaConverters.seqAsJavaListConverter(
             received).asJava();
         if (snapshots.isEmpty()) {
@@ -127,8 +137,17 @@ public class MR3MetricsIngestionService implements AutoCloseable {
     while (true) {
       synchronized (ingestionOperationLock) {
         if (stopping) return;
-        scala.collection.immutable.List<ContainerGroupMetricSnapshot> received =
-            client.getContainerMetricSnapshots(containerFromIndex);
+        scala.collection.immutable.List<ContainerGroupMetricSnapshot> received;
+        try {
+          received = client.getContainerMetricSnapshots(containerFromIndex);
+        } catch (MR3StaleIndexException e) {
+          long currentStartIndex = e.currentStartIndex();
+          assert currentStartIndex > containerFromIndex;
+          LOG.warn("Skipping expired MR3 container metric snapshot indexes [{}, {})",
+              containerFromIndex, currentStartIndex);
+          containerFromIndex = currentStartIndex;
+          continue;
+        }
         List<ContainerGroupMetricSnapshot> snapshots = JavaConverters.seqAsJavaListConverter(
             received).asJava();
         if (snapshots.isEmpty()) return;
