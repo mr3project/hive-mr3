@@ -21,6 +21,7 @@ package org.apache.hadoop.hive.ql.exec.mr3.metrics;
 import com.datamonad.mr3.api.client.ApplicationMetricSnapshot;
 import com.datamonad.mr3.api.client.ContainerGroupMetricSnapshot;
 import com.datamonad.mr3.api.client.MR3SessionClient;
+import com.datamonad.mr3.api.common.MR3Exception;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.util.List;
 import java.util.Objects;
@@ -29,6 +30,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.exec.mr3.MR3IngestionIndexUtils;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -110,8 +112,20 @@ public class MR3MetricsIngestionService implements AutoCloseable {
           return;
         }
 
-        scala.collection.immutable.List<ApplicationMetricSnapshot> received =
-            client.getApplicationMetricSnapshots(applicationFromIndex);
+        scala.collection.immutable.List<ApplicationMetricSnapshot> received;
+        try {
+          received = client.getApplicationMetricSnapshots(applicationFromIndex);
+        } catch (MR3Exception e) {
+          long resetIndex =
+              MR3IngestionIndexUtils.getResetIndex(e.getMessage(), applicationFromIndex);
+          if (resetIndex < 0) {
+            throw e;
+          }
+          LOG.warn("MR3 application metrics before index {} are no longer available; "
+              + "resuming ingestion at index {}", applicationFromIndex, resetIndex);
+          applicationFromIndex = resetIndex;
+          continue;
+        }
         List<ApplicationMetricSnapshot> snapshots = JavaConverters.seqAsJavaListConverter(
             received).asJava();
         if (snapshots.isEmpty()) {
@@ -127,8 +141,20 @@ public class MR3MetricsIngestionService implements AutoCloseable {
     while (true) {
       synchronized (ingestionOperationLock) {
         if (stopping) return;
-        scala.collection.immutable.List<ContainerGroupMetricSnapshot> received =
-            client.getContainerMetricSnapshots(containerFromIndex);
+        scala.collection.immutable.List<ContainerGroupMetricSnapshot> received;
+        try {
+          received = client.getContainerMetricSnapshots(containerFromIndex);
+        } catch (MR3Exception e) {
+          long resetIndex =
+              MR3IngestionIndexUtils.getResetIndex(e.getMessage(), containerFromIndex);
+          if (resetIndex < 0) {
+            throw e;
+          }
+          LOG.warn("MR3 container metrics before index {} are no longer available; "
+              + "resuming ingestion at index {}", containerFromIndex, resetIndex);
+          containerFromIndex = resetIndex;
+          continue;
+        }
         List<ContainerGroupMetricSnapshot> snapshots = JavaConverters.seqAsJavaListConverter(
             received).asJava();
         if (snapshots.isEmpty()) return;
