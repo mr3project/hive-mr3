@@ -35,6 +35,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.exec.mr3.MR3IngestionIndexUtils;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timeline.TimelinePutResponse;
@@ -119,8 +120,20 @@ public class MR3TimelineIngestionService implements AutoCloseable {
           return;
         }
 
-        scala.collection.immutable.List<TimelineEntity> timelineEntities =
-            mr3SessionClient.getTimelineDataEntities(fromIndex);
+        scala.collection.immutable.List<TimelineEntity> timelineEntities;
+        try {
+          timelineEntities = mr3SessionClient.getTimelineDataEntities(fromIndex);
+        } catch (MR3Exception e) {
+          long resetIndex = MR3IngestionIndexUtils.getResetIndex(e.getMessage(), fromIndex);
+          if (resetIndex < 0) {
+            throw e;
+          }
+          LOG.warn("MR3 timeline data before index {} is no longer available; "
+              + "resuming ingestion at index {}", fromIndex, resetIndex);
+          fromIndex = resetIndex;
+          numEntities = MAX_NUM_ENTITIES_PER_REQUEST;
+          continue;
+        }
         List<TimelineEntity> entities =
             JavaConverters.seqAsJavaListConverter(timelineEntities).asJava();
         numEntities = entities.size();
