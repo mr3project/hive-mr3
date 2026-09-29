@@ -186,13 +186,13 @@ public class ReExecDriver implements IDriver {
       LOG.info("Execution #{} of query", executionIndex);
       CommandProcessorResponse cpr = null;
       CommandProcessorException cpe = null;
+      PlanMapper oldPlanMapper = coreDriver.getPlanMapper();
       try {
         cpr = coreDriver.run();
       } catch (CommandProcessorException e) {
         cpe = e;
       }
 
-      PlanMapper oldPlanMapper = coreDriver.getPlanMapper();
       boolean success = cpr != null;
       plugins.forEach(p -> p.afterExecute(oldPlanMapper, success));
 
