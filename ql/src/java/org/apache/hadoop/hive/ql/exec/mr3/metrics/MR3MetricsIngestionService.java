@@ -57,7 +57,7 @@ public class MR3MetricsIngestionService implements AutoCloseable {
   }
 
   public synchronized void start() {
-    if (executorService != null) {
+    if (executorService != null || stopping) {
       return;
     }
 
@@ -74,6 +74,10 @@ public class MR3MetricsIngestionService implements AutoCloseable {
   private void ingestSafely() {
     try {
       ingestMetric();
+    } catch (InterruptedException e) {
+      LOG.warn("MR3 metrics ingestion was interrupted; stopping the ingestion service");
+      requestStop();
+      Thread.currentThread().interrupt();
     } catch (Exception e) {
       LOG.warn("Failed to ingest native MR3 metrics", e);
     }
@@ -136,7 +140,10 @@ public class MR3MetricsIngestionService implements AutoCloseable {
   private void ingestContainers(MR3SessionClient client) throws Exception {
     while (true) {
       synchronized (ingestionOperationLock) {
-        if (stopping) return;
+        if (stopping) {
+          return;
+        }
+
         scala.collection.immutable.List<ContainerGroupMetricSnapshot> received;
         try {
           received = client.getContainerMetricSnapshots(containerFromIndex);
@@ -158,7 +165,26 @@ public class MR3MetricsIngestionService implements AutoCloseable {
   }
 
   @Override
-  public synchronized void close() {
+  public void close() {
+    ScheduledExecutorService executorServiceToAwait;
+    synchronized (this) {
+      requestStop();
+      executorServiceToAwait = executorService;
+      executorService = null;
+    }
+    if (executorServiceToAwait != null) {
+      try {
+        if (!executorServiceToAwait.awaitTermination(
+            ingestionIntervalMillis, TimeUnit.MILLISECONDS)) {
+          LOG.warn("MR3 metrics ingestion worker did not stop in time");
+        }
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+    }
+  }
+
+  private synchronized void requestStop() {
     synchronized (ingestionOperationLock) {
       stopping = true;
     }
@@ -168,12 +194,6 @@ public class MR3MetricsIngestionService implements AutoCloseable {
     }
     if (executorService != null) {
       executorService.shutdown();
-      try {
-        executorService.awaitTermination(ingestionIntervalMillis, TimeUnit.MILLISECONDS);
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-      }
-      executorService = null;
     }
   }
 }

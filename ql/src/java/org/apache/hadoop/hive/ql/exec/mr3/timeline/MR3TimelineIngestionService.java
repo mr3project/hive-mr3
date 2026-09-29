@@ -71,7 +71,7 @@ public class MR3TimelineIngestionService implements AutoCloseable {
   }
 
   public synchronized void start() {
-    if (executorService != null) {
+    if (executorService != null || stopping) {
       return;
     }
 
@@ -89,6 +89,10 @@ public class MR3TimelineIngestionService implements AutoCloseable {
   private void ingestSafely() {
     try {
       ingestTimelineEvents();
+    } catch (InterruptedException e) {
+      LOG.warn("MR3 timeline ingestion was interrupted; stopping the ingestion service");
+      requestStop();
+      Thread.currentThread().interrupt();
     } catch (MR3Exception e) {
       // Do not set mr3SessionClient to null because ingestTimelineEvents() may get stuck later
       // if HiveMR3ClientImpl.close() is currently being executed.
@@ -186,7 +190,26 @@ public class MR3TimelineIngestionService implements AutoCloseable {
   }
 
   @Override
-  public synchronized void close() {
+  public void close() {
+    ScheduledExecutorService executorServiceToAwait;
+    synchronized (this) {
+      requestStop();
+      executorServiceToAwait = executorService;
+      executorService = null;
+    }
+    if (executorServiceToAwait != null) {
+      try {
+        if (!executorServiceToAwait.awaitTermination(
+            ingestionIntervalMillis, TimeUnit.MILLISECONDS)) {
+          LOG.warn("MR3 timeline ingestion worker did not stop in time");
+        }
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+    }
+  }
+
+  private synchronized void requestStop() {
     synchronized (ingestionOperationLock) {
       stopping = true;
     }
@@ -200,15 +223,6 @@ public class MR3TimelineIngestionService implements AutoCloseable {
     }
     if (executorService != null) {
       executorService.shutdown();
-      try {
-        if (!executorService.awaitTermination(
-            ingestionIntervalMillis, TimeUnit.MILLISECONDS)) {
-          LOG.warn("MR3 timeline ingestion worker did not stop in time");
-        }
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-      }
-      executorService = null;
     }
   }
 }
