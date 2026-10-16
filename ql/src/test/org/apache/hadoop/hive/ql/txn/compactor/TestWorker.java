@@ -1206,15 +1206,20 @@ public class TestWorker extends CompactorTest {
 
     TimeoutWorker timeoutWorker = getTimeoutWorker(timeoutConf, executor,
         runForever, swallowInterrupt, new CountDownLatch(2));
-    // Wait until the 2nd cycle is finished
-    timeoutWorker.looped.await();
-    timeoutWorker.stop.set(true);
-    executor.shutdownNow();
+    try {
+      // A second attempt must start even if the first one ignores interruption.
+      timeoutWorker.started.await();
+    } finally {
+      timeoutWorker.stop.set(true);
+      // Release all attempts, including those in executors abandoned after a timeout.
+      timeoutWorker.release.countDown();
+      executor.shutdownNow();
+    }
   }
 
   private TimeoutWorker getTimeoutWorker(HiveConf conf, ExecutorService executor, boolean runForever,
-      boolean swallowInterrupt, CountDownLatch looped) throws Exception {
-    TimeoutWorker timeoutWorker = new TimeoutWorker(runForever, swallowInterrupt, looped);
+      boolean swallowInterrupt, CountDownLatch started) throws Exception {
+    TimeoutWorker timeoutWorker = new TimeoutWorker(runForever, swallowInterrupt, started);
     timeoutWorker.setConf(conf);
     timeoutWorker.init(new AtomicBoolean(false));
     executor.submit(timeoutWorker);
@@ -1229,33 +1234,29 @@ public class TestWorker extends CompactorTest {
   private static final class TimeoutWorker extends Worker {
     private boolean runForever;
     private boolean swallowInterrupt;
-    private CountDownLatch looped;
+    private final CountDownLatch started;
+    private final CountDownLatch release = new CountDownLatch(1);
 
-    private TimeoutWorker(boolean runForever, boolean swallowInterrupt, CountDownLatch looped) {
+    private TimeoutWorker(boolean runForever, boolean swallowInterrupt, CountDownLatch started) {
       this.runForever = runForever;
       this.swallowInterrupt = swallowInterrupt;
-      this.looped = looped;
+      this.started = started;
     }
 
     @Override
     protected Boolean findNextCompactionAndExecute(boolean collectGenericStats, boolean collectMrStats) {
+      started.countDown();
       if (runForever) {
         while (!stop.get()) {
           try {
-            Thread.sleep(Long.MAX_VALUE);
+            release.await();
           } catch (InterruptedException ie) {
             if (!swallowInterrupt) {
               break;
             }
-            try {
-              Thread.sleep(Long.MAX_VALUE);
-            } catch (InterruptedException e) {
-            }
           }
-          looped.countDown();
         }
       }
-      looped.countDown();
       return true;
     }
   }
