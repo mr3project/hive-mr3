@@ -749,7 +749,10 @@ public class MR3Task {
     for (QueryResultMaterializationContext ctx : queryResultMaterializationContexts.values()) {
       List<ByteString> outputs = outputsById.get(ctx.resultId);
       List<ByteString> resultOutputs = outputs == null ? Collections.emptyList() : outputs;
-      if (previewAttributes.isEmpty()) {
+      // Internal outputs, such as column statistics, have their own schema rather than
+      // the client result schema.
+      // Only a sink connected to the FetchTask can supply the query-result preview.
+      if (previewAttributes.isEmpty() && ctx.fileSinkDesc.getFilesToFetch() != null) {
         previewAttributes = buildResultPreview(ctx, resultOutputs, resultSchema);
       }
       materializeQueryResult(ctx, resultOutputs, context);
