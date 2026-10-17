@@ -137,6 +137,7 @@ public class AlterTableConcatenateOperation extends DDLOperation<AlterTableConca
       hiveConf.setFloatVar(HiveConf.ConfVars.MR3_AM_TASK_CONCURRENT_RUN_THRESHOLD_PERCENT, 100.0f);
     }
 
+    task.setQueryDisplay(context.getTask().queryDisplay);
     task.initialize(context.getQueryState(), context.getQueryPlan(), taskQueue, generalContext);
     int ret = task.execute();
 
