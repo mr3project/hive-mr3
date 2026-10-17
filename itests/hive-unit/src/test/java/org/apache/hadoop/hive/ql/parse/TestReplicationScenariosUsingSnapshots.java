@@ -73,6 +73,7 @@ public class TestReplicationScenariosUsingSnapshots extends BaseReplicationAcros
   @BeforeClass
   public static void classLevelSetup() throws Exception {
     HashMap<String, String> overrides = new HashMap<>();
+    overrides.put(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "tez");
     overrides.put(MetastoreConf.ConfVars.EVENT_MESSAGE_FACTORY.getHiveName(),
         GzipJSONMessageEncoder.class.getCanonicalName());
     overrides.put(HiveConf.ConfVars.REPL_DUMP_METADATA_ONLY.varname, "false");

@@ -62,7 +62,6 @@ public class TestReplicationOnHDFSEncryptedZones {
         "java.security.KeyRep$Type;javax.crypto.spec.SecretKeySpec;" +
         "org.apache.hadoop.crypto.key.JavaKeyStoreProvider$KeyMetadata;!*");
     conf = getNewConf();
-    conf.set(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "mr");
     conf.set("dfs.client.use.datanode.hostname", "true");
     conf.set("hadoop.proxyuser." + Utils.getUGI().getShortUserName() + ".hosts", "*");
     conf.set("hadoop.security.key.provider.path", "jceks://file" + jksFile);
@@ -196,8 +195,7 @@ public class TestReplicationOnHDFSEncryptedZones {
 
   private static Configuration getNewConf() {
     Configuration conf = new Configuration();
-    //TODO: HIVE-28044: Replication tests to run on Tez
-    conf.set(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "mr");
+    conf.set(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "tez");
     return conf;
   }
 }

@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.parse;
 
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.hadoop.hive.metastore.messaging.json.JSONMessageEncoder;
 import org.junit.Before;
@@ -42,6 +43,7 @@ public class TestReplAcidTablesBootstrapWithJsonMessage
   @BeforeClass
   public static void classLevelSetup() throws Exception {
     Map<String, String> overrides = new HashMap<>();
+    overrides.put(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "tez");
     overrides.put(MetastoreConf.ConfVars.EVENT_MESSAGE_FACTORY.getHiveName(),
             JSONMessageEncoder.class.getCanonicalName());
     internalBeforeClassSetup(overrides, TestReplAcidTablesBootstrapWithJsonMessage.class);

@@ -902,8 +902,7 @@ public class TestJdbcWithMiniHS2 {
 
   private static HiveConf getNewHiveConf() {
     HiveConf conf = new HiveConfForTest(TestJdbcWithMiniHS2.class);
-    //TODO: HIVE-28284: TestJdbcWithMiniHS2/TestJdbcWithMiniHS2ErasureCoding to run on Tez
-    conf.setVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE, "mr");
+    conf.setVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE, "tez");
     return conf;
   }
 

@@ -186,6 +186,7 @@ public class TestReplicationScenarios {
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
     HashMap<String, String> overrideProperties = new HashMap<>();
+    overrideProperties.put(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "tez");
     overrideProperties.put(MetastoreConf.ConfVars.EVENT_MESSAGE_FACTORY.getHiveName(),
         GzipJSONMessageEncoder.class.getCanonicalName());
     internalBeforeClassSetup(overrideProperties);

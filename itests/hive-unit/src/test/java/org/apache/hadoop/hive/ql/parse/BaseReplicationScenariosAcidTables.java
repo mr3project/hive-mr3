@@ -81,8 +81,7 @@ public class BaseReplicationScenariosAcidTables {
   static void internalBeforeClassSetup(Map<String, String> overrides, Class clazz)
           throws Exception {
     conf = new HiveConfForTest(clazz);
-    //TODO: HIVE-28044: Replication tests to run on Tez
-    conf.setVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE, "mr");
+    conf.setVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE, "tez");
     conf.set("dfs.client.use.datanode.hostname", "true");
     conf.set("hadoop.proxyuser." + Utils.getUGI().getShortUserName() + ".hosts", "*");
     MiniDFSCluster miniDFSCluster =

@@ -40,6 +40,7 @@ public class TestReplAcrossInstancesWithJsonMessageFormat
   @BeforeClass
   public static void classLevelSetup() throws Exception {
     Map<String, String> overrides = new HashMap<>();
+    overrides.put(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "tez");
     overrides.put(MetastoreConf.ConfVars.EVENT_MESSAGE_FACTORY.getHiveName(),
             JSONMessageEncoder.class.getCanonicalName());
     overrides.put(MetastoreConf.ConfVars.HIVE_TXN_MANAGER.getVarname(),

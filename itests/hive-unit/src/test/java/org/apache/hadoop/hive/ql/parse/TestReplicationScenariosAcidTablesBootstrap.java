@@ -60,6 +60,7 @@ public class TestReplicationScenariosAcidTablesBootstrap
   @BeforeClass
   public static void classLevelSetup() throws Exception {
     Map<String, String> overrides = new HashMap<>();
+    overrides.put(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "tez");
     overrides.put(MetastoreConf.ConfVars.EVENT_MESSAGE_FACTORY.getHiveName(),
         GzipJSONMessageEncoder.class.getCanonicalName());
 

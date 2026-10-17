@@ -36,6 +36,7 @@ import org.apache.hadoop.hive.metastore.tools.SQLGenerator;
 import org.apache.hadoop.hive.metastore.utils.TestTxnDbUtil;
 import org.apache.hadoop.hive.ql.parse.repl.PathBuilder;
 import org.apache.hadoop.hive.shims.Utils;
+import org.apache.hadoop.util.StringUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -251,15 +252,13 @@ public class TestReplicationFilterTransactions {
 
     Map<String, String> conf = setupConf(miniDFSCluster.getFileSystem().getUri().toString(),
             PrimaryEventListenerTestImpl.class.getName());
-    //TODO: HIVE-28044: Replication tests to run on Tez
-    conf.put(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "mr");
+    conf.put(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "tez");
     primary = new WarehouseInstance(LOG, miniDFSCluster, conf);
 
     conf = setupConf(miniDFSCluster.getFileSystem().getUri().toString(),
             ReplicaEventListenerTestImpl.class.getName());
     conf.put(MetastoreConf.ConfVars.REPLDIR.getHiveName(), primary.repldDir);
-    //TODO: HIVE-28044: Replication tests to run on Tez
-    conf.put(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "mr");
+    conf.put(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "tez");
     replica = new WarehouseInstance(LOG, miniDFSCluster, conf);
 
     primaryDbName = testName.getMethodName() + "_" + System.currentTimeMillis();
@@ -392,11 +391,16 @@ public class TestReplicationFilterTransactions {
     try {
       primary.run("use " + dbName)
              .run("update t3 set id = 999 where id = " + String.valueOf(value));
-      Assert.fail("Update should have failed");
     } catch (Throwable t) {
-      Assert.assertTrue(t.getCause().getCause() instanceof org.apache.orc.FileFormatException);
+      // MR3 reports the original exception in diagnostics rather than preserving its cause chain.
+      String diagnostics = StringUtils.stringifyException(t);
+      Assert.assertTrue("Expected an ORC FileFormatException: " + diagnostics,
+          diagnostics.contains(org.apache.orc.FileFormatException.class.getName()));
+      return;
+    } finally {
+      alterBucketFile(primary.warehouseRoot, dbName, "t3", false);
     }
-    alterBucketFile(primary.warehouseRoot, dbName, "t3", false);
+    Assert.fail("Update should have failed");
   }
 
   private void prepareIncrementalData() throws Throwable {

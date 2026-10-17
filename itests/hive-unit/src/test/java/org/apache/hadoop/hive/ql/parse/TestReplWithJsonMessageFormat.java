@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hive.ql.parse;
 
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.hadoop.hive.metastore.messaging.json.JSONMessageEncoder;
 import org.apache.hive.hcatalog.api.repl.ReplicationV1CompatRule;
@@ -40,6 +41,7 @@ public class TestReplWithJsonMessageFormat extends TestReplicationScenarios {
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
     Map<String, String> overrides = new HashMap<>();
+    overrides.put(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "tez");
     overrides.put(MetastoreConf.ConfVars.EVENT_MESSAGE_FACTORY.getHiveName(),
             JSONMessageEncoder.class.getCanonicalName());
     internalBeforeClassSetup(overrides);
