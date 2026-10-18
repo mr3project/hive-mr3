@@ -422,6 +422,14 @@ public final class WriteBuffers implements RandomAccessOutput, MemoryEstimate {
   public void getByteSegmentRefToCurrent(ByteSegmentRef byteSegmentRef, int length,
        Position readPos) {
 
+    if (length > 0 && length <= wbSize - readPos.offset) {
+      // Reuse the current buffer without converting to and from a global offset.
+      assert readPos.buffer != null;
+      byteSegmentRef.reset(readPos.offset, length);
+      byteSegmentRef.bytes = readPos.buffer;
+      return;
+    }
+
     byteSegmentRef.reset((readPos.bufferIndex * (long)wbSize) + readPos.offset, length);
     if (length > 0) {
       populateValue(byteSegmentRef);
