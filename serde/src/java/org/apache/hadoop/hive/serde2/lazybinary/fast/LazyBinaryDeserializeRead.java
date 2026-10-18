@@ -77,6 +77,7 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
   private int stackDepth;
   private int currentGeneration;
   private Field root;
+  private final boolean allTopLevelPrimitive;
 
   private class Field {
     Field[] children;
@@ -113,6 +114,15 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
     root.category = Category.STRUCT;
     root.children = createFields(typeInfos);
     root.count = typeInfos.length;
+
+    boolean allPrimitive = true;
+    for (Field field : root.children) {
+      if (field.category != Category.PRIMITIVE) {
+        allPrimitive = false;
+        break;
+      }
+    }
+    allTopLevelPrimitive = allPrimitive;
   }
 
   private Field[] createFields(TypeInfo[] typeInfos) {
@@ -261,7 +271,27 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
    */
   @Override
   public boolean readNextField() throws IOException {
-    return readComplexField();
+    if (!allTopLevelPrimitive) {
+      return readComplexField();
+    }
+
+    // A flat schema never pushes a nested field onto the stack.
+    assert stackDepth == 1 && stack[0] == root;
+    final int fieldIndex = root.index;
+    if ((fieldIndex & 7) == 0) {
+      root.nullByte = bytes[offset++];
+    }
+    if ((root.nullByte & (1 << (fieldIndex & 7))) == 0) {
+      root.index++;
+      return false;
+    }
+
+    final boolean hasValue = readPrimitive(root.children[fieldIndex]);
+    root.index++;
+    if (offset > end) {
+      throw new EOFException();
+    }
+    return hasValue;
   }
 
   private boolean readPrimitive(Field field) throws IOException {
