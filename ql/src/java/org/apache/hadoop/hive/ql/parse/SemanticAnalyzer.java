@@ -7992,7 +7992,8 @@ public class SemanticAnalyzer extends BaseSemanticAnalyzer {
       }
 
       boolean isDestTempFile = true;
-      if (!ctx.isMRTmpFileURI(destinationPath.toUri().toString())
+      if (!useLocalMr3QueryResult
+          && !ctx.isMRTmpFileURI(destinationPath.toUri().toString())
           && !ctx.isResultCacheDir(destinationPath)) {
         // not a temp dir and not a result cache dir
         idToTableNameMap.put(String.valueOf(destTableId), destinationPath.toUri().toString());
