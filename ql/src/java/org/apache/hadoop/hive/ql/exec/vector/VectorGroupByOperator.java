@@ -42,6 +42,8 @@ import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.GroupByOperator;
 import org.apache.hadoop.hive.ql.exec.IConfigureJobConf;
 import org.apache.hadoop.hive.ql.exec.KeyWrapper;
+import org.apache.hadoop.hive.ql.exec.ObjectCache;
+import org.apache.hadoop.hive.ql.exec.ObjectCacheFactory;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.ConstantVectorExpression;
@@ -151,6 +153,13 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
   private transient int numEntriesHashTable;
   private transient long numFlushedOutEntriesBeforeFinalFlush;
+
+  // keep the peak on the operator: hash aggregation can switch to streaming before close
+  private transient int peakEntries;
+  private transient Integer peakEntriesHintAtStart;
+  private transient ObjectCache peakEntriesCache;
+  // 12 = initial HashMap capacity 16 * HashMap load factor 0.75
+  private static final int INITIAL_HASH_MAP_ENTRY_THRESHOLD = 12;
 
   private transient long maxHashTblMemory;
 
@@ -421,7 +430,13 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
       sumBatchSize = 0;
 
-      mapKeysAggregationBuffers = new HashMap<KeyWrapper, VectorAggregationBufferRow>();
+      if (peakEntriesHintAtStart == null) {
+        mapKeysAggregationBuffers = new HashMap<KeyWrapper, VectorAggregationBufferRow>();
+      } else {
+        assert peakEntriesHintAtStart > INITIAL_HASH_MAP_ENTRY_THRESHOLD;
+        // do not consider memory limits which the previous VectorGroupByOperator already took care of
+        mapKeysAggregationBuffers = HashMap.newHashMap(peakEntriesHintAtStart);
+      }
       /*
        * The grouping sets expand the hash sizes by producing intermediate keys. 3 grouping sets
        * of (),(col1),(col1,col2), will turn 10 rows into 30 rows. If the col1 has an nDV of 2 and
@@ -486,6 +501,9 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
       // Next we locate the aggregation buffer set for each key
       prepareBatchAggregationBufferSets(batch);
+
+      // sample each batch (and each grouping set) before any entries can be flushed
+      peakEntries = Math.max(peakEntries, numEntriesHashTable);
 
       // Finally, evaluate the aggregators
       processAggregators(batch);
@@ -1201,6 +1219,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       break;
     case HASH:
       processingMode = this.new ProcessingModeHashAggregate();
+      initializePeakEntries(hconf);
       break;
     case MERGE_PARTIAL:
       Preconditions.checkState(!groupingSetsPresent);
@@ -1214,6 +1233,31 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
           vectorDesc.getProcessingMode().name());
     }
     processingMode.initialize(hconf);
+  }
+
+  private void initializePeakEntries(Configuration hconf) throws HiveException {
+    peakEntries = 0;
+    peakEntriesHintAtStart = null;
+    peakEntriesCache = null;
+
+    String queryId = hconf == null ? null : HiveConf.getVar(hconf, HiveConf.ConfVars.HIVE_QUERY_ID);
+    int dagIdId = hconf == null ? HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID.defaultIntVal : HiveConf.getIntVar(hconf, HiveConf.ConfVars.HIVE_MR3_QUERY_DAG_ID_ID);
+
+    // only measure worker-shared vertex hints; the disabled-cache fallback is per thread
+    if (hconf != null && queryId != null && !queryId.isEmpty() && dagIdId >= 0 &&
+        HiveConf.getBoolVar(hconf, HiveConf.ConfVars.MR3_CONTAINER_USE_PER_QUERY_CACHE)) {
+      // use per-query cache
+      peakEntriesCache = ObjectCacheFactory.getCache(hconf, queryId, dagIdId, false, true);
+      // operatorId is unique for each query
+      peakEntriesHintAtStart = peakEntriesCache.retrieve(getPeakEntriesCacheKey());
+      if (peakEntriesHintAtStart != null) {
+        LOG.info("Initial peakEntries {}: hintEntriesAtStart={}", getOperatorId(), peakEntriesHintAtStart);
+      }
+    }
+  }
+
+  private String getPeakEntriesCacheKey() {
+    return VectorGroupByOperator.class.getSimpleName() + ".peakEntries." + getOperatorId();
   }
 
   @VisibleForTesting
@@ -1385,6 +1429,17 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     processingMode.close(aborted);
     if (!aborted && outputBatch.size > 0) {
       flushOutput();
+    }
+
+    if (vectorDesc.getProcessingMode() == VectorGroupByDesc.ProcessingMode.HASH) {
+      LOG.debug("Final peakEntries {} = {}", getOperatorId(), peakEntries);
+      if (!aborted && peakEntriesCache != null && peakEntriesHintAtStart == null &&
+          peakEntries > INITIAL_HASH_MAP_ENTRY_THRESHOLD) {
+        peakEntriesCache.retrieve(getPeakEntriesCacheKey(), () -> {
+          LOG.info("Set peakEntries for {}: {}", getOperatorId(), peakEntries);
+          return Integer.valueOf(peakEntries);
+        });
+      }
     }
   }
 
