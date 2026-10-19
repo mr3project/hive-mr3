@@ -390,7 +390,7 @@ public final class HiveDecimalWritable extends FastHiveDecimal
    *
    * @return the number of bytes written
    */
-  @HiveDecimalWritableVersionV1
+  @HiveDecimalWritableVersionV2
   public int writeDirect(byte[] output, int offset) {
     if (!isSet()) {
       throw new RuntimeException("no value set");
@@ -427,7 +427,7 @@ public final class HiveDecimalWritable extends FastHiveDecimal
    *
    * @return the number of bytes read
    */
-  @HiveDecimalWritableVersionV1
+  @HiveDecimalWritableVersionV2
   public int readDirect(byte[] input, int offset) throws IOException {
     int position = offset;
     int scale = ((input[position++] & 0xff) << 24)
