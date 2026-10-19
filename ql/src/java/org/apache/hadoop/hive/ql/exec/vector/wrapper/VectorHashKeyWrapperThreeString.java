@@ -77,27 +77,27 @@ public class VectorHashKeyWrapperThreeString extends VectorHashKeyWrapperBase {
   @Override
   public void setHashKey() {
     int hash = nullHashcode();
-    if (length0 != -1 || length1 != -1 || length2 != -1) {
-      Murmur3.IncrementalHash32 bytesHash = HashContext.getBytesHash(hashCtx);
+    Murmur3.IncrementalHash32 bytesHash = null;
+    if (length0 != -1) {
+      bytesHash = HashContext.getBytesHash(hashCtx);
       bytesHash.start(hash);
-      // Defer the last nonempty string to addAndEnd, even when later strings are empty.
-      if (length0 > 0 && (length1 > 0 || length2 > 0)) {
-        bytesHash.add(bytes0, start0, length0);
-      }
-      if (length1 > 0 && length2 > 0) {
-        bytesHash.add(bytes1, start1, length1);
-      }
-      if (length2 > 0) {
-        hash = bytesHash.addAndEnd(bytes2, start2, length2);
-      } else if (length1 > 0) {
-        hash = bytesHash.addAndEnd(bytes1, start1, length1);
-      } else if (length0 > 0) {
-        hash = bytesHash.addAndEnd(bytes0, start0, length0);
-      } else {
-        hash = bytesHash.end();
-      }
+      bytesHash.add(bytes0, start0, length0);
     }
-    hashcode = hash;
+    if (length1 != -1) {
+      if (bytesHash == null) {
+        bytesHash = HashContext.getBytesHash(hashCtx);
+        bytesHash.start(hash);
+      }
+      bytesHash.add(bytes1, start1, length1);
+    }
+    if (length2 != -1) {
+      if (bytesHash == null) {
+        bytesHash = HashContext.getBytesHash(hashCtx);
+        bytesHash.start(hash);
+      }
+      bytesHash.add(bytes2, start2, length2);
+    }
+    hashcode = bytesHash == null ? hash : bytesHash.end();
   }
 
   private int nullHashcode() {

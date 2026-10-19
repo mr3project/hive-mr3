@@ -138,7 +138,6 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
 
     // This code, with branches and all, is not executed if there are no string keys
     Murmur3.IncrementalHash32 bytesHash = null;
-    int pendingIndex = -1;
     for (int i = 0; i < byteValues.length; ++i) {
       /*
        *  Hashing the string is potentially expensive so is better to branch.
@@ -151,19 +150,10 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
         bytesHash = HashContext.getBytesHash(hashCtx);
         bytesHash.start(hash);
       }
-      if (byteLengths[i] > 0) {
-        // Keep the last nonempty string for addAndEnd; empty strings contribute no bytes.
-        if (pendingIndex != -1) {
-          bytesHash.add(
-              byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex]);
-        }
-        pendingIndex = i;
-      }
+      bytesHash.add(byteValues[i], byteStarts[i], byteLengths[i]);
     }
     if (bytesHash != null) {
-      hash = pendingIndex == -1 ? bytesHash.end()
-          : bytesHash.addAndEnd(
-              byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex]);
+      hash = bytesHash.end();
     }
     this.hashcode = hash;
   }

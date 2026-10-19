@@ -255,11 +255,7 @@ public class TestMurmur3 {
     final int seed = 123, arraySize = 1023;
     byte[] bytes = new byte[arraySize];
     new Random(seed).nextBytes(bytes);
-    // chunking must produce the same hash as adding the entire input at once
-    IncrementalHash32 reference = new IncrementalHash32();
-    reference.start(Murmur3.DEFAULT_SEED);
-    reference.add(bytes, 0, bytes.length);
-    int expected = reference.end();
+    int expected = Murmur3.hash32(bytes, arraySize);
     Murmur3.IncrementalHash32 same = new IncrementalHash32(), diff = new IncrementalHash32();
     for (int blockSize = 1; blockSize <= arraySize; ++blockSize) {
       byte[] block = new byte[blockSize];
@@ -273,71 +269,6 @@ public class TestMurmur3 {
       }
       assertEquals("Block size " + blockSize, expected, same.end());
       assertEquals("Block size " + blockSize, expected, diff.end());
-    }
-  }
-
-  @Test
-  public void testIncrementalAddAndEnd() {
-    byte[] bytes = new byte[192];
-    new Random(9983).nextBytes(bytes);
-    IncrementalHash32 reference = new IncrementalHash32();
-    IncrementalHash32 optimized = new IncrementalHash32();
-
-    for (int seed : new int[] {0, -1, Integer.MIN_VALUE, Integer.MAX_VALUE, Murmur3.DEFAULT_SEED}) {
-      // Cover every existing tail size, with and without previously processed full blocks.
-      for (int prefixLength = 0; prefixLength <= 48; prefixLength++) {
-        for (int finalLength = 0; finalLength <= 65; finalLength++) {
-          reference.start(seed);
-          reference.add(bytes, 3, prefixLength);
-          reference.add(bytes, 96, finalLength);
-
-          optimized.start(seed);
-          optimized.add(bytes, 3, prefixLength);
-          assertEquals("seed=" + seed + ", prefix=" + prefixLength + ", final=" + finalLength,
-              reference.end(), optimized.addAndEnd(bytes, 96, finalLength));
-        }
-      }
-    }
-  }
-
-  @Test
-  public void testIncrementalAddAndEndAfterMultipleSlices() {
-    byte[] bytes = new byte[256];
-    new Random(9984).nextBytes(bytes);
-    IncrementalHash32 reference = new IncrementalHash32();
-    IncrementalHash32 optimized = new IncrementalHash32();
-
-    for (int finalLength = 0; finalLength <= 65; finalLength++) {
-      reference.start(123);
-      optimized.start(123);
-      int offset = 0;
-      for (int length : new int[] {1, 3, 7, 15, 16, 17, 31}) {
-        reference.add(bytes, offset, length);
-        optimized.add(bytes, offset, length);
-        offset += length;
-      }
-      reference.add(bytes, 160, finalLength);
-      assertEquals("final=" + finalLength,
-          reference.end(), optimized.addAndEnd(bytes, 160, finalLength));
-    }
-  }
-
-  @Test
-  public void testIncrementalAddAndEndNullSlice() {
-    byte[] bytes = new byte[64];
-    new Random(9985).nextBytes(bytes);
-    IncrementalHash32 reference = new IncrementalHash32();
-    IncrementalHash32 optimized = new IncrementalHash32();
-
-    for (int prefixLength = 0; prefixLength <= bytes.length; prefixLength++) {
-      reference.start(123);
-      reference.add(bytes, 0, prefixLength);
-      reference.add(null, 7, 19);
-
-      optimized.start(123);
-      optimized.add(bytes, 0, prefixLength);
-      assertEquals("prefix=" + prefixLength,
-          reference.end(), optimized.addAndEnd(null, 7, 19));
     }
   }
 

@@ -68,22 +68,20 @@ public class VectorHashKeyWrapperSingleLongTwoString extends VectorHashKeyWrappe
   public void setHashKey() {
     int hash = calculateLongValuesHashCode();
     hash = 31 * hash + calculateNullsHashCode();
-    if (length0 != -1 || length1 != -1) {
-      Murmur3.IncrementalHash32 bytesHash = HashContext.getBytesHash(hashCtx);
+    Murmur3.IncrementalHash32 bytesHash = null;
+    if (length0 != -1) {
+      bytesHash = HashContext.getBytesHash(hashCtx);
       bytesHash.start(hash);
-      // Finish on the last nonempty string so a trailing empty string does not force a tail copy.
-      if (length1 > 0) {
-        if (length0 > 0) {
-          bytesHash.add(bytes0, start0, length0);
-        }
-        hash = bytesHash.addAndEnd(bytes1, start1, length1);
-      } else if (length0 > 0) {
-        hash = bytesHash.addAndEnd(bytes0, start0, length0);
-      } else {
-        hash = bytesHash.end();
-      }
+      bytesHash.add(bytes0, start0, length0);
     }
-    hashcode = hash;
+    if (length1 != -1) {
+      if (bytesHash == null) {
+        bytesHash = HashContext.getBytesHash(hashCtx);
+        bytesHash.start(hash);
+      }
+      bytesHash.add(bytes1, start1, length1);
+    }
+    hashcode = bytesHash == null ? hash : bytesHash.end();
   }
 
   private int calculateLongValuesHashCode() {
