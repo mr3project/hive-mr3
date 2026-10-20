@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.vector;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 
 import java.io.BufferedWriter;
@@ -1949,10 +1950,24 @@ public class TestVectorShuffleBatchSerde {
   private void roundTrip(VectorizedRowBatch source, int[] sourceColumnMap,
       VectorizedRowBatch destination) throws Exception {
     BytesWritable serialized = new BytesWritable();
-    byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
-    int length = serializer.serialize(source, sourceColumnMap, buffer, 0);
-    serialized.set(buffer, 0, length);
+    int offset = 13;
+    byte[] buffer = new byte[offset + SERIALIZE_BUFFER_SIZE + 17];
+    Arrays.fill(buffer, 0, offset, (byte) 0x5a);
+    int length = serializer.serialize(source, sourceColumnMap, buffer, offset);
+    Arrays.fill(buffer, offset + length, offset + length + 17, (byte) 0x5a);
+    serialized.setDirect(buffer, offset, length);
     deserializer.deserialize(serialized, destination);
+    assertSame(buffer, serialized.getBytesRaw());
+    assertEquals(offset, serialized.getOffset());
+    assertEquals(length, serialized.getLength());
+    for (int index = 0; index < offset; index++) {
+      assertEquals((byte) 0x5a, buffer[index]);
+    }
+    for (int index = offset + length; index < offset + length + 17; index++) {
+      assertEquals((byte) 0x5a, buffer[index]);
+    }
+    // Existing value assertions run after the source is overwritten, including nested byte vectors.
+    Arrays.fill(buffer, offset, offset + length, (byte) 0xa5);
   }
 
   private static void assertBytesValueEquals(byte[] expected, BytesColumnVector actual,
