@@ -233,18 +233,14 @@ public abstract class VectorReduceSinkUniformHashOperator extends VectorReduceSi
               valueLazyBinarySerializeWrite.reset();
               valueVectorSerializeRow.serializeWrite(batch, batchIndex);
 
-              valueBytesWritable.set(valueOutput.getData(), 0, valueOutput.getLength());
-
-              collect(keyWritable, valueBytesWritable);
+              collect(keyWritable, serializedValueWritable());
             } while (++logical < end);
           } else {
             do {
               valueLazyBinarySerializeWrite.reset();
               valueVectorSerializeRow.serializeWrite(batch, logical);
 
-              valueBytesWritable.set(valueOutput.getData(), 0, valueOutput.getLength());
-
-              collect(keyWritable, valueBytesWritable);
+              collect(keyWritable, serializedValueWritable());
             } while (++logical < end);
 
           }
