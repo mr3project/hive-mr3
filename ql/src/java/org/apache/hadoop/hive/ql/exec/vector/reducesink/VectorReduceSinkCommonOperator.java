@@ -132,8 +132,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   // The hive key and bytes writable value needed to pass the key and value to the collector.
   protected transient HiveKey keyWritable;
   protected transient BytesWritable valueBytesWritable;
-  // Never use the borrowed wrapper for TopN, which may retain values after collect().
-  protected transient BytesWritable borrowedValueBytesWritable;
 
   // Picks topN K:V pairs from input.
   protected transient TopNHash reducerHash;
@@ -325,7 +323,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     keyWritable = new HiveKey();
 
     valueBytesWritable = new BytesWritable();
-    borrowedValueBytesWritable = new BytesWritable();
 
     int limit = conf.getTopN();
     float memUsage = conf.getTopNMemoryUsage();
@@ -587,19 +584,18 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   }
 
   /**
-   * Wrap the serializer's current slice without copying it into Hive-owned staging storage.
-   * This slice is only valid until the next serializer reset or buffer growth. Built-in Tez
-   * ordered/unordered writers consume it synchronously and copy/serialize it into
-   * Tez-owned storage before returning. TopN and other collectors keep an owned writable.
+   * Use a borrowed serializer slice for immediate Tez writes. The current Tez-MR3 writers
+   * consume it synchronously before the next serializer reset or buffer growth. TopN uses
+   * an owned copy instead, since it may retain values.
    */
   protected final BytesWritable serializedValueWritable() {
     final byte[] bytes = valueOutput.getData();
     final int length = valueOutput.getLength();
     if (reducerHash == null && BORROWED_VALUE_OUTPUT_ALLOWED) {
-      borrowedValueBytesWritable.setDirect(bytes, 0, length);
-      return borrowedValueBytesWritable;
+      valueBytesWritable.setDirect(bytes, 0, length);
+    } else {
+      valueBytesWritable.set(bytes, 0, length);
     }
-    valueBytesWritable.set(bytes, 0, length);
     return valueBytesWritable;
   }
 
