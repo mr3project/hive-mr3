@@ -153,6 +153,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient byte[] vectorShuffleSerializeBuffer;
   private transient int[] vectorShuffleBatchColumnMap;
   private transient HiveKey vectorShuffleBatchKey;
+  // Keep the borrowed batch slice separate from mutable ordinary-row value storage.
+  private transient BytesWritable vectorShuffleBatchValue;
   private transient BinarySortableSerializeWrite vectorShuffleRowKeySerializeWrite;
   private transient Output vectorShuffleRowKeyOutput;
   private transient VectorSerializeRow<BinarySortableSerializeWrite> vectorShuffleRowKeySerializeRow;
@@ -334,6 +336,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShuffleSerializeBuffer = null;
     vectorShuffleBatchColumnMap = null;
     vectorShuffleBatchKey = null;
+    vectorShuffleBatchValue = null;
     vectorShuffleRowKeySerializeWrite = null;
     vectorShuffleRowKeyOutput = null;
     vectorShuffleRowKeySerializeRow = null;
@@ -383,7 +386,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
             growVectorShuffleSerializeBuffer();
           }
         }
-        doCollectBatch(vectorShuffleBatchKey, valueBytesWritable, 0, logicalRecordCount);
+        doCollectBatch(vectorShuffleBatchKey, vectorShuffleBatchValue, 0, logicalRecordCount);
       }
       return true;
     }
@@ -468,6 +471,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShuffleBatchSerializer = new VectorShuffleBatchSerializer();
     if (vectorShuffleNumUnorderedPartitions == 1) {
       vectorShuffleSerializeBuffer = new byte[SERIALIZE_BUFFER_SIZE];
+      vectorShuffleBatchValue = new BytesWritable();
     }
 
     final int keyColumnCount = isEmptyKey ? 0 : reduceSinkKeyColumnMap.length;
@@ -515,7 +519,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private void serializeVectorShuffleBatch(VectorizedRowBatch batch) {
     int length = vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
         vectorShuffleSerializeBuffer, 0);
-    valueBytesWritable.set(vectorShuffleSerializeBuffer, 0, length);
+    // The Tez writer consumes this slice before the next batch reuses the scratch buffer.
+    vectorShuffleBatchValue.setDirect(vectorShuffleSerializeBuffer, 0, length);
   }
 
   private void serializeVectorShuffleBatch(VectorizedRowBatch batch, int[] rowIndices,
