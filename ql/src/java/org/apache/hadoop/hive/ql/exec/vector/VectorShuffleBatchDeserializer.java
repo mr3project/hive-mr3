@@ -43,9 +43,10 @@ public final class VectorShuffleBatchDeserializer {
       throws IOException {
     assert serialized != null && destination != null;
 
-    buffer = serialized.getBytes();
-    position = 0;
-    limit = serialized.getLength();
+    buffer = serialized.getBytesRaw();
+    position = serialized.getOffset();
+    limit = position + serialized.getLength();
+
     final int rowCount = readInt();
     final int columnCount = readInt();
     if (rowCount < 0 || columnCount < 0 || columnCount > destination.cols.length) {
@@ -73,6 +74,8 @@ public final class VectorShuffleBatchDeserializer {
     if (position != limit) {
       throw new IOException("Vector shuffle batch has " + (limit - position) + " trailing bytes");
     }
+
+    buffer = null;
   }
 
   private void readColumn(ColumnVector column, int rowCount) throws IOException {
@@ -296,9 +299,9 @@ public final class VectorShuffleBatchDeserializer {
           if (length < 0) {
             throw new IOException("Negative byte-vector value length " + length);
           }
-          byte[] bytes = new byte[length];
-          readFully(bytes);
-          bytesColumn.setVal(destinationIndex(destinationIndices, logical, repeating), bytes);
+          bytesColumn.setVal(destinationIndex(destinationIndices, logical, repeating),
+              buffer, position, length);
+          position += length;
         }
       }
     } else if (column instanceof TimestampColumnVector) {
