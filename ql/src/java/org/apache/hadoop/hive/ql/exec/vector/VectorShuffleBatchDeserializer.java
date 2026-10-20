@@ -43,9 +43,23 @@ public final class VectorShuffleBatchDeserializer {
       throws IOException {
     assert serialized != null && destination != null;
 
-    buffer = serialized.getBytes();
-    position = 0;
-    limit = serialized.getLength();
+    buffer = serialized.getBytesRaw();
+    position = serialized.getOffset();
+    int length = serialized.getLength();
+    try {
+      if (buffer == null || position < 0 || length < 0 || position > buffer.length - length) {
+        throw new IOException("Invalid vector shuffle batch slice: offset=" + position
+            + ", length=" + length);
+      }
+      limit = position + length;
+      deserialize(destination);
+    } finally {
+      // Byte columns own their decoded data; do not retain the fetched segment after decoding.
+      buffer = null;
+    }
+  }
+
+  private void deserialize(VectorizedRowBatch destination) throws IOException {
     final int rowCount = readInt();
     final int columnCount = readInt();
     if (rowCount < 0 || columnCount < 0 || columnCount > destination.cols.length) {
@@ -203,35 +217,46 @@ public final class VectorShuffleBatchDeserializer {
     return childCount;
   }
 
-  private int readUnsignedByte() {
+  private void requireAvailable(int length) throws IOException {
+    if (length < 0 || length > limit - position) {
+      throw new IOException("Truncated vector shuffle batch: requested " + length
+          + " bytes, remaining " + (limit - position));
+    }
+  }
+
+  private int readUnsignedByte() throws IOException {
+    requireAvailable(1);
     return buffer[position++] & 0xff;
   }
 
-  private boolean readBoolean() {
+  private boolean readBoolean() throws IOException {
     return readUnsignedByte() != 0;
   }
 
-  private int readInt() {
+  private int readInt() throws IOException {
+    requireAvailable(Integer.BYTES);
     int value = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + position);
     position += Integer.BYTES;
     return value;
   }
 
-  private long readLong() {
+  private long readLong() throws IOException {
+    requireAvailable(Long.BYTES);
     long value = theUnsafe.getLong(buffer, BYTE_ARRAY_BASE_OFFSET + position);
     position += Long.BYTES;
     return value;
   }
 
-  private double readDouble() {
+  private double readDouble() throws IOException {
     return Double.longBitsToDouble(readLong());
   }
 
-  private void readFully(byte[] bytes) {
+  private void readFully(byte[] bytes) throws IOException {
     readFully(bytes, 0, bytes.length);
   }
 
-  private void readFully(byte[] bytes, int offset, int length) {
+  private void readFully(byte[] bytes, int offset, int length) throws IOException {
+    requireAvailable(length);
     System.arraycopy(buffer, position, bytes, offset, length);
     position += length;
   }
@@ -255,7 +280,7 @@ public final class VectorShuffleBatchDeserializer {
     return requiredSize;
   }
 
-  private void readTypeMetadata(ColumnVector column) {
+  private void readTypeMetadata(ColumnVector column) throws IOException {
     if (column instanceof DateColumnVector) {
       ((DateColumnVector) column).setUsingProlepticCalendar(readBoolean());
     } else if (column instanceof TimestampColumnVector) {
@@ -296,9 +321,10 @@ public final class VectorShuffleBatchDeserializer {
           if (length < 0) {
             throw new IOException("Negative byte-vector value length " + length);
           }
-          byte[] bytes = new byte[length];
-          readFully(bytes);
-          bytesColumn.setVal(destinationIndex(destinationIndices, logical, repeating), bytes);
+          requireAvailable(length);
+          bytesColumn.setVal(destinationIndex(destinationIndices, logical, repeating),
+              buffer, position, length);
+          position += length;
         }
       }
     } else if (column instanceof TimestampColumnVector) {
@@ -323,7 +349,7 @@ public final class VectorShuffleBatchDeserializer {
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
           HiveDecimalWritable decimal = new HiveDecimalWritable();
-          position += decimal.readDirect(buffer, position);
+          readDecimal(decimal);
           decimal64.set(destinationIndex(destinationIndices, logical, repeating), decimal);
         }
       }
@@ -331,8 +357,7 @@ public final class VectorShuffleBatchDeserializer {
       DecimalColumnVector decimal = (DecimalColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
-          position += decimal.vector[destinationIndex(destinationIndices, logical, repeating)]
-              .readDirect(buffer, position);
+          readDecimal(decimal.vector[destinationIndex(destinationIndices, logical, repeating)]);
         }
       }
     } else if (column instanceof LongColumnVector) {
@@ -355,6 +380,19 @@ public final class VectorShuffleBatchDeserializer {
     } else {
       throw unsupported(column);
     }
+  }
+
+  private void readDecimal(HiveDecimalWritable decimal) throws IOException {
+    // readDirect has no slice limit. Validate its big-endian header and magnitude first.
+    requireAvailable(2 * Integer.BYTES);
+    int byteLength = ((buffer[position + 4] & 0xff) << 24)
+        | ((buffer[position + 5] & 0xff) << 16)
+        | ((buffer[position + 6] & 0xff) << 8)
+        | (buffer[position + 7] & 0xff);
+    if (byteLength < 0 || byteLength > limit - position - 2 * Integer.BYTES) {
+      throw new IOException("Invalid vector shuffle decimal byte length " + byteLength);
+    }
+    position += decimal.readDirect(buffer, position);
   }
 
   private IllegalArgumentException unsupported(ColumnVector column) {
