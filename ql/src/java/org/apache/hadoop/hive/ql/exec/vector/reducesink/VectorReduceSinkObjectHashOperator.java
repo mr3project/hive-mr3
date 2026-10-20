@@ -22,6 +22,7 @@ import java.util.Random;
 
 import java.util.function.ToIntFunction;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorExtractRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
@@ -355,16 +356,16 @@ public class VectorReduceSinkObjectHashOperator extends VectorReduceSinkCommonOp
     }
   }
 
-  private void processValue(VectorizedRowBatch batch, int batchIndex)  throws HiveException {
+  private BytesWritable processValue(VectorizedRowBatch batch, int batchIndex) throws HiveException {
     if (isEmptyValue) {
-      return;
+      return valueBytesWritable;
     }
 
     try {
       valueLazyBinarySerializeWrite.reset();
       valueVectorSerializeRow.serializeWrite(batch, batchIndex);
 
-      valueBytesWritable.set(valueOutput.getData(), 0, valueOutput.getLength());
+      return serializedValueWritable();
     } catch (Exception e) {
       throw new HiveException(e);
     }
@@ -374,8 +375,7 @@ public class VectorReduceSinkObjectHashOperator extends VectorReduceSinkCommonOp
     try {
       processKey(batch, batchIndex, tag);
       keyWritable.setHashCode(hashCode);
-      processValue(batch, batchIndex);
-      collect(keyWritable, valueBytesWritable);
+      collect(keyWritable, processValue(batch, batchIndex));
     } catch (Exception e) {
       throw new HiveException(e);
     }
