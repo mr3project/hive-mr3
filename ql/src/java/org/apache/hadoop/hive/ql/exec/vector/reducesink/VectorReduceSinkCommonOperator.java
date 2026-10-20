@@ -140,7 +140,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   // Where to write our key and value pairs.
   private transient TezProcessor.TezKVOutputCollector out;
-  private transient boolean borrowedValueOutputAllowed;
+  // This is true only for the current Tez-MR3 LogicalOutputEdge implementations:
+  // OrderedPartitionedKVOutput, UnorderedPartitionedKVOutput, and UnorderedKVOutput.
+  // All consume/copy value bytes synchronously before a writer call returns.
+  // Revisit this invariant if Tez-MR3 adds a different output implementation.
+  private static final boolean BORROWED_VALUE_OUTPUT_ALLOWED = true;
 
   private transient long cntr = 1;
 
@@ -585,13 +589,13 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   /**
    * Wrap the serializer's current slice without copying it into Hive-owned staging storage.
    * This slice is only valid until the next serializer reset or buffer growth. Built-in Tez
-   * ordered/unordered partitioned writers consume it synchronously and copy/serialize it into
+   * ordered/unordered writers consume it synchronously and copy/serialize it into
    * Tez-owned storage before returning. TopN and other collectors keep an owned writable.
    */
   protected final BytesWritable serializedValueWritable() {
     final byte[] bytes = valueOutput.getData();
     final int length = valueOutput.getLength();
-    if (reducerHash == null && borrowedValueOutputAllowed) {
+    if (reducerHash == null && BORROWED_VALUE_OUTPUT_ALLOWED) {
       borrowedValueBytesWritable.setDirect(bytes, 0, length);
       return borrowedValueBytesWritable;
     }
@@ -809,7 +813,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   @Override
   public void setOutputCollector(OutputCollector _out) {
     this.out = (TezProcessor.TezKVOutputCollector) _out;
-    borrowedValueOutputAllowed = out != null && out.supportsBorrowedValueWrites();
   }
 
   @Override
