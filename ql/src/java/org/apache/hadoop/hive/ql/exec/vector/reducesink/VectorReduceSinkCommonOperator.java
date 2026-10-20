@@ -53,6 +53,7 @@ import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableSerialize
 import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.WritableComparator;
 import org.apache.hive.common.util.Murmur3;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.tez.runtime.library.api.KeyValueWriterEdge.WriteValueBytes;
@@ -131,12 +132,15 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   // The hive key and bytes writable value needed to pass the key and value to the collector.
   protected transient HiveKey keyWritable;
   protected transient BytesWritable valueBytesWritable;
+  // Never use the borrowed wrapper for TopN, which may retain values after collect().
+  protected transient BytesWritable borrowedValueBytesWritable;
 
   // Picks topN K:V pairs from input.
   protected transient TopNHash reducerHash;
 
   // Where to write our key and value pairs.
   private transient TezProcessor.TezKVOutputCollector out;
+  private transient boolean borrowedValueOutputAllowed;
 
   private transient long cntr = 1;
 
@@ -317,6 +321,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     keyWritable = new HiveKey();
 
     valueBytesWritable = new BytesWritable();
+    borrowedValueBytesWritable = new BytesWritable();
 
     int limit = conf.getTopN();
     float memUsage = conf.getTopNMemoryUsage();
@@ -545,12 +550,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       final int batchIndex = rowIndices == null
           ? (batch.selectedInUse ? batch.selected[logical] : logical)
           : rowIndices[rowOffset + logical];
-      serializeVectorShuffleRow(batch, batchIndex, tag);
-      doCollectRowWithPartition(keyWritable, valueBytesWritable, partition);
+      doCollectRowWithPartition(keyWritable, serializeVectorShuffleRow(batch, batchIndex, tag), partition);
     }
   }
 
-  private void serializeVectorShuffleRow(VectorizedRowBatch batch, int batchIndex, int tag) throws IOException {
+  private BytesWritable serializeVectorShuffleRow(VectorizedRowBatch batch, int batchIndex, int tag) throws IOException {
     try {
       if (isEmptyKey) {
         initializeEmptyKey(tag);
@@ -567,14 +571,32 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
       if (isEmptyValue) {
         valueBytesWritable.setSize(0);
+        return valueBytesWritable;
       } else {
         valueLazyBinarySerializeWrite.reset();
         valueVectorSerializeRow.serializeWrite(batch, batchIndex);
-        valueBytesWritable.set(valueOutput.getData(), 0, valueOutput.getLength());
+        return serializedValueWritable();
       }
     } catch (Exception e) {
       throw new IOException("Failed to serialize vector shuffle row", e);
     }
+  }
+
+  /**
+   * Wrap the serializer's current slice without copying it into Hive-owned staging storage.
+   * This slice is only valid until the next serializer reset or buffer growth. Built-in Tez
+   * ordered/unordered partitioned writers consume it synchronously and copy/serialize it into
+   * Tez-owned storage before returning. TopN and other collectors keep an owned writable.
+   */
+  protected final BytesWritable serializedValueWritable() {
+    final byte[] bytes = valueOutput.getData();
+    final int length = valueOutput.getLength();
+    if (reducerHash == null && borrowedValueOutputAllowed) {
+      borrowedValueBytesWritable.setDirect(bytes, 0, length);
+      return borrowedValueBytesWritable;
+    }
+    valueBytesWritable.set(bytes, 0, length);
+    return valueBytesWritable;
   }
 
   protected void clearVectorShuffleRowKeyBatchCache() {
@@ -650,8 +672,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         final int batchIndex = selectedInUse ? selected[logical] : logical;
         valueLazyBinarySerializeWrite.reset();
         valueVectorSerializeRow.serializeWrite(batch, batchIndex);
-        valueBytesWritable.set(valueOutput.getData(), 0, valueOutput.getLength());
-        hashCodes[batchIndex] = valueBytesWritable.hashCode();
+        hashCodes[batchIndex] = WritableComparator.hashBytes(
+            valueOutput.getData(), 0, valueOutput.getLength());
       }
     } catch (Exception e) {
       throw new HiveException(e);
@@ -787,6 +809,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   @Override
   public void setOutputCollector(OutputCollector _out) {
     this.out = (TezProcessor.TezKVOutputCollector) _out;
+    borrowedValueOutputAllowed = out != null && out.supportsBorrowedValueWrites();
   }
 
   @Override
