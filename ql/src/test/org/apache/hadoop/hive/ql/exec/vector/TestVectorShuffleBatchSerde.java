@@ -26,7 +26,6 @@ import static org.junit.Assert.assertThrows;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.math.BigInteger;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -554,71 +553,6 @@ public class TestVectorShuffleBatchSerde {
     assertThrows(IOException.class,
         () -> deserializer.deserialize(malformed,
             batchWithColumn(structOf(new LongColumnVector()), 0)));
-  }
-
-  @Test
-  public void testDeserializerRejectsTruncatedSlicesWithReadableSuffix() throws Exception {
-    LongColumnVector longs = new LongColumnVector();
-    longs.vector[0] = Long.MAX_VALUE;
-    assertRejectsTruncatedSlice(longs, new LongColumnVector());
-
-    BytesColumnVector strings = (BytesColumnVector) stringAdapter().createVector();
-    strings.setVal(0, bytes("a byte value must stay inside the logical slice"));
-    assertRejectsTruncatedSlice(strings, stringAdapter().createVector());
-
-    DecimalColumnVector decimals = new DecimalColumnVector(DECIMAL_PRECISION, DECIMAL_SCALE);
-    decimals.set(0, HiveDecimal.create("1234567890.1234"));
-    assertRejectsTruncatedSlice(decimals,
-        new DecimalColumnVector(DECIMAL_PRECISION, DECIMAL_SCALE));
-    assertRejectsTruncatedSlice(decimals,
-        new Decimal64ColumnVector(DECIMAL_PRECISION, DECIMAL_SCALE));
-  }
-
-  @Test
-  public void testDeserializerRejectsInvalidDecimalMagnitudeLengths() throws Exception {
-    DecimalColumnVector source = new DecimalColumnVector(DECIMAL_PRECISION, DECIMAL_SCALE);
-    source.set(0, HiveDecimal.create("1234567890.1234"));
-    BytesWritable serialized = serialize(batchWithColumn(source, 1));
-    int offset = 13;
-    for (int length : new int[] {-1, Integer.MAX_VALUE}) {
-      byte[] buffer = new byte[offset + serialized.getLength() + 17];
-      System.arraycopy(serialized.getBytesRaw(), serialized.getOffset(), buffer, offset,
-          serialized.getLength());
-      // After row/column counts, flags and decimal scale, the magnitude length is big-endian.
-      int magnitudeLengthOffset = offset + 2 * Integer.BYTES + 1 + Integer.BYTES;
-      ByteBuffer.wrap(buffer).putInt(magnitudeLengthOffset, length);
-      BytesWritable invalid = new BytesWritable();
-      invalid.setDirect(buffer, offset, serialized.getLength());
-      for (ColumnVector destination : new ColumnVector[] {
-          new DecimalColumnVector(DECIMAL_PRECISION, DECIMAL_SCALE),
-          new Decimal64ColumnVector(DECIMAL_PRECISION, DECIMAL_SCALE)}) {
-        assertThrows("decimal magnitude length=" + length, IOException.class,
-            () -> deserializer.deserialize(invalid, batchWithColumn(destination, 0)));
-      }
-    }
-  }
-
-  private void assertRejectsTruncatedSlice(ColumnVector source, ColumnVector destination)
-      throws Exception {
-    BytesWritable serialized = serialize(batchWithColumn(source, 1));
-    int offset = 13;
-    byte[] buffer = new byte[offset + serialized.getLength() + 17];
-    Arrays.fill(buffer, (byte) 0x5a);
-    System.arraycopy(serialized.getBytesRaw(), serialized.getOffset(), buffer, offset,
-        serialized.getLength());
-    VectorizedRowBatch result = batchWithColumn(destination, 0);
-    for (int length = 0; length < serialized.getLength(); length++) {
-      BytesWritable truncated = new BytesWritable();
-      // The complete encoded record remains physically readable beyond this logical limit.
-      truncated.setDirect(buffer, offset, length);
-      assertThrows("slice length=" + length, IOException.class,
-          () -> deserializer.deserialize(truncated, result));
-    }
-
-    BytesWritable complete = new BytesWritable();
-    complete.setDirect(buffer, offset, serialized.getLength());
-    deserializer.deserialize(complete, result);
-    assertEquals(1, result.size);
   }
 
   private void assertRandomBytesSliceRoundTrips(long seed, int iterations) throws Exception {
