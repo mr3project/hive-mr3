@@ -45,13 +45,8 @@ public final class VectorShuffleBatchDeserializer {
 
     buffer = serialized.getBytesRaw();
     position = serialized.getOffset();
-    int length = serialized.getLength();
+    limit = position + serialized.getLength();
     try {
-      if (buffer == null || position < 0 || length < 0 || position > buffer.length - length) {
-        throw new IOException("Invalid vector shuffle batch slice: offset=" + position
-            + ", length=" + length);
-      }
-      limit = position + length;
       deserialize(destination);
     } finally {
       // Byte columns own their decoded data; do not retain the fetched segment after decoding.

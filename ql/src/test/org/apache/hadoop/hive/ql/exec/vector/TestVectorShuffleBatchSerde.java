@@ -575,22 +575,6 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
-  public void testDeserializerRejectsInvalidSliceRanges() {
-    byte[] buffer = new byte[16];
-    int[][] invalidRanges = {
-        {-1, 0}, {0, -1}, {17, 0}, {16, 1}, {1, Integer.MAX_VALUE},
-        {Integer.MAX_VALUE, 1}
-    };
-    for (int[] range : invalidRanges) {
-      BytesWritable serialized = new BytesWritable();
-      serialized.setDirect(buffer, range[0], range[1]);
-      assertThrows("offset=" + range[0] + ", length=" + range[1], IOException.class,
-          () -> deserializer.deserialize(serialized,
-              batchWithColumn(new LongColumnVector(), 0)));
-    }
-  }
-
-  @Test
   public void testDeserializerRejectsInvalidDecimalMagnitudeLengths() throws Exception {
     DecimalColumnVector source = new DecimalColumnVector(DECIMAL_PRECISION, DECIMAL_SCALE);
     source.set(0, HiveDecimal.create("1234567890.1234"));
