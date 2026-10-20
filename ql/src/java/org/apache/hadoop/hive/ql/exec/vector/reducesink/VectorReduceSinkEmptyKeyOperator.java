@@ -131,18 +131,14 @@ public class VectorReduceSinkEmptyKeyOperator extends VectorReduceSinkCommonOper
             valueLazyBinarySerializeWrite.reset();
             valueVectorSerializeRow.serializeWrite(batch, batchIndex);
 
-            valueBytesWritable.set(valueOutput.getData(), 0, valueOutput.getLength());
-
-            collect(keyWritable, valueBytesWritable);
+            collect(keyWritable, serializedValueWritable());
           }
         } else {
           for (int batchIndex = 0; batchIndex < size; batchIndex++) {
             valueLazyBinarySerializeWrite.reset();
             valueVectorSerializeRow.serializeWrite(batch, batchIndex);
 
-            valueBytesWritable.set(valueOutput.getData(), 0, valueOutput.getLength());
-
-            collect(keyWritable, valueBytesWritable);
+            collect(keyWritable, serializedValueWritable());
           }
         }
       } else {
