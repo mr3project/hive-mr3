@@ -471,7 +471,7 @@ public class Murmur3 {
     // Diagnostic instrumentation is disabled unless explicitly enabled in the worker JVM.
     private static final boolean TRACK_COPIES =
         Boolean.getBoolean("hive.incrementalhash32.trackCopies");
-    private static final int REPORT_INTERVAL = 1_000_000;
+    private static final int REPORT_INTERVAL = 1_000;
     private static final ConcurrentLinkedQueue<CopyStatistics> ALL_COPY_STATS =
         new ConcurrentLinkedQueue<>();
     private static final ThreadLocal<CopyStatistics> THREAD_COPY_STATS =
@@ -499,7 +499,7 @@ public class Murmur3 {
       long totalCopyBytes;
       long totalHashBytes;
 
-      void record(long hashBytes, long copyCount, long copyBytes, int avoidableBytes) {
+      synchronized void record(long hashBytes, long copyCount, long copyBytes, int avoidableBytes) {
         hashCount++;
         totalHashBytes += hashBytes;
         totalCopyCount += copyCount;
@@ -513,7 +513,7 @@ public class Murmur3 {
         }
       }
 
-      void report() {
+      synchronized void report() {
         if (hashCount == 0) {
           return;
         }
@@ -533,6 +533,7 @@ public class Murmur3 {
         totalHashBytes = 0;
       }
     }
+
     // XXHash constants
     private static final int PRIME1 = 0x9E3779B1; // 2654435761U
     private static final int PRIME2 = 0x85EBCA77; // 2246822519U
@@ -550,6 +551,7 @@ public class Murmur3 {
     private long measuredCopyCount;
     private long measuredCopyBytes;
     private int avoidableCopyBytes;
+    private boolean hashReported;
 
     // Internal state variables
     private int seed;        // Initial seed value
@@ -567,6 +569,7 @@ public class Murmur3 {
         measuredCopyCount = 0;
         measuredCopyBytes = 0;
         avoidableCopyBytes = 0;
+        hashReported = false;
       }
 
       // Initialize internal state
@@ -708,14 +711,11 @@ public class Murmur3 {
       h32 *= PRIME3;
       h32 ^= h32 >>> 16;
 
-      if (TRACK_COPIES) {
+      if (TRACK_COPIES && !hashReported) {
         THREAD_COPY_STATS.get().record(
             measuredHashBytes, measuredCopyCount, measuredCopyBytes, avoidableCopyBytes);
-        // A repeated end() does not represent another copy of the same bytes.
-        measuredHashBytes = 0;
-        measuredCopyCount = 0;
-        measuredCopyBytes = 0;
-        avoidableCopyBytes = 0;
+        // Count one completed hash per start(), even if end() is called repeatedly.
+        hashReported = true;
       }
       return h32;
     }
