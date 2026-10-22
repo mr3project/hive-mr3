@@ -20,6 +20,7 @@ package org.apache.hive.common.util;
 
 import sun.misc.Unsafe;
 import java.lang.reflect.Field;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * Murmur3 is successor to Murmur2 fast non-crytographic hash algorithms.
@@ -467,6 +468,71 @@ public class Murmur3 {
   }
 
   public static class IncrementalHash32 {
+    // Diagnostic instrumentation is disabled unless explicitly enabled in the worker JVM.
+    private static final boolean TRACK_COPIES =
+        Boolean.getBoolean("hive.incrementalhash32.trackCopies");
+    private static final int REPORT_INTERVAL = 1_000_000;
+    private static final ConcurrentLinkedQueue<CopyStatistics> ALL_COPY_STATS =
+        new ConcurrentLinkedQueue<>();
+    private static final ThreadLocal<CopyStatistics> THREAD_COPY_STATS =
+        ThreadLocal.withInitial(() -> {
+          CopyStatistics stats = new CopyStatistics();
+          ALL_COPY_STATS.add(stats);
+          return stats;
+        });
+
+    static {
+      if (TRACK_COPIES) {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+          for (CopyStatistics stats : ALL_COPY_STATS) {
+            stats.report();
+          }
+        }, "IncrementalHash32-copy-stats"));
+      }
+    }
+
+    private static final class CopyStatistics {
+      long hashCount;
+      long avoidableCopyCount;
+      long avoidableCopyBytes;
+      long totalCopyCount;
+      long totalCopyBytes;
+      long totalHashBytes;
+
+      void record(long hashBytes, long copyCount, long copyBytes, int avoidableBytes) {
+        hashCount++;
+        totalHashBytes += hashBytes;
+        totalCopyCount += copyCount;
+        totalCopyBytes += copyBytes;
+        if (avoidableBytes > 0) {
+          avoidableCopyCount++;
+          avoidableCopyBytes += avoidableBytes;
+        }
+        if (hashCount >= REPORT_INTERVAL) {
+          report();
+        }
+      }
+
+      void report() {
+        if (hashCount == 0) {
+          return;
+        }
+        // Each line contains a delta; summing all lines across workers gives suite totals.
+        System.err.println("INCREMENTAL_HASH32_COPY_STATS"
+            + " hashCount=" + hashCount
+            + " avoidableCopyCount=" + avoidableCopyCount
+            + " avoidableCopyBytes=" + avoidableCopyBytes
+            + " totalCopyCount=" + totalCopyCount
+            + " totalCopyBytes=" + totalCopyBytes
+            + " totalHashBytes=" + totalHashBytes);
+        hashCount = 0;
+        avoidableCopyCount = 0;
+        avoidableCopyBytes = 0;
+        totalCopyCount = 0;
+        totalCopyBytes = 0;
+        totalHashBytes = 0;
+      }
+    }
     // XXHash constants
     private static final int PRIME1 = 0x9E3779B1; // 2654435761U
     private static final int PRIME2 = 0x85EBCA77; // 2246822519U
@@ -479,6 +545,12 @@ public class Murmur3 {
     private int tailLen;
     private int totalLen;
 
+    // Per-hash copy statistics, accumulated at end() only for completed hashes.
+    private long measuredHashBytes;
+    private long measuredCopyCount;
+    private long measuredCopyBytes;
+    private int avoidableCopyBytes;
+
     // Internal state variables
     private int seed;        // Initial seed value
     private int v1;          // State accumulators
@@ -490,6 +562,12 @@ public class Murmur3 {
       this.seed = seed;
       this.tailLen = 0;
       this.totalLen = 0;
+      if (TRACK_COPIES) {
+        measuredHashBytes = 0;
+        measuredCopyCount = 0;
+        measuredCopyBytes = 0;
+        avoidableCopyBytes = 0;
+      }
 
       // Initialize internal state
       v1 = seed + PRIME1 + PRIME2;
@@ -504,6 +582,11 @@ public class Murmur3 {
       }
 
       totalLen += length;
+      if (TRACK_COPIES) {
+        measuredHashBytes += length;
+        // A further nonempty slice means the preceding final-tail copy was necessary.
+        avoidableCopyBytes = 0;
+      }
 
       // If we have data stored in tail, try to fill a complete block
       if (tailLen > 0) {
@@ -513,12 +596,20 @@ public class Murmur3 {
         // If we cannot fill a block, just store in tail
         if (length < neededBytes) {
           System.arraycopy(data, offset, tail, tailLen, length);
+          if (TRACK_COPIES) {
+            measuredCopyCount++;
+            measuredCopyBytes += length;
+          }
           tailLen += length;
           return;
         }
 
         // We can fill a block. First, fill the tail.
         System.arraycopy(data, offset, tail, tailLen, neededBytes);
+        if (TRACK_COPIES) {
+          measuredCopyCount++;
+          measuredCopyBytes += neededBytes;
+        }
 
         // Process the now-full block in tail
         processBlock(tail, 0);
@@ -545,6 +636,11 @@ public class Murmur3 {
       if (currentOffset < limit) {
         int remaining = limit - currentOffset;
         System.arraycopy(data, currentOffset, tail, 0, remaining);
+        if (TRACK_COPIES) {
+          measuredCopyCount++;
+          measuredCopyBytes += remaining;
+          avoidableCopyBytes = remaining;
+        }
         tailLen = remaining;
       }
     }
@@ -612,6 +708,15 @@ public class Murmur3 {
       h32 *= PRIME3;
       h32 ^= h32 >>> 16;
 
+      if (TRACK_COPIES) {
+        THREAD_COPY_STATS.get().record(
+            measuredHashBytes, measuredCopyCount, measuredCopyBytes, avoidableCopyBytes);
+        // A repeated end() does not represent another copy of the same bytes.
+        measuredHashBytes = 0;
+        measuredCopyCount = 0;
+        measuredCopyBytes = 0;
+        avoidableCopyBytes = 0;
+      }
       return h32;
     }
   }
