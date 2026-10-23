@@ -555,9 +555,7 @@ public class Murmur3 {
      * This is a terminal operation: call {@link #start(int)} before using this hasher again.
      */
     public final int addAndEnd(byte[] data, int offset, int length) {
-      if (data == null || length == 0) {
-        return end();
-      }
+      assert data != null && length > 0;
 
       totalLen += length;
       if (tailLen > 0) {
