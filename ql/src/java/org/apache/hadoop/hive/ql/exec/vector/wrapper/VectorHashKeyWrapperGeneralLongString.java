@@ -86,6 +86,8 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
 
     // This code, with branches and all, is not executed if there are no string keys.
     Murmur3.IncrementalHash32 bytesHash = null;
+    int pendingIndex = -1;
+    boolean hasNonNull = false;
     for (int i = 0; i < byteValues.length; ++i) {
       /*
        * Hashing the string is potentially expensive so it is better to branch.
@@ -94,13 +96,31 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
       if (byteLengths[i] == -1) {
         continue;
       }
-      if (bytesHash == null) {
-        bytesHash = HashContext.getBytesHash(hashCtx);
-        bytesHash.start(hash);
+      hasNonNull = true;
+      if (byteLengths[i] > 0) {
+        // Keep the last nonempty string for addAndEnd; empty strings contribute no bytes.
+        if (pendingIndex != -1) {
+          if (bytesHash == null) {
+            bytesHash = HashContext.getBytesHash(hashCtx);
+            bytesHash.start(hash);
+          }
+          bytesHash.add(
+              byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex]);
+        }
+        pendingIndex = i;
       }
-      bytesHash.add(byteValues[i], byteStarts[i], byteLengths[i]);
     }
     if (bytesHash != null) {
+      hash = bytesHash.addAndEnd(
+          byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex]);
+    } else if (pendingIndex != -1) {
+      // A single nonempty slice can be hashed without initializing incremental state.
+      hash = Murmur3.IncrementalHash32.hash32(
+          byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex], hash);
+    } else if (hasNonNull) {
+      // Non-null empty strings still finalize the seeded XXHash32 value.
+      bytesHash = HashContext.getBytesHash(hashCtx);
+      bytesHash.start(hash);
       hash = bytesHash.end();
     }
     this.hashcode = hash;

@@ -64,10 +64,7 @@ public class VectorHashKeyWrapperTwoLongSingleString extends VectorHashKeyWrappe
     int hash = calculateLongValuesHashCode();
     hash = 31 * hash + calculateNullsHashCode();
     if (length0 != -1) {
-      Murmur3.IncrementalHash32 bytesHash = HashContext.getBytesHash(hashCtx);
-      bytesHash.start(hash);
-      bytesHash.add(bytes0, start0, length0);
-      hash = bytesHash.end();
+      hash = Murmur3.IncrementalHash32.hash32(bytes0, start0, length0, hash);
     }
     hashcode = hash;
   }
