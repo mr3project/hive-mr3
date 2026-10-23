@@ -549,6 +549,41 @@ public class Murmur3 {
       }
     }
 
+    /**
+     * Adds the final slice and returns the same hash as {@code add(data, offset, length); end()}.
+     * Processes the final contiguous tail directly from the input instead of copying it.
+     * This is a terminal operation: call {@link #start(int)} before using this hasher again.
+     */
+    public final int addAndEnd(byte[] data, int offset, int length) {
+      assert data != null && length > 0;
+
+      totalLen += length;
+      if (tailLen > 0) {
+        int neededBytes = 16 - tailLen;
+        if (length < neededBytes) {
+          // The remaining bytes straddle the previous slice and this one.
+          System.arraycopy(data, offset, tail, tailLen, length);
+          tailLen += length;
+          return end();
+        }
+
+        System.arraycopy(data, offset, tail, tailLen, neededBytes);
+        processBlock(tail, 0);
+        offset += neededBytes;
+        length -= neededBytes;
+        tailLen = 0;
+      }
+
+      final int limit = offset + length;
+      final int limitMinusBlock = limit - 16;
+      int currentOffset = offset;
+      while (currentOffset <= limitMinusBlock) {
+        processBlock(data, currentOffset);
+        currentOffset += 16;
+      }
+      return end(data, currentOffset, limit - currentOffset);
+    }
+
     private void processBlock(byte[] data, int offset) {
       int k1 = unsafe.getInt(data, BASE_OFFSET + offset);
       int k2 = unsafe.getInt(data, BASE_OFFSET + offset + 4);
@@ -569,6 +604,11 @@ public class Murmur3 {
     }
 
     public final int end() {
+      return end(tail, 0, tailLen);
+    }
+
+    private int end(byte[] data, int offset, int length) {
+      assert length >= 0 && length < 16;
       int h32;
 
       // If data length is >= 16 bytes, merge accumulator lanes
@@ -585,21 +625,21 @@ public class Murmur3 {
       // Add the total length of the input to the hash
       h32 += totalLen;
 
-      // Process remaining bytes in the tail (0 to 15 bytes)
+      // Process remaining bytes in the supplied slice (0 to 15 bytes).
       int idx = 0;
 
-      // Process 4-byte chunks from the tail
-      while (idx + 4 <= tailLen) {
-        int k1 = unsafe.getInt(tail, BASE_OFFSET + idx);
+      // Process 4-byte chunks.
+      while (idx + 4 <= length) {
+        int k1 = unsafe.getInt(data, BASE_OFFSET + offset + idx);
         h32 += k1 * PRIME3;
         h32 = Integer.rotateLeft(h32, 17);
         h32 *= PRIME4;
         idx += 4;
       }
 
-      // Process remaining 1 to 3 bytes from the tail
-      while (idx < tailLen) {
-        h32 += (tail[idx] & 0xFF) * PRIME5; // Process byte by byte
+      // Process remaining 1 to 3 bytes.
+      while (idx < length) {
+        h32 += (data[offset + idx] & 0xFF) * PRIME5; // Process byte by byte
         h32 = Integer.rotateLeft(h32, 11);
         h32 *= PRIME1;
         idx++;
