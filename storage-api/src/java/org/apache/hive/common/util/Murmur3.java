@@ -20,6 +20,10 @@ package org.apache.hive.common.util;
 
 import sun.misc.Unsafe;
 import java.lang.reflect.Field;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Murmur3 is successor to Murmur2 fast non-crytographic hash algorithms.
@@ -467,6 +471,54 @@ public class Murmur3 {
   }
 
   public static class IncrementalHash32 {
+    private static final Logger LOG = LoggerFactory.getLogger(IncrementalHash32.class);
+    private static final boolean TRACK_COPIES =
+        Boolean.getBoolean("hive.incrementalhash32.trackCopies");
+    private static final int REPORT_INTERVAL = 1_000_000;
+    private static final ConcurrentLinkedQueue<CopyStats> ALL_COPY_STATS =
+        new ConcurrentLinkedQueue<>();
+    private static final ThreadLocal<CopyStats> THREAD_COPY_STATS = ThreadLocal.withInitial(() -> {
+      CopyStats stats = new CopyStats();
+      ALL_COPY_STATS.add(stats);
+      return stats;
+    });
+
+    static {
+      if (TRACK_COPIES) {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+          for (CopyStats stats : ALL_COPY_STATS) {
+            stats.report();
+          }
+        }, "IncrementalHash32-copy-stats"));
+      }
+    }
+
+    private static final class CopyStats {
+      private int hashCount;
+      private long actualCopyCount;
+      private long savedCopyCount;
+
+      synchronized void record(long actual, long saved) {
+        hashCount++;
+        actualCopyCount += actual;
+        savedCopyCount += saved;
+        if (hashCount >= REPORT_INTERVAL) {
+          report();
+        }
+      }
+
+      synchronized void report() {
+        if (hashCount == 0) {
+          return;
+        }
+        LOG.error("INCREMENTAL_HASH32_ARRAYCOPY_STATS actualCopyCount={} savedCopyCount={}",
+            actualCopyCount, savedCopyCount);
+        hashCount = 0;
+        actualCopyCount = 0;
+        savedCopyCount = 0;
+      }
+    }
+
     // XXHash constants
     private static final int PRIME1 = 0x9E3779B1; // 2654435761U
     private static final int PRIME2 = 0x85EBCA77; // 2246822519U
@@ -478,6 +530,8 @@ public class Murmur3 {
     private byte[] tail = new byte[16]; // Buffer for remaining bytes (XXHash block size is 16)
     private int tailLen;
     private int totalLen;
+    private long actualCopyCount;
+    private long savedCopyCount;
 
     // Internal state variables
     private int seed;        // Initial seed value
@@ -490,6 +544,10 @@ public class Murmur3 {
       this.seed = seed;
       this.tailLen = 0;
       this.totalLen = 0;
+      if (TRACK_COPIES) {
+        actualCopyCount = 0;
+        savedCopyCount = 0;
+      }
 
       // Initialize internal state
       v1 = seed + PRIME1 + PRIME2;
@@ -513,12 +571,18 @@ public class Murmur3 {
         // If we cannot fill a block, just store in tail
         if (length < neededBytes) {
           System.arraycopy(data, offset, tail, tailLen, length);
+          if (TRACK_COPIES) {
+            actualCopyCount++;
+          }
           tailLen += length;
           return;
         }
 
         // We can fill a block. First, fill the tail.
         System.arraycopy(data, offset, tail, tailLen, neededBytes);
+        if (TRACK_COPIES) {
+          actualCopyCount++;
+        }
 
         // Process the now-full block in tail
         processBlock(tail, 0);
@@ -545,8 +609,55 @@ public class Murmur3 {
       if (currentOffset < limit) {
         int remaining = limit - currentOffset;
         System.arraycopy(data, currentOffset, tail, 0, remaining);
+        if (TRACK_COPIES) {
+          actualCopyCount++;
+        }
         tailLen = remaining;
       }
+    }
+
+    /**
+     * Adds the final slice and returns the same hash as {@code add(data, offset, length); end()}.
+     * Processes the final contiguous tail directly from the input instead of copying it.
+     * This is a terminal operation: call {@link #start(int)} before using this hasher again.
+     */
+    public final int addAndEnd(byte[] data, int offset, int length) {
+      assert data != null && length > 0;
+
+      totalLen += length;
+      if (tailLen > 0) {
+        int neededBytes = 16 - tailLen;
+        if (length < neededBytes) {
+          // The remaining bytes straddle the previous slice and this one.
+          System.arraycopy(data, offset, tail, tailLen, length);
+          if (TRACK_COPIES) {
+            actualCopyCount++;
+          }
+          tailLen += length;
+          return end();
+        }
+
+        System.arraycopy(data, offset, tail, tailLen, neededBytes);
+        if (TRACK_COPIES) {
+          actualCopyCount++;
+        }
+        processBlock(tail, 0);
+        offset += neededBytes;
+        length -= neededBytes;
+        tailLen = 0;
+      }
+
+      final int limit = offset + length;
+      final int limitMinusBlock = limit - 16;
+      int currentOffset = offset;
+      while (currentOffset <= limitMinusBlock) {
+        processBlock(data, currentOffset);
+        currentOffset += 16;
+      }
+      if (TRACK_COPIES && currentOffset < limit) {
+        savedCopyCount++;
+      }
+      return end(data, currentOffset, limit - currentOffset);
     }
 
     private void processBlock(byte[] data, int offset) {
@@ -569,6 +680,11 @@ public class Murmur3 {
     }
 
     public final int end() {
+      return end(tail, 0, tailLen);
+    }
+
+    private int end(byte[] data, int offset, int length) {
+      assert length >= 0 && length < 16;
       int h32;
 
       // If data length is >= 16 bytes, merge accumulator lanes
@@ -585,21 +701,21 @@ public class Murmur3 {
       // Add the total length of the input to the hash
       h32 += totalLen;
 
-      // Process remaining bytes in the tail (0 to 15 bytes)
+      // Process remaining bytes in the supplied slice (0 to 15 bytes).
       int idx = 0;
 
-      // Process 4-byte chunks from the tail
-      while (idx + 4 <= tailLen) {
-        int k1 = unsafe.getInt(tail, BASE_OFFSET + idx);
+      // Process 4-byte chunks.
+      while (idx + 4 <= length) {
+        int k1 = unsafe.getInt(data, BASE_OFFSET + offset + idx);
         h32 += k1 * PRIME3;
         h32 = Integer.rotateLeft(h32, 17);
         h32 *= PRIME4;
         idx += 4;
       }
 
-      // Process remaining 1 to 3 bytes from the tail
-      while (idx < tailLen) {
-        h32 += (tail[idx] & 0xFF) * PRIME5; // Process byte by byte
+      // Process remaining 1 to 3 bytes.
+      while (idx < length) {
+        h32 += (data[offset + idx] & 0xFF) * PRIME5; // Process byte by byte
         h32 = Integer.rotateLeft(h32, 11);
         h32 *= PRIME1;
         idx++;
@@ -612,6 +728,11 @@ public class Murmur3 {
       h32 *= PRIME3;
       h32 ^= h32 >>> 16;
 
+      if (TRACK_COPIES) {
+        THREAD_COPY_STATS.get().record(actualCopyCount, savedCopyCount);
+        actualCopyCount = 0;
+        savedCopyCount = 0;
+      }
       return h32;
     }
   }
