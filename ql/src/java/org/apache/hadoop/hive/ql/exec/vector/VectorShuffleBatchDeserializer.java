@@ -35,47 +35,503 @@ public final class VectorShuffleBatchDeserializer {
   private byte[] buffer;
   private int position;
   private int limit;
+  private final FrameInfo frameInfo = new FrameInfo();
+  private final boolean requiresMetadataInspection;
 
-  // The Tez shuffle layer has already verified that the right number of bytes have been received,
-  // so we usually do not expect ArrayIndexOutOfBoundsException.
-  // IOException is for handling in-transit data corruption.
-  public void deserialize(BytesWritable serialized, VectorizedRowBatch destination)
+  /** Keeps full metadata preinspection when the caller does not provide a fixed schema. */
+  public VectorShuffleBatchDeserializer() {
+    requiresMetadataInspection = true;
+  }
+
+  /**
+   * Caches whether the transmitted input columns contain batch-wide date/timestamp metadata.
+   * Scratch columns after {@code inputColumnCount} do not participate. The caller must use this fixed
+   * schema, including its nested column types, for every destination passed to inspect().
+   */
+  public VectorShuffleBatchDeserializer(VectorizedRowBatch schema, int inputColumnCount) {
+    assert schema != null && inputColumnCount >= 0 && inputColumnCount <= schema.cols.length;
+    boolean hasMetadata = false;
+    for (int i = 0; i < inputColumnCount; i++) {
+      hasMetadata |= hasTypeMetadata(schema.cols[i]);
+    }
+    requiresMetadataInspection = hasMetadata;
+  }
+
+  private static boolean hasTypeMetadata(ColumnVector column) {
+    assert column != null;
+    // DateColumnVector extends LongColumnVector, but still carries batch-wide metadata.
+    if (column instanceof DateColumnVector || column instanceof TimestampColumnVector) {
+      return true;
+    }
+    if (column instanceof ListColumnVector) {
+      return hasTypeMetadata(((ListColumnVector) column).child);
+    }
+    if (column instanceof MapColumnVector) {
+      MapColumnVector map = (MapColumnVector) column;
+      boolean hasMetadata = hasTypeMetadata(map.keys);
+      hasMetadata |= hasTypeMetadata(map.values);
+      return hasMetadata;
+    }
+    ColumnVector[] fields;
+    if (column instanceof StructColumnVector) {
+      fields = ((StructColumnVector) column).fields;
+    } else if (column instanceof UnionColumnVector) {
+      fields = ((UnionColumnVector) column).fields;
+    } else {
+      return false;
+    }
+    boolean hasMetadata = false;
+    for (ColumnVector field : fields) {
+      hasMetadata |= hasTypeMetadata(field);
+    }
+    return hasMetadata;
+  }
+
+  /** Reusable inspection result, valid until the next inspect() call on this deserializer. */
+  public static final class FrameInfo {
+    private int rowCount;
+    private boolean appendCompatible;
+
+    private FrameInfo() {
+    }
+
+    public int getRowCount() {
+      return rowCount;
+    }
+
+    /** Full frames, as well as incompatible metadata, require standalone replacement decoding. */
+    public boolean isAppendCompatible() {
+      return appendCompatible;
+    }
+  }
+
+  /**
+   * Validates the header and inspects appendable frames once, without changing the destination.
+   * Full frames cannot share an execution batch, so only their header is inspected; replacement
+   * decoding validates their payload. For a fixed schema without date/timestamp metadata, positive
+   * smaller frames also need only header inspection; append decoding validates their payload.
+   * Otherwise smaller frames are fully validated and their date/timestamp metadata is compared with
+   * the destination, including when the destination is empty. Empty frames are fully validated.
+   *
+   * The result is reused and holds no input-buffer or destination references. Callers must consume
+   * its fields before the next inspection, and flush then use replacement decoding if it is not
+   * append-compatible.
+   */
+  public FrameInfo inspect(BytesWritable serialized, VectorizedRowBatch destination)
       throws IOException {
-    assert serialized != null && destination != null;
+    frameInfo.rowCount = 0;
+    frameInfo.appendCompatible = false;
+    try {
+      start(serialized);
+      int rowCount = readInt();
+      int columnCount = readInt();
+      int capacity = validateAppendDimensions(destination, rowCount, columnCount);
+      boolean compatible = rowCount < capacity;
+      if (rowCount == 0 || (compatible && requiresMetadataInspection)) {
+        for (int i = 0; i < columnCount; i++) {
+          compatible &= inspectColumn(destination.cols[i], rowCount);
+        }
+        checkEnd();
+      }
+      frameInfo.rowCount = rowCount;
+      frameInfo.appendCompatible = compatible;
+      return frameInfo;
+    } finally {
+      buffer = null;
+    }
+  }
 
+  /**
+   * Appends directly into destination-owned storage, preserving its dense, nonrepeating prefix.
+   * Only successful decoding publishes the new size. A failure invalidates the destination; callers
+   * must fail the task and discard it, rather than dispatching the partially decoded batch.
+   * The receiver uses inspect() to choose a compatible representation first. This method rechecks
+   * dimensions and capacity, and checks metadata while decoding, without another inspection pass.
+   */
+  public void append(BytesWritable serialized, VectorizedRowBatch destination) throws IOException {
+    assert !destination.selectedInUse;
+    try {
+      start(serialized);
+      int rowCount = readInt();
+      int columnCount = readInt();
+      int capacity = validateAppendDimensions(destination, rowCount, columnCount);
+      validateAppendCapacity(destination, rowCount, capacity);
+      // Zero-count decoding validates empty frames without changing the accumulated prefix.
+      int[] indices = consecutiveIndices(destination.size, rowCount);
+      for (int i = 0; i < columnCount; i++) {
+        readAppendColumn(destination.cols[i], indices, rowCount);
+      }
+      checkEnd();
+      destination.size += rowCount;
+    } finally {
+      buffer = null;
+    }
+  }
+
+  private void start(BytesWritable serialized) throws IOException {
+    assert serialized != null;
     buffer = serialized.getBytesRaw();
     position = serialized.getOffset();
-    limit = position + serialized.getLength();
+    int length = serialized.getLength();
+    if (buffer == null || position < 0 || length < 0 || position > buffer.length - length) {
+      throw new IOException("Invalid vector shuffle payload bounds");
+    }
+    limit = position + length;
+  }
 
-    final int rowCount = readInt();
-    final int columnCount = readInt();
+  private void validateDimensions(VectorizedRowBatch destination, int rowCount, int columnCount)
+      throws IOException {
+    assert destination != null;
     if (rowCount < 0 || columnCount < 0 || columnCount > destination.cols.length) {
       throw new IOException("Invalid vector shuffle batch dimensions: " + rowCount + " rows, "
           + columnCount + " columns");
     }
+    for (int i = 0; i < columnCount; i++) {
+      if (destination.cols[i] == null) {
+        throw new IOException("Destination column " + i + " is not initialized");
+      }
+    }
+  }
 
-    destination.reset();
-    for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
-      if (destination.cols[columnIndex] != null) {
-        destination.cols[columnIndex].ensureSize(rowCount, false);
-      }
+  private int validateAppendDimensions(VectorizedRowBatch destination, int rowCount,
+      int columnCount) throws IOException {
+    validateDimensions(destination, rowCount, columnCount);
+    if (columnCount != destination.projectionSize) {
+      throw new IOException("Vector shuffle frame has " + columnCount + " columns; expected "
+          + destination.projectionSize);
     }
-    destination.size = rowCount;
-    destination.selectedInUse = false;
-    destination.projectionSize = columnCount;
-    for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
-      destination.projectedColumns[columnIndex] = columnIndex;
-      ColumnVector column = destination.cols[columnIndex];
-      if (column == null) {
-        throw new IOException("Destination column " + columnIndex + " is not initialized");
-      }
-      readColumn(column, rowCount);
+    int capacity = appendCapacity(destination);
+    if (rowCount > capacity) {
+      throw new IOException("Vector shuffle frame of " + rowCount + " rows does not fit destination"
+          + " capacity " + capacity);
     }
+    return capacity;
+  }
+
+  private void validateAppendCapacity(VectorizedRowBatch destination, int rowCount, int capacity)
+      throws IOException {
+    if (destination.size < 0 || destination.size > capacity - rowCount) {
+      throw new IOException("Vector shuffle frame of " + rowCount + " rows does not fit destination"
+          + " with " + destination.size + " pending rows and capacity " + capacity);
+    }
+  }
+
+  private int appendCapacity(VectorizedRowBatch destination) {
+    int capacity = Math.min(VectorizedRowBatch.DEFAULT_SIZE, destination.selected.length);
+    for (int i = 0; i < destination.projectionSize; i++) {
+      capacity = Math.min(capacity, destination.cols[i].isNull.length);
+    }
+    return capacity;
+  }
+
+  private void checkEnd() throws IOException {
     if (position != limit) {
       throw new IOException("Vector shuffle batch has " + (limit - position) + " trailing bytes");
     }
+  }
 
-    buffer = null;
+  public void deserialize(BytesWritable serialized, VectorizedRowBatch destination)
+      throws IOException {
+    assert serialized != null && destination != null;
+    try {
+      start(serialized);
+      final int rowCount = readInt();
+      final int columnCount = readInt();
+      validateDimensions(destination, rowCount, columnCount);
+
+      destination.reset();
+      for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+        destination.cols[columnIndex].ensureSize(rowCount, false);
+      }
+      destination.size = rowCount;
+      destination.selectedInUse = false;
+      destination.projectionSize = columnCount;
+      for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+        destination.projectedColumns[columnIndex] = columnIndex;
+        readColumn(destination.cols[columnIndex], rowCount);
+      }
+      checkEnd();
+    } finally {
+      buffer = null;
+    }
+  }
+
+  private int[] consecutiveIndices(int offset, int count) throws IOException {
+    assert offset >= 0 && count >= 0 && offset <= Integer.MAX_VALUE - count;
+    int[] indices = new int[count];
+    for (int i = 0; i < count; i++) {
+      indices[i] = offset + i;
+    }
+    return indices;
+  }
+
+  private int checkedAdd(int first, int second) throws IOException {
+    if (first < 0 || second < 0 || first > Integer.MAX_VALUE - second) {
+      throw new IOException("Vector shuffle child count exceeds supported capacity");
+    }
+    return first + second;
+  }
+
+  private int readFlags(ColumnVector column) throws IOException {
+    int flags = readUnsignedByte();
+    if ((flags & ~(IS_REPEATING | HAS_NULLS | IS_DECIMAL_64)) != 0
+        || ((flags & IS_DECIMAL_64) != 0 && !(column instanceof Decimal64ColumnVector)
+            && !(column instanceof DecimalColumnVector))) {
+      throw new IOException("Invalid vector shuffle flags " + flags + " for "
+          + column.getClass().getSimpleName());
+    }
+    return flags;
+  }
+
+  private byte[] readNullBitmap(int flags, int valueCount) throws IOException {
+    if ((flags & HAS_NULLS) == 0) {
+      return null;
+    }
+    int length = (int) ((valueCount + 7L) / 8);
+    requireBytes(length);
+    byte[] bitmap = new byte[length];
+    System.arraycopy(buffer, position, bitmap, 0, length);
+    position += length;
+    return bitmap;
+  }
+
+  private boolean inspectColumn(ColumnVector column, int rowCount) throws IOException {
+    int flags = readFlags(column);
+    int count = (flags & IS_REPEATING) != 0 ? Math.min(rowCount, 1) : rowCount;
+    boolean hasNulls = (flags & HAS_NULLS) != 0;
+    int bitmapOffset = position;
+    if (hasNulls) {
+      // Validate the entire bitmap before inspecting its bits directly in the input buffer.
+      skipBytes((int) ((count + 7L) / 8));
+    }
+    boolean compatible = !requiresMetadataInspection || inspectTypeMetadata(column, count);
+    int nonNullCount = count;
+    if (hasNulls) {
+      for (int i = 0; i < count; i++) {
+        if ((buffer[bitmapOffset + (i >>> 3)] & (1 << (i & 7))) != 0) {
+          nonNullCount--;
+        }
+      }
+    }
+    if (column instanceof StructColumnVector) {
+      for (ColumnVector field : ((StructColumnVector) column).fields) {
+        compatible &= inspectColumn(field, nonNullCount);
+      }
+    } else if (column instanceof UnionColumnVector) {
+      UnionColumnVector union = (UnionColumnVector) column;
+      int[] counts = new int[union.fields.length];
+      for (int i = 0; i < nonNullCount; i++) {
+        int tag = readInt();
+        validateUnionTag(tag, union.fields.length);
+        counts[tag]++;
+      }
+      for (int tag = 0; tag < union.fields.length; tag++) {
+        compatible &= inspectColumn(union.fields[tag], counts[tag]);
+      }
+    } else if (column instanceof MultiValuedColumnVector) {
+      int children = 0;
+      for (int i = 0; i < nonNullCount; i++) {
+        children = checkedAdd(children, readInt());
+      }
+      if (column instanceof ListColumnVector) {
+        compatible &= inspectColumn(((ListColumnVector) column).child, children);
+      } else {
+        MapColumnVector map = (MapColumnVector) column;
+        compatible &= inspectColumn(map.keys, children);
+        compatible &= inspectColumn(map.values, children);
+      }
+    } else if ((flags & IS_DECIMAL_64) != 0
+        || (column instanceof LongColumnVector && !(column instanceof Decimal64ColumnVector))
+        || column instanceof DoubleColumnVector) {
+      skipFixedValues(nonNullCount, Long.BYTES);
+    } else if (column instanceof BytesColumnVector) {
+      for (int i = 0; i < nonNullCount; i++) {
+        skipBytes(readInt());
+      }
+    } else if (column instanceof TimestampColumnVector
+        || column instanceof IntervalDayTimeColumnVector) {
+      skipFixedValues(nonNullCount, Long.BYTES + Integer.BYTES);
+    } else if (column instanceof DecimalColumnVector || column instanceof Decimal64ColumnVector) {
+      for (int i = 0; i < nonNullCount; i++) {
+        position += decimalLength();
+      }
+    } else if (!(column instanceof VoidColumnVector)) {
+      throw unsupported(column);
+    }
+    return compatible;
+  }
+
+  private boolean inspectTypeMetadata(ColumnVector column, int valueCount) throws IOException {
+    if (column instanceof DateColumnVector) {
+      boolean proleptic = readBoolean();
+      return valueCount == 0
+          || proleptic == ((DateColumnVector) column).isUsingProlepticCalendar();
+    }
+    if (column instanceof TimestampColumnVector) {
+      TimestampColumnVector timestamp = (TimestampColumnVector) column;
+      boolean utc = readBoolean();
+      boolean proleptic = readBoolean();
+      return valueCount == 0
+          || utc == timestamp.isUTC() && proleptic == timestamp.usingProlepticCalendar();
+    }
+    return true;
+  }
+
+  private void skipFixedValues(int count, int width) throws IOException {
+    if (count > (limit - position) / width) {
+      throw new IOException("Truncated vector shuffle values");
+    }
+    position += count * width;
+  }
+
+  private void skipBytes(int length) throws IOException {
+    requireBytes(length);
+    position += length;
+  }
+
+  // HiveDecimalWritable's direct representation uses big-endian integers, unlike frame dimensions.
+  private int decimalLength() throws IOException {
+    requireBytes(2 * Integer.BYTES);
+    int p = position + Integer.BYTES;
+    int length = ((buffer[p] & 0xff) << 24) | ((buffer[p + 1] & 0xff) << 16)
+        | ((buffer[p + 2] & 0xff) << 8) | (buffer[p + 3] & 0xff);
+    if (length <= 0 || length > limit - position - 2 * Integer.BYTES) {
+      throw new IOException("Invalid vector shuffle decimal length " + length);
+    }
+    return 2 * Integer.BYTES + length;
+  }
+
+  private void validateUnionTag(int tag, int fieldCount) throws IOException {
+    if (tag < 0 || tag >= fieldCount) {
+      throw new IOException("Invalid union tag " + tag + " for " + fieldCount + " fields");
+    }
+  }
+
+  private void readAppendColumn(ColumnVector column, int[] indices, int rowCount)
+      throws IOException {
+    assert !column.isRepeating;
+    int flags = readFlags(column);
+    boolean repeating = (flags & IS_REPEATING) != 0;
+    int count = repeating ? Math.min(rowCount, 1) : rowCount;
+    column.ensureSize(requiredSize(indices, rowCount, false), true);
+    byte[] nulls = readNullBitmap(flags, count);
+    for (int i = 0; i < count; i++) {
+      boolean isNull = isNull(nulls, i);
+      column.isNull[indices[i]] = isNull;
+      if (isNull) {
+        column.noNulls = false;
+      }
+    }
+    // Recheck metadata during decoding, including after a receiver flush. Empty nested columns
+    // leave destination metadata untouched.
+    if (requiresMetadataInspection && !inspectTypeMetadata(column, count)) {
+      throw new IOException("Incompatible vector shuffle date/timestamp metadata");
+    }
+    if (column instanceof StructColumnVector) {
+      int activeCount = 0;
+      for (int i = 0; i < count; i++) {
+        if (!isNull(nulls, i)) {
+          activeCount++;
+        }
+      }
+      int[] active = new int[activeCount];
+      int next = 0;
+      for (int i = 0; i < count; i++) {
+        if (!isNull(nulls, i)) {
+          active[next++] = indices[i];
+        }
+      }
+      for (ColumnVector field : ((StructColumnVector) column).fields) {
+        readAppendColumn(field, active, activeCount);
+      }
+    } else if (column instanceof UnionColumnVector) {
+      UnionColumnVector union = (UnionColumnVector) column;
+      int[] counts = new int[union.fields.length];
+      for (int i = 0; i < count; i++) {
+        if (!isNull(nulls, i)) {
+          int tag = readInt();
+          validateUnionTag(tag, union.fields.length);
+          union.tags[indices[i]] = tag;
+          counts[tag]++;
+        }
+      }
+      int[][] active = new int[union.fields.length][];
+      int[] next = new int[union.fields.length];
+      for (int tag = 0; tag < union.fields.length; tag++) {
+        active[tag] = new int[counts[tag]];
+      }
+      for (int i = 0; i < count; i++) {
+        if (!isNull(nulls, i)) {
+          int tag = union.tags[indices[i]];
+          active[tag][next[tag]++] = indices[i];
+        }
+      }
+      for (int tag = 0; tag < union.fields.length; tag++) {
+        readAppendColumn(union.fields[tag], active[tag], counts[tag]);
+      }
+    } else if (column instanceof MultiValuedColumnVector) {
+      MultiValuedColumnVector multi = (MultiValuedColumnVector) column;
+      int oldChildCount = multi.childCount;
+      int childCount = oldChildCount;
+      for (int i = 0; i < count; i++) {
+        int index = indices[i];
+        multi.offsets[index] = childCount;
+        int length = isNull(nulls, i) ? 0 : readInt();
+        childCount = checkedAdd(childCount, length);
+        multi.lengths[index] = length;
+      }
+      int incomingChildren = childCount - oldChildCount;
+      int[] children = consecutiveIndices(oldChildCount, incomingChildren);
+      if (column instanceof ListColumnVector) {
+        readAppendColumn(((ListColumnVector) column).child, children, incomingChildren);
+      } else {
+        MapColumnVector map = (MapColumnVector) column;
+        readAppendColumn(map.keys, children, incomingChildren);
+        readAppendColumn(map.values, children, incomingChildren);
+      }
+      multi.childCount = childCount;
+    } else {
+      // The source repeating flag must never redirect writes to the accumulator's row zero.
+      readValue(column, indices, count, false, nulls, (flags & IS_DECIMAL_64) != 0);
+    }
+    if (repeating && rowCount > 1) {
+      for (int i = 1; i < rowCount; i++) {
+        copyRepeatedElement(column, indices[0], indices[i]);
+      }
+    }
+  }
+
+  private void copyRepeatedElement(ColumnVector column, int source, int destination) {
+    column.isNull[destination] = column.isNull[source];
+    if (column.isNull[source]) {
+      column.noNulls = false;
+      return;
+    }
+    if (column instanceof BytesColumnVector) {
+      BytesColumnVector bytes = (BytesColumnVector) column;
+      // References are safe here: the original value was copied into destination-owned storage.
+      bytes.setRef(destination, bytes.vector[source], bytes.start[source], bytes.length[source]);
+    } else if (column instanceof MultiValuedColumnVector) {
+      MultiValuedColumnVector multi = (MultiValuedColumnVector) column;
+      // As in MultiValuedColumnVector.flatten(), repeated rows can share a decoded child range.
+      multi.offsets[destination] = multi.offsets[source];
+      multi.lengths[destination] = multi.lengths[source];
+    } else if (column instanceof StructColumnVector) {
+      for (ColumnVector field : ((StructColumnVector) column).fields) {
+        copyRepeatedElement(field, source, destination);
+      }
+    } else if (column instanceof UnionColumnVector) {
+      UnionColumnVector union = (UnionColumnVector) column;
+      int tag = union.tags[source];
+      union.tags[destination] = tag;
+      copyRepeatedElement(union.fields[tag], source, destination);
+    } else if (column instanceof DecimalColumnVector) {
+      DecimalColumnVector decimals = (DecimalColumnVector) column;
+      // Preserve the decoded value exactly, as readDirect/deserialize64 do above.
+      decimals.vector[destination].set(decimals.vector[source]);
+    } else if (!(column instanceof VoidColumnVector)) {
+      column.setElement(destination, source, column);
+    }
   }
 
   private void readColumn(ColumnVector column, int rowCount) throws IOException {
@@ -84,17 +540,13 @@ public final class VectorShuffleBatchDeserializer {
 
   private void readColumn(ColumnVector column, int[] destinationIndices, int rowCount)
       throws IOException {
-    final int flags = readUnsignedByte();
+    final int flags = readFlags(column);
     final boolean repeating = (flags & IS_REPEATING) != 0;
     final boolean hasNulls = (flags & HAS_NULLS) != 0;
     final int valueCount = repeating ? Math.min(rowCount, 1) : rowCount;
     column.ensureSize(requiredSize(destinationIndices, valueCount, repeating), false);
 
-    byte[] nullBitmap = null;
-    if (hasNulls) {
-      nullBitmap = new byte[(valueCount + 7) / 8];
-      readFully(nullBitmap);
-    }
+    byte[] nullBitmap = readNullBitmap(flags, valueCount);
 
     column.isRepeating = repeating;
     column.noNulls = !hasNulls;
@@ -193,11 +645,8 @@ public final class VectorShuffleBatchDeserializer {
       column.offsets[destinationIndex] = childCount;
       if (!column.isNull[destinationIndex]) {
         int length = readInt();
-        if (length < 0) {
-          throw new IOException("Negative multi-valued vector length " + length);
-        }
+        childCount = checkedAdd(childCount, length);
         column.lengths[destinationIndex] = length;
-        childCount = Math.addExact(childCount, length);
       } else {
         column.lengths[destinationIndex] = 0;
       }
@@ -206,37 +655,42 @@ public final class VectorShuffleBatchDeserializer {
     return childCount;
   }
 
-  private int readUnsignedByte() {
+  private void requireBytes(int count) throws IOException {
+    if (count < 0 || count > limit - position) {
+      throw new IOException("Truncated vector shuffle payload at byte " + position
+          + ": need " + count + " bytes, remaining " + (limit - position));
+    }
+  }
+
+  private int readUnsignedByte() throws IOException {
+    requireBytes(Byte.BYTES);
     return buffer[position++] & 0xff;
   }
 
-  private boolean readBoolean() {
-    return readUnsignedByte() != 0;
+  private boolean readBoolean() throws IOException {
+    int value = readUnsignedByte();
+    if (value > 1) {
+      throw new IOException("Invalid vector shuffle boolean " + value);
+    }
+    return value != 0;
   }
 
-  private int readInt() {
+  private int readInt() throws IOException {
+    requireBytes(Integer.BYTES);
     int value = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + position);
     position += Integer.BYTES;
     return value;
   }
 
-  private long readLong() {
+  private long readLong() throws IOException {
+    requireBytes(Long.BYTES);
     long value = theUnsafe.getLong(buffer, BYTE_ARRAY_BASE_OFFSET + position);
     position += Long.BYTES;
     return value;
   }
 
-  private double readDouble() {
+  private double readDouble() throws IOException {
     return Double.longBitsToDouble(readLong());
-  }
-
-  private void readFully(byte[] bytes) {
-    readFully(bytes, 0, bytes.length);
-  }
-
-  private void readFully(byte[] bytes, int offset, int length) {
-    System.arraycopy(buffer, position, bytes, offset, length);
-    position += length;
   }
 
   private boolean isNull(byte[] nullBitmap, int logical) {
@@ -258,7 +712,7 @@ public final class VectorShuffleBatchDeserializer {
     return requiredSize;
   }
 
-  private void readTypeMetadata(ColumnVector column) {
+  private void readTypeMetadata(ColumnVector column) throws IOException {
     if (column instanceof DateColumnVector) {
       ((DateColumnVector) column).setUsingProlepticCalendar(readBoolean());
     } else if (column instanceof TimestampColumnVector) {
@@ -278,7 +732,8 @@ public final class VectorShuffleBatchDeserializer {
             decimal64.vector[destinationIndex(destinationIndices, logical, repeating)] = readLong();
           }
         }
-      } else if (column instanceof DecimalColumnVector) {
+      } else {
+        assert column instanceof DecimalColumnVector;
         DecimalColumnVector decimal = (DecimalColumnVector) column;
         for (int logical = 0; logical < valueCount; logical++) {
           if (!isNull(nullBitmap, logical)) {
@@ -286,8 +741,6 @@ public final class VectorShuffleBatchDeserializer {
                 .deserialize64(readLong(), decimal.scale);
           }
         }
-      } else {
-        throw unsupported(column);
       }
       return;
     }
@@ -296,9 +749,7 @@ public final class VectorShuffleBatchDeserializer {
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
           int length = readInt();
-          if (length < 0) {
-            throw new IOException("Negative byte-vector value length " + length);
-          }
+          requireBytes(length);
           bytesColumn.setVal(destinationIndex(destinationIndices, logical, repeating),
               buffer, position, length);
           position += length;
@@ -326,6 +777,7 @@ public final class VectorShuffleBatchDeserializer {
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
           HiveDecimalWritable decimal = new HiveDecimalWritable();
+          decimalLength();
           position += decimal.readDirect(buffer, position);
           decimal64.set(destinationIndex(destinationIndices, logical, repeating), decimal);
         }
@@ -334,6 +786,7 @@ public final class VectorShuffleBatchDeserializer {
       DecimalColumnVector decimal = (DecimalColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmap, logical)) {
+          decimalLength();
           position += decimal.vector[destinationIndex(destinationIndices, logical, repeating)]
               .readDirect(buffer, position);
         }
