@@ -760,6 +760,16 @@ public class ReduceRecordSource implements RecordSource {
         return;
       }
 
+      // Compact frames may use calendar/UTC settings that ordinary row deserialization
+      // does not encode. Do not merge those values into an ordinary-row representation.
+      // A new schema-initialized batch restores the defaults (reset() does not).
+      if (!compact && vectorShuffleBatchDeserializer.hasNonDefaultMetadata(
+          batch, accumulatorColumnCount)) {
+        flushPendingBatch();
+        batch = batchContext.createVectorizedRowBatch();
+        prepareAccumulatorBatch();
+      }
+
       long recordBytes = (long) keyWritable.getLength() + valueWritable.getLength();
       if (accumulatorRows != 0 &&
           (incomingRows > accumulatorMaxRows - accumulatorRows
