@@ -26,6 +26,8 @@ import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.io.BytesWritable;
 
+import com.google.common.base.Preconditions;
+
 /** Deserializes a compact vector shuffle payload into an already schema-initialized batch. */
 public final class VectorShuffleBatchDeserializer {
   private static final int IS_REPEATING = 1;
@@ -36,6 +38,58 @@ public final class VectorShuffleBatchDeserializer {
   private int position;
   private int limit;
   private final FrameInfo frameInfo = new FrameInfo();
+  private final boolean requiresMetadataInspection;
+
+  /** Keeps full metadata preinspection when the caller does not provide a fixed schema. */
+  public VectorShuffleBatchDeserializer() {
+    requiresMetadataInspection = true;
+  }
+
+  /**
+   * Caches whether the transmitted input columns contain batch-wide date/timestamp metadata.
+   * Scratch columns after {@code inputColumnCount} do not participate. The caller must use this fixed
+   * schema, including its nested column types, for every destination passed to inspect().
+   */
+  public VectorShuffleBatchDeserializer(VectorizedRowBatch schema, int inputColumnCount) {
+    Preconditions.checkArgument(schema != null, "Vector shuffle schema must be initialized");
+    Preconditions.checkArgument(inputColumnCount >= 0 && inputColumnCount <= schema.cols.length,
+        "Invalid vector shuffle input column count: %s", inputColumnCount);
+    boolean hasMetadata = false;
+    for (int i = 0; i < inputColumnCount; i++) {
+      hasMetadata |= hasTypeMetadata(schema.cols[i]);
+    }
+    requiresMetadataInspection = hasMetadata;
+  }
+
+  private static boolean hasTypeMetadata(ColumnVector column) {
+    Preconditions.checkArgument(column != null, "Vector shuffle schema column is not initialized");
+    // DateColumnVector extends LongColumnVector, but still carries batch-wide metadata.
+    if (column instanceof DateColumnVector || column instanceof TimestampColumnVector) {
+      return true;
+    }
+    if (column instanceof ListColumnVector) {
+      return hasTypeMetadata(((ListColumnVector) column).child);
+    }
+    if (column instanceof MapColumnVector) {
+      MapColumnVector map = (MapColumnVector) column;
+      boolean hasMetadata = hasTypeMetadata(map.keys);
+      hasMetadata |= hasTypeMetadata(map.values);
+      return hasMetadata;
+    }
+    ColumnVector[] fields;
+    if (column instanceof StructColumnVector) {
+      fields = ((StructColumnVector) column).fields;
+    } else if (column instanceof UnionColumnVector) {
+      fields = ((UnionColumnVector) column).fields;
+    } else {
+      return false;
+    }
+    boolean hasMetadata = false;
+    for (ColumnVector field : fields) {
+      hasMetadata |= hasTypeMetadata(field);
+    }
+    return hasMetadata;
+  }
 
   /** Reusable inspection result, valid until the next inspect() call on this deserializer. */
   public static final class FrameInfo {
@@ -58,8 +112,10 @@ public final class VectorShuffleBatchDeserializer {
   /**
    * Validates the header and inspects appendable frames once, without changing the destination.
    * Full frames cannot share an execution batch, so only their header is inspected; replacement
-   * decoding validates their payload. Smaller frames are fully validated and their date/timestamp
-   * metadata is compared with the destination, including when the destination is empty.
+   * decoding validates their payload. For a fixed schema without date/timestamp metadata, positive
+   * smaller frames also need only header inspection; append decoding validates their payload.
+   * Otherwise smaller frames are fully validated and their date/timestamp metadata is compared with
+   * the destination, including when the destination is empty. Empty frames are fully validated.
    *
    * The result is reused and holds no input-buffer or destination references. Callers must consume
    * its fields before the next inspection, and flush then use replacement decoding if it is not
@@ -75,7 +131,7 @@ public final class VectorShuffleBatchDeserializer {
       int columnCount = readInt();
       validateAppendDimensions(destination, rowCount, columnCount);
       boolean compatible = rowCount < appendCapacity(destination);
-      if (compatible) {
+      if (rowCount == 0 || (compatible && requiresMetadataInspection)) {
         for (int i = 0; i < columnCount; i++) {
           compatible &= inspectColumn(destination.cols[i], rowCount);
         }

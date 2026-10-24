@@ -230,11 +230,13 @@ public class ReduceRecordSource implements RecordSource {
         rowObjectInspector = Utilities.constructVectorizedReduceRowOI(keyStructInspector,
             valueStructInspectors);
         batch = batchContext.createVectorizedRowBatch();
-        vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
         // Unordered vector input already has the mixed-key execution-batch contract. Ordered
         // input and row-mode fallback must retain their group and replacement semantics.
         accumulateShuffleInput = isKeyValueReader && HiveConf.getBoolVar(jconf,
             HiveConf.ConfVars.HIVE_VECTORIZATION_REDUCE_SHUFFLE_INPUT_ACCUMULATE);
+        vectorShuffleBatchDeserializer = accumulateShuffleInput
+            ? new VectorShuffleBatchDeserializer(batch, totalColumns)
+            : new VectorShuffleBatchDeserializer();
         if (accumulateShuffleInput) {
           inputColumnCount = totalColumns;
           accumulatorProjection = batch.projectedColumns;
