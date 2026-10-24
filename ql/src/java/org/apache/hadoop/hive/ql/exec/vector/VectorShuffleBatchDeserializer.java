@@ -36,13 +36,13 @@ public final class VectorShuffleBatchDeserializer {
   private int position;
   private int limit;
 
-  /** Inspects dimensions without resetting or changing the destination. */
+  /** Validates receiver schema and frame capacity without changing the destination or prefix. */
   public int getRowCount(BytesWritable serialized, VectorizedRowBatch destination)
       throws IOException {
     try {
       start(serialized);
       int rowCount = readInt();
-      validateDimensions(destination, rowCount, readInt());
+      validateAppendDimensions(destination, rowCount, readInt());
       return rowCount;
     } finally {
       buffer = null;
@@ -478,7 +478,7 @@ public final class VectorShuffleBatchDeserializer {
 
   private void readColumn(ColumnVector column, int[] destinationIndices, int rowCount)
       throws IOException {
-    final int flags = readUnsignedByte();
+    final int flags = readFlags(column);
     final boolean repeating = (flags & IS_REPEATING) != 0;
     final boolean hasNulls = (flags & HAS_NULLS) != 0;
     final int valueCount = repeating ? Math.min(rowCount, 1) : rowCount;

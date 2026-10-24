@@ -657,15 +657,17 @@ public class ReduceRecordSource implements RecordSource {
           + " rows; receiver accumulation limit is " + accumulatorRowLimit);
     }
     final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
-    final boolean compatible = !compact
-        || vectorShuffleBatchDeserializer.isAppendCompatible(valueWritable, batch);
-    if (pendingRows > 0 && (!compatible || incomingRows > accumulatorRowLimit - pendingRows
+    // A full execution batch cannot accumulate with any pending rows. Short-circuit the
+    // compatibility scan and preserve its compact representation through replacement decoding.
+    final boolean standaloneCompact = compact && (incomingRows == accumulatorRowLimit
+        || !vectorShuffleBatchDeserializer.isAppendCompatible(valueWritable, batch));
+    if (pendingRows > 0 && (standaloneCompact || incomingRows > accumulatorRowLimit - pendingRows
         || incomingBytes > BATCH_BYTES - pendingBytes)) {
       flushPendingBatch();
     }
-    if (!compatible) {
-      // Calendar/UTC flags are batch-wide. Process this exceptional representation alone and
-      // restore the schema's ordinary-row metadata before accepting another record.
+    if (standaloneCompact) {
+      // Full frames and frames with incompatible calendar/UTC flags are processed alone. The
+      // common dispatch helper restores ordinary-row metadata before accepting another record.
       vectorShuffleBatchDeserializer.deserialize(valueWritable, batch);
       pendingRows = incomingRows;
       pendingBytes = incomingBytes;
