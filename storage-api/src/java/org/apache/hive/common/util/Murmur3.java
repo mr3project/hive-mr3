@@ -156,13 +156,9 @@ public class Murmur3 {
     final int nblocks = length >> 2;
 
     // body
+    // The native byte order is assumed to be little-endian.
     for (int i = 0; i < nblocks; i++) {
-      int i_4 = i << 2;
-      int k = (data[offset + i_4] & 0xff)
-          | ((data[offset + i_4 + 1] & 0xff) << 8)
-          | ((data[offset + i_4 + 2] & 0xff) << 16)
-          | ((data[offset + i_4 + 3] & 0xff) << 24);
-
+      int k = unsafe.getInt(data, BASE_OFFSET + offset + (i << 2));
       hash = mix32(k, hash);
     }
 
