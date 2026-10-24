@@ -27,11 +27,18 @@ import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
 import org.apache.tez.runtime.library.api.KeyValuesReaderEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.CommonMergeJoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.DateColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.ListColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.MapColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.StructColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.UnionColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorDeserializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchDeserializer;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
@@ -108,6 +115,16 @@ public class ReduceRecordSource implements RecordSource {
   private VectorizedRowBatchCtx batchContext;
   private VectorizedRowBatch batch;
   private VectorShuffleBatchDeserializer vectorShuffleBatchDeserializer;
+  private boolean accumulateShuffleInput;
+  private int inputColumnCount;
+  private int accumulatorRowLimit;
+  private int[] accumulatorProjection;
+  private int[] accumulatorSelection;
+  // These counters belong to the source: operators can change batch.size during process().
+  private int pendingRows;
+  private long pendingBytes;
+  private final List<Runnable> restoreSourceTypeMetadata = new ArrayList<>();
+  private InterruptibleProcessing abortChecker;
   private VectorSerializeRow<BinarySortableSerializeWrite> rowModeKeySerializeRow;
   private VectorSerializeRow<LazyBinarySerializeWrite> rowModeValueSerializeRow;
   private BinarySortableSerializeWrite rowModeKeySerializeWrite;
@@ -214,6 +231,17 @@ public class ReduceRecordSource implements RecordSource {
             valueStructInspectors);
         batch = batchContext.createVectorizedRowBatch();
         vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
+        // Unordered vector input already has the mixed-key execution-batch contract. Ordered
+        // input and row-mode fallback must retain their group and replacement semantics.
+        accumulateShuffleInput = isKeyValueReader && HiveConf.getBoolVar(jconf,
+            HiveConf.ConfVars.HIVE_VECTORIZATION_REDUCE_SHUFFLE_INPUT_ACCUMULATE);
+        if (accumulateShuffleInput) {
+          inputColumnCount = totalColumns;
+          accumulatorProjection = batch.projectedColumns;
+          accumulatorSelection = batch.selected;
+          captureSourceTypeMetadata();
+          prepareAccumulator(false);
+        }
 
         // Setup vectorized deserialization for the key and value.
         BinarySortableSerDe binarySortableSerDe = (BinarySortableSerDe) inputKeySerDe;
@@ -525,6 +553,9 @@ public class ReduceRecordSource implements RecordSource {
   private boolean pushRecordVectorFromKeyValueUnordered() {
     try {
       if (!keyValueReader.next()) {
+        if (accumulateShuffleInput) {
+          flushPendingBatch();
+        }
         return false;
       }
 
@@ -535,6 +566,7 @@ public class ReduceRecordSource implements RecordSource {
       return true;
     } catch (Throwable e) {
       abort = true;
+      discardPendingBatch();
       if (e instanceof OutOfMemoryError) {
         // Don't create a new object if we are already out of memory
         throw (OutOfMemoryError) e;
@@ -577,28 +609,183 @@ public class ReduceRecordSource implements RecordSource {
     return vectorized && isKeyValueReader;  // for unordered key/value records
   }
 
+  void setAbortChecker(InterruptibleProcessing abortChecker) {
+    this.abortChecker = abortChecker;
+  }
+
   void consumeAllUnordered(RecordProgress progress) throws HiveException, InterruptedException {
     // called when canConsumeAllUnordered() == true
     try {
       keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
-        // KeyValueReaderEdge provides unordered key/value records. The same logical key can
-        // appear again later, so every record must be treated as an independent final batch.
+        // Keep progress and cancellation accounting per received record, independently of how
+        // many execution batches the receiver dispatches.
         processVectorRecordUnordered(keyWritable, valueWritable, tag);
         progress.onRecord();
       });
-    } catch (OutOfMemoryError e) {
+      if (accumulateShuffleInput) {
+        // Only normal EOF may publish the partial batch, before downstream finalization.
+        flushPendingBatch();
+      }
+    } catch (Error e) {
       abort = true;
+      discardPendingBatch();
       throw e;
     } catch (InterruptedException e) {
       abort = true;
+      discardPendingBatch();
       throw e;
     } catch (Exception e) {
       abort = true;
+      discardPendingBatch();
       throw new HiveException(e);
     }
   }
 
-  private void processVectorRecordUnordered(BytesWritable keyWritable, BytesWritable valueWritable, byte tag) throws HiveException {
+  private void processVectorRecordUnordered(BytesWritable keyWritable, BytesWritable valueWritable,
+      byte tag) throws HiveException, IOException, InterruptedException {
+    if (!accumulateShuffleInput) {
+      processVectorRecordUnorderedLegacy(keyWritable, valueWritable, tag);
+      return;
+    }
+    checkAccumulationAbort();
+    assert !batch.selectedInUse && batch.size == pendingRows;
+    final boolean compact = isVectorBatchKey(keyWritable);
+    final int incomingRows = compact
+        ? vectorShuffleBatchDeserializer.getRowCount(valueWritable, batch) : 1;
+    if (incomingRows > accumulatorRowLimit) {
+      throw new IOException("Vector shuffle frame has " + incomingRows
+          + " rows; receiver accumulation limit is " + accumulatorRowLimit);
+    }
+    final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
+    final boolean compatible = !compact
+        || vectorShuffleBatchDeserializer.isAppendCompatible(valueWritable, batch);
+    if (pendingRows > 0 && (!compatible || incomingRows > accumulatorRowLimit - pendingRows
+        || incomingBytes > BATCH_BYTES - pendingBytes)) {
+      flushPendingBatch();
+    }
+    if (!compatible) {
+      // Calendar/UTC flags are batch-wide. Process this exceptional representation alone and
+      // restore the schema's ordinary-row metadata before accepting another record.
+      vectorShuffleBatchDeserializer.deserialize(valueWritable, batch);
+      pendingRows = incomingRows;
+      pendingBytes = incomingBytes;
+      flushPendingBatch();
+      return;
+    }
+    if (compact) {
+      vectorShuffleBatchDeserializer.append(valueWritable, batch);
+    } else {
+      keyBinarySortableDeserializeToRow.setBytes(keyWritable.getBytesRaw(), keyWritable.getOffset(),
+          keyWritable.getLength());
+      keyBinarySortableDeserializeToRow.deserialize(batch, pendingRows);
+      if (valueLazyBinaryDeserializeToRow != null) {
+        valueLazyBinaryDeserializeToRow.setBytes(valueWritable.getBytesRaw(),
+            valueWritable.getOffset(), valueWritable.getLength());
+        valueLazyBinaryDeserializeToRow.deserialize(batch, pendingRows);
+      }
+      batch.size = pendingRows + 1;
+    }
+    pendingRows += incomingRows;
+    pendingBytes += incomingBytes;
+    // Serialized bytes are only a soft threshold. Repeating and nested values can materialize
+    // into much more decoded memory than their wire size.
+    if (pendingRows == accumulatorRowLimit || pendingBytes >= BATCH_BYTES) {
+      flushPendingBatch();
+    }
+  }
+
+  private void checkAccumulationAbort() throws InterruptedException {
+    if (abortChecker != null) {
+      abortChecker.checkAbortCondition();
+    }
+    if (abort || Thread.currentThread().isInterrupted()) {
+      throw new InterruptedException("Vector shuffle accumulation aborted");
+    }
+  }
+
+  private void flushPendingBatch() throws HiveException, InterruptedException {
+    checkAccumulationAbort();
+    if (pendingRows == 0) {
+      pendingBytes = 0;
+      return;
+    }
+    batch.size = pendingRows;
+    final boolean retained = reducer.batchNeedsClone();
+    reducer.process(batch, tag);
+    // Never reset a batch retained by downstream code. Allocate once per dispatch instead of
+    // once per incoming record. The counters must not depend on the returned batch.size.
+    prepareAccumulator(retained);
+  }
+
+  private void discardPendingBatch() {
+    pendingRows = 0;
+    pendingBytes = 0;
+  }
+
+  private void prepareAccumulator(boolean replace) {
+    if (replace) {
+      batch = batchContext.createVectorizedRowBatch();
+      accumulatorProjection = batch.projectedColumns;
+      accumulatorSelection = batch.selected;
+      captureSourceTypeMetadata();
+    } else {
+      batch.reset(); // Includes scratch columns, nested storage, selection, and EOF state.
+      for (Runnable restore : restoreSourceTypeMetadata) {
+        restore.run();
+      }
+    }
+    batch.projectedColumns = accumulatorProjection;
+    batch.selected = accumulatorSelection;
+    batch.projectionSize = inputColumnCount;
+    for (int i = 0; i < batch.projectedColumns.length; i++) {
+      batch.projectedColumns[i] = i;
+    }
+    accumulatorRowLimit = Math.min(VectorizedRowBatch.DEFAULT_SIZE, batch.getMaxSize());
+    for (int i = 0; i < inputColumnCount; i++) {
+      accumulatorRowLimit = Math.min(accumulatorRowLimit, batch.cols[i].isNull.length);
+    }
+    assert accumulatorRowLimit > 0;
+    discardPendingBatch();
+  }
+
+  private void captureSourceTypeMetadata() {
+    restoreSourceTypeMetadata.clear();
+    for (ColumnVector column : batch.cols) {
+      captureSourceTypeMetadata(column);
+    }
+  }
+
+  private void captureSourceTypeMetadata(ColumnVector column) {
+    if (column instanceof DateColumnVector) {
+      DateColumnVector date = (DateColumnVector) column;
+      boolean proleptic = date.isUsingProlepticCalendar();
+      restoreSourceTypeMetadata.add(() -> date.setUsingProlepticCalendar(proleptic));
+    } else if (column instanceof TimestampColumnVector) {
+      TimestampColumnVector timestamp = (TimestampColumnVector) column;
+      boolean utc = timestamp.isUTC();
+      boolean proleptic = timestamp.usingProlepticCalendar();
+      restoreSourceTypeMetadata.add(() -> {
+        timestamp.setIsUTC(utc);
+        timestamp.setUsingProlepticCalendar(proleptic);
+      });
+    } else if (column instanceof ListColumnVector) {
+      captureSourceTypeMetadata(((ListColumnVector) column).child);
+    } else if (column instanceof MapColumnVector) {
+      captureSourceTypeMetadata(((MapColumnVector) column).keys);
+      captureSourceTypeMetadata(((MapColumnVector) column).values);
+    } else if (column instanceof StructColumnVector) {
+      for (ColumnVector field : ((StructColumnVector) column).fields) {
+        captureSourceTypeMetadata(field);
+      }
+    } else if (column instanceof UnionColumnVector) {
+      for (ColumnVector field : ((UnionColumnVector) column).fields) {
+        captureSourceTypeMetadata(field);
+      }
+    }
+  }
+
+  private void processVectorRecordUnorderedLegacy(BytesWritable keyWritable,
+      BytesWritable valueWritable, byte tag) throws HiveException {
     if (reducer.batchNeedsClone()) {
       batch = batchContext.createVectorizedRowBatch();
     }
