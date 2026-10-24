@@ -650,17 +650,16 @@ public class ReduceRecordSource implements RecordSource {
     checkAccumulationAbort();
     assert !batch.selectedInUse && batch.size == pendingRows;
     final boolean compact = isVectorBatchKey(keyWritable);
-    final int incomingRows = compact
-        ? vectorShuffleBatchDeserializer.getRowCount(valueWritable, batch) : 1;
+    final VectorShuffleBatchDeserializer.FrameInfo frameInfo = compact
+        ? vectorShuffleBatchDeserializer.inspect(valueWritable, batch) : null;
+    final int incomingRows = compact ? frameInfo.getRowCount() : 1;
+    // Snapshot the reusable inspection result before dispatch can invoke downstream code.
+    final boolean standaloneCompact = compact && !frameInfo.isAppendCompatible();
     if (incomingRows > accumulatorRowLimit) {
       throw new IOException("Vector shuffle frame has " + incomingRows
           + " rows; receiver accumulation limit is " + accumulatorRowLimit);
     }
     final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
-    // A full execution batch cannot accumulate with any pending rows. Short-circuit the
-    // compatibility scan and preserve its compact representation through replacement decoding.
-    final boolean standaloneCompact = compact && (incomingRows == accumulatorRowLimit
-        || !vectorShuffleBatchDeserializer.isAppendCompatible(valueWritable, batch));
     if (pendingRows > 0 && (standaloneCompact || incomingRows > accumulatorRowLimit - pendingRows
         || incomingBytes > BATCH_BYTES - pendingBytes)) {
       flushPendingBatch();

@@ -35,39 +35,55 @@ public final class VectorShuffleBatchDeserializer {
   private byte[] buffer;
   private int position;
   private int limit;
+  private final FrameInfo frameInfo = new FrameInfo();
 
-  /** Validates receiver schema and frame capacity without changing the destination or prefix. */
-  public int getRowCount(BytesWritable serialized, VectorizedRowBatch destination)
-      throws IOException {
-    try {
-      start(serialized);
-      int rowCount = readInt();
-      validateAppendDimensions(destination, rowCount, readInt());
+  /** Reusable inspection result, valid until the next inspect() call on this deserializer. */
+  public static final class FrameInfo {
+    private int rowCount;
+    private boolean appendCompatible;
+
+    private FrameInfo() {
+    }
+
+    public int getRowCount() {
       return rowCount;
-    } finally {
-      buffer = null;
+    }
+
+    /** Full frames, as well as incompatible metadata, require standalone replacement decoding. */
+    public boolean isAppendCompatible() {
+      return appendCompatible;
     }
   }
 
   /**
-   * Validates the complete frame and checks batch-wide date/timestamp metadata before any prefix
-   * can be changed. A false result requires the receiver to flush and use the replacement API for
-   * this frame. Metadata is compared with the schema's ordinary-row representation, even when the
-   * destination is empty, so ordinary and compact records can safely alternate.
+   * Validates the header and inspects appendable frames once, without changing the destination.
+   * Full frames cannot share an execution batch, so only their header is inspected; replacement
+   * decoding validates their payload. Smaller frames are fully validated and their date/timestamp
+   * metadata is compared with the destination, including when the destination is empty.
+   *
+   * The result is reused and holds no input-buffer or destination references. Callers must consume
+   * its fields before the next inspection, and flush then use replacement decoding if it is not
+   * append-compatible.
    */
-  public boolean isAppendCompatible(BytesWritable serialized, VectorizedRowBatch destination)
+  public FrameInfo inspect(BytesWritable serialized, VectorizedRowBatch destination)
       throws IOException {
+    frameInfo.rowCount = 0;
+    frameInfo.appendCompatible = false;
     try {
       start(serialized);
       int rowCount = readInt();
       int columnCount = readInt();
       validateAppendDimensions(destination, rowCount, columnCount);
-      boolean compatible = true;
-      for (int i = 0; i < columnCount; i++) {
-        compatible &= inspectColumn(destination.cols[i], rowCount);
+      boolean compatible = rowCount < appendCapacity(destination);
+      if (compatible) {
+        for (int i = 0; i < columnCount; i++) {
+          compatible &= inspectColumn(destination.cols[i], rowCount);
+        }
+        checkEnd();
       }
-      checkEnd();
-      return compatible;
+      frameInfo.rowCount = rowCount;
+      frameInfo.appendCompatible = compatible;
+      return frameInfo;
     } finally {
       buffer = null;
     }
@@ -77,23 +93,20 @@ public final class VectorShuffleBatchDeserializer {
    * Appends directly into destination-owned storage, preserving its dense, nonrepeating prefix.
    * Only successful decoding publishes the new size. A failure invalidates the destination; callers
    * must fail the task and discard it, rather than dispatching the partially decoded batch.
+   * The receiver uses inspect() to choose a compatible representation first. This method rechecks
+   * dimensions and capacity, and checks metadata while decoding, without another inspection pass.
    */
   public void append(BytesWritable serialized, VectorizedRowBatch destination) throws IOException {
     if (destination.selectedInUse) {
       throw new IOException("Cannot append to a selected vector shuffle destination");
     }
-    if (!isAppendCompatible(serialized, destination)) {
-      throw new IOException("Incompatible vector shuffle date/timestamp metadata");
-    }
     try {
       start(serialized);
       int rowCount = readInt();
       int columnCount = readInt();
+      validateAppendDimensions(destination, rowCount, columnCount);
       validateAppendCapacity(destination, rowCount);
-      // The inspection above also validates empty frames, without changing any destination state.
-      if (rowCount == 0) {
-        return;
-      }
+      // Zero-count decoding validates empty frames without changing the accumulated prefix.
       int[] indices = consecutiveIndices(destination.size, rowCount);
       for (int i = 0; i < columnCount; i++) {
         readAppendColumn(destination.cols[i], indices, rowCount);
@@ -361,7 +374,8 @@ public final class VectorShuffleBatchDeserializer {
         column.noNulls = false;
       }
     }
-    // Compatibility was checked before decoding. Empty nested columns leave metadata untouched.
+    // Recheck metadata during decoding, including after a receiver flush. Empty nested columns
+    // leave destination metadata untouched.
     if (!inspectTypeMetadata(column, count)) {
       throw new IOException("Incompatible vector shuffle date/timestamp metadata");
     }
