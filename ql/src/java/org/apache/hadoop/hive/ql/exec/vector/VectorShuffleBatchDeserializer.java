@@ -255,12 +255,17 @@ public final class VectorShuffleBatchDeserializer {
   private boolean inspectColumn(ColumnVector column, int rowCount) throws IOException {
     int flags = readFlags(column);
     int count = (flags & IS_REPEATING) != 0 ? Math.min(rowCount, 1) : rowCount;
-    byte[] nulls = readNullBitmap(flags, count);
+    boolean hasNulls = (flags & HAS_NULLS) != 0;
+    int bitmapOffset = position;
+    if (hasNulls) {
+      // Validate the entire bitmap before inspecting its bits directly in the input buffer.
+      skipBytes((int) ((count + 7L) / 8));
+    }
     boolean compatible = inspectTypeMetadata(column, count);
     int nonNullCount = count;
-    if (nulls != null) {
+    if (hasNulls) {
       for (int i = 0; i < count; i++) {
-        if (isNull(nulls, i)) {
+        if ((buffer[bitmapOffset + (i >>> 3)] & (1 << (i & 7))) != 0) {
           nonNullCount--;
         }
       }
