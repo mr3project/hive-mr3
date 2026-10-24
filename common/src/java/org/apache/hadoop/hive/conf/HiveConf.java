@@ -4644,6 +4644,11 @@ public class HiveConf extends Configuration {
     HIVE_VECTORIZATION_REDUCE_ENABLED("hive.vectorized.execution.reduce.enabled", true,
         "This flag should be set to true to enable vectorized mode of the reduce-side of query execution.\n" +
         "The default value is true."),
+    HIVE_VECTORIZATION_REDUCE_SHUFFLE_ACCUMULATE_ENABLED(
+        "hive.vectorized.reduce.shuffle.accumulate.enabled", false,
+        "Accumulate compatible unordered vectorized shuffle records into execution batches. " +
+        "The default is false. The 32 MiB serialized-byte flush threshold is soft: decoded " +
+        "nested data and expanded repeating values can occupy considerably more memory."),
     HIVE_VECTORIZATION_REDUCE_GROUPBY_ENABLED("hive.vectorized.execution.reduce.groupby.enabled", true,
         "This flag should be set to true to enable vectorized mode of the reduce-side GROUP BY query execution.\n" +
         "The default value is true."),
