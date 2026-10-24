@@ -201,9 +201,10 @@ public final class VectorShuffleBatchDeserializer {
           skipBytes(Long.BYTES + Integer.BYTES);
         } else if (column instanceof DecimalColumnVector
             || column instanceof Decimal64ColumnVector) {
-          // HiveDecimalWritable's direct format is scale(int), byte length(int), bytes.
+          // HiveDecimalWritable.writeDirect writes these integers in big-endian order,
+          // unlike the native-endian vector frame fields.
           skipBytes(Integer.BYTES);
-          int length = readInt();
+          int length = readBigEndianInt();
           if (length < 0) {
             throw new IOException("Negative decimal byte length " + length);
           }
@@ -238,6 +239,16 @@ public final class VectorShuffleBatchDeserializer {
       throw new IOException("Truncated vector shuffle batch at byte " + position
           + ", requested " + size + ", limit " + limit);
     }
+  }
+
+  private int readBigEndianInt() throws IOException {
+    requireAvailable(Integer.BYTES);
+    int value = ((buffer[position] & 0xff) << 24)
+        | ((buffer[position + 1] & 0xff) << 16)
+        | ((buffer[position + 2] & 0xff) << 8)
+        | (buffer[position + 3] & 0xff);
+    position += Integer.BYTES;
+    return value;
   }
 
   private void skipBytes(int size) throws IOException {
