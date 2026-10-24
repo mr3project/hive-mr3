@@ -466,6 +466,14 @@ public class Murmur3 {
     return h;
   }
 
+  /**
+   * Computes XXHash32 directly from one contiguous byte slice without incremental state.
+   * Unlike {@link #hash32(byte[], int, int, int)}, this uses the XXHash32 algorithm.
+   */
+  public static int xxHash32(byte[] data, int offset, int length, int seed) {
+    return IncrementalHash32.xxHash32(data, offset, length, seed);
+  }
+
   public static class IncrementalHash32 {
     // XXHash constants
     private static final int PRIME1 = 0x9E3779B1; // 2654435761U
@@ -473,6 +481,59 @@ public class Murmur3 {
     private static final int PRIME3 = 0xC2B2AE3D; // 3266489917U
     private static final int PRIME4 = 0x27D4EB2F; //  668265263U
     private static final int PRIME5 = 0x165667B1; //  374761393U
+
+    private static int xxHash32(byte[] data, int offset, int length, int seed) {
+      final int end = offset + length;
+      int currentOffset = offset;
+      int h32;
+
+      if (length >= 16) {
+        int v1 = seed + PRIME1 + PRIME2;
+        int v2 = seed + PRIME2;
+        int v3 = seed;
+        int v4 = seed - PRIME1;
+
+        final int blockLimit = end - 16;
+        do {
+          v1 = round(v1, unsafe.getInt(data, BASE_OFFSET + currentOffset));
+          v2 = round(v2, unsafe.getInt(data, BASE_OFFSET + currentOffset + 4));
+          v3 = round(v3, unsafe.getInt(data, BASE_OFFSET + currentOffset + 8));
+          v4 = round(v4, unsafe.getInt(data, BASE_OFFSET + currentOffset + 12));
+          currentOffset += 16;
+        } while (currentOffset <= blockLimit);
+
+        h32 = Integer.rotateLeft(v1, 1) +
+              Integer.rotateLeft(v2, 7) +
+              Integer.rotateLeft(v3, 12) +
+              Integer.rotateLeft(v4, 18);
+      } else {
+        h32 = seed + PRIME5;
+      }
+
+      h32 += length;
+      final int wordLimit = end - 4;
+      while (currentOffset <= wordLimit) {
+        int k1 = unsafe.getInt(data, BASE_OFFSET + currentOffset);
+        h32 += k1 * PRIME3;
+        h32 = Integer.rotateLeft(h32, 17);
+        h32 *= PRIME4;
+        currentOffset += 4;
+      }
+
+      while (currentOffset < end) {
+        h32 += (data[currentOffset] & 0xFF) * PRIME5;
+        h32 = Integer.rotateLeft(h32, 11);
+        h32 *= PRIME1;
+        currentOffset++;
+      }
+
+      h32 ^= h32 >>> 15;
+      h32 *= PRIME2;
+      h32 ^= h32 >>> 13;
+      h32 *= PRIME3;
+      h32 ^= h32 >>> 16;
+      return h32;
+    }
 
     // State variables
     private byte[] tail = new byte[16]; // Buffer for remaining bytes (XXHash block size is 16)
@@ -596,7 +657,7 @@ public class Murmur3 {
       v4 = round(v4, k4);
     }
 
-    private int round(int acc, int input) {
+    private static int round(int acc, int input) {
       acc += input * PRIME2;
       acc = Integer.rotateLeft(acc, 13);
       acc *= PRIME1;
