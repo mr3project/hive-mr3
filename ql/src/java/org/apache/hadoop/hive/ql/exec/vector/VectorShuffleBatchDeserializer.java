@@ -115,6 +115,10 @@ public final class VectorShuffleBatchDeserializer {
       throw new IOException("Unsupported vector shuffle flags " + flags);
     }
     boolean repeating = (flags & IS_REPEATING) != 0;
+    if ((flags & IS_DECIMAL_64) != 0
+        && !(column instanceof Decimal64ColumnVector || column instanceof DecimalColumnVector)) {
+      throw new IOException("Invalid decimal64 vector shuffle representation");
+    }
     int valueCount = repeating ? Math.min(count, 1) : count;
     int bitmapOffset = -1;
     if ((flags & HAS_NULLS) != 0) {
@@ -184,8 +188,7 @@ public final class VectorShuffleBatchDeserializer {
         if (bitmapNull(bitmapOffset, i)) {
           continue;
         }
-        if (decimal64 || column instanceof LongColumnVector
-            || column instanceof DoubleColumnVector) {
+        if (decimal64) {
           skipBytes(Long.BYTES);
         } else if (column instanceof BytesColumnVector) {
           int length = readInt();
@@ -205,6 +208,9 @@ public final class VectorShuffleBatchDeserializer {
             throw new IOException("Negative decimal byte length " + length);
           }
           skipBytes(length);
+        } else if (column instanceof LongColumnVector
+            || column instanceof DoubleColumnVector) {
+          skipBytes(Long.BYTES);
         } else if (!(column instanceof VoidColumnVector)) {
           throw new IOException("Unsupported vector shuffle column " + column.getClass());
         }
@@ -269,6 +275,45 @@ public final class VectorShuffleBatchDeserializer {
     } finally {
       buffer = null;
     }
+  }
+
+  /** True if a compact frame left batch-wide representation metadata unsuitable for ordinary rows. */
+  public boolean hasNonDefaultMetadata(VectorizedRowBatch destination, int columnCount) {
+    for (int i = 0; i < columnCount; i++) {
+      if (hasNonDefaultMetadata(destination.cols[i])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean hasNonDefaultMetadata(ColumnVector column) {
+    if (column instanceof DateColumnVector) {
+      return ((DateColumnVector) column).isUsingProlepticCalendar();
+    }
+    if (column instanceof TimestampColumnVector) {
+      TimestampColumnVector timestamp = (TimestampColumnVector) column;
+      return timestamp.isUTC() || timestamp.usingProlepticCalendar();
+    }
+    if (column instanceof StructColumnVector) {
+      for (ColumnVector field : ((StructColumnVector) column).fields) {
+        if (hasNonDefaultMetadata(field)) {
+          return true;
+        }
+      }
+    } else if (column instanceof UnionColumnVector) {
+      for (ColumnVector field : ((UnionColumnVector) column).fields) {
+        if (hasNonDefaultMetadata(field)) {
+          return true;
+        }
+      }
+    } else if (column instanceof ListColumnVector) {
+      return hasNonDefaultMetadata(((ListColumnVector) column).child);
+    } else if (column instanceof MapColumnVector) {
+      MapColumnVector map = (MapColumnVector) column;
+      return hasNonDefaultMetadata(map.keys) || hasNonDefaultMetadata(map.values);
+    }
+    return false;
   }
 
   private int appendIndex(int[] destinationIndices, int logical, int base) {
