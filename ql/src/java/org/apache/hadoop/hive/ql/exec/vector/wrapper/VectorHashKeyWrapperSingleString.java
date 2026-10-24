@@ -51,10 +51,7 @@ public class VectorHashKeyWrapperSingleString extends VectorHashKeyWrapperSingle
   public void setHashKey() {
     int hash = isNull0 ? singleStringNullHashcode : nonNullHashcode;
     if (length0 != -1) {
-      Murmur3.IncrementalHash32 bytesHash = HashContext.getBytesHash(hashCtx);
-      bytesHash.start(hash);
-      bytesHash.add(bytes0, start0, length0);
-      hash = bytesHash.end();
+      hash = Murmur3.xxHash32(bytes0, start0, length0, hash);
     }
     hashcode = hash;
   }
