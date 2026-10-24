@@ -85,6 +85,11 @@ public final class VectorShuffleBatchDeserializer {
       int[] dimensions = readDimensions(destination);
       int rowCount = dimensions[0];
       int columnCount = dimensions[1];
+      int maxRows = Math.min(VectorizedRowBatch.DEFAULT_SIZE, destination.getMaxSize());
+      if (rowCount > maxRows) {
+        throw new IOException("Vector shuffle frame has " + rowCount
+            + " rows; receiver limit is " + maxRows);
+      }
       if (columnCount != expectedColumns) {
         throw new IOException("Unexpected vector shuffle column count " + columnCount
             + ", expected " + expectedColumns);
