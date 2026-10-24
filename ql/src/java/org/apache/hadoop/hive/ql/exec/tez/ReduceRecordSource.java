@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
 import org.apache.tez.runtime.library.api.KeyValuesReaderEdge;
 import org.slf4j.Logger;
@@ -122,9 +123,8 @@ public class ReduceRecordSource implements RecordSource {
 
   // Opt-in: serialized bytes are a soft threshold, not a bound on decoded nested data
   // or expanded repeating values.
-  private static final String ACCUMULATE_UNORDERED_VECTOR_SHUFFLE =
-      "hive.vectorized.reduce.shuffle.accumulate.enabled";
   private boolean accumulateUnorderedVectorShuffle;
+  private boolean accumulatorHasNonDefaultMetadata;
   private int accumulatorRows;
   private long accumulatorBytes;
   private int accumulatorMaxRows;
@@ -196,7 +196,8 @@ public class ReduceRecordSource implements RecordSource {
     this.handleGroupKey = handleGroupKey;
     this.tag = tag;
     accumulateUnorderedVectorShuffle = vectorized && isKeyValueReader
-        && jconf.getBoolean(ACCUMULATE_UNORDERED_VECTOR_SHUFFLE, false);
+        && HiveConf.getBoolVar(jconf,
+            HiveConf.ConfVars.HIVE_VECTORIZATION_REDUCE_SHUFFLE_ACCUMULATE_ENABLED);
 
     try {
       inputKeySerDe = ReflectionUtils.newInstance(keyTableDesc.getSerDeClass(), null);
@@ -728,7 +729,9 @@ public class ReduceRecordSource implements RecordSource {
     if (retainsBatch) {
       // Ownership of the dispatched vectors belongs to the downstream pipeline.
       batch = batchContext.createVectorizedRowBatch();
+      accumulatorHasNonDefaultMetadata = false;
     } else {
+      // reset() does not reset the date/timestamp representation of a vector.
       batch.reset();
     }
     prepareAccumulatorBatch();
@@ -763,10 +766,10 @@ public class ReduceRecordSource implements RecordSource {
       // Compact frames may use calendar/UTC settings that ordinary row deserialization
       // does not encode. Do not merge those values into an ordinary-row representation.
       // A new schema-initialized batch restores the defaults (reset() does not).
-      if (!compact && vectorShuffleBatchDeserializer.hasNonDefaultMetadata(
-          batch, accumulatorColumnCount)) {
+      if (!compact && accumulatorHasNonDefaultMetadata) {
         flushPendingBatch();
         batch = batchContext.createVectorizedRowBatch();
+        accumulatorHasNonDefaultMetadata = false;
         prepareAccumulatorBatch();
       }
 
@@ -795,6 +798,10 @@ public class ReduceRecordSource implements RecordSource {
 
       accumulatorRows += incomingRows;
       accumulatorBytes += recordBytes;
+      if (compact) {
+        accumulatorHasNonDefaultMetadata =
+            vectorShuffleBatchDeserializer.hasNonDefaultMetadata(batch, accumulatorColumnCount);
+      }
       if (accumulatorRows >= accumulatorMaxRows || accumulatorBytes >= BATCH_BYTES) {
         flushPendingBatch();
       }
