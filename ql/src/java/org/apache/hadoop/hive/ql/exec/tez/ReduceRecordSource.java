@@ -653,6 +653,11 @@ public class ReduceRecordSource implements RecordSource {
     final VectorShuffleBatchDeserializer.FrameInfo frameInfo = compact
         ? vectorShuffleBatchDeserializer.inspect(valueWritable, batch) : null;
     final int incomingRows = compact ? frameInfo.getRowCount() : 1;
+    if (incomingRows == 0) {
+      // Inspection fully validated the empty frame. It carries no group or EOF signal and
+      // must not consume the pending batch's byte budget or trigger a flush.
+      return;
+    }
     // Snapshot the reusable inspection result before dispatch can invoke downstream code.
     final boolean standaloneCompact = compact && !frameInfo.isAppendCompatible();
     if (incomingRows > accumulatorRowLimit) {
