@@ -120,6 +120,18 @@ public class ReduceRecordSource implements RecordSource {
 
   private final int BATCH_BYTES = VectorizedRowBatch.DEFAULT_BYTES;
 
+  // Opt-in: serialized bytes are a soft threshold, not a bound on decoded nested data
+  // or expanded repeating values.
+  private static final String ACCUMULATE_UNORDERED_VECTOR_SHUFFLE =
+      "hive.vectorized.reduce.shuffle.accumulate.enabled";
+  private boolean accumulateUnorderedVectorShuffle;
+  private int accumulatorRows;
+  private long accumulatorBytes;
+  private int accumulatorMaxRows;
+  private int accumulatorColumnCount;
+  private int sourceProjectionSize;
+  private int[] sourceProjectedColumns;
+
   private StructObjectInspector keyStructInspector;
   private StructObjectInspector valueStructInspectors;
 
@@ -183,6 +195,8 @@ public class ReduceRecordSource implements RecordSource {
     }
     this.handleGroupKey = handleGroupKey;
     this.tag = tag;
+    accumulateUnorderedVectorShuffle = vectorized && isKeyValueReader
+        && jconf.getBoolean(ACCUMULATE_UNORDERED_VECTOR_SHUFFLE, false);
 
     try {
       inputKeySerDe = ReflectionUtils.newInstance(keyTableDesc.getSerDeClass(), null);
@@ -214,6 +228,15 @@ public class ReduceRecordSource implements RecordSource {
             valueStructInspectors);
         batch = batchContext.createVectorizedRowBatch();
         vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
+        if (accumulateUnorderedVectorShuffle) {
+          accumulatorColumnCount = totalColumns;
+          accumulatorMaxRows = Math.min(VectorizedRowBatch.DEFAULT_SIZE, batch.getMaxSize());
+          if (accumulatorMaxRows <= 0) {
+            throw new HiveException("No capacity for unordered vector shuffle accumulator");
+          }
+          sourceProjectionSize = batch.projectionSize;
+          sourceProjectedColumns = Arrays.copyOf(batch.projectedColumns, sourceProjectionSize);
+        }
 
         // Setup vectorized deserialization for the key and value.
         BinarySortableSerDe binarySortableSerDe = (BinarySortableSerDe) inputKeySerDe;
@@ -525,6 +548,9 @@ public class ReduceRecordSource implements RecordSource {
   private boolean pushRecordVectorFromKeyValueUnordered() {
     try {
       if (!keyValueReader.next()) {
+        if (accumulateUnorderedVectorShuffle && !abort) {
+          flushPendingBatch();
+        }
         return false;
       }
 
@@ -581,11 +607,17 @@ public class ReduceRecordSource implements RecordSource {
     // called when canConsumeAllUnordered() == true
     try {
       keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
-        // KeyValueReaderEdge provides unordered key/value records. The same logical key can
-        // appear again later, so every record must be treated as an independent final batch.
+        // KeyValueReaderEdge provides unordered key/value records without group boundaries.
         processVectorRecordUnordered(keyWritable, valueWritable, tag);
         progress.onRecord();
       });
+      // Only normal EOF publishes a partial batch. Never flush in error cleanup.
+      if (accumulateUnorderedVectorShuffle && !abort
+          && !Thread.currentThread().isInterrupted()) {
+        flushPendingBatch();
+      } else if (Thread.currentThread().isInterrupted()) {
+        throw new InterruptedException("Interrupted before final vector shuffle batch");
+      }
     } catch (OutOfMemoryError e) {
       abort = true;
       throw e;
@@ -599,6 +631,10 @@ public class ReduceRecordSource implements RecordSource {
   }
 
   private void processVectorRecordUnordered(BytesWritable keyWritable, BytesWritable valueWritable, byte tag) throws HiveException {
+    if (accumulateUnorderedVectorShuffle) {
+      accumulateVectorRecordUnordered(keyWritable, valueWritable);
+      return;
+    }
     if (reducer.batchNeedsClone()) {
       batch = batchContext.createVectorizedRowBatch();
     }
@@ -661,6 +697,102 @@ public class ReduceRecordSource implements RecordSource {
           + ") (vectorizedVertexNum " + vectorizedVertexNum + ") " + rowString, e);
       throw new HiveException("Hive Runtime Error while processing vector batch (tag="
           + tag + ") (vectorizedVertexNum " + vectorizedVertexNum + ")", e);
+    }
+  }
+
+
+  private void prepareAccumulatorBatch() {
+    batch.selectedInUse = false;
+    batch.endOfFile = false;
+    batch.size = 0;
+    batch.projectionSize = sourceProjectionSize;
+    System.arraycopy(sourceProjectedColumns, 0, batch.projectedColumns, 0,
+        sourceProjectionSize);
+  }
+
+  private void flushPendingBatch() throws HiveException {
+    if (accumulatorRows == 0 || abort) {
+      return;
+    }
+    if (Thread.currentThread().isInterrupted()) {
+      throw new HiveException("Interrupted before vector shuffle batch dispatch");
+    }
+    // Operators are free to modify the batch header. Keep accounting independently.
+    final int rows = accumulatorRows;
+    final long bytes = accumulatorBytes;
+    final boolean retainsBatch = reducer.batchNeedsClone();
+    batch.size = rows;
+    reducer.process(batch, tag);
+    accumulatorRows = 0;
+    accumulatorBytes = 0;
+    if (retainsBatch) {
+      // Ownership of the dispatched vectors belongs to the downstream pipeline.
+      batch = batchContext.createVectorizedRowBatch();
+    } else {
+      batch.reset();
+    }
+    prepareAccumulatorBatch();
+  }
+
+  private void accumulateVectorRecordUnordered(BytesWritable keyWritable,
+      BytesWritable valueWritable) throws HiveException {
+    final boolean compact = isVectorBatchKey(keyWritable);
+    final int incomingRows;
+    final boolean compatible;
+    try {
+      if (compact) {
+        VectorShuffleBatchDeserializer.FrameInfo frame =
+            vectorShuffleBatchDeserializer.inspect(valueWritable, batch, accumulatorColumnCount);
+        incomingRows = frame.rowCount;
+        compatible = frame.compatible;
+        if (incomingRows > accumulatorMaxRows) {
+          throw new IOException("Vector shuffle frame has " + incomingRows
+              + " rows; receiver limit is " + accumulatorMaxRows);
+        }
+      } else {
+        incomingRows = 1;
+        compatible = true;
+      }
+
+      // An empty compact frame has already been validated; it must not change or dispatch
+      // existing accumulated rows.
+      if (incomingRows == 0) {
+        return;
+      }
+
+      long recordBytes = (long) keyWritable.getLength() + valueWritable.getLength();
+      if (accumulatorRows != 0 &&
+          (incomingRows > accumulatorMaxRows - accumulatorRows
+              || recordBytes > BATCH_BYTES - accumulatorBytes || !compatible)) {
+        flushPendingBatch();
+      }
+
+      if (compact) {
+        vectorShuffleBatchDeserializer.append(valueWritable, batch, incomingRows,
+            accumulatorColumnCount);
+      } else {
+        final int row = accumulatorRows;
+        keyBinarySortableDeserializeToRow.setBytes(keyWritable.getBytesRaw(),
+            keyWritable.getOffset(), keyWritable.getLength());
+        keyBinarySortableDeserializeToRow.deserialize(batch, row);
+        if (valueLazyBinaryDeserializeToRow != null) {
+          valueLazyBinaryDeserializeToRow.setBytes(valueWritable.getBytesRaw(),
+              valueWritable.getOffset(), valueWritable.getLength());
+          valueLazyBinaryDeserializeToRow.deserialize(batch, row);
+        }
+        batch.size = row + 1;
+      }
+
+      accumulatorRows += incomingRows;
+      accumulatorBytes += recordBytes;
+      if (accumulatorRows >= accumulatorMaxRows || accumulatorBytes >= BATCH_BYTES) {
+        flushPendingBatch();
+      }
+    } catch (Exception e) {
+      // Do not publish or flush any prefix after a partially failed deserialize.
+      abort = true;
+      throw new HiveException("Unable to accumulate unordered vector shuffle record (tag="
+          + tag + ", vectorizedVertexNum=" + vectorizedVertexNum + ")", e);
     }
   }
 
