@@ -20,6 +20,10 @@ package org.apache.hive.common.util;
 
 import sun.misc.Unsafe;
 import java.lang.reflect.Field;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Murmur3 is successor to Murmur2 fast non-crytographic hash algorithms.
@@ -467,6 +471,62 @@ public class Murmur3 {
   }
 
   public static class IncrementalHash32 {
+    private static final Logger LOG = LoggerFactory.getLogger(IncrementalHash32.class);
+    private static final boolean TRACK_CALLS =
+        Boolean.getBoolean("hive.incrementalhash32.trackCalls");
+    private static final int REPORT_INTERVAL = 1_000_000;
+    private static final ConcurrentLinkedQueue<CallStats> ALL_STATS =
+        new ConcurrentLinkedQueue<>();
+    private static final ThreadLocal<CallStats> THREAD_STATS = ThreadLocal.withInitial(() -> {
+      CallStats stats = new CallStats();
+      ALL_STATS.add(stats);
+      return stats;
+    });
+
+    static {
+      if (TRACK_CALLS) {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+          for (CallStats stats : ALL_STATS) {
+            stats.report();
+          }
+        }, "IncrementalHash32-call-stats"));
+      }
+    }
+
+    private static final class CallStats {
+      private long addCalls;
+      private long endCalls;
+      private long addAndEndCalls;
+
+      synchronized void recordAdd() {
+        addCalls++;
+      }
+
+      synchronized void recordEnd() {
+        endCalls++;
+        if (endCalls + addAndEndCalls >= REPORT_INTERVAL) {
+          report();
+        }
+      }
+
+      synchronized void recordAddAndEnd() {
+        addAndEndCalls++;
+        if (endCalls + addAndEndCalls >= REPORT_INTERVAL) {
+          report();
+        }
+      }
+
+      synchronized void report() {
+        if (addCalls == 0 && endCalls == 0 && addAndEndCalls == 0) {
+          return;
+        }
+        LOG.error("xxx {} {} {}", addCalls, endCalls, addAndEndCalls);
+        addCalls = 0;
+        endCalls = 0;
+        addAndEndCalls = 0;
+      }
+    }
+
     // XXHash constants
     private static final int PRIME1 = 0x9E3779B1; // 2654435761U
     private static final int PRIME2 = 0x85EBCA77; // 2246822519U
@@ -499,6 +559,9 @@ public class Murmur3 {
     }
 
     public final void add(byte[] data, int offset, int length) {
+      if (TRACK_CALLS) {
+        THREAD_STATS.get().recordAdd();
+      }
       if (data == null || length == 0) {
         return;
       }
@@ -555,6 +618,9 @@ public class Murmur3 {
      * This is a terminal operation: call {@link #start(int)} before using this hasher again.
      */
     public final int addAndEnd(byte[] data, int offset, int length) {
+      if (TRACK_CALLS) {
+        THREAD_STATS.get().recordAddAndEnd();
+      }
       assert data != null && length > 0;
 
       totalLen += length;
@@ -564,7 +630,7 @@ public class Murmur3 {
           // The remaining bytes straddle the previous slice and this one.
           System.arraycopy(data, offset, tail, tailLen, length);
           tailLen += length;
-          return end();
+          return end(tail, 0, tailLen);
         }
 
         System.arraycopy(data, offset, tail, tailLen, neededBytes);
@@ -604,6 +670,9 @@ public class Murmur3 {
     }
 
     public final int end() {
+      if (TRACK_CALLS) {
+        THREAD_STATS.get().recordEnd();
+      }
       return end(tail, 0, tailLen);
     }
 
