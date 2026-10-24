@@ -457,6 +457,13 @@ public final class VectorShuffleBatchDeserializer {
     // recursively duplicates list/map children into destination-owned storage.
     if (repeating && count > 1) {
       int first = appendIndex(destinationIndices, 0, base);
+      if (!column.isNull[first] && column instanceof MultiValuedColumnVector) {
+        MultiValuedColumnVector multi = (MultiValuedColumnVector) column;
+        long additionalChildren = (long) (count - 1) * multi.lengths[first];
+        if (additionalChildren > Integer.MAX_VALUE - multi.childCount) {
+          throw new IOException("Repeating vector children exceed destination capacity");
+        }
+      }
       for (int i = 1; i < count; i++) {
         int index = appendIndex(destinationIndices, i, base);
         if (column.isNull[first]) {
