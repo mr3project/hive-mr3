@@ -414,6 +414,29 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testInspectedAppendWithDateMetadata() throws Exception {
+    DateColumnVector source = new DateColumnVector();
+    source.setUsingProlepticCalendar(true);
+    source.vector[0] = 10;
+    source.vector[1] = 20;
+
+    DateColumnVector result = new DateColumnVector();
+    result.setUsingProlepticCalendar(true);
+    VectorizedRowBatch destination = batchWithColumn(result, 0);
+    VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
+    BytesWritable frame = serialize(batchWithColumn(source, 2));
+
+    VectorShuffleBatchDeserializer.FrameInfo info = decoder.inspect(frame, destination);
+    assertTrue(info.isAppendCompatible());
+    int rows = info.getRowCount();
+    decoder.appendInspected(frame, destination, rows);
+    assertEquals(2, destination.size);
+    assertEquals(10, result.vector[0]);
+    assertEquals(20, result.vector[1]);
+    assertTrue(result.isUsingProlepticCalendar());
+  }
+
+  @Test
   public void testInspectedAppendValidatesPayloadEnd() throws Exception {
     VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
     VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
