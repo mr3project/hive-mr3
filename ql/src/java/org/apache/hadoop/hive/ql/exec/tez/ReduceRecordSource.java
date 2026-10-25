@@ -124,7 +124,6 @@ public class ReduceRecordSource implements RecordSource {
   private int pendingRows;
   private long pendingBytes;
   private final List<Runnable> restoreSourceTypeMetadata = new ArrayList<>();
-  private InterruptibleProcessing abortChecker;
   private VectorSerializeRow<BinarySortableSerializeWrite> rowModeKeySerializeRow;
   private VectorSerializeRow<LazyBinarySerializeWrite> rowModeValueSerializeRow;
   private BinarySortableSerializeWrite rowModeKeySerializeWrite;
@@ -239,6 +238,8 @@ public class ReduceRecordSource implements RecordSource {
             : new VectorShuffleBatchDeserializer();
         if (accumulateShuffleInput) {
           inputColumnCount = totalColumns;
+          accumulatorRowLimit = vectorShuffleBatchDeserializer.getAppendCapacity();
+          assert accumulatorRowLimit > 0;
           accumulatorProjection = batch.projectedColumns;
           accumulatorSelection = batch.selected;
           captureSourceTypeMetadata();
@@ -564,7 +565,11 @@ public class ReduceRecordSource implements RecordSource {
       BytesWritable keyWritable = keyValueReader.getCurrentKey();
       BytesWritable valueWritable = keyValueReader.getCurrentValue();
 
-      processVectorRecordUnordered(keyWritable, valueWritable, tag);
+      if (accumulateShuffleInput) {
+        processVectorRecordUnordered(keyWritable, valueWritable, tag);
+      } else {
+        processVectorRecordUnorderedLegacy(keyWritable, valueWritable, tag);
+      }
       return true;
     } catch (Throwable e) {
       abort = true;
@@ -611,22 +616,19 @@ public class ReduceRecordSource implements RecordSource {
     return vectorized && isKeyValueReader;  // for unordered key/value records
   }
 
-  void setAbortChecker(InterruptibleProcessing abortChecker) {
-    this.abortChecker = abortChecker;
-  }
-
   void consumeAllUnordered(RecordProgress progress) throws HiveException, InterruptedException {
     // called when canConsumeAllUnordered() == true
     try {
-      keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
-        // Keep progress and cancellation accounting per received record, independently of how
-        // many execution batches the receiver dispatches.
-        processVectorRecordUnordered(keyWritable, valueWritable, tag);
-        progress.onRecord();
-      });
       if (accumulateShuffleInput) {
+        keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) ->
+            processVectorRecordUnordered(keyWritable, valueWritable, tag));
         // Only normal EOF may publish the partial batch, before downstream finalization.
         flushPendingBatch();
+      } else {
+        keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
+          processVectorRecordUnorderedLegacy(keyWritable, valueWritable, tag);
+          progress.onRecord();
+        });
       }
     } catch (Error e) {
       abort = true;
@@ -644,32 +646,22 @@ public class ReduceRecordSource implements RecordSource {
   }
 
   private void processVectorRecordUnordered(BytesWritable keyWritable, BytesWritable valueWritable,
-      byte tag) throws HiveException, IOException, InterruptedException {
-    if (!accumulateShuffleInput) {
-      processVectorRecordUnorderedLegacy(keyWritable, valueWritable, tag);
-      return;
-    }
-    // Cancellation is checked periodically by ReduceRecordProcessor's progress callback
-    // and immediately before dispatching a pending batch.
+      byte tag) throws HiveException, IOException {
     assert !batch.selectedInUse && batch.size == pendingRows;
     final boolean compact = isVectorBatchKey(keyWritable);
-    final VectorShuffleBatchDeserializer.FrameInfo frameInfo = compact
-        ? vectorShuffleBatchDeserializer.inspectAccumulation(valueWritable, batch) : null;
-    final int incomingRows = compact ? frameInfo.getRowCount() : 1;
+    final int incomingRows = compact
+        ? VectorShuffleBatchDeserializer.getRowCount(valueWritable) : 1;
     if (incomingRows == 0) {
-      // Inspection fully validated the empty frame. It carries no group or EOF signal and
-      // must not consume the pending batch's byte budget or trigger a flush.
+      // Empty frames carry no group or EOF signal and do not consume the byte budget.
       return;
     }
-    // Snapshot the reusable inspection result before dispatch can invoke downstream code.
-    final boolean standaloneCompact = compact && !frameInfo.isAppendCompatible();
-    assert incomingRows > 0 && incomingRows <= accumulatorRowLimit;
-    if (standaloneCompact) {
+    if (compact && (incomingRows >= accumulatorRowLimit
+        || !vectorShuffleBatchDeserializer.canAccumulateFrames())) {
       if (pendingRows > 0) {
         flushPendingBatch();
       }
-      // Full frames and frames with incompatible calendar/UTC flags are processed alone. The
-      // common dispatch helper restores ordinary-row metadata before accepting another record.
+      // Full frames retain their repeating representation. Date/timestamp schemas always run
+      // standalone because their calendar/UTC flags describe the whole column, not each row.
       vectorShuffleBatchDeserializer.deserialize(valueWritable, batch);
       pendingRows = incomingRows;
       flushPendingBatch();
@@ -677,13 +669,11 @@ public class ReduceRecordSource implements RecordSource {
     }
     final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
     if (pendingRows > 0 && (incomingRows > accumulatorRowLimit - pendingRows
-        || incomingBytes > BATCH_BYTES - pendingBytes
-        || (compact && !frameInfo.isRepeatingCompatible())
-        || (!compact && vectorShuffleBatchDeserializer.hasRepeatingColumns()))) {
+        || incomingBytes > BATCH_BYTES - pendingBytes)) {
       flushPendingBatch();
     }
     if (compact) {
-      vectorShuffleBatchDeserializer.appendInspectedAccumulation(valueWritable, batch, incomingRows);
+      vectorShuffleBatchDeserializer.append(valueWritable, batch, incomingRows);
     } else {
       keyBinarySortableDeserializeToRow.setBytes(keyWritable.getBytesRaw(), keyWritable.getOffset(),
           keyWritable.getLength());
@@ -704,14 +694,7 @@ public class ReduceRecordSource implements RecordSource {
     }
   }
 
-  private void checkAccumulationAbort() throws InterruptedException {
-    assert abortChecker != null;
-    assert !abort;
-    abortChecker.checkAbortCondition();
-  }
-
-  private void flushPendingBatch() throws HiveException, InterruptedException {
-    checkAccumulationAbort();
+  private void flushPendingBatch() throws HiveException {
     if (pendingRows == 0) {
       assert pendingBytes == 0;
       return;
@@ -752,9 +735,6 @@ public class ReduceRecordSource implements RecordSource {
     for (int i = 0; i < batch.projectedColumns.length; i++) {
       batch.projectedColumns[i] = i;
     }
-    accumulatorRowLimit = vectorShuffleBatchDeserializer.getAppendCapacity();
-    assert accumulatorRowLimit > 0;
-    vectorShuffleBatchDeserializer.resetAccumulation();
     discardPendingBatch();
   }
 
