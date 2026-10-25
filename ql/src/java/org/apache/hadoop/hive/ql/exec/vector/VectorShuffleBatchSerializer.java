@@ -20,6 +20,8 @@ package org.apache.hadoop.hive.ql.exec.vector;
 import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
 import static org.apache.tez.util.FastByteComparisons.theUnsafe;
 
+import java.util.Arrays;
+
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 
 /**
@@ -29,6 +31,10 @@ import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
  * are compacted in logical order, inactive rows and unselected columns are omitted, null values are
  * omitted, and repeating columns are represented by a single value. Primitive, list, map, struct, and
  * union vectors are supported recursively.</p>
+ *
+ * <p>Use {@link #initialize(ColumnVector[], int[])} once for a fixed schema and mapping to
+ * reuse schema metadata and scratch arrays. Without explicit initialization, each call supports
+ * a different schema or mapping.</p>
  */
 public final class VectorShuffleBatchSerializer {
   private static final int IS_REPEATING = 1;
@@ -37,84 +43,166 @@ public final class VectorShuffleBatchSerializer {
 
   private byte[] buffer;
   private int position;
+  private boolean nestedRepeating;
+  private VectorShuffleBatchMetadata metadata;
+  private boolean schemaInitialized;
+  private int columnCount;
+  private int bitmapLength;
+  private int fixedHeaderSize;
+  private int[] repeatingColumns;
+  private int[] ordinaryColumns;
+
+  /**
+   * Precomputes the fixed schema and logical column mapping. Call again before serializing a
+   * different schema or mapping. Paths refer to the current batch, so replacing its vectors with
+   * vectors of the same schema does not require reinitialization.
+   */
+  public void initialize(ColumnVector[] columns, int[] sourceColumnMap) {
+    initializeSchema(columns, sourceColumnMap);
+    schemaInitialized = true;
+  }
+
+  private void initializeSchema(ColumnVector[] columns, int[] sourceColumnMap) {
+    metadata = new VectorShuffleBatchMetadata(columns, sourceColumnMap);
+    columnCount = sourceColumnMap.length;
+    bitmapLength = (columnCount + 7) / 8;
+    fixedHeaderSize = 2 * Integer.BYTES + bitmapLength + 1 + metadata.getByteCount();
+    if (repeatingColumns == null || repeatingColumns.length != columnCount) {
+      repeatingColumns = new int[columnCount];
+      ordinaryColumns = new int[columnCount];
+    }
+  }
 
   public int serialize(VectorizedRowBatch source, int[] sourceColumnMap, byte[] buffer,
       int position) {
-    int[] logicalRows = new int[source.size];
-    for (int logical = 0; logical < source.size; logical++) {
-      logicalRows[logical] = source.selectedInUse ? source.selected[logical] : logical;
-    }
-
-    reset(buffer, position);
-    final int start = position;
-    writeInt(source.size);
-    writeInt(sourceColumnMap.length);
-    for (int sourceColumn : sourceColumnMap) {
-      writeColumn(source.cols[sourceColumn], logicalRows, source.size);
-    }
-    return this.position - start;
+    return serializeColumns(source, sourceColumnMap,
+        source.selectedInUse ? source.selected : null, 0, source.size, buffer, position);
   }
 
   public int serialize(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
       int rowOffset, int rowCount, byte[] buffer, int position) {
     assert rowOffset <= rowIndices.length - rowCount;
+    return serializeColumns(source, sourceColumnMap, rowIndices, rowOffset, rowCount,
+        buffer, position);
+  }
 
-    int[] logicalRows = rowIndices;
-    if (rowOffset != 0) {
-      logicalRows = new int[rowCount];
-      System.arraycopy(rowIndices, rowOffset, logicalRows, 0, rowCount);
+  private int serializeColumns(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
+      int rowOffset, int rowCount, byte[] buffer, int position) {
+    if (!schemaInitialized) {
+      initializeSchema(source.cols, sourceColumnMap);
     }
-
     reset(buffer, position);
+    ensureCapacity(fixedHeaderSize);
     final int start = position;
-    writeInt(rowCount);
-    writeInt(sourceColumnMap.length);
-    for (int sourceColumn : sourceColumnMap) {
-      writeColumn(source.cols[sourceColumn], logicalRows, rowCount);
+    theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position, rowCount);
+    theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position + Integer.BYTES, columnCount);
+
+    // Bits refer to the sourceColumnMap's logical order, least significant bit first.
+    final int bitmapOffset = position + 2 * Integer.BYTES;
+    final int nestedRepeatingOffset = bitmapOffset + bitmapLength;
+    final int metadataOffset = nestedRepeatingOffset + 1;
+    this.position += fixedHeaderSize;
+    Arrays.fill(buffer, bitmapOffset, nestedRepeatingOffset, (byte) 0);
+    int repeatingCount = 0;
+    int ordinaryCount = 0;
+    for (int logical = 0; logical < columnCount; logical++) {
+      int sourceColumn = sourceColumnMap[logical];
+      if (rowCount > 1 && source.cols[sourceColumn].isRepeating) {
+        buffer[bitmapOffset + (logical >>> 3)] |= 1 << (logical & 7);
+        repeatingColumns[repeatingCount++] = sourceColumn;
+      } else {
+        ordinaryColumns[ordinaryCount++] = sourceColumn;
+      }
     }
+    if (metadata.getByteCount() != 0) {
+      metadata.write(source.cols, buffer, metadataOffset);
+    }
+
+    final int repeatingLengthOffset = this.position;
+    if (repeatingCount != 0) {
+      writeInt(0);
+    }
+    final int repeatingStart = this.position;
+    nestedRepeating = false;
+    for (int i = 0; i < repeatingCount; i++) {
+      writeColumn(source.cols[repeatingColumns[i]], rowIndices, rowOffset, rowCount, false);
+    }
+    if (repeatingCount != 0) {
+      theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + repeatingLengthOffset,
+          this.position - repeatingStart);
+    }
+    for (int i = 0; i < ordinaryCount; i++) {
+      writeColumn(source.cols[ordinaryColumns[i]], rowIndices, rowOffset, rowCount, false);
+    }
+    buffer[nestedRepeatingOffset] = (byte) (nestedRepeating ? 1 : 0);
     return this.position - start;
   }
 
-  private void writeColumn(ColumnVector column, int[] indices, int count) {
+  private void writeColumn(ColumnVector column, int[] indices, int rowOffset, int count,
+      boolean nested) {
     final boolean repeating = column.isRepeating;
+    // The count belongs to this invocation: an empty/singleton child never needs expansion.
+    nestedRepeating |= nested && repeating && count > 1;
     final int valueCount = repeating ? Math.min(count, 1) : count;
-    final boolean hasNulls = hasNulls(column, indices, valueCount, repeating);
-    writeByte((repeating ? IS_REPEATING : 0) | (hasNulls ? HAS_NULLS : 0)
+    final int flagsOffset = position;
+    writeByte((repeating ? IS_REPEATING : 0)
         | (column instanceof Decimal64ColumnVector ? IS_DECIMAL_64 : 0));
 
-    byte[] nullBitmap = null;
-    if (hasNulls) {
-      nullBitmap = new byte[(valueCount + 7) / 8];
-      for (int logical = 0; logical < valueCount; logical++) {
-        if (isNull(column, indices, logical, repeating)) {
-          nullBitmap[logical >>> 3] |= 1 << (logical & 7);
+    int nullBitmapOffset = -1;
+    if (!column.noNulls) {
+      int firstNull = 0;
+      while (firstNull < valueCount
+          && !column.isNull[physicalIndex(indices, rowOffset, firstNull, repeating)]) {
+        firstNull++;
+      }
+      if (firstNull < valueCount) {
+        nullBitmapOffset = position;
+        final int nullBitmapLength = (valueCount + 7) / 8;
+        ensureCapacity(nullBitmapLength);
+        Arrays.fill(buffer, position, position + nullBitmapLength, (byte) 0);
+        position += nullBitmapLength;
+        buffer[flagsOffset] |= HAS_NULLS;
+        buffer[nullBitmapOffset + (firstNull >>> 3)] |= 1 << (firstNull & 7);
+        for (int logical = firstNull + 1; logical < valueCount; logical++) {
+          if (column.isNull[physicalIndex(indices, rowOffset, logical, repeating)]) {
+            buffer[nullBitmapOffset + (logical >>> 3)] |= 1 << (logical & 7);
+          }
         }
       }
-      writeBytes(nullBitmap);
     }
 
-    writeTypeMetadata(column);
     if (column instanceof StructColumnVector) {
-      writeStructChildren((StructColumnVector) column, indices, valueCount, repeating,
-          nullBitmap);
+      writeStructChildren((StructColumnVector) column, indices, rowOffset, valueCount, repeating,
+          nullBitmapOffset);
     } else if (column instanceof UnionColumnVector) {
-      writeUnionChildren((UnionColumnVector) column, indices, valueCount, repeating, nullBitmap);
+      writeUnionChildren((UnionColumnVector) column, indices, rowOffset, valueCount, repeating,
+          nullBitmapOffset);
     } else if (column instanceof ListColumnVector) {
       ListColumnVector list = (ListColumnVector) column;
-      writeMultiValuedChildren(list, list.child, null, indices, valueCount, repeating, nullBitmap);
+      writeMultiValuedChildren(list, list.child, null, indices, rowOffset, valueCount, repeating,
+          nullBitmapOffset);
     } else if (column instanceof MapColumnVector) {
       MapColumnVector map = (MapColumnVector) column;
-      writeMultiValuedChildren(map, map.keys, map.values, indices, valueCount, repeating, nullBitmap);
+      writeMultiValuedChildren(map, map.keys, map.values, indices, rowOffset, valueCount, repeating,
+          nullBitmapOffset);
     } else {
-      writeValue(column, indices, valueCount, repeating, nullBitmap);
+      writeValue(column, indices, rowOffset, valueCount, repeating, nullBitmapOffset);
     }
   }
 
-  private void writeStructChildren(StructColumnVector struct, int[] indices, int valueCount,
-      boolean repeating, byte[] nullBitmap) {
+  private void writeStructChildren(StructColumnVector struct, int[] indices, int rowOffset,
+      int valueCount, boolean repeating, int nullBitmapOffset) {
+    if (nullBitmapOffset < 0) {
+      for (ColumnVector field : struct.fields) {
+        writeColumn(field, repeating ? null : indices, repeating ? 0 : rowOffset,
+            valueCount, true);
+      }
+      return;
+    }
+
     int activeCount = 0;
     for (int logical = 0; logical < valueCount; logical++) {
-      if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
+      if (!isNull(nullBitmapOffset, logical)) {
         activeCount++;
       }
     }
@@ -122,22 +210,22 @@ public final class VectorShuffleBatchSerializer {
     int[] activeIndices = new int[activeCount];
     int activePosition = 0;
     for (int logical = 0; logical < valueCount; logical++) {
-      if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
-        activeIndices[activePosition++] = physicalIndex(indices, logical, repeating);
+      if (!isNull(nullBitmapOffset, logical)) {
+        activeIndices[activePosition++] = physicalIndex(indices, rowOffset, logical, repeating);
       }
     }
 
     for (ColumnVector field : struct.fields) {
-      writeColumn(field, activeIndices, activeCount);
+      writeColumn(field, activeIndices, 0, activeCount, true);
     }
   }
 
-  private void writeUnionChildren(UnionColumnVector union, int[] indices, int valueCount,
-      boolean repeating, byte[] nullBitmap) {
+  private void writeUnionChildren(UnionColumnVector union, int[] indices, int rowOffset,
+      int valueCount, boolean repeating, int nullBitmapOffset) {
     int[] fieldCounts = new int[union.fields.length];
     for (int logical = 0; logical < valueCount; logical++) {
-      if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
-        int tag = union.tags[physicalIndex(indices, logical, repeating)];
+      if (!isNull(nullBitmapOffset, logical)) {
+        int tag = union.tags[physicalIndex(indices, rowOffset, logical, repeating)];
         validateUnionTag(tag, union.fields.length);
         writeInt(tag);
         fieldCounts[tag]++;
@@ -150,15 +238,15 @@ public final class VectorShuffleBatchSerializer {
     }
     int[] fieldPositions = new int[union.fields.length];
     for (int logical = 0; logical < valueCount; logical++) {
-      if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
-        int index = physicalIndex(indices, logical, repeating);
+      if (!isNull(nullBitmapOffset, logical)) {
+        int index = physicalIndex(indices, rowOffset, logical, repeating);
         int tag = union.tags[index];
         fieldIndices[tag][fieldPositions[tag]++] = index;
       }
     }
 
     for (int tag = 0; tag < union.fields.length; tag++) {
-      writeColumn(union.fields[tag], fieldIndices[tag], fieldCounts[tag]);
+      writeColumn(union.fields[tag], fieldIndices[tag], 0, fieldCounts[tag], true);
     }
   }
 
@@ -170,11 +258,12 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeMultiValuedChildren(MultiValuedColumnVector parent, ColumnVector firstChild,
-      ColumnVector secondChild, int[] indices, int valueCount, boolean repeating, byte[] nullBitmap) {
+      ColumnVector secondChild, int[] indices, int rowOffset, int valueCount, boolean repeating,
+      int nullBitmapOffset) {
     int childCount = 0;
     for (int logical = 0; logical < valueCount; logical++) {
-      if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
-        int index = physicalIndex(indices, logical, repeating);
+      if (!isNull(nullBitmapOffset, logical)) {
+        int index = physicalIndex(indices, rowOffset, logical, repeating);
         int length = Math.toIntExact(parent.lengths[index]);
         writeInt(length);
         childCount = Math.addExact(childCount, length);
@@ -184,8 +273,8 @@ public final class VectorShuffleBatchSerializer {
     int[] childIndices = new int[childCount];
     int childPosition = 0;
     for (int logical = 0; logical < valueCount; logical++) {
-      if (nullBitmap == null || (nullBitmap[logical >>> 3] & (1 << (logical & 7))) == 0) {
-        int index = physicalIndex(indices, logical, repeating);
+      if (!isNull(nullBitmapOffset, logical)) {
+        int index = physicalIndex(indices, rowOffset, logical, repeating);
         int offset = Math.toIntExact(parent.offsets[index]);
         int length = Math.toIntExact(parent.lengths[index]);
         for (int child = 0; child < length; child++) {
@@ -193,9 +282,9 @@ public final class VectorShuffleBatchSerializer {
         }
       }
     }
-    writeColumn(firstChild, childIndices, childCount);
+    writeColumn(firstChild, childIndices, 0, childCount, true);
     if (secondChild != null) {
-      writeColumn(secondChild, childIndices, childCount);
+      writeColumn(secondChild, childIndices, 0, childCount, true);
     }
   }
 
@@ -207,10 +296,6 @@ public final class VectorShuffleBatchSerializer {
   private void writeByte(int value) {
     ensureCapacity(Byte.BYTES);
     buffer[position++] = (byte) value;
-  }
-
-  private void writeBoolean(boolean value) {
-    writeByte(value ? 1 : 0);
   }
 
   private void writeInt(int value) {
@@ -229,10 +314,6 @@ public final class VectorShuffleBatchSerializer {
     writeLong(Double.doubleToLongBits(value));
   }
 
-  private void writeBytes(byte[] bytes) {
-    writeBytes(bytes, 0, bytes.length);
-  }
-
   private void writeBytes(byte[] bytes, int offset, int length) {
     System.arraycopy(bytes, offset, buffer, position, length);
     position += length;
@@ -245,44 +326,17 @@ public final class VectorShuffleBatchSerializer {
     }
   }
 
-  private boolean hasNulls(ColumnVector column, int[] indices, int valueCount,
-      boolean repeating) {
-    if (column.noNulls) {
-      return false;
-    }
-    for (int logical = 0; logical < valueCount; logical++) {
-      if (isNull(column, indices, logical, repeating)) {
-        return true;
-      }
-    }
-    return false;
+  private int physicalIndex(int[] indices, int rowOffset, int logical, boolean repeating) {
+    return repeating ? 0 : indices == null ? rowOffset + logical : indices[rowOffset + logical];
   }
 
-  private boolean isNull(ColumnVector column, int[] indices, int logical, boolean repeating) {
-    return column.isNull[physicalIndex(indices, logical, repeating)];
-  }
-
-  private int physicalIndex(int[] indices, int logical, boolean repeating) {
-    return repeating ? 0 : indices[logical];
-  }
-
-  private void writeTypeMetadata(ColumnVector column) {
-    if (column instanceof DateColumnVector) {
-      writeBoolean(((DateColumnVector) column).isUsingProlepticCalendar());
-    } else if (column instanceof TimestampColumnVector) {
-      TimestampColumnVector timestamp = (TimestampColumnVector) column;
-      writeBoolean(timestamp.isUTC());
-      writeBoolean(timestamp.usingProlepticCalendar());
-    }
-  }
-
-  private void writeValue(ColumnVector column, int[] indices, int valueCount, boolean repeating,
-      byte[] nullBitmap) {
+  private void writeValue(ColumnVector column, int[] indices, int rowOffset, int valueCount,
+      boolean repeating, int nullBitmapOffset) {
     if (column instanceof BytesColumnVector) {
       BytesColumnVector bytes = (BytesColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
-          int index = physicalIndex(indices, logical, repeating);
+        if (!isNull(nullBitmapOffset, logical)) {
+          int index = physicalIndex(indices, rowOffset, logical, repeating);
           writeInt(bytes.length[index]);
           writeBytes(bytes.vector[index], bytes.start[index], bytes.length[index]);
         }
@@ -290,8 +344,8 @@ public final class VectorShuffleBatchSerializer {
     } else if (column instanceof TimestampColumnVector) {
       TimestampColumnVector timestamp = (TimestampColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
-          int index = physicalIndex(indices, logical, repeating);
+        if (!isNull(nullBitmapOffset, logical)) {
+          int index = physicalIndex(indices, rowOffset, logical, repeating);
           writeLong(timestamp.time[index]);
           writeInt(timestamp.nanos[index]);
         }
@@ -299,9 +353,10 @@ public final class VectorShuffleBatchSerializer {
     } else if (column instanceof IntervalDayTimeColumnVector) {
       IntervalDayTimeColumnVector intervalColumn = (IntervalDayTimeColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
+        if (!isNull(nullBitmapOffset, logical)) {
           HiveIntervalDayTime interval =
-              intervalColumn.asScratchIntervalDayTime(physicalIndex(indices, logical, repeating));
+              intervalColumn.asScratchIntervalDayTime(
+                  physicalIndex(indices, rowOffset, logical, repeating));
           writeLong(interval.getTotalSeconds());
           writeInt(interval.getNanos());
         }
@@ -309,24 +364,61 @@ public final class VectorShuffleBatchSerializer {
     } else if (column instanceof DecimalColumnVector) {
       DecimalColumnVector decimal = (DecimalColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
-          position += decimal.vector[physicalIndex(indices, logical, repeating)]
+        if (!isNull(nullBitmapOffset, logical)) {
+          position += decimal.vector[physicalIndex(indices, rowOffset, logical, repeating)]
               .writeDirect(buffer, position);
         }
       }
     } else if (column instanceof LongColumnVector) {
-      // Decimal64ColumnVector extends LongColumnVector, so this branch covers it.
+      // Includes Decimal64ColumnVector and DateColumnVector: all use native-endian longs.
       LongColumnVector longs = (LongColumnVector) column;
-      for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
-          writeLong(longs.vector[physicalIndex(indices, logical, repeating)]);
+      if (nullBitmapOffset < 0 && !repeating) {
+        // For small per-partition frames, do one bounds check per column, not per value.
+        int bytes = valueCount * Long.BYTES;
+        ensureCapacity(bytes);
+        if (indices == null) {
+          VectorShuffleBatchFixedWidth.writeLongs(
+              longs.vector, rowOffset, buffer, position, valueCount);
+        } else {
+          final long base = BYTE_ARRAY_BASE_OFFSET + position;
+          for (int i = 0; i < valueCount; i++) {
+            theUnsafe.putLong(buffer, base + (long) i * Long.BYTES,
+                longs.vector[indices[rowOffset + i]]);
+          }
+        }
+        position += bytes;
+      } else {
+        for (int logical = 0; logical < valueCount; logical++) {
+          if (!isNull(nullBitmapOffset, logical)) {
+            writeLong(longs.vector[physicalIndex(indices, rowOffset, logical, repeating)]);
+          }
         }
       }
     } else if (column instanceof DoubleColumnVector) {
       DoubleColumnVector doubles = (DoubleColumnVector) column;
-      for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
-          writeDouble(doubles.vector[physicalIndex(indices, logical, repeating)]);
+      if (nullBitmapOffset < 0 && !repeating) {
+        int bytes = valueCount * Double.BYTES;
+        ensureCapacity(bytes);
+        // Do not bulk-copy raw doubles: doubleToLongBits canonicalizes NaN payloads.
+        final long base = BYTE_ARRAY_BASE_OFFSET + position;
+        final double[] values = doubles.vector;
+        if (indices == null) {
+          for (int i = 0; i < valueCount; i++) {
+            theUnsafe.putLong(buffer, base + (long) i * Double.BYTES,
+                Double.doubleToLongBits(values[rowOffset + i]));
+          }
+        } else {
+          for (int i = 0; i < valueCount; i++) {
+            theUnsafe.putLong(buffer, base + (long) i * Double.BYTES,
+                Double.doubleToLongBits(values[indices[rowOffset + i]]));
+          }
+        }
+        position += bytes;
+      } else {
+        for (int logical = 0; logical < valueCount; logical++) {
+          if (!isNull(nullBitmapOffset, logical)) {
+            writeDouble(doubles.vector[physicalIndex(indices, rowOffset, logical, repeating)]);
+          }
         }
       }
     } else if (column instanceof VoidColumnVector) {
@@ -336,8 +428,9 @@ public final class VectorShuffleBatchSerializer {
     }
   }
 
-  private boolean isNull(byte[] nullBitmap, int logical) {
-    return nullBitmap != null && (nullBitmap[logical >>> 3] & (1 << (logical & 7))) != 0;
+  private boolean isNull(int nullBitmapOffset, int logical) {
+    return nullBitmapOffset >= 0
+        && (buffer[nullBitmapOffset + (logical >>> 3)] & (1 << (logical & 7))) != 0;
   }
 
   private IllegalArgumentException unsupported(ColumnVector column) {
