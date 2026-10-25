@@ -123,6 +123,8 @@ public class ReduceRecordSource implements RecordSource {
   // These counters belong to the source: operators can change batch.size during process().
   private int pendingRows;
   private long pendingBytes;
+  private int[] pendingInputRows;
+  private int pendingInputCount;
   private final List<Runnable> restoreSourceTypeMetadata = new ArrayList<>();
   private InterruptibleProcessing abortChecker;
   private VectorSerializeRow<BinarySortableSerializeWrite> rowModeKeySerializeRow;
@@ -241,6 +243,9 @@ public class ReduceRecordSource implements RecordSource {
           inputColumnCount = totalColumns;
           accumulatorProjection = batch.projectedColumns;
           accumulatorSelection = batch.selected;
+          if (l4j.isErrorEnabled()) {
+            pendingInputRows = new int[vectorShuffleBatchDeserializer.getAppendCapacity()];
+          }
           captureSourceTypeMetadata();
           initializeAccumulatorState();
         }
@@ -672,6 +677,7 @@ public class ReduceRecordSource implements RecordSource {
       // common dispatch helper restores ordinary-row metadata before accepting another record.
       vectorShuffleBatchDeserializer.deserialize(valueWritable, batch);
       pendingRows = incomingRows;
+      recordPendingInputRows(incomingRows);
       flushPendingBatch();
       return;
     }
@@ -695,6 +701,7 @@ public class ReduceRecordSource implements RecordSource {
     }
     pendingRows += incomingRows;
     pendingBytes += incomingBytes;
+    recordPendingInputRows(incomingRows);
     // Serialized bytes are only a soft threshold. Repeating and nested values can materialize
     // into much more decoded memory than their wire size.
     if (pendingRows == accumulatorRowLimit || pendingBytes >= BATCH_BYTES) {
@@ -708,6 +715,13 @@ public class ReduceRecordSource implements RecordSource {
     abortChecker.checkAbortCondition();
   }
 
+  private void recordPendingInputRows(int incomingRows) {
+    if (pendingInputRows != null) {
+      assert incomingRows > 0 && pendingInputCount < pendingInputRows.length;
+      pendingInputRows[pendingInputCount++] = incomingRows;
+    }
+  }
+
   private void flushPendingBatch() throws HiveException, InterruptedException {
     checkAccumulationAbort();
     if (pendingRows == 0) {
@@ -715,8 +729,20 @@ public class ReduceRecordSource implements RecordSource {
       return;
     }
     assert batch.size == pendingRows;
+    assert pendingInputRows == null
+        || Arrays.stream(pendingInputRows, 0, pendingInputCount).sum() == pendingRows;
     final boolean retained = reducer.batchNeedsClone();
     reducer.process(batch, tag);
+    if (pendingInputRows != null && l4j.isErrorEnabled()) {
+      StringBuilder inputRows = new StringBuilder();
+      for (int i = 0; i < pendingInputCount; i++) {
+        if (i > 0) {
+          inputRows.append(", ");
+        }
+        inputRows.append(pendingInputRows[i]);
+      }
+      l4j.error("xxxxx {} {} <- {}", pendingInputCount, pendingRows, inputRows);
+    }
     // Never reset a batch retained by downstream code. Allocate once per dispatch instead of
     // once per incoming record. The counters must not depend on the returned batch.size.
     prepareAccumulator(retained);
@@ -725,6 +751,7 @@ public class ReduceRecordSource implements RecordSource {
   private void discardPendingBatch() {
     pendingRows = 0;
     pendingBytes = 0;
+    pendingInputCount = 0;
   }
 
   private void prepareAccumulator(boolean replace) {
