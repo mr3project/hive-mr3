@@ -495,6 +495,170 @@ public class TestVectorShuffleBatchSerde {
     }
   }
 
+
+  @Test
+  public void testAccumulationKeepsRepeatingColumnWithoutExpansion() throws Exception {
+    VectorizedRowBatch destination = new VectorizedRowBatch(2);
+    destination.cols[0] = new LongColumnVector();
+    destination.cols[1] = new LongColumnVector();
+    destination.size = 0;
+    VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 2);
+
+    for (int iteration = 0; iteration < 2; iteration++) {
+      int count = iteration == 0 ? 3 : 2;
+      VectorizedRowBatch source = new VectorizedRowBatch(2);
+      LongColumnVector repeated = new LongColumnVector();
+      repeated.isRepeating = true;
+      repeated.vector[0] = 42;
+      source.cols[0] = repeated;
+      LongColumnVector ordinary = new LongColumnVector();
+      for (int row = 0; row < count; row++) {
+        ordinary.vector[row] = iteration * 100 + row;
+      }
+      source.cols[1] = ordinary;
+      source.size = count;
+      byte[] encoded = new byte[SERIALIZE_BUFFER_SIZE];
+      int length = serializer.serialize(source, new int[] {0, 1}, encoded, 0);
+      BytesWritable frame = new BytesWritable();
+      frame.set(encoded, 0, length);
+
+      VectorShuffleBatchDeserializer.FrameInfo info =
+          decoder.inspectAccumulation(frame, destination);
+      assertTrue(info.isAppendCompatible());
+      assertTrue(info.isRepeatingCompatible());
+      decoder.appendInspectedAccumulation(frame, destination, info.getRowCount());
+    }
+    assertEquals(5, destination.size);
+    assertTrue(decoder.hasRepeatingColumns());
+    LongColumnVector result = (LongColumnVector) destination.cols[0];
+    assertTrue(result.isRepeating);
+    assertEquals(42, result.vector[0]);
+    assertFalse(destination.cols[1].isRepeating);
+    LongColumnVector ordinary = (LongColumnVector) destination.cols[1];
+    assertEquals(0, ordinary.vector[0]);
+    assertEquals(1, ordinary.vector[1]);
+    assertEquals(2, ordinary.vector[2]);
+    assertEquals(100, ordinary.vector[3]);
+    assertEquals(101, ordinary.vector[4]);
+
+    // One conflicting column forces a full-batch flush, without changing the accumulator.
+    LongColumnVector different = new LongColumnVector();
+    different.isRepeating = true;
+    different.vector[0] = 43;
+    VectorizedRowBatch conflict = new VectorizedRowBatch(2);
+    conflict.cols[0] = different;
+    conflict.cols[1] = new LongColumnVector();
+    conflict.size = 2;
+    byte[] bytes = new byte[SERIALIZE_BUFFER_SIZE];
+    int length = serializer.serialize(conflict, new int[] {0, 1}, bytes, 0);
+    BytesWritable frame = new BytesWritable();
+    frame.set(bytes, 0, length);
+    VectorShuffleBatchDeserializer.FrameInfo info =
+        decoder.inspectAccumulation(frame, destination);
+    assertTrue(info.isAppendCompatible());
+    assertFalse(info.isRepeatingCompatible());
+    assertEquals(5, destination.size);
+    assertEquals(42, result.vector[0]);
+
+    // As after a receiver flush, the same inspected frame can start the next accumulator.
+    destination.reset();
+    decoder.resetAccumulation();
+    decoder.appendInspectedAccumulation(frame, destination, info.getRowCount());
+    assertTrue(((LongColumnVector) destination.cols[0]).isRepeating);
+    assertEquals(43, ((LongColumnVector) destination.cols[0]).vector[0]);
+    assertEquals(2, destination.size);
+  }
+
+  @Test
+  public void testAccumulationRepeatingNullAndSingleRowExceptions() throws Exception {
+    VectorizedRowBatch destination = batchWithColumn(new BytesColumnVector(), 0);
+    VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
+
+    BytesColumnVector nullColumn = new BytesColumnVector();
+    nullColumn.isRepeating = true;
+    nullColumn.noNulls = false;
+    nullColumn.isNull[0] = true;
+    BytesWritable nullFrame = serialize(batchWithColumn(nullColumn, 3));
+    VectorShuffleBatchDeserializer.FrameInfo info =
+        decoder.inspectAccumulation(nullFrame, destination);
+    decoder.appendInspectedAccumulation(nullFrame, destination, info.getRowCount());
+    assertTrue(destination.cols[0].isRepeating);
+    assertTrue(destination.cols[0].isNull[0]);
+
+    info = decoder.inspectAccumulation(nullFrame, destination);
+    assertTrue(info.isRepeatingCompatible());
+    decoder.appendInspectedAccumulation(nullFrame, destination, info.getRowCount());
+    assertEquals(6, destination.size);
+    assertTrue(destination.cols[0].isRepeating);
+
+    BytesColumnVector nonNull = new BytesColumnVector();
+    nonNull.isRepeating = true;
+    nonNull.setRef(0, bytes("text"), 0, 4);
+    BytesWritable textFrame = serialize(batchWithColumn(nonNull, 2));
+    info = decoder.inspectAccumulation(textFrame, destination);
+    assertFalse(info.isRepeatingCompatible());
+
+    destination.reset();
+    decoder.resetAccumulation();
+    decoder.appendInspectedAccumulation(textFrame, destination, info.getRowCount());
+    assertTrue(destination.cols[0].isRepeating);
+    assertBytesValueEquals(bytes("text"), (BytesColumnVector) destination.cols[0], 0);
+
+    // Single-row nonrepeating input with the same value can join a repeating accumulator.
+    BytesColumnVector same = new BytesColumnVector();
+    same.setRef(0, bytes("text"), 0, 4);
+    BytesWritable single = serialize(batchWithColumn(same, 1));
+    info = decoder.inspectAccumulation(single, destination);
+    assertTrue(info.isRepeatingCompatible());
+    decoder.appendInspectedAccumulation(single, destination, info.getRowCount());
+    assertEquals(3, destination.size);
+    assertTrue(destination.cols[0].isRepeating);
+
+    same.setRef(0, bytes("other"), 0, 5);
+    BytesWritable different = serialize(batchWithColumn(same, 1));
+    assertFalse(decoder.inspectAccumulation(different, destination).isRepeatingCompatible());
+
+    // A one-row source carrying a repeating flag must not force a nonrepeating prefix to flush.
+    destination.reset();
+    decoder.resetAccumulation();
+    BytesColumnVector first = new BytesColumnVector();
+    first.setRef(0, bytes("start"), 0, 5);
+    BytesWritable firstFrame = serialize(batchWithColumn(first, 2));
+    info = decoder.inspectAccumulation(firstFrame, destination);
+    decoder.appendInspectedAccumulation(firstFrame, destination, info.getRowCount());
+    BytesColumnVector oneRepeating = new BytesColumnVector();
+    oneRepeating.isRepeating = true;
+    oneRepeating.setRef(0, bytes("text"), 0, 4);
+    BytesWritable oneFrame = serialize(batchWithColumn(oneRepeating, 1));
+    info = decoder.inspectAccumulation(oneFrame, destination);
+    assertTrue(info.isRepeatingCompatible());
+    decoder.appendInspectedAccumulation(oneFrame, destination, info.getRowCount());
+    assertEquals(3, destination.size);
+    assertFalse(destination.cols[0].isRepeating);
+    assertBytesValueEquals(bytes("text"), (BytesColumnVector) destination.cols[0], 2);
+  }
+
+  @Test
+  public void testAccumulationRepeatingStructDoesNotExpandChildren() throws Exception {
+    VectorizedRowBatch destination = batchWithColumn(structOf(new LongColumnVector()), 0);
+    VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
+    StructColumnVector source = structOf(new LongColumnVector());
+    source.isRepeating = true;
+    ((LongColumnVector) source.fields[0]).vector[0] = 19;
+    BytesWritable frame = serialize(batchWithColumn(source, 3));
+    for (int i = 0; i < 2; i++) {
+      VectorShuffleBatchDeserializer.FrameInfo info =
+          decoder.inspectAccumulation(frame, destination);
+      assertTrue(info.isRepeatingCompatible());
+      decoder.appendInspectedAccumulation(frame, destination, info.getRowCount());
+    }
+    StructColumnVector result = (StructColumnVector) destination.cols[0];
+    assertEquals(6, destination.size);
+    assertTrue(result.isRepeating);
+    assertEquals(19, ((LongColumnVector) result.fields[0]).vector[0]);
+    assertEquals(0, ((LongColumnVector) result.fields[0]).vector[1]);
+  }
+
   @Test
   public void testInspectedAppendReusesFrameHeaderAcrossFlush() throws Exception {
     VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);

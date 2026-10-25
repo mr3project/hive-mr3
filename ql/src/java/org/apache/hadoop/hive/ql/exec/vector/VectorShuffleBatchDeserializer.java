@@ -40,11 +40,18 @@ public final class VectorShuffleBatchDeserializer {
   private final boolean requiresMetadataInspection;
   // Fixed-schema accumulation always uses batches created by the same VectorizedRowBatchCtx.
   private final int fixedAppendCapacity;
+  // Accumulation retains the exact encoding of each repeating top-level column. Comparing
+  // those encodings before append also works for nested values without expanding them.
+  private final boolean[] accumulatorRepeating;
+  private final byte[][] repeatedColumnEncodings;
+  private boolean hasRepeatingColumns;
 
   /** Keeps full metadata preinspection when the caller does not provide a fixed schema. */
   public VectorShuffleBatchDeserializer() {
     requiresMetadataInspection = true;
     fixedAppendCapacity = 0;
+    accumulatorRepeating = null;
+    repeatedColumnEncodings = null;
   }
 
   /**
@@ -61,12 +68,30 @@ public final class VectorShuffleBatchDeserializer {
     }
     requiresMetadataInspection = hasMetadata;
     fixedAppendCapacity = calculateAppendCapacity(schema, inputColumnCount);
+    accumulatorRepeating = new boolean[inputColumnCount];
+    repeatedColumnEncodings = new byte[inputColumnCount][];
+    frameInfo.columnStarts = new int[inputColumnCount];
+    frameInfo.columnEnds = new int[inputColumnCount];
+    frameInfo.columnRepeating = new boolean[inputColumnCount];
   }
 
   /** Row limit shared with the fixed-schema accumulation receiver. */
   public int getAppendCapacity() {
     assert fixedAppendCapacity > 0;
     return fixedAppendCapacity;
+  }
+
+  /** True if the current accumulation has any repeating top-level column. */
+  public boolean hasRepeatingColumns() {
+    return hasRepeatingColumns;
+  }
+
+  /** Discard the column encodings whenever the receiver dispatches or discards its batch. */
+  public void resetAccumulation() {
+    assert accumulatorRepeating != null;
+    Arrays.fill(accumulatorRepeating, false);
+    Arrays.fill(repeatedColumnEncodings, null);
+    hasRepeatingColumns = false;
   }
 
   private static boolean hasTypeMetadata(ColumnVector column) {
@@ -103,6 +128,10 @@ public final class VectorShuffleBatchDeserializer {
   public static final class FrameInfo {
     private int rowCount;
     private boolean appendCompatible;
+    private boolean repeatingCompatible;
+    private int[] columnStarts;
+    private int[] columnEnds;
+    private boolean[] columnRepeating;
 
     private FrameInfo() {
     }
@@ -114,6 +143,11 @@ public final class VectorShuffleBatchDeserializer {
     /** Full frames, as well as incompatible metadata, require standalone replacement decoding. */
     public boolean isAppendCompatible() {
       return appendCompatible;
+    }
+
+    /** Whether the incoming frame preserves each accumulated column's repeating shape/value. */
+    public boolean isRepeatingCompatible() {
+      return repeatingCompatible;
     }
   }
 
@@ -131,24 +165,79 @@ public final class VectorShuffleBatchDeserializer {
    */
   public FrameInfo inspect(BytesWritable serialized, VectorizedRowBatch destination)
       throws IOException {
+    return inspect(serialized, destination, false);
+  }
+
+  /**
+   * Inspects every column before accumulation. A shape/value conflict requires the receiver
+   * to flush and then append this frame to an empty accumulator; it does not require standalone
+   * replacement decoding. Inspecting the entire frame also validates skipped repeating payloads.
+   */
+  public FrameInfo inspectAccumulation(BytesWritable serialized, VectorizedRowBatch destination)
+      throws IOException {
+    assert accumulatorRepeating != null;
+    return inspect(serialized, destination, true);
+  }
+
+  private FrameInfo inspect(BytesWritable serialized, VectorizedRowBatch destination,
+      boolean accumulating) throws IOException {
     try {
       start(serialized);
       int rowCount = readInt();
       int columnCount = readInt();
       int capacity = validateAppendDimensions(destination, rowCount, columnCount);
       boolean compatible = rowCount < capacity;
-      if (rowCount == 0 || (compatible && requiresMetadataInspection)) {
+      if (rowCount == 0 || (compatible && (requiresMetadataInspection || accumulating))) {
         for (int i = 0; i < columnCount; i++) {
+          if (accumulating && rowCount > 0) {
+            frameInfo.columnStarts[i] = position - serialized.getOffset();
+            // A single value never needs a repeating vector, whatever the source flag.
+            frameInfo.columnRepeating[i] =
+                rowCount > 1 && (buffer[position] & IS_REPEATING) != 0;
+          }
           compatible &= inspectColumn(destination.cols[i], rowCount);
+          if (accumulating && rowCount > 0) {
+            frameInfo.columnEnds[i] = position - serialized.getOffset();
+          }
         }
         checkEnd();
       }
+      boolean repeatingCompatible = true;
+      if (accumulating && compatible && rowCount > 0 && destination.size > 0) {
+        for (int i = 0; i < columnCount; i++) {
+          if (accumulatorRepeating[i]) {
+            // For one row the source may omit IS_REPEATING, but the encoded value is
+            // otherwise identical. Multi-row nonrepeating input always conflicts.
+            if ((rowCount > 1 && !frameInfo.columnRepeating[i])
+                || !matchesRepeatingColumn(i, serialized.getOffset())) {
+              repeatingCompatible = false;
+            }
+          } else if (frameInfo.columnRepeating[i]) {
+            repeatingCompatible = false;
+          }
+        }
+      }
       frameInfo.rowCount = rowCount;
       frameInfo.appendCompatible = compatible;
+      frameInfo.repeatingCompatible = repeatingCompatible;
       return frameInfo;
     } finally {
       buffer = null;
     }
+  }
+
+  private boolean matchesRepeatingColumn(int column, int frameOffset) {
+    byte[] previous = repeatedColumnEncodings[column];
+    int start = frameInfo.columnStarts[column];
+    int end = frameInfo.columnEnds[column];
+    if (previous == null || previous.length != end - start) {
+      return false;
+    }
+    int position = frameOffset + start;
+    // A single-row frame may encode the same value without the repetition flag.
+    return (previous[0] & ~IS_REPEATING) == (buffer[position] & ~IS_REPEATING)
+        && Arrays.equals(previous, 1, previous.length, buffer, position + 1,
+            position + previous.length);
   }
 
   /**
@@ -187,6 +276,51 @@ public final class VectorShuffleBatchDeserializer {
       // The receiver may have flushed and replaced the destination since inspect().
       validateAppendCapacity(destination, rowCount, fixedAppendCapacity);
       appendColumns(destination, destination.projectionSize, rowCount);
+    } finally {
+      buffer = null;
+    }
+  }
+
+  /**
+   * Append a frame previously inspected for accumulation. Compatible repeating columns keep
+   * their row-zero values and are not decoded again. The source buffer is retained only while
+   * decoding, and saved column encodings are owned by this deserializer.
+   */
+  public void appendInspectedAccumulation(BytesWritable serialized, VectorizedRowBatch destination,
+      int rowCount) throws IOException {
+    assert accumulatorRepeating != null && !destination.selectedInUse;
+    if (!frameInfo.appendCompatible || !frameInfo.repeatingCompatible
+        || frameInfo.rowCount != rowCount) {
+      throw new IOException("Incompatible vector shuffle accumulation frame");
+    }
+    try {
+      start(serialized);
+      position += 2 * Integer.BYTES;
+      validateAppendCapacity(destination, rowCount, fixedAppendCapacity);
+      int originalRows = destination.size;
+      for (int i = 0; i < destination.projectionSize; i++) {
+        assert position == serialized.getOffset() + frameInfo.columnStarts[i];
+        if (originalRows > 0 && accumulatorRepeating[i]) {
+          // inspectAccumulation() already validated and compared the entire column.
+          position = serialized.getOffset() + frameInfo.columnEnds[i];
+        } else {
+          readAppendColumn(destination.cols[i], null, originalRows, rowCount, true);
+        }
+      }
+      checkEnd();
+      destination.size += rowCount;
+      if (originalRows == 0) {
+        for (int i = 0; i < destination.projectionSize; i++) {
+          boolean repeating = frameInfo.columnRepeating[i];
+          accumulatorRepeating[i] = repeating;
+          if (repeating) {
+            int offset = serialized.getOffset();
+            repeatedColumnEncodings[i] = Arrays.copyOfRange(buffer,
+                offset + frameInfo.columnStarts[i], offset + frameInfo.columnEnds[i]);
+            hasRepeatingColumns = true;
+          }
+        }
+      }
     } finally {
       buffer = null;
     }
@@ -486,6 +620,11 @@ public final class VectorShuffleBatchDeserializer {
   /** Null indices describe a consecutive range starting at offset; otherwise offset is unused. */
   private void readAppendColumn(ColumnVector column, int[] indices, int offset, int rowCount)
       throws IOException {
+    readAppendColumn(column, indices, offset, rowCount, false);
+  }
+
+  private void readAppendColumn(ColumnVector column, int[] indices, int offset, int rowCount,
+      boolean preserveRepeating) throws IOException {
     assert !column.isRepeating;
     int flags = readFlags(column);
     boolean repeating = (flags & IS_REPEATING) != 0;
@@ -571,7 +710,12 @@ public final class VectorShuffleBatchDeserializer {
       readValue(column, indices, offset, count, false, bitmapOffset, (flags & IS_DECIMAL_64) != 0);
     }
     if (repeating && rowCount > 1) {
-      expandRepeating(column, indices, offset, rowCount);
+      if (preserveRepeating) {
+        assert indices == null && offset == 0;
+        column.isRepeating = true;
+      } else {
+        expandRepeating(column, indices, offset, rowCount);
+      }
     }
   }
 
