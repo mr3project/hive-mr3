@@ -125,6 +125,9 @@ public class ReduceRecordSource implements RecordSource {
   private long pendingBytes;
   private int[] pendingInputRows;
   private int pendingInputCount;
+  // Temporary diagnostics accompanying the existing xxxxx accumulation log.
+  private int pendingRepeatingInputFrames;
+  private int pendingRepeatingColumnOccurrences;
   private final List<Runnable> restoreSourceTypeMetadata = new ArrayList<>();
   private InterruptibleProcessing abortChecker;
   private VectorSerializeRow<BinarySortableSerializeWrite> rowModeKeySerializeRow;
@@ -704,6 +707,13 @@ public class ReduceRecordSource implements RecordSource {
     pendingRows += incomingRows;
     pendingBytes += incomingBytes;
     recordPendingInputRows(incomingRows);
+    if (compact && pendingInputRows != null) {
+      int repeatingColumns = frameInfo.getRepeatingColumnCount();
+      if (repeatingColumns > 0) {
+        pendingRepeatingInputFrames++;
+        pendingRepeatingColumnOccurrences += repeatingColumns;
+      }
+    }
     // Serialized bytes are only a soft threshold. Repeating and nested values can materialize
     // into much more decoded memory than their wire size.
     if (pendingRows == accumulatorRowLimit || pendingBytes >= BATCH_BYTES) {
@@ -734,6 +744,19 @@ public class ReduceRecordSource implements RecordSource {
     assert pendingInputRows == null
         || Arrays.stream(pendingInputRows, 0, pendingInputCount).sum() == pendingRows;
     final boolean retained = reducer.batchNeedsClone();
+    String retainedRepeatingColumns = null;
+    if (pendingInputRows != null && l4j.isErrorEnabled()) {
+      StringBuilder repeated = new StringBuilder();
+      for (int i = 0; i < inputColumnCount; i++) {
+        if (batch.cols[i].isRepeating) {
+          if (repeated.length() > 0) {
+            repeated.append(',');
+          }
+          repeated.append(i);
+        }
+      }
+      retainedRepeatingColumns = repeated.length() == 0 ? "none" : repeated.toString();
+    }
     reducer.process(batch, tag);
     if (pendingInputRows != null && l4j.isErrorEnabled()) {
       StringBuilder inputRows = new StringBuilder();
@@ -744,6 +767,9 @@ public class ReduceRecordSource implements RecordSource {
         inputRows.append(pendingInputRows[i]);
       }
       l4j.error("xxxxx {} {} <- {}", pendingInputCount, pendingRows, inputRows);
+      // Examine the accumulator before calling process(): operators can mutate its columns.
+      l4j.error("repeating-accumulation frames={} columns={} retained={}",
+          pendingRepeatingInputFrames, pendingRepeatingColumnOccurrences, retainedRepeatingColumns);
     }
     // Never reset a batch retained by downstream code. Allocate once per dispatch instead of
     // once per incoming record. The counters must not depend on the returned batch.size.
@@ -754,6 +780,8 @@ public class ReduceRecordSource implements RecordSource {
     pendingRows = 0;
     pendingBytes = 0;
     pendingInputCount = 0;
+    pendingRepeatingInputFrames = 0;
+    pendingRepeatingColumnOccurrences = 0;
   }
 
   private void prepareAccumulator(boolean replace) {

@@ -129,6 +129,7 @@ public final class VectorShuffleBatchDeserializer {
     private int rowCount;
     private boolean appendCompatible;
     private boolean repeatingCompatible;
+    private int repeatingColumnCount;
     private int[] columnStarts;
     private int[] columnEnds;
     private boolean[] columnRepeating;
@@ -148,6 +149,11 @@ public final class VectorShuffleBatchDeserializer {
     /** Whether the incoming frame preserves each accumulated column's repeating shape/value. */
     public boolean isRepeatingCompatible() {
       return repeatingCompatible;
+    }
+
+    /** Top-level repeating columns in this frame with at least two rows. */
+    public int getRepeatingColumnCount() {
+      return repeatingColumnCount;
     }
   }
 
@@ -187,6 +193,7 @@ public final class VectorShuffleBatchDeserializer {
       int columnCount = readInt();
       int capacity = validateAppendDimensions(destination, rowCount, columnCount);
       boolean compatible = rowCount < capacity;
+      int repeatingColumnCount = 0;
       if (rowCount == 0 || (compatible && (requiresMetadataInspection || accumulating))) {
         for (int i = 0; i < columnCount; i++) {
           if (accumulating && rowCount > 0) {
@@ -194,6 +201,9 @@ public final class VectorShuffleBatchDeserializer {
             // A single value never needs a repeating vector, whatever the source flag.
             frameInfo.columnRepeating[i] =
                 rowCount > 1 && (buffer[position] & IS_REPEATING) != 0;
+            if (frameInfo.columnRepeating[i]) {
+              repeatingColumnCount++;
+            }
           }
           compatible &= inspectColumn(destination.cols[i], rowCount);
           if (accumulating && rowCount > 0) {
@@ -220,6 +230,7 @@ public final class VectorShuffleBatchDeserializer {
       frameInfo.rowCount = rowCount;
       frameInfo.appendCompatible = compatible;
       frameInfo.repeatingCompatible = repeatingCompatible;
+      frameInfo.repeatingColumnCount = repeatingColumnCount;
       return frameInfo;
     } finally {
       buffer = null;
