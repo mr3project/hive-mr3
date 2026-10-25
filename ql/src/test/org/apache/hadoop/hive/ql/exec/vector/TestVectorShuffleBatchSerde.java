@@ -468,8 +468,8 @@ public class TestVectorShuffleBatchSerde {
   @Test
   public void testAccumulationPreservesRepeatingAndFlushesOnConflict() throws Exception {
     VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
-    VectorShuffleBatchDeserializer accumulating =
-        new VectorShuffleBatchDeserializer(destination, 1);
+    VectorShuffleBatchAccumulatingDeserializer accumulating =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
 
     LongColumnVector repeated = new LongColumnVector();
     repeated.isRepeating = true;
@@ -546,8 +546,8 @@ public class TestVectorShuffleBatchSerde {
     BytesWritable serialized = serialize(batchWithColumn(list, 1));
     VectorizedRowBatch destination = batchWithColumn(
         new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new LongColumnVector()), 0);
-    VectorShuffleBatchDeserializer accumulating =
-        new VectorShuffleBatchDeserializer(destination, 1);
+    VectorShuffleBatchAccumulatingDeserializer accumulating =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
 
     assertFalse(accumulating.inspectAccumulation(serialized, destination, 1)
         .isAppendCompatible());
