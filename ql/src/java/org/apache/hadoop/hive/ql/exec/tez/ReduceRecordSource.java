@@ -649,7 +649,8 @@ public class ReduceRecordSource implements RecordSource {
       processVectorRecordUnorderedLegacy(keyWritable, valueWritable, tag);
       return;
     }
-    checkAccumulationAbort();
+    // Cancellation is checked periodically by ReduceRecordProcessor's progress callback
+    // and immediately before dispatching a pending batch.
     assert !batch.selectedInUse && batch.size == pendingRows;
     final boolean compact = isVectorBatchKey(keyWritable);
     final VectorShuffleBatchDeserializer.FrameInfo frameInfo = compact
