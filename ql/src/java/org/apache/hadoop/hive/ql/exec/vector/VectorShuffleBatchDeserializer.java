@@ -21,6 +21,7 @@ import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
 import static org.apache.tez.util.FastByteComparisons.theUnsafe;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
@@ -28,6 +29,7 @@ import org.apache.hadoop.io.BytesWritable;
 
 /** Deserializes a compact vector shuffle payload into an already schema-initialized batch. */
 public final class VectorShuffleBatchDeserializer {
+
   private static final int IS_REPEATING = 1;
   private static final int HAS_NULLS = 2;
   private static final int IS_DECIMAL_64 = 4;
@@ -36,46 +38,122 @@ public final class VectorShuffleBatchDeserializer {
   private int position;
   private int limit;
 
+  private final VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+  private VectorShuffleBatchMetadata metadata;
+  private int inputColumnCount;
+  private boolean fixedSchema;
+
+  public VectorShuffleBatchDeserializer() {
+  }
+
+  public VectorShuffleBatchDeserializer(VectorizedRowBatch schema, int inputColumnCount) {
+    // initialize once for a fixed schema; later batches may use different column vectors.
+    this.inputColumnCount = inputColumnCount;
+    metadata = new VectorShuffleBatchMetadata(schema.cols, inputColumnCount);
+    fixedSchema = true;
+  }
+
   // The Tez shuffle layer has already verified that the right number of bytes have been received,
   // so we usually do not expect ArrayIndexOutOfBoundsException.
   // IOException is for handling in-transit data corruption.
   public void deserialize(BytesWritable serialized, VectorizedRowBatch destination)
       throws IOException {
-    assert serialized != null && destination != null;
-
-    buffer = serialized.getBytesRaw();
-    position = serialized.getOffset();
-    limit = position + serialized.getLength();
-
-    final int rowCount = readInt();
-    final int columnCount = readInt();
-    if (rowCount < 0 || columnCount < 0 || columnCount > destination.cols.length) {
-      throw new IOException("Invalid vector shuffle batch dimensions: " + rowCount + " rows, "
-          + columnCount + " columns");
+    if (serialized.getLength() < Integer.BYTES) {
+      throw new IOException("Truncated vector shuffle batch header");
     }
 
-    destination.reset();
-    for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
-      if (destination.cols[columnIndex] != null) {
-        destination.cols[columnIndex].ensureSize(rowCount, false);
+    final int columnCount = theUnsafe.getInt(serialized.getBytesRaw(),
+        BYTE_ARRAY_BASE_OFFSET + serialized.getOffset());
+    if (columnCount < 0 || columnCount > destination.cols.length) {
+      throw new IOException("Invalid vector shuffle batch column count " + columnCount);
+    }
+
+    if (!fixedSchema) {
+      for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+        if (destination.cols[columnIndex] == null) {
+          throw new IOException("Destination column " + columnIndex + " is not initialized");
+        }
+      }
+      inputColumnCount = columnCount;
+      metadata = new VectorShuffleBatchMetadata(destination.cols, columnCount);
+    }
+
+    try {
+      header.read(serialized, inputColumnCount, metadata.getByteCount());
+      buffer = header.getBuffer();
+      position = header.getRepeatingStart();
+      limit = header.getLimit();
+      final int rowCount = header.getRowCount();
+
+      destination.reset();
+      destination.size = rowCount;
+      destination.selectedInUse = false;
+      destination.projectionSize = columnCount;
+      for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+        destination.projectedColumns[columnIndex] = columnIndex;
+        ColumnVector column = destination.cols[columnIndex];
+        column.ensureSize(rowCount, false);
+      }
+
+      metadata.apply(destination.cols, buffer, header.getMetadataOffset());
+
+      // Payload order follows the bitmap, independently of the logical destination indices.
+      if (header.hasRepeatingColumns()) {
+        readRepeatingColumns(destination, columnCount, rowCount);
+      }
+      if (position != header.getRepeatingEnd()) {
+        throw new IOException("Vector shuffle repeating section length does not match its payload");
+      }
+
+      position = header.getOrdinaryStart();
+      if (!header.hasRepeatingColumns()) {
+        for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+          readColumn(destination.cols[columnIndex], rowCount);
+        }
+      } else if (columnCount <= Long.SIZE) {
+        long ordinaryBits = ~header.getRepeatingBits() & columnMask(columnCount);
+        while (ordinaryBits != 0) {
+          int columnIndex = Long.numberOfTrailingZeros(ordinaryBits);
+          readColumn(destination.cols[columnIndex], rowCount);
+          ordinaryBits &= ordinaryBits - 1;
+        }
+      } else {
+        for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+          if (!header.isRepeating(columnIndex)) {
+            readColumn(destination.cols[columnIndex], rowCount);
+          }
+        }
+      }
+
+      if (position != limit) {
+        throw new IOException("Vector shuffle batch has " + (limit - position) + " trailing bytes");
+      }
+    } finally {
+      buffer = null;
+      header.clear();
+    }
+  }
+
+  private static long columnMask(int columnCount) {
+    return -1L >>> (Long.SIZE - columnCount);
+  }
+
+  private void readRepeatingColumns(VectorizedRowBatch destination, int columnCount, int rowCount)
+      throws IOException {
+    if (columnCount <= Long.SIZE) {
+      long repeatingBits = header.getRepeatingBits() & columnMask(columnCount);
+      while (repeatingBits != 0) {
+        int columnIndex = Long.numberOfTrailingZeros(repeatingBits);
+        readColumn(destination.cols[columnIndex], rowCount);
+        repeatingBits &= repeatingBits - 1;
+      }
+    } else {
+      for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+        if (header.isRepeating(columnIndex)) {
+          readColumn(destination.cols[columnIndex], rowCount);
+        }
       }
     }
-    destination.size = rowCount;
-    destination.selectedInUse = false;
-    destination.projectionSize = columnCount;
-    for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
-      destination.projectedColumns[columnIndex] = columnIndex;
-      ColumnVector column = destination.cols[columnIndex];
-      if (column == null) {
-        throw new IOException("Destination column " + columnIndex + " is not initialized");
-      }
-      readColumn(column, rowCount);
-    }
-    if (position != limit) {
-      throw new IOException("Vector shuffle batch has " + (limit - position) + " trailing bytes");
-    }
-
-    buffer = null;
   }
 
   private void readColumn(ColumnVector column, int rowCount) throws IOException {
@@ -88,21 +166,27 @@ public final class VectorShuffleBatchDeserializer {
     final boolean repeating = (flags & IS_REPEATING) != 0;
     final boolean hasNulls = (flags & HAS_NULLS) != 0;
     final int valueCount = repeating ? Math.min(rowCount, 1) : rowCount;
-    column.ensureSize(requiredSize(destinationIndices, valueCount, repeating), false);
 
-    byte[] nullBitmap = null;
+    int nullBitmap = -1;
     if (hasNulls) {
-      nullBitmap = new byte[(valueCount + 7) / 8];
-      readFully(nullBitmap);
+      nullBitmap = position;
+      position += (valueCount + 7) / 8;
     }
 
     column.isRepeating = repeating;
     column.noNulls = !hasNulls;
+    if (!repeating && !hasNulls && destinationIndices == null &&
+        VectorShuffleBatchFixedWidth.canRead(column, (flags & IS_DECIMAL_64) != 0)) {
+      // Preserve null-bitmap semantics when reusing a standalone destination batch.
+      Arrays.fill(column.isNull, 0, valueCount, false);
+      readDenseFixedWidth(column, 0, valueCount);
+      return;
+    }
+
     for (int logical = 0; logical < valueCount; logical++) {
       int destinationIndex = destinationIndex(destinationIndices, logical, repeating);
       column.isNull[destinationIndex] = hasNulls && isNull(nullBitmap, logical);
     }
-    readTypeMetadata(column);
 
     if (column instanceof StructColumnVector) {
       readStructChildren((StructColumnVector) column, destinationIndices, valueCount, repeating);
@@ -145,7 +229,7 @@ public final class VectorShuffleBatchDeserializer {
     }
 
     for (ColumnVector field : struct.fields) {
-      field.ensureSize(requiredSize(activeDestinationIndices, activeCount, false), false);
+      assert field.isNull.length >= struct.isNull.length;
       readColumn(field, activeDestinationIndices, activeCount);
     }
   }
@@ -180,7 +264,7 @@ public final class VectorShuffleBatchDeserializer {
 
     for (int tag = 0; tag < union.fields.length; tag++) {
       ColumnVector field = union.fields[tag];
-      field.ensureSize(requiredSize(fieldDestinationIndices[tag], fieldCounts[tag], false), false);
+      assert field.isNull.length >= union.tags.length;
       readColumn(field, fieldDestinationIndices[tag], fieldCounts[tag]);
     }
   }
@@ -210,10 +294,6 @@ public final class VectorShuffleBatchDeserializer {
     return buffer[position++] & 0xff;
   }
 
-  private boolean readBoolean() {
-    return readUnsignedByte() != 0;
-  }
-
   private int readInt() {
     int value = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + position);
     position += Integer.BYTES;
@@ -230,46 +310,27 @@ public final class VectorShuffleBatchDeserializer {
     return Double.longBitsToDouble(readLong());
   }
 
-  private void readFully(byte[] bytes) {
-    readFully(bytes, 0, bytes.length);
-  }
-
-  private void readFully(byte[] bytes, int offset, int length) {
-    System.arraycopy(buffer, position, bytes, offset, length);
-    position += length;
-  }
-
-  private boolean isNull(byte[] nullBitmap, int logical) {
-    return nullBitmap != null && (nullBitmap[logical >>> 3] & (1 << (logical & 7))) != 0;
+  private boolean isNull(int nullBitmap, int logical) {
+    return nullBitmap >= 0
+        && (buffer[nullBitmap + (logical >>> 3)] & (1 << (logical & 7))) != 0;
   }
 
   private int destinationIndex(int[] destinationIndices, int logical, boolean repeating) {
     return repeating ? 0 : destinationIndices == null ? logical : destinationIndices[logical];
   }
 
-  private int requiredSize(int[] destinationIndices, int valueCount, boolean repeating) {
-    if (repeating || destinationIndices == null) {
-      return valueCount;
+  private void readDenseFixedWidth(ColumnVector column, int destinationOffset, int count)
+      throws IOException {
+    long bytes = (long) count * Long.BYTES;
+    if (count < 0 || bytes > limit - position) {
+      throw new IOException("Truncated fixed-width vector shuffle column");
     }
-    int requiredSize = 0;
-    for (int logical = 0; logical < valueCount; logical++) {
-      requiredSize = Math.max(requiredSize, destinationIndices[logical] + 1);
-    }
-    return requiredSize;
-  }
-
-  private void readTypeMetadata(ColumnVector column) {
-    if (column instanceof DateColumnVector) {
-      ((DateColumnVector) column).setUsingProlepticCalendar(readBoolean());
-    } else if (column instanceof TimestampColumnVector) {
-      TimestampColumnVector timestamp = (TimestampColumnVector) column;
-      timestamp.setIsUTC(readBoolean());
-      timestamp.setUsingProlepticCalendar(readBoolean());
-    }
+    VectorShuffleBatchFixedWidth.read(buffer, position, column, destinationOffset, count);
+    position += (int) bytes;
   }
 
   private void readValue(ColumnVector column, int[] destinationIndices, int valueCount,
-      boolean repeating, byte[] nullBitmap, boolean sourceIsDecimal64) throws IOException {
+      boolean repeating, int nullBitmap, boolean sourceIsDecimal64) throws IOException {
     if (sourceIsDecimal64) {
       if (column instanceof Decimal64ColumnVector) {
         Decimal64ColumnVector decimal64 = (Decimal64ColumnVector) column;
