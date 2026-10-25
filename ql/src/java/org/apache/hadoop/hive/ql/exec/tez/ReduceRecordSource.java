@@ -121,6 +121,8 @@ public class ReduceRecordSource implements RecordSource {
   // number of columns pertaining to keys in a vectorized row batch
   private int firstValueColumnOffset;
 
+  private final int BATCH_BYTES = VectorizedRowBatch.DEFAULT_BYTES;
+
   private StructObjectInspector keyStructInspector;
   private StructObjectInspector valueStructInspectors;
 
