@@ -471,12 +471,12 @@ public final class VectorShuffleBatchDeserializer {
     readAppendColumn(column, null, offset, rowCount);
   }
 
+  // Appended rows occupy previously unwritten slots; resetInit() clears old null flags.
   private void readNulls(ColumnVector column, int[] indices, int offset, int count,
       boolean repeating, int bitmapOffset) {
     for (int i = 0; i < count; i++) {
-      boolean isNull = isNull(bitmapOffset, i);
-      column.isNull[destinationIndex(indices, offset, i, repeating)] = isNull;
-      if (isNull) {
+      if (isNull(bitmapOffset, i)) {
+        column.isNull[destinationIndex(indices, offset, i, repeating)] = true;
         column.noNulls = false;
       }
     }
@@ -587,13 +587,11 @@ public final class VectorShuffleBatchDeserializer {
       if (column instanceof LongColumnVector) {
         LongColumnVector longs = (LongColumnVector) column;
         Arrays.fill(longs.vector, offset + 1, end, longs.vector[source]);
-        Arrays.fill(column.isNull, offset + 1, end, false);
         return;
       }
       if (column instanceof DoubleColumnVector) {
         DoubleColumnVector doubles = (DoubleColumnVector) column;
         Arrays.fill(doubles.vector, offset + 1, end, doubles.vector[source]);
-        Arrays.fill(column.isNull, offset + 1, end, false);
         return;
       }
     }
@@ -603,8 +601,8 @@ public final class VectorShuffleBatchDeserializer {
   }
 
   private void copyRepeatedElement(ColumnVector column, int source, int destination) {
-    column.isNull[destination] = column.isNull[source];
     if (column.isNull[source]) {
+      column.isNull[destination] = true;
       column.noNulls = false;
       return;
     }
@@ -815,12 +813,12 @@ public final class VectorShuffleBatchDeserializer {
         : destinationIndices == null ? destinationOffset + logical : destinationIndices[logical];
   }
 
+  // New destination slots are already non-null after initialization or batch reset.
   private int nonNullDestinationIndex(ColumnVector column, int[] destinationIndices,
       int destinationOffset, int logical, boolean repeating, int bitmapOffset) {
     int index = destinationIndex(destinationIndices, destinationOffset, logical, repeating);
-    boolean isNull = isNull(bitmapOffset, logical);
-    column.isNull[index] = isNull;
-    if (isNull) {
+    if (isNull(bitmapOffset, logical)) {
+      column.isNull[index] = true;
       column.noNulls = false;
       return -1;
     }
