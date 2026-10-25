@@ -496,7 +496,7 @@ public class TestVectorShuffleBatchSerde {
 
     BytesColumnVector repeated = new BytesColumnVector();
     repeated.isRepeating = true;
-    repeated.setVal(0, bytes("hello"));
+    repeated.setRef(0, bytes("hello"), 0, 5);
     BytesWritable textFrame = serialize(batchWithColumn(repeated, 3));
     rows = decoder.inspect(textFrame, destination).getRowCount();
     decoder.appendInspected(textFrame, destination, rows);
