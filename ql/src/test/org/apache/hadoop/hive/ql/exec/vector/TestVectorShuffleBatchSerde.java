@@ -437,6 +437,82 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testInspectedAppendNullsAndRepeating() throws Exception {
+    VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
+    VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
+
+    LongColumnVector first = new LongColumnVector();
+    first.noNulls = false;
+    first.vector[0] = 10;
+    first.isNull[1] = true;
+    first.vector[2] = 30;
+    BytesWritable firstFrame = serialize(batchWithColumn(first, 3));
+    int rows = decoder.inspect(firstFrame, destination).getRowCount();
+    decoder.appendInspected(firstFrame, destination, rows);
+
+    LongColumnVector repeatedNull = new LongColumnVector();
+    repeatedNull.isRepeating = true;
+    repeatedNull.noNulls = false;
+    repeatedNull.isNull[0] = true;
+    BytesWritable secondFrame = serialize(batchWithColumn(repeatedNull, 3));
+    rows = decoder.inspect(secondFrame, destination).getRowCount();
+    decoder.appendInspected(secondFrame, destination, rows);
+
+    LongColumnVector repeatedValue = new LongColumnVector();
+    repeatedValue.isRepeating = true;
+    repeatedValue.vector[0] = 70;
+    BytesWritable thirdFrame = serialize(batchWithColumn(repeatedValue, 3));
+    rows = decoder.inspect(thirdFrame, destination).getRowCount();
+    decoder.appendInspected(thirdFrame, destination, rows);
+
+    LongColumnVector result = (LongColumnVector) destination.cols[0];
+    assertEquals(9, destination.size);
+    assertEquals(10, result.vector[0]);
+    assertFalse(result.isNull[0]);
+    assertTrue(result.isNull[1]);
+    assertEquals(30, result.vector[2]);
+    assertFalse(result.isNull[2]);
+    for (int i = 3; i < 6; i++) {
+      assertTrue(result.isNull[i]);
+    }
+    for (int i = 6; i < 9; i++) {
+      assertFalse(result.isNull[i]);
+      assertEquals(70, result.vector[i]);
+    }
+  }
+
+  @Test
+  public void testInspectedAppendRepeatingStringAfterNull() throws Exception {
+    VectorizedRowBatch destination = batchWithColumn(new BytesColumnVector(), 0);
+    VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
+
+    BytesColumnVector nullValue = new BytesColumnVector();
+    nullValue.noNulls = false;
+    nullValue.isRepeating = true;
+    nullValue.isNull[0] = true;
+    BytesWritable nullFrame = serialize(batchWithColumn(nullValue, 3));
+    int rows = decoder.inspect(nullFrame, destination).getRowCount();
+    decoder.appendInspected(nullFrame, destination, rows);
+
+    BytesColumnVector repeated = new BytesColumnVector();
+    repeated.isRepeating = true;
+    repeated.setVal(0, bytes("hello"));
+    BytesWritable textFrame = serialize(batchWithColumn(repeated, 3));
+    rows = decoder.inspect(textFrame, destination).getRowCount();
+    decoder.appendInspected(textFrame, destination, rows);
+
+    BytesColumnVector result = (BytesColumnVector) destination.cols[0];
+    assertEquals(6, destination.size);
+    for (int i = 0; i < 3; i++) {
+      assertTrue(result.isNull[i]);
+    }
+    for (int i = 3; i < 6; i++) {
+      assertFalse(result.isNull[i]);
+      assertBytesValueEquals(bytes("hello"), result, i);
+    }
+  }
+
+  @Test
   public void testInspectedAppendValidatesPayloadEnd() throws Exception {
     VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
     VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
