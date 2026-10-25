@@ -514,6 +514,40 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testInspectedAppendStructNulls() throws Exception {
+    StructColumnVector first = structOf(new LongColumnVector());
+    first.noNulls = false;
+    first.isNull[1] = true;
+    ((LongColumnVector) first.fields[0]).vector[0] = 100;
+    ((LongColumnVector) first.fields[0]).vector[2] = 300;
+
+    VectorizedRowBatch destination = batchWithColumn(structOf(new LongColumnVector()), 0);
+    VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
+    BytesWritable firstFrame = serialize(batchWithColumn(first, 3));
+    int rows = decoder.inspect(firstFrame, destination).getRowCount();
+    decoder.appendInspected(firstFrame, destination, rows);
+
+    StructColumnVector second = structOf(new LongColumnVector());
+    ((LongColumnVector) second.fields[0]).vector[0] = 400;
+    ((LongColumnVector) second.fields[0]).vector[1] = 500;
+    BytesWritable secondFrame = serialize(batchWithColumn(second, 2));
+    rows = decoder.inspect(secondFrame, destination).getRowCount();
+    decoder.appendInspected(secondFrame, destination, rows);
+
+    StructColumnVector actual = (StructColumnVector) destination.cols[0];
+    assertEquals(5, destination.size);
+    assertTrue(actual.isNull[1]);
+    for (int i : new int[] {0, 2, 3, 4}) {
+      assertFalse(actual.isNull[i]);
+    }
+    LongColumnVector values = (LongColumnVector) actual.fields[0];
+    assertEquals(100, values.vector[0]);
+    assertEquals(300, values.vector[2]);
+    assertEquals(400, values.vector[3]);
+    assertEquals(500, values.vector[4]);
+  }
+
+  @Test
   public void testInspectedAppendValidatesPayloadEnd() throws Exception {
     VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
     VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
