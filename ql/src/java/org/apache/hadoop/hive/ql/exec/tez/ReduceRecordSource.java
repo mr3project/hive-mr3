@@ -679,7 +679,7 @@ public class ReduceRecordSource implements RecordSource {
       return;
     }
     if (compact) {
-      vectorShuffleBatchDeserializer.append(valueWritable, batch);
+      vectorShuffleBatchDeserializer.appendInspected(valueWritable, batch, incomingRows);
     } else {
       keyBinarySortableDeserializeToRow.setBytes(keyWritable.getBytesRaw(), keyWritable.getOffset(),
           keyWritable.getLength());
@@ -743,10 +743,7 @@ public class ReduceRecordSource implements RecordSource {
     for (int i = 0; i < batch.projectedColumns.length; i++) {
       batch.projectedColumns[i] = i;
     }
-    accumulatorRowLimit = Math.min(VectorizedRowBatch.DEFAULT_SIZE, batch.getMaxSize());
-    for (int i = 0; i < inputColumnCount; i++) {
-      accumulatorRowLimit = Math.min(accumulatorRowLimit, batch.cols[i].isNull.length);
-    }
+    accumulatorRowLimit = vectorShuffleBatchDeserializer.getAppendCapacity();
     assert accumulatorRowLimit > 0;
     discardPendingBatch();
   }
