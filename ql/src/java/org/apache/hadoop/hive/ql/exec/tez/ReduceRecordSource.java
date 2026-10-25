@@ -657,8 +657,14 @@ public class ReduceRecordSource implements RecordSource {
       // Empty frames carry no group or EOF signal and do not consume the byte budget.
       return;
     }
-    if (compact && (incomingRows >= accumulatorRowLimit
-        || !vectorShuffleBatchDeserializer.canAccumulateFrames())) {
+    // Inspect before mutating the pending batch. Repetition conflicts flush the batch;
+    // nested repeating vectors use standalone decoding so they are never expanded.
+    final VectorShuffleBatchDeserializer.FrameInfo frameInfo =
+        compact && incomingRows < accumulatorRowLimit
+            && vectorShuffleBatchDeserializer.canAccumulateFrames()
+            ? vectorShuffleBatchDeserializer.inspectAccumulation(valueWritable, batch, incomingRows)
+            : null;
+    if (compact && (frameInfo == null || !frameInfo.isAppendCompatible())) {
       if (pendingRows > 0) {
         flushPendingBatch();
       }
@@ -671,11 +677,14 @@ public class ReduceRecordSource implements RecordSource {
     }
     final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
     if (pendingRows > 0 && (incomingRows > accumulatorRowLimit - pendingRows
-        || incomingBytes > BATCH_BYTES - pendingBytes)) {
+        || incomingBytes > BATCH_BYTES - pendingBytes
+        || (compact && !frameInfo.isRepeatingCompatible())
+        || (!compact && vectorShuffleBatchDeserializer.hasRepeatingColumns()))) {
       flushPendingBatch();
     }
     if (compact) {
-      vectorShuffleBatchDeserializer.append(valueWritable, batch, incomingRows);
+      vectorShuffleBatchDeserializer.appendInspectedAccumulation(
+          valueWritable, batch, incomingRows);
     } else {
       keyBinarySortableDeserializeToRow.setBytes(keyWritable.getBytesRaw(), keyWritable.getOffset(),
           keyWritable.getLength());
@@ -737,6 +746,7 @@ public class ReduceRecordSource implements RecordSource {
     for (int i = 0; i < batch.projectedColumns.length; i++) {
       batch.projectedColumns[i] = i;
     }
+    vectorShuffleBatchDeserializer.resetAccumulation();
     discardPendingBatch();
   }
 
