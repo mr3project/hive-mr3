@@ -4644,6 +4644,9 @@ public class HiveConf extends Configuration {
     HIVE_VECTORIZATION_REDUCE_ENABLED("hive.vectorized.execution.reduce.enabled", true,
         "This flag should be set to true to enable vectorized mode of the reduce-side of query execution.\n" +
         "The default value is true."),
+    HIVE_VECTORIZATION_REDUCE_SHUFFLE_INPUT_ACCUMULATE("hive.vectorized.reduce.shuffle.input.accumulate", false,
+        "Accumulate unordered vectorized shuffle input at the receiver into mixed-key execution batches. " +
+        "Ordered input and row-mode input are unchanged. The default value is false."),
     HIVE_VECTORIZATION_REDUCE_GROUPBY_ENABLED("hive.vectorized.execution.reduce.groupby.enabled", true,
         "This flag should be set to true to enable vectorized mode of the reduce-side GROUP BY query execution.\n" +
         "The default value is true."),

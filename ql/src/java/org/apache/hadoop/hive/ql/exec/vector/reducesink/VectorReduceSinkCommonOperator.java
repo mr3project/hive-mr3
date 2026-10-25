@@ -73,7 +73,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private static final String CLASS_NAME = VectorReduceSinkCommonOperator.class.getName();
   private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
 
-  private static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 1;
+  public static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 1;
   private static final int SERIALIZE_BUFFER_SIZE = 100 * 1024;
   private static final int MIN_VALUE_BYTES_THRESHOLD = 128;
 
@@ -367,7 +367,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         vectorShuffleBatchAllowed = false;  // we never check vectorShuffleNumUnorderedPartitions again
         return false;
       }
-      initializeVectorShuffleOutputScratch();
+      initializeVectorShuffleOutputScratch(batch);
     }
 
     // Expressions evaluated by the concrete reduce-sink operator can filter every row after its
@@ -427,10 +427,14 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
 
     vectorShufflePartitionOffsets[0] = 0;
+    int compactCandidateCount = 0;
     for (int partition = 0; partition < numUnorderedPartitions; partition++) {
       vectorShufflePartitionOffsets[partition + 1] =
           vectorShufflePartitionOffsets[partition] + vectorShufflePartitionCounts[partition];
       vectorShufflePartitionPositions[partition] = vectorShufflePartitionOffsets[partition];
+      if (vectorShufflePartitionCounts[partition] > NUM_ROWS_THRESHOLD_FOR_BATCH) {
+        compactCandidateCount++;
+      }
     }
 
     for (int logical = 0; logical < size; logical++) {
@@ -439,6 +443,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       vectorShufflePartitionRowIndices[vectorShufflePartitionPositions[partition]++] = batchIndex;
     }
 
+    boolean commonPrefixReady = false;
     for (int partition = 0; partition < numUnorderedPartitions; partition++) {
       final int rowCount = vectorShufflePartitionCounts[partition];
       if (rowCount == 0) {
@@ -449,17 +454,27 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
             vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
       } else {
         WriteValueBytes valueBytes = out.requestWriteValueBytes(vectorShuffleBatchKey, partition);
-        if (valueBytes == null || valueBytes.maxValueBytes <= MIN_VALUE_BYTES_THRESHOLD) {
-          collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
-              vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
-          continue;
+        int valueLength = 0;
+        if (valueBytes != null &&
+            (commonPrefixReady || valueBytes.maxValueBytes > MIN_VALUE_BYTES_THRESHOLD)) {
+          try {
+            if (!commonPrefixReady) {
+              // Keep this local: repeating flags, nullability, and metadata can change with
+              // the next batch. Preparation also computes the reusable lower-bound terms.
+              vectorShuffleBatchSerializer.setupCommonPrefix(batch,
+                  vectorShuffleBatchColumnMap, valueBytes.buffer, valueBytes.offsetToValueBytes,
+                  compactCandidateCount);
+              commonPrefixReady = true;
+            }
+            // Includes the first partition. Zero means its writer region cannot fit the bound.
+            valueLength = vectorShuffleBatchSerializer.serializePartition(batch,
+                vectorShufflePartitionRowIndices, vectorShufflePartitionOffsets[partition], rowCount,
+                valueBytes.buffer, valueBytes.offsetToValueBytes, valueBytes.maxValueBytes);
+          } catch (ArrayIndexOutOfBoundsException ex) {
+            // The bound omits payloads that require scanning; retain overflow fallback.
+          }
         }
-        final int valueLength;
-        try {
-          valueLength = vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
-              vectorShufflePartitionRowIndices, vectorShufflePartitionOffsets[partition], rowCount,
-              valueBytes.buffer, valueBytes.offsetToValueBytes);
-        } catch (ArrayIndexOutOfBoundsException ex) {
+        if (valueLength == 0) {
           collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
               vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
           continue;
@@ -470,7 +485,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
   }
 
-  private void initializeVectorShuffleOutputScratch() throws HiveException {
+  private void initializeVectorShuffleOutputScratch(VectorizedRowBatch batch) throws HiveException {
     assert vectorShuffleBatchSerializer == null;
     assert vectorShuffleNumUnorderedPartitions >= 1;
 
@@ -490,6 +505,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       System.arraycopy(reduceSinkValueColumnMap, 0, vectorShuffleBatchColumnMap, keyColumnCount,
           valueColumnCount);
     }
+
+    vectorShuffleBatchSerializer.initialize(batch.cols, vectorShuffleBatchColumnMap);
 
     vectorShuffleBatchKey = new HiveKey(ReduceRecordSource.VECTOR_BATCH_KEY_BYTES, 0);
     vectorShuffleBatchKey.setDistKeyLength(ReduceRecordSource.VECTOR_BATCH_KEY_BYTES.length);
