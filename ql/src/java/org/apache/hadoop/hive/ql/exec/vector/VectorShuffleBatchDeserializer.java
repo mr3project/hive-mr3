@@ -21,6 +21,7 @@ import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
 import static org.apache.tez.util.FastByteComparisons.theUnsafe;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
@@ -156,9 +157,9 @@ public final class VectorShuffleBatchDeserializer {
       int capacity = validateAppendDimensions(destination, rowCount, columnCount);
       validateAppendCapacity(destination, rowCount, capacity);
       // Zero-count decoding validates empty frames without changing the accumulated prefix.
-      int[] indices = consecutiveIndices(destination.size, rowCount);
       for (int i = 0; i < columnCount; i++) {
-        readAppendColumn(destination.cols[i], indices, rowCount);
+        // Header/capacity validation already guarantees space in every top-level column.
+        readAppendColumn(destination.cols[i], null, destination.size, rowCount);
       }
       checkEnd();
       destination.size += rowCount;
@@ -255,15 +256,6 @@ public final class VectorShuffleBatchDeserializer {
     }
   }
 
-  private int[] consecutiveIndices(int offset, int count) {
-    assert offset >= 0 && count >= 0 && offset <= Integer.MAX_VALUE - count;
-    int[] indices = new int[count];
-    for (int i = 0; i < count; i++) {
-      indices[i] = offset + i;
-    }
-    return indices;
-  }
-
   private int checkedAdd(int first, int second) throws IOException {
     if (first < 0 || second < 0 || first > Integer.MAX_VALUE - second) {
       throw new IOException("Vector shuffle child count exceeds supported capacity");
@@ -282,16 +274,14 @@ public final class VectorShuffleBatchDeserializer {
     return flags;
   }
 
-  private byte[] readNullBitmap(int flags, int valueCount) throws IOException {
+  private int readNullBitmap(int flags, int valueCount) throws IOException {
     if ((flags & HAS_NULLS) == 0) {
-      return null;
+      return -1;
     }
     int length = (int) ((valueCount + 7L) / 8);
-    requireBytes(length);
-    byte[] bitmap = new byte[length];
-    System.arraycopy(buffer, position, bitmap, 0, length);
-    position += length;
-    return bitmap;
+    int bitmapOffset = position;
+    skipBytes(length);
+    return bitmapOffset;
   }
 
   private boolean inspectColumn(ColumnVector column, int rowCount) throws IOException {
@@ -409,18 +399,42 @@ public final class VectorShuffleBatchDeserializer {
 
   private void readAppendColumn(ColumnVector column, int[] indices, int rowCount)
       throws IOException {
+    column.ensureSize(requiredSize(indices, rowCount, false), true);
+    readAppendColumn(column, indices, 0, rowCount);
+  }
+
+  private void readAppendColumnConsecutive(ColumnVector column, int offset, int rowCount)
+      throws IOException {
+    assert offset >= 0 && rowCount >= 0 && offset <= Integer.MAX_VALUE - rowCount;
+    // Nested storage grows independently of the top-level accumulator's fixed row capacity.
+    column.ensureSize(offset + rowCount, true);
+    readAppendColumn(column, null, offset, rowCount);
+  }
+
+  private void readNulls(ColumnVector column, int[] indices, int offset, int count,
+      boolean repeating, int bitmapOffset) {
+    for (int i = 0; i < count; i++) {
+      boolean isNull = isNull(bitmapOffset, i);
+      column.isNull[destinationIndex(indices, offset, i, repeating)] = isNull;
+      if (isNull) {
+        column.noNulls = false;
+      }
+    }
+  }
+
+  /** Null indices describe a consecutive range starting at offset; otherwise offset is unused. */
+  private void readAppendColumn(ColumnVector column, int[] indices, int offset, int rowCount)
+      throws IOException {
     assert !column.isRepeating;
     int flags = readFlags(column);
     boolean repeating = (flags & IS_REPEATING) != 0;
     int count = repeating ? Math.min(rowCount, 1) : rowCount;
-    column.ensureSize(requiredSize(indices, rowCount, false), true);
-    byte[] nulls = readNullBitmap(flags, count);
-    for (int i = 0; i < count; i++) {
-      boolean isNull = isNull(nulls, i);
-      column.isNull[indices[i]] = isNull;
-      if (isNull) {
-        column.noNulls = false;
-      }
+    int bitmapOffset = readNullBitmap(flags, count);
+    if (column instanceof StructColumnVector || column instanceof UnionColumnVector
+        || column instanceof MultiValuedColumnVector) {
+      // Complex columns need parent nulls before constructing their child mappings. Primitive
+      // columns initialize null state in the same loop that decodes their values below.
+      readNulls(column, indices, offset, count, false, bitmapOffset);
     }
     // Recheck metadata during decoding, including after a receiver flush, unless the fixed schema
     // has none. Empty nested columns leave destination metadata untouched.
@@ -430,15 +444,15 @@ public final class VectorShuffleBatchDeserializer {
     if (column instanceof StructColumnVector) {
       int activeCount = 0;
       for (int i = 0; i < count; i++) {
-        if (!isNull(nulls, i)) {
+        if (!isNull(bitmapOffset, i)) {
           activeCount++;
         }
       }
       int[] active = new int[activeCount];
       int next = 0;
       for (int i = 0; i < count; i++) {
-        if (!isNull(nulls, i)) {
-          active[next++] = indices[i];
+        if (!isNull(bitmapOffset, i)) {
+          active[next++] = destinationIndex(indices, offset, i, false);
         }
       }
       for (ColumnVector field : ((StructColumnVector) column).fields) {
@@ -448,10 +462,10 @@ public final class VectorShuffleBatchDeserializer {
       UnionColumnVector union = (UnionColumnVector) column;
       int[] counts = new int[union.fields.length];
       for (int i = 0; i < count; i++) {
-        if (!isNull(nulls, i)) {
+        if (!isNull(bitmapOffset, i)) {
           int tag = readInt();
           validateUnionTag(tag, union.fields.length);
-          union.tags[indices[i]] = tag;
+          union.tags[destinationIndex(indices, offset, i, false)] = tag;
           counts[tag]++;
         }
       }
@@ -461,9 +475,10 @@ public final class VectorShuffleBatchDeserializer {
         active[tag] = new int[counts[tag]];
       }
       for (int i = 0; i < count; i++) {
-        if (!isNull(nulls, i)) {
-          int tag = union.tags[indices[i]];
-          active[tag][next[tag]++] = indices[i];
+        if (!isNull(bitmapOffset, i)) {
+          int index = destinationIndex(indices, offset, i, false);
+          int tag = union.tags[index];
+          active[tag][next[tag]++] = index;
         }
       }
       for (int tag = 0; tag < union.fields.length; tag++) {
@@ -474,30 +489,56 @@ public final class VectorShuffleBatchDeserializer {
       int oldChildCount = multi.childCount;
       int childCount = oldChildCount;
       for (int i = 0; i < count; i++) {
-        int index = indices[i];
+        int index = destinationIndex(indices, offset, i, false);
         multi.offsets[index] = childCount;
-        int length = isNull(nulls, i) ? 0 : readInt();
+        int length = isNull(bitmapOffset, i) ? 0 : readInt();
         childCount = checkedAdd(childCount, length);
         multi.lengths[index] = length;
       }
       int incomingChildren = childCount - oldChildCount;
-      int[] children = consecutiveIndices(oldChildCount, incomingChildren);
       if (column instanceof ListColumnVector) {
-        readAppendColumn(((ListColumnVector) column).child, children, incomingChildren);
+        readAppendColumnConsecutive(((ListColumnVector) column).child, oldChildCount,
+            incomingChildren);
       } else {
         MapColumnVector map = (MapColumnVector) column;
-        readAppendColumn(map.keys, children, incomingChildren);
-        readAppendColumn(map.values, children, incomingChildren);
+        readAppendColumnConsecutive(map.keys, oldChildCount, incomingChildren);
+        readAppendColumnConsecutive(map.values, oldChildCount, incomingChildren);
       }
       multi.childCount = childCount;
     } else {
       // The source repeating flag must never redirect writes to the accumulator's row zero.
-      readValue(column, indices, count, false, nulls, (flags & IS_DECIMAL_64) != 0);
+      readValue(column, indices, offset, count, false, bitmapOffset, (flags & IS_DECIMAL_64) != 0);
     }
     if (repeating && rowCount > 1) {
-      for (int i = 1; i < rowCount; i++) {
-        copyRepeatedElement(column, indices[0], indices[i]);
+      expandRepeating(column, indices, offset, rowCount);
+    }
+  }
+
+  private void expandRepeating(ColumnVector column, int[] indices, int offset, int rowCount) {
+    int source = destinationIndex(indices, offset, 0, false);
+    if (indices == null) {
+      int end = offset + rowCount;
+      if (column.isNull[source]) {
+        // Use the post-decode null state, including a decimal conversion that produced null.
+        Arrays.fill(column.isNull, offset + 1, end, true);
+        column.noNulls = false;
+        return;
       }
+      if (column instanceof LongColumnVector) {
+        LongColumnVector longs = (LongColumnVector) column;
+        Arrays.fill(longs.vector, offset + 1, end, longs.vector[source]);
+        Arrays.fill(column.isNull, offset + 1, end, false);
+        return;
+      }
+      if (column instanceof DoubleColumnVector) {
+        DoubleColumnVector doubles = (DoubleColumnVector) column;
+        Arrays.fill(doubles.vector, offset + 1, end, doubles.vector[source]);
+        Arrays.fill(column.isNull, offset + 1, end, false);
+        return;
+      }
+    }
+    for (int i = 1; i < rowCount; i++) {
+      copyRepeatedElement(column, source, destinationIndex(indices, offset, i, false));
     }
   }
 
@@ -546,13 +587,13 @@ public final class VectorShuffleBatchDeserializer {
     final int valueCount = repeating ? Math.min(rowCount, 1) : rowCount;
     column.ensureSize(requiredSize(destinationIndices, valueCount, repeating), false);
 
-    byte[] nullBitmap = readNullBitmap(flags, valueCount);
+    int bitmapOffset = readNullBitmap(flags, valueCount);
 
     column.isRepeating = repeating;
     column.noNulls = !hasNulls;
-    for (int logical = 0; logical < valueCount; logical++) {
-      int destinationIndex = destinationIndex(destinationIndices, logical, repeating);
-      column.isNull[destinationIndex] = hasNulls && isNull(nullBitmap, logical);
+    if (column instanceof StructColumnVector || column instanceof UnionColumnVector
+        || column instanceof MultiValuedColumnVector) {
+      readNulls(column, destinationIndices, 0, valueCount, repeating, bitmapOffset);
     }
     readTypeMetadata(column);
 
@@ -574,7 +615,7 @@ public final class VectorShuffleBatchDeserializer {
       readColumn(map.values, childCount);
     } else {
       final boolean sourceIsDecimal64 = (flags & IS_DECIMAL_64) != 0;
-      readValue(column, destinationIndices, valueCount, repeating, nullBitmap, sourceIsDecimal64);
+      readValue(column, destinationIndices, 0, valueCount, repeating, bitmapOffset, sourceIsDecimal64);
     }
   }
 
@@ -693,12 +734,31 @@ public final class VectorShuffleBatchDeserializer {
     return Double.longBitsToDouble(readLong());
   }
 
-  private boolean isNull(byte[] nullBitmap, int logical) {
-    return nullBitmap != null && (nullBitmap[logical >>> 3] & (1 << (logical & 7))) != 0;
+  private boolean isNull(int bitmapOffset, int logical) {
+    return bitmapOffset >= 0
+        && (buffer[bitmapOffset + (logical >>> 3)] & (1 << (logical & 7))) != 0;
   }
 
   private int destinationIndex(int[] destinationIndices, int logical, boolean repeating) {
-    return repeating ? 0 : destinationIndices == null ? logical : destinationIndices[logical];
+    return destinationIndex(destinationIndices, 0, logical, repeating);
+  }
+
+  private int destinationIndex(int[] destinationIndices, int destinationOffset, int logical,
+      boolean repeating) {
+    return repeating ? 0
+        : destinationIndices == null ? destinationOffset + logical : destinationIndices[logical];
+  }
+
+  private int nonNullDestinationIndex(ColumnVector column, int[] destinationIndices,
+      int destinationOffset, int logical, boolean repeating, int bitmapOffset) {
+    int index = destinationIndex(destinationIndices, destinationOffset, logical, repeating);
+    boolean isNull = isNull(bitmapOffset, logical);
+    column.isNull[index] = isNull;
+    if (isNull) {
+      column.noNulls = false;
+      return -1;
+    }
+    return index;
   }
 
   private int requiredSize(int[] destinationIndices, int valueCount, boolean repeating) {
@@ -722,23 +782,27 @@ public final class VectorShuffleBatchDeserializer {
     }
   }
 
-  private void readValue(ColumnVector column, int[] destinationIndices, int valueCount,
-      boolean repeating, byte[] nullBitmap, boolean sourceIsDecimal64) throws IOException {
+  private void readValue(ColumnVector column, int[] destinationIndices, int destinationOffset,
+      int valueCount, boolean repeating, int bitmapOffset, boolean sourceIsDecimal64)
+      throws IOException {
     if (sourceIsDecimal64) {
       if (column instanceof Decimal64ColumnVector) {
         Decimal64ColumnVector decimal64 = (Decimal64ColumnVector) column;
         for (int logical = 0; logical < valueCount; logical++) {
-          if (!isNull(nullBitmap, logical)) {
-            decimal64.vector[destinationIndex(destinationIndices, logical, repeating)] = readLong();
+          int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
+              repeating, bitmapOffset);
+          if (index >= 0) {
+            decimal64.vector[index] = readLong();
           }
         }
       } else {
         assert column instanceof DecimalColumnVector;
         DecimalColumnVector decimal = (DecimalColumnVector) column;
         for (int logical = 0; logical < valueCount; logical++) {
-          if (!isNull(nullBitmap, logical)) {
-            decimal.vector[destinationIndex(destinationIndices, logical, repeating)]
-                .deserialize64(readLong(), decimal.scale);
+          int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
+              repeating, bitmapOffset);
+          if (index >= 0) {
+            decimal.vector[index].deserialize64(readLong(), decimal.scale);
           }
         }
       }
@@ -747,19 +811,21 @@ public final class VectorShuffleBatchDeserializer {
     if (column instanceof BytesColumnVector) {
       BytesColumnVector bytesColumn = (BytesColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
+        int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
+            repeating, bitmapOffset);
+        if (index >= 0) {
           int length = readInt();
           requireBytes(length);
-          bytesColumn.setVal(destinationIndex(destinationIndices, logical, repeating),
-              buffer, position, length);
+          bytesColumn.setVal(index, buffer, position, length);
           position += length;
         }
       }
     } else if (column instanceof TimestampColumnVector) {
       TimestampColumnVector timestamp = (TimestampColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
-          int index = destinationIndex(destinationIndices, logical, repeating);
+        int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
+            repeating, bitmapOffset);
+        if (index >= 0) {
           timestamp.time[index] = readLong();
           timestamp.nanos[index] = readInt();
         }
@@ -767,47 +833,59 @@ public final class VectorShuffleBatchDeserializer {
     } else if (column instanceof IntervalDayTimeColumnVector) {
       IntervalDayTimeColumnVector interval = (IntervalDayTimeColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
-          interval.set(destinationIndex(destinationIndices, logical, repeating),
-              new HiveIntervalDayTime(readLong(), readInt()));
+        int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
+            repeating, bitmapOffset);
+        if (index >= 0) {
+          interval.set(index, new HiveIntervalDayTime(readLong(), readInt()));
         }
       }
     } else if (column instanceof Decimal64ColumnVector) {
       Decimal64ColumnVector decimal64 = (Decimal64ColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
+        int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
+            repeating, bitmapOffset);
+        if (index >= 0) {
           HiveDecimalWritable decimal = new HiveDecimalWritable();
           decimalLength();
           position += decimal.readDirect(buffer, position);
-          decimal64.set(destinationIndex(destinationIndices, logical, repeating), decimal);
+          decimal64.set(index, decimal);
         }
       }
     } else if (column instanceof DecimalColumnVector) {
       DecimalColumnVector decimal = (DecimalColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
+        int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
+            repeating, bitmapOffset);
+        if (index >= 0) {
           decimalLength();
-          position += decimal.vector[destinationIndex(destinationIndices, logical, repeating)]
-              .readDirect(buffer, position);
+          position += decimal.vector[index].readDirect(buffer, position);
         }
       }
     } else if (column instanceof LongColumnVector) {
-      // Decimal64ColumnVector extends LongColumnVector, so this branch covers it.
+      // Decimal64ColumnVector is handled above; DateColumnVector shares this representation.
       LongColumnVector longs = (LongColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
-          longs.vector[destinationIndex(destinationIndices, logical, repeating)] = readLong();
+        int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
+            repeating, bitmapOffset);
+        if (index >= 0) {
+          longs.vector[index] = readLong();
         }
       }
     } else if (column instanceof DoubleColumnVector) {
       DoubleColumnVector doubles = (DoubleColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmap, logical)) {
-          doubles.vector[destinationIndex(destinationIndices, logical, repeating)] = readDouble();
+        int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
+            repeating, bitmapOffset);
+        if (index >= 0) {
+          doubles.vector[index] = readDouble();
         }
       }
     } else if (column instanceof VoidColumnVector) {
       // VOID has no value payload.
+      for (int logical = 0; logical < valueCount; logical++) {
+        nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical, repeating,
+            bitmapOffset);
+      }
     } else {
       throw unsupported(column);
     }
