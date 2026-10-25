@@ -259,7 +259,8 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
       position += nonNullCount * Long.BYTES;
     } else if (column instanceof BytesColumnVector) {
       for (int i = 0; i < nonNullCount; i++) {
-        position += readInt();
+        int length = readInt();
+        position += length;
       }
     } else if (column instanceof IntervalDayTimeColumnVector) {
       position += nonNullCount * (Long.BYTES + Integer.BYTES);

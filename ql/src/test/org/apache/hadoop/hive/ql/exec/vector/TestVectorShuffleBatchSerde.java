@@ -539,6 +539,7 @@ public class TestVectorShuffleBatchSerde {
     destination.cols[0] = new LongColumnVector();
     destination.cols[1] = new LongColumnVector();
     destination.projectionSize = 2;
+    destination.reset();
     VectorShuffleBatchAccumulatingDeserializer accumulating =
         new VectorShuffleBatchAccumulatingDeserializer(destination, 2);
 
@@ -596,6 +597,106 @@ public class TestVectorShuffleBatchSerde {
     BytesWritable incompatible = new BytesWritable();
     incompatible.set(buffer, 0, length);
     assertFalse(accumulating.inspectAccumulation(incompatible, destination, 3)
+        .isRepeatingCompatible());
+  }
+
+  @Test
+  public void testAccumulationByteColumnBoundaries() throws Exception {
+    byte[][] values = {bytes("first"), bytes(""), null};
+    VectorizedRowBatch source = new VectorizedRowBatch(2);
+    BytesColumnVector strings = new BytesColumnVector();
+    LongColumnVector longs = new LongColumnVector();
+    source.cols[0] = strings;
+    source.cols[1] = longs;
+    source.reset();
+    source.size = values.length;
+    for (int row = 0; row < values.length; row++) {
+      if (values[row] == null) {
+        strings.noNulls = false;
+        strings.isNull[row] = true;
+      } else {
+        strings.setVal(row, values[row]);
+      }
+    }
+
+    VectorizedRowBatch destination = new VectorizedRowBatch(2);
+    destination.cols[0] = new BytesColumnVector();
+    destination.cols[1] = new LongColumnVector();
+    destination.reset();
+    VectorShuffleBatchAccumulatingDeserializer accumulating =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 2);
+    byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
+    int offset = 13;
+    for (int frame = 0; frame < 2; frame++) {
+      for (int row = 0; row < values.length; row++) {
+        longs.vector[row] = frame * 10 + row;
+      }
+      int length = serializer.serialize(source, new int[] {0, 1}, buffer, offset);
+      BytesWritable serialized = new BytesWritable(buffer, offset, length);
+      VectorShuffleBatchAccumulatingDeserializer.FrameInfo info =
+          accumulating.inspectAccumulation(serialized, destination, source.size);
+      assertTrue(info.isAppendCompatible());
+      assertTrue(info.isRepeatingCompatible());
+      accumulating.appendInspectedAccumulation(serialized, destination, source.size);
+      // The reader may reuse its backing buffer as soon as append returns.
+      Arrays.fill(buffer, (byte) 0xff);
+
+      assertEquals((frame + 1) * values.length, destination.size);
+      BytesColumnVector actualStrings = (BytesColumnVector) destination.cols[0];
+      LongColumnVector actualLongs = (LongColumnVector) destination.cols[1];
+      assertFalse(actualStrings.noNulls);
+      for (int row = 0; row < destination.size; row++) {
+        int sourceRow = row % values.length;
+        assertEquals(values[sourceRow] == null, actualStrings.isNull[row]);
+        if (values[sourceRow] != null) {
+          assertBytesValueEquals(values[sourceRow], actualStrings, row);
+        }
+        assertEquals((row / values.length) * 10 + sourceRow, actualLongs.vector[row]);
+      }
+    }
+  }
+
+  @Test
+  public void testAccumulationRepeatingListOfStrings() throws Exception {
+    BytesColumnVector child = new BytesColumnVector();
+    child.initBuffer();
+    child.setVal(0, bytes("x"));
+    child.setVal(1, bytes(""));
+    child.noNulls = false;
+    child.isNull[2] = true;
+    ListColumnVector list = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, child);
+    list.isRepeating = true;
+    list.lengths[0] = 3;
+    list.childCount = 3;
+    VectorizedRowBatch source = batchWithColumn(list, 3);
+
+    VectorizedRowBatch destination = batchWithColumn(
+        new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new BytesColumnVector()), 0);
+    destination.reset();
+    VectorShuffleBatchAccumulatingDeserializer accumulating =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
+    BytesWritable serialized = serialize(source);
+    for (int frame = 0; frame < 2; frame++) {
+      VectorShuffleBatchAccumulatingDeserializer.FrameInfo info =
+          accumulating.inspectAccumulation(serialized, destination, source.size);
+      assertTrue(info.isAppendCompatible());
+      assertTrue(info.isRepeatingCompatible());
+      accumulating.appendInspectedAccumulation(serialized, destination, source.size);
+      assertEquals((frame + 1) * source.size, destination.size);
+      ListColumnVector actual = (ListColumnVector) destination.cols[0];
+      assertTrue(actual.isRepeating);
+      assertEquals(0, actual.offsets[0]);
+      assertEquals(3, actual.lengths[0]);
+      assertEquals(3, actual.childCount);
+      BytesColumnVector actualChild = (BytesColumnVector) actual.child;
+      assertBytesValueEquals(bytes("x"), actualChild, 0);
+      assertBytesValueEquals(bytes(""), actualChild, 1);
+      assertFalse(actualChild.noNulls);
+      assertTrue(actualChild.isNull[2]);
+    }
+
+    child.setVal(0, bytes("different"));
+    assertFalse(accumulating.inspectAccumulation(serialize(source), destination, source.size)
         .isRepeatingCompatible());
   }
 
