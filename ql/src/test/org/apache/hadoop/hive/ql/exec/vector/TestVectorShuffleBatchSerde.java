@@ -424,14 +424,13 @@ public class TestVectorShuffleBatchSerde {
     byte[] trailing = Arrays.copyOf(valid.getBytes(), valid.getLength() + 1);
     BytesWritable extra = new BytesWritable();
     extra.set(trailing, 0, trailing.length);
-    int rows = decoder.inspect(extra, destination).getRowCount();
-    assertThrows(IOException.class, () -> decoder.appendInspected(extra, destination, rows));
+    final int extraRows = decoder.inspect(extra, destination).getRowCount();
+    assertThrows(IOException.class, () -> decoder.appendInspected(extra, destination, extraRows));
 
     byte[] truncated = Arrays.copyOf(valid.getBytes(), valid.getLength() - 1);
     BytesWritable shortFrame = new BytesWritable();
     shortFrame.set(truncated, 0, truncated.length);
-    rows = decoder.inspect(shortFrame, destination).getRowCount();
-    final int truncatedRows = rows;
+    final int truncatedRows = decoder.inspect(shortFrame, destination).getRowCount();
     assertThrows(IOException.class,
         () -> decoder.appendInspected(shortFrame, destination, truncatedRows));
   }
