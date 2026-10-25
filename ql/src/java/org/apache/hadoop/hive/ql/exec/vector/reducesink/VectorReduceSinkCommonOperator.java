@@ -367,7 +367,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         vectorShuffleBatchAllowed = false;  // we never check vectorShuffleNumUnorderedPartitions again
         return false;
       }
-      initializeVectorShuffleOutputScratch();
+      initializeVectorShuffleOutputScratch(batch);
     }
 
     // Expressions evaluated by the concrete reduce-sink operator can filter every row after its
@@ -470,7 +470,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
   }
 
-  private void initializeVectorShuffleOutputScratch() throws HiveException {
+  private void initializeVectorShuffleOutputScratch(VectorizedRowBatch batch) throws HiveException {
     assert vectorShuffleBatchSerializer == null;
     assert vectorShuffleNumUnorderedPartitions >= 1;
 
@@ -490,6 +490,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       System.arraycopy(reduceSinkValueColumnMap, 0, vectorShuffleBatchColumnMap, keyColumnCount,
           valueColumnCount);
     }
+
+    vectorShuffleBatchSerializer.initialize(batch.cols, vectorShuffleBatchColumnMap);
 
     vectorShuffleBatchKey = new HiveKey(ReduceRecordSource.VECTOR_BATCH_KEY_BYTES, 0);
     vectorShuffleBatchKey.setDistKeyLength(ReduceRecordSource.VECTOR_BATCH_KEY_BYTES.length);
