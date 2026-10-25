@@ -623,6 +623,7 @@ public class TestVectorShuffleBatchSerde {
     decoder.resetAccumulation();
     BytesColumnVector first = new BytesColumnVector();
     first.setRef(0, bytes("start"), 0, 5);
+    first.setRef(1, bytes("again"), 0, 5);
     BytesWritable firstFrame = serialize(batchWithColumn(first, 2));
     info = decoder.inspectAccumulation(firstFrame, destination);
     decoder.appendInspectedAccumulation(firstFrame, destination, info.getRowCount());
@@ -636,6 +637,43 @@ public class TestVectorShuffleBatchSerde {
     assertEquals(3, destination.size);
     assertFalse(destination.cols[0].isRepeating);
     assertBytesValueEquals(bytes("text"), (BytesColumnVector) destination.cols[0], 2);
+  }
+
+
+  @Test
+  public void testAccumulationFlushesOnSymmetricRepetitionMismatch() throws Exception {
+    VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
+    VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
+    LongColumnVector ordinary = new LongColumnVector();
+    ordinary.vector[0] = 5;
+    ordinary.vector[1] = 6;
+    BytesWritable ordinaryFrame = serialize(batchWithColumn(ordinary, 2));
+    LongColumnVector repeated = new LongColumnVector();
+    repeated.isRepeating = true;
+    repeated.vector[0] = 5;
+    BytesWritable repeatingFrame = serialize(batchWithColumn(repeated, 2));
+
+    VectorShuffleBatchDeserializer.FrameInfo info =
+        decoder.inspectAccumulation(ordinaryFrame, destination);
+    decoder.appendInspectedAccumulation(ordinaryFrame, destination, info.getRowCount());
+    assertFalse(destination.cols[0].isRepeating);
+    info = decoder.inspectAccumulation(repeatingFrame, destination);
+    assertFalse(info.isRepeatingCompatible());
+
+    destination.reset();
+    decoder.resetAccumulation();
+    decoder.appendInspectedAccumulation(repeatingFrame, destination, info.getRowCount());
+    assertTrue(destination.cols[0].isRepeating);
+    info = decoder.inspectAccumulation(ordinaryFrame, destination);
+    assertFalse(info.isRepeatingCompatible());
+
+    // With a fresh accumulator, the previously inspected nonrepeating frame can append.
+    destination.reset();
+    decoder.resetAccumulation();
+    decoder.appendInspectedAccumulation(ordinaryFrame, destination, info.getRowCount());
+    assertFalse(destination.cols[0].isRepeating);
+    assertEquals(2, destination.size);
+    assertEquals(6, ((LongColumnVector) destination.cols[0]).vector[1]);
   }
 
   @Test

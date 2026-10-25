@@ -289,8 +289,10 @@ public final class VectorShuffleBatchDeserializer {
   public void appendInspectedAccumulation(BytesWritable serialized, VectorizedRowBatch destination,
       int rowCount) throws IOException {
     assert accumulatorRepeating != null && !destination.selectedInUse;
-    if (!frameInfo.appendCompatible || !frameInfo.repeatingCompatible
-        || frameInfo.rowCount != rowCount) {
+    // The receiver can flush after inspection. A repetition conflict then disappears
+    // because the same frame starts an empty accumulator.
+    if (!frameInfo.appendCompatible || frameInfo.rowCount != rowCount
+        || (destination.size > 0 && !frameInfo.repeatingCompatible)) {
       throw new IOException("Incompatible vector shuffle accumulation frame");
     }
     try {
