@@ -27,6 +27,7 @@ import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
 import org.apache.tez.runtime.library.api.KeyValuesReaderEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.CommonMergeJoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
@@ -108,6 +109,8 @@ public class ReduceRecordSource implements RecordSource {
   private VectorizedRowBatchCtx batchContext;
   private VectorizedRowBatch batch;
   private VectorShuffleBatchDeserializer vectorShuffleBatchDeserializer;
+  private boolean accumulateShuffleInput;
+  private VectorShuffleBatchAccumulator shuffleAccumulator;
   private VectorSerializeRow<BinarySortableSerializeWrite> rowModeKeySerializeRow;
   private VectorSerializeRow<LazyBinarySerializeWrite> rowModeValueSerializeRow;
   private BinarySortableSerializeWrite rowModeKeySerializeWrite;
@@ -213,7 +216,13 @@ public class ReduceRecordSource implements RecordSource {
         rowObjectInspector = Utilities.constructVectorizedReduceRowOI(keyStructInspector,
             valueStructInspectors);
         batch = batchContext.createVectorizedRowBatch();
-        vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
+        // Unordered vector input already has the mixed-key execution-batch contract. Ordered
+        // input and row-mode fallback must retain their group and replacement semantics.
+        accumulateShuffleInput = isKeyValueReader && HiveConf.getBoolVar(jconf,
+            HiveConf.ConfVars.HIVE_VECTORIZATION_REDUCE_SHUFFLE_INPUT_ACCUMULATE);
+        if (!accumulateShuffleInput) {
+          vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
+        }
 
         // Setup vectorized deserialization for the key and value.
         BinarySortableSerDe binarySortableSerDe = (BinarySortableSerDe) inputKeySerDe;
@@ -255,6 +264,10 @@ public class ReduceRecordSource implements RecordSource {
               bytesColumnVector.initBuffer();
             }
           }
+        }
+        if (accumulateShuffleInput) {
+          shuffleAccumulator = new VectorShuffleBatchAccumulator(batchContext, reducer, batch,
+              totalColumns, tag, keyBinarySortableDeserializeToRow, valueLazyBinaryDeserializeToRow);
         }
       } else {
         ois.add(keyObjectInspector);
@@ -525,16 +538,26 @@ public class ReduceRecordSource implements RecordSource {
   private boolean pushRecordVectorFromKeyValueUnordered() {
     try {
       if (!keyValueReader.next()) {
+        if (accumulateShuffleInput) {
+          shuffleAccumulator.flushPendingBatch();
+        }
         return false;
       }
 
       BytesWritable keyWritable = keyValueReader.getCurrentKey();
       BytesWritable valueWritable = keyValueReader.getCurrentValue();
 
-      processVectorRecordUnordered(keyWritable, valueWritable, tag);
+      if (accumulateShuffleInput) {
+        shuffleAccumulator.process(keyWritable, valueWritable, isVectorBatchKey(keyWritable));
+      } else {
+        processVectorRecordUnorderedLegacy(keyWritable, valueWritable, tag);
+      }
       return true;
     } catch (Throwable e) {
       abort = true;
+      if (shuffleAccumulator != null) {
+        shuffleAccumulator.discardPendingBatch();
+      }
       if (e instanceof OutOfMemoryError) {
         // Don't create a new object if we are already out of memory
         throw (OutOfMemoryError) e;
@@ -578,12 +601,16 @@ public class ReduceRecordSource implements RecordSource {
   }
 
   void consumeAllUnordered(RecordProgress progress) throws HiveException, InterruptedException {
-    // called when canConsumeAllUnordered() == true
+    // Keep the legacy exception handling and record dispatch unchanged when accumulation is off.
+    if (accumulateShuffleInput) {
+      consumeAllAccumulated(progress);
+      return;
+    }
     try {
       keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
         // KeyValueReaderEdge provides unordered key/value records. The same logical key can
         // appear again later, so every record must be treated as an independent final batch.
-        processVectorRecordUnordered(keyWritable, valueWritable, tag);
+        processVectorRecordUnorderedLegacy(keyWritable, valueWritable, tag);
         progress.onRecord();
       });
     } catch (OutOfMemoryError e) {
@@ -598,7 +625,32 @@ public class ReduceRecordSource implements RecordSource {
     }
   }
 
-  private void processVectorRecordUnordered(BytesWritable keyWritable, BytesWritable valueWritable, byte tag) throws HiveException {
+  private void consumeAllAccumulated(RecordProgress progress)
+      throws HiveException, InterruptedException {
+    try {
+      keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
+        shuffleAccumulator.process(keyWritable, valueWritable, isVectorBatchKey(keyWritable));
+        progress.onRecord();
+      });
+      // Only normal EOF may publish the partial batch, before downstream finalization.
+      shuffleAccumulator.flushPendingBatch();
+    } catch (Error e) {
+      abort = true;
+      shuffleAccumulator.discardPendingBatch();
+      throw e;
+    } catch (InterruptedException e) {
+      abort = true;
+      shuffleAccumulator.discardPendingBatch();
+      throw e;
+    } catch (Exception e) {
+      abort = true;
+      shuffleAccumulator.discardPendingBatch();
+      throw new HiveException(e);
+    }
+  }
+
+  private void processVectorRecordUnorderedLegacy(BytesWritable keyWritable,
+      BytesWritable valueWritable, byte tag) throws HiveException {
     if (reducer.batchNeedsClone()) {
       batch = batchContext.createVectorizedRowBatch();
     }
