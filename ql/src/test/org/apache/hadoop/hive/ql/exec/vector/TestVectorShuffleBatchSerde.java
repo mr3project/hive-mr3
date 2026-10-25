@@ -21,6 +21,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -367,6 +368,72 @@ public class TestVectorShuffleBatchSerde {
         assertEquals(row, actual.vector[row]);
       }
     }
+  }
+
+  @Test
+  public void testInspectedAppendReusesFrameHeaderAcrossFlush() throws Exception {
+    VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
+    VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
+    assertEquals(VectorizedRowBatch.DEFAULT_SIZE, decoder.getAppendCapacity());
+
+    LongColumnVector first = new LongColumnVector();
+    first.vector[0] = 11;
+    first.vector[1] = 22;
+    BytesWritable firstFrame = serialize(batchWithColumn(first, 2));
+    VectorShuffleBatchDeserializer.FrameInfo info = decoder.inspect(firstFrame, destination);
+    assertTrue(info.isAppendCompatible());
+    int firstRows = info.getRowCount();
+    decoder.appendInspected(firstFrame, destination, firstRows);
+    assertEquals(2, destination.size);
+
+    LongColumnVector second = new LongColumnVector();
+    second.vector[0] = 33;
+    second.vector[1] = 44;
+    BytesWritable secondFrame = serialize(batchWithColumn(second, 2));
+    info = decoder.inspect(secondFrame, destination);
+    int secondRows = info.getRowCount();
+    assertTrue(info.isAppendCompatible());
+    decoder.appendInspected(secondFrame, destination, secondRows);
+    assertEquals(4, destination.size);
+    LongColumnVector result = (LongColumnVector) destination.cols[0];
+    assertEquals(11, result.vector[0]);
+    assertEquals(22, result.vector[1]);
+    assertEquals(33, result.vector[2]);
+    assertEquals(44, result.vector[3]);
+
+    // A receiver flush may replace the accumulator after inspection but before append.
+    LongColumnVector third = new LongColumnVector();
+    third.vector[0] = 55;
+    BytesWritable thirdFrame = serialize(batchWithColumn(third, 1));
+    info = decoder.inspect(thirdFrame, destination);
+    int thirdRows = info.getRowCount();
+    destination = batchWithColumn(new LongColumnVector(), 0);
+    decoder.appendInspected(thirdFrame, destination, thirdRows);
+    assertEquals(1, destination.size);
+    assertEquals(55, ((LongColumnVector) destination.cols[0]).vector[0]);
+  }
+
+  @Test
+  public void testInspectedAppendValidatesPayloadEnd() throws Exception {
+    VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
+    VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
+    LongColumnVector source = new LongColumnVector();
+    source.vector[0] = 17;
+    BytesWritable valid = serialize(batchWithColumn(source, 1));
+
+    byte[] trailing = Arrays.copyOf(valid.getBytes(), valid.getLength() + 1);
+    BytesWritable extra = new BytesWritable();
+    extra.set(trailing, 0, trailing.length);
+    int rows = decoder.inspect(extra, destination).getRowCount();
+    assertThrows(IOException.class, () -> decoder.appendInspected(extra, destination, rows));
+
+    byte[] truncated = Arrays.copyOf(valid.getBytes(), valid.getLength() - 1);
+    BytesWritable shortFrame = new BytesWritable();
+    shortFrame.set(truncated, 0, truncated.length);
+    rows = decoder.inspect(shortFrame, destination).getRowCount();
+    final int truncatedRows = rows;
+    assertThrows(IOException.class,
+        () -> decoder.appendInspected(shortFrame, destination, truncatedRows));
   }
 
   @Test
