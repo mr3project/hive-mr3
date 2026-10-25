@@ -218,7 +218,9 @@ public class ReduceRecordSource implements RecordSource {
         // input and row-mode fallback must retain their group and replacement semantics.
         accumulateShuffleInput = isKeyValueReader && HiveConf.getBoolVar(jconf,
             HiveConf.ConfVars.HIVE_VECTORIZATION_REDUCE_SHUFFLE_INPUT_ACCUMULATE);
-        vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
+        if (!accumulateShuffleInput) {
+          vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer();
+        }
 
         // Setup vectorized deserialization for the key and value.
         BinarySortableSerDe binarySortableSerDe = (BinarySortableSerDe) inputKeySerDe;
