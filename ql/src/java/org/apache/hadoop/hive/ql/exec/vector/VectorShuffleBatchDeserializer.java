@@ -38,10 +38,13 @@ public final class VectorShuffleBatchDeserializer {
   private int limit;
   private final FrameInfo frameInfo = new FrameInfo();
   private final boolean requiresMetadataInspection;
+  // Fixed-schema accumulation always uses batches created by the same VectorizedRowBatchCtx.
+  private final int fixedAppendCapacity;
 
   /** Keeps full metadata preinspection when the caller does not provide a fixed schema. */
   public VectorShuffleBatchDeserializer() {
     requiresMetadataInspection = true;
+    fixedAppendCapacity = 0;
   }
 
   /**
@@ -57,6 +60,13 @@ public final class VectorShuffleBatchDeserializer {
       hasMetadata |= hasTypeMetadata(schema.cols[i]);
     }
     requiresMetadataInspection = hasMetadata;
+    fixedAppendCapacity = calculateAppendCapacity(schema, inputColumnCount);
+  }
+
+  /** Row limit shared with the fixed-schema accumulation receiver. */
+  public int getAppendCapacity() {
+    assert fixedAppendCapacity > 0;
+    return fixedAppendCapacity;
   }
 
   private static boolean hasTypeMetadata(ColumnVector column) {
@@ -145,8 +155,8 @@ public final class VectorShuffleBatchDeserializer {
    * Appends directly into destination-owned storage, preserving its dense, nonrepeating prefix.
    * Only successful decoding publishes the new size. A failure invalidates the destination; callers
    * must fail the task and discard it, rather than dispatching the partially decoded batch.
-   * The receiver uses inspect() to choose a compatible representation first. This method rechecks
-   * dimensions and capacity, and checks metadata while decoding, without another inspection pass.
+   * This standalone API checks the frame header and capacity itself. The accumulation receiver
+   * uses appendInspected() to reuse the header already validated by inspect().
    */
   public void append(BytesWritable serialized, VectorizedRowBatch destination) throws IOException {
     assert destination != null && !destination.selectedInUse;
@@ -156,16 +166,40 @@ public final class VectorShuffleBatchDeserializer {
       int columnCount = readInt();
       int capacity = validateAppendDimensions(destination, rowCount, columnCount);
       validateAppendCapacity(destination, rowCount, capacity);
-      // Zero-count decoding validates empty frames without changing the accumulated prefix.
-      for (int i = 0; i < columnCount; i++) {
-        // Header/capacity validation already guarantees space in every top-level column.
-        readAppendColumn(destination.cols[i], null, destination.size, rowCount);
-      }
-      checkEnd();
-      destination.size += rowCount;
+      appendColumns(destination, columnCount, rowCount);
     } finally {
       buffer = null;
     }
+  }
+
+  /**
+   * Append a frame whose header has already been validated by inspect(). The caller supplies
+   * a snapshot of its row count because downstream processing may run between inspection and
+   * append. Reposition at the start of the columns without rereading either header integer or
+   * recomputing the destination's capacity. Payload validation, including checkEnd(), remains.
+   */
+  public void appendInspected(BytesWritable serialized, VectorizedRowBatch destination, int rowCount)
+      throws IOException {
+    assert destination != null && !destination.selectedInUse && fixedAppendCapacity > 0;
+    try {
+      start(serialized);
+      position += 2 * Integer.BYTES;
+      // The receiver may have flushed and replaced the destination since inspect().
+      validateAppendCapacity(destination, rowCount, fixedAppendCapacity);
+      appendColumns(destination, destination.projectionSize, rowCount);
+    } finally {
+      buffer = null;
+    }
+  }
+
+  private void appendColumns(VectorizedRowBatch destination, int columnCount, int rowCount)
+      throws IOException {
+    for (int i = 0; i < columnCount; i++) {
+      // Header/capacity validation already guarantees space in every top-level column.
+      readAppendColumn(destination.cols[i], null, destination.size, rowCount);
+    }
+    checkEnd();
+    destination.size += rowCount;
   }
 
   private void start(BytesWritable serialized) throws IOException {
@@ -214,10 +248,15 @@ public final class VectorShuffleBatchDeserializer {
   }
 
   private int appendCapacity(VectorizedRowBatch destination) {
-    int capacity = Math.min(VectorizedRowBatch.DEFAULT_SIZE, destination.selected.length);
-    for (int i = 0; i < destination.projectionSize; i++) {
-      assert destination.cols[i] != null;
-      capacity = Math.min(capacity, destination.cols[i].isNull.length);
+    return fixedAppendCapacity > 0
+        ? fixedAppendCapacity : calculateAppendCapacity(destination, destination.projectionSize);
+  }
+
+  private static int calculateAppendCapacity(VectorizedRowBatch batch, int columnCount) {
+    int capacity = Math.min(VectorizedRowBatch.DEFAULT_SIZE, batch.selected.length);
+    for (int i = 0; i < columnCount; i++) {
+      assert batch.cols[i] != null;
+      capacity = Math.min(capacity, batch.cols[i].isNull.length);
     }
     return capacity;
   }
