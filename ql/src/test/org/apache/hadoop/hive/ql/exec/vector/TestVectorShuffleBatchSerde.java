@@ -21,10 +21,13 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -353,6 +356,45 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testDefaultSerdeAcceptsChangingSchemasAndMappings() throws Exception {
+    VectorShuffleBatchSerializer dynamicSerializer = new VectorShuffleBatchSerializer();
+    VectorShuffleBatchDeserializer dynamicDeserializer = new VectorShuffleBatchDeserializer();
+    VectorizedRowBatch source = new VectorizedRowBatch(2);
+    DateColumnVector date = new DateColumnVector().setUsingProlepticCalendar(true);
+    date.vector[0] = -200000;
+    date.vector[1] = -199999;
+    TimestampColumnVector timestamp = new TimestampColumnVector();
+    timestamp.setIsUTC(true);
+    timestamp.isRepeating = true;
+    timestamp.time[0] = -20000000000000L;
+    source.cols[0] = date;
+    source.cols[1] = timestamp;
+    source.size = 2;
+    byte[] buffer = new byte[1024];
+    for (int[] mapping : new int[][] {{0}, {1}, {1, 0, 1}, {}}) {
+      VectorizedRowBatch destination = new VectorizedRowBatch(mapping.length);
+      for (int column = 0; column < mapping.length; column++) {
+        destination.cols[column] = mapping[column] == 0
+            ? new DateColumnVector() : new TimestampColumnVector();
+      }
+      int length = dynamicSerializer.serialize(source, mapping, buffer, 0);
+      dynamicDeserializer.deserialize(new BytesWritable(buffer, 0, length), destination);
+      assertEquals(2, destination.size);
+      assertEquals(mapping.length, destination.projectionSize);
+      for (int column = 0; column < mapping.length; column++) {
+        assertMetadataEquals(source.cols[mapping[column]], destination.cols[column]);
+        if (mapping[column] == 0) {
+          assertEquals(-199999, ((DateColumnVector) destination.cols[column]).vector[1]);
+        } else {
+          assertTrue(destination.cols[column].isRepeating);
+          assertEquals(-20000000000000L,
+              ((TimestampColumnVector) destination.cols[column]).time[0]);
+        }
+      }
+    }
+  }
+
+  @Test
   public void testBatchSizeEncodingBoundaries() throws Exception {
     for (int size : new int[] {0, 1, 127, 128, 255, 256, 1023, 1024}) {
       LongColumnVector source = new LongColumnVector();
@@ -392,6 +434,117 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testDenseFixedWidthFastPathsForConsecutiveSelectedAndPartitionRows()
+      throws Exception {
+    for (int rows : new int[] {1, 7, 8, 10, 16}) {
+      for (int mode = 0; mode < 3; mode++) {
+        LongColumnVector longs = new LongColumnVector();
+        DoubleColumnVector doubles = new DoubleColumnVector();
+        for (int physical = 0; physical < 64; physical++) {
+          longs.vector[physical] = physical * 17L - 2026L;
+          doubles.vector[physical] = physical % 4 == 0
+              ? Double.longBitsToDouble(0x7ff80000000000f1L)
+              : physical % 3 == 1 ? -0.0d : physical / 7.0d;
+        }
+        VectorizedRowBatch source = new VectorizedRowBatch(2);
+        source.cols[0] = longs;
+        source.cols[1] = doubles;
+        source.size = rows;
+        int[] selected = new int[rows + 1];
+        selected[0] = 99; // Must not be read for partition subsets with offset 1.
+        for (int i = 0; i < rows; i++) {
+          source.selected[i] = (i * 3 + 1) % 64;
+          selected[i + 1] = (i * 7 + 3) % 64;
+        }
+        source.selectedInUse = mode == 1;
+        int[] mapping = {0, 1};
+        serializer.initialize(source.cols, mapping);
+        byte[] bytes = new byte[2048];
+        int frameOffset = 11;
+        int length = mode == 2
+            ? serializer.serialize(source, mapping, selected, 1, rows, bytes, frameOffset)
+            : serializer.serialize(source, mapping, bytes, frameOffset);
+        // Bitmap, nested flag, and one column flag per column; unchanged wire format.
+        assertEquals(10 + 2 * (1 + rows * Long.BYTES), length);
+        BytesWritable serialized = new BytesWritable(bytes, frameOffset, length);
+        for (boolean accumulate : new boolean[] {false, true}) {
+          VectorizedRowBatch destination = new VectorizedRowBatch(2);
+          destination.cols[0] = new LongColumnVector();
+          destination.cols[1] = new DoubleColumnVector();
+          destination.reset();
+          if (accumulate) {
+            VectorShuffleBatchAccumulatingDeserializer decoder =
+                new VectorShuffleBatchAccumulatingDeserializer(destination, 2);
+            decoder.readHeader(serialized);
+            decoder.append(serialized, destination);
+          } else {
+            new VectorShuffleBatchDeserializer(destination, 2)
+                .deserialize(serialized, destination);
+          }
+          assertEquals(rows, destination.size);
+          for (int i = 0; i < rows; i++) {
+            int physical = mode == 0 ? i
+                : mode == 1 ? source.selected[i] : selected[i + 1];
+            assertFalse(destination.cols[0].isNull[i]);
+            assertFalse(destination.cols[1].isNull[i]);
+            assertEquals(longs.vector[physical],
+                ((LongColumnVector) destination.cols[0]).vector[i]);
+            assertEquals(Double.doubleToLongBits(doubles.vector[physical]),
+                Double.doubleToLongBits(((DoubleColumnVector) destination.cols[1]).vector[i]));
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testDenseAppendAfterNullableFrameClearsNullBits() throws Exception {
+    LongColumnVector nullable = new LongColumnVector();
+    nullable.noNulls = false;
+    nullable.isNull[1] = true;
+    nullable.vector[0] = 10;
+    nullable.vector[2] = 30;
+    VectorizedRowBatch first = batchWithColumn(nullable, 3);
+
+    LongColumnVector dense = new LongColumnVector();
+    for (int i = 0; i < 10; i++) {
+      dense.vector[i] = 100 + i;
+    }
+    VectorizedRowBatch next = batchWithColumn(dense, 10);
+    int[] mapping = {0};
+    byte[] bytes = new byte[2048];
+    VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
+    VectorShuffleBatchAccumulatingDeserializer decoder =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
+
+    for (VectorizedRowBatch source : new VectorizedRowBatch[] {first, next}) {
+      int length = serializer.serialize(source, mapping, bytes, 13);
+      BytesWritable frame = new BytesWritable(bytes, 13, length);
+      decoder.readHeader(frame);
+      if (destination.size > 0) {
+        assertTrue(decoder.isCompatible());
+      }
+      decoder.append(frame, destination);
+    }
+
+    assertEquals(13, destination.size);
+    assertFalse(destination.cols[0].noNulls);
+    assertTrue(destination.cols[0].isNull[1]);
+    for (int i = 3; i < 13; i++) {
+      assertFalse(destination.cols[0].isNull[i]);
+      assertEquals(100 + i - 3, ((LongColumnVector) destination.cols[0]).vector[i]);
+    }
+    // Reusing a standalone destination must not expose stale isNull bits.
+    int length = serializer.serialize(next, mapping, bytes, 13);
+    new VectorShuffleBatchDeserializer(destination, 1)
+        .deserialize(new BytesWritable(bytes, 13, length), destination);
+    assertEquals(10, destination.size);
+    for (int i = 0; i < 10; i++) {
+      assertFalse(destination.cols[0].isNull[i]);
+    }
+  }
+
+  @Test
   public void testNullBitmapBoundaries() throws Exception {
     LongColumnVector source = new LongColumnVector();
     source.noNulls = false;
@@ -409,6 +562,74 @@ public class TestVectorShuffleBatchSerde {
       assertEquals(source.isNull[row], actual.isNull[row]);
       if (!source.isNull[row]) {
         assertEquals(source.vector[row], actual.vector[row]);
+      }
+    }
+  }
+
+  @Test
+  public void testNullBitmapReuseWithConsecutiveSelectedAndPartitionRows() throws Exception {
+    LongColumnVector longs = new LongColumnVector();
+    BytesColumnVector strings = new BytesColumnVector();
+    VectorizedRowBatch source = new VectorizedRowBatch(2);
+    source.cols[0] = longs;
+    source.cols[1] = strings;
+    source.reset();
+    source.size = 17;
+    longs.noNulls = false;
+    strings.noNulls = false;
+    for (int row = 0; row < 40; row++) {
+      longs.vector[row] = row * 10L;
+      strings.setVal(row, bytes("row-" + row));
+    }
+    int[] mapping = {0, 1};
+    serializer.initialize(source.cols, mapping);
+    byte[] buffer = new byte[2048];
+    int offset = 11;
+    int[] subset = {99, 31, 7, 29, 1, 16, 8, 0, 23, 15, 30, 4, 25, 6, 28, 2, 19, 9, 99};
+    for (int mode = 0; mode < 3; mode++) {
+      source.selectedInUse = mode == 1;
+      System.arraycopy(subset, 1, source.selected, 0, source.size);
+      // Reuse a dirty buffer across all-null, sparse-null, and nullable-but-non-null frames.
+      for (int nullPattern = 0; nullPattern < 3; nullPattern++) {
+        Arrays.fill(buffer, (byte) 0xff);
+        for (int row = 0; row < 40; row++) {
+          longs.isNull[row] = nullPattern == 0 || (nullPattern == 1 && row % 3 == 0);
+          strings.isNull[row] = nullPattern == 0 || (nullPattern == 1 && row % 5 == 0);
+        }
+        int length = mode == 2
+            ? serializer.serialize(source, mapping, subset, 1, source.size, buffer, offset)
+            : serializer.serialize(source, mapping, buffer, offset);
+        assertEquals(0xff, buffer[offset - 1] & 0xff);
+        assertEquals(0xff, buffer[offset + length] & 0xff);
+        BytesWritable serialized = new BytesWritable(buffer, offset, length);
+        for (boolean accumulate : new boolean[] {false, true}) {
+          VectorizedRowBatch destination = new VectorizedRowBatch(2);
+          destination.cols[0] = new LongColumnVector();
+          destination.cols[1] = new BytesColumnVector();
+          destination.reset();
+          if (accumulate) {
+            VectorShuffleBatchAccumulatingDeserializer decoder =
+                new VectorShuffleBatchAccumulatingDeserializer(destination, 2);
+            decoder.readHeader(serialized);
+            decoder.append(serialized, destination);
+          } else {
+            deserializer.deserialize(serialized, destination);
+          }
+          assertEquals(source.size, destination.size);
+          for (int row = 0; row < source.size; row++) {
+            int physical = mode == 0 ? row : subset[row + 1];
+            assertEquals(longs.isNull[physical], destination.cols[0].isNull[row]);
+            assertEquals(strings.isNull[physical], destination.cols[1].isNull[row]);
+            if (!longs.isNull[physical]) {
+              assertEquals(longs.vector[physical],
+                  ((LongColumnVector) destination.cols[0]).vector[row]);
+            }
+            if (!strings.isNull[physical]) {
+              assertBytesValueEquals(bytes("row-" + physical),
+                  (BytesColumnVector) destination.cols[1], row);
+            }
+          }
+        }
       }
     }
   }
@@ -465,6 +686,896 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testAccumulationPreservesRepeatingAndFlushesOnConflict() throws Exception {
+    VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
+    VectorShuffleBatchAccumulatingDeserializer accumulating =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
+
+    LongColumnVector repeated = new LongColumnVector();
+    repeated.isRepeating = true;
+    repeated.vector[0] = 17;
+    BytesWritable first = serialize(batchWithColumn(repeated, 3));
+    assertFalse(accumulating.readHeader(first).hasNestedRepeating());
+    accumulating.append(first, destination);
+    assertEquals(3, destination.size);
+    assertTrue(destination.cols[0].isRepeating);
+    assertTrue(accumulating.hasRepeatingColumns());
+
+    BytesWritable identical = serialize(batchWithColumn(repeated, 4));
+    assertTrue(isCompatible(accumulating, identical));
+    accumulating.append(identical, destination);
+    assertEquals(7, destination.size);
+    assertTrue(destination.cols[0].isRepeating);
+    assertEquals(17, ((LongColumnVector) destination.cols[0]).vector[0]);
+
+    // One-row frames have no effective top-level repetition and are dispatched standalone.
+    LongColumnVector single = new LongColumnVector();
+    single.vector[0] = 17;
+    BytesWritable one = serialize(batchWithColumn(single, 1));
+    assertFalse(isCompatible(accumulating, one));
+    VectorizedRowBatch oneDestination = batchWithColumn(new LongColumnVector(), 0);
+    accumulating.deserialize(one, oneDestination);
+    assertEquals(1, oneDestination.size);
+    assertEquals(17, ((LongColumnVector) oneDestination.cols[0]).vector[0]);
+    assertEquals(7, destination.size);
+    assertTrue(destination.cols[0].isRepeating);
+
+    LongColumnVector changed = new LongColumnVector();
+    changed.isRepeating = true;
+    changed.vector[0] = 23;
+    BytesWritable different = serialize(batchWithColumn(changed, 2));
+    assertFalse(isCompatible(accumulating, different));
+
+    // Simulate the receiver flushing the old batch before appending the conflicting frame.
+    destination.reset();
+    accumulating.resetAccumulation();
+    accumulating.append(different, destination);
+    assertEquals(2, destination.size);
+    assertTrue(destination.cols[0].isRepeating);
+    assertEquals(23, ((LongColumnVector) destination.cols[0]).vector[0]);
+
+    LongColumnVector dense = new LongColumnVector();
+    dense.vector[0] = 31;
+    dense.vector[1] = 37;
+    BytesWritable nonRepeating = serialize(batchWithColumn(dense, 2));
+    assertFalse(isCompatible(accumulating, nonRepeating));
+
+    destination.reset();
+    accumulating.resetAccumulation();
+    accumulating.append(nonRepeating, destination);
+    assertEquals(2, destination.size);
+    assertFalse(destination.cols[0].isRepeating);
+    assertEquals(31, ((LongColumnVector) destination.cols[0]).vector[0]);
+    assertEquals(37, ((LongColumnVector) destination.cols[0]).vector[1]);
+
+    assertFalse(isCompatible(accumulating, first));
+  }
+
+  @Test
+  public void testAccumulationMixedRepeatingAndDenseColumns() throws Exception {
+    VectorizedRowBatch destination = new VectorizedRowBatch(2);
+    destination.cols[0] = new LongColumnVector();
+    destination.cols[1] = new LongColumnVector();
+    destination.projectionSize = 2;
+    destination.reset();
+    VectorShuffleBatchAccumulatingDeserializer accumulating =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 2);
+
+    VectorizedRowBatch first = new VectorizedRowBatch(2);
+    LongColumnVector firstRepeating = new LongColumnVector();
+    firstRepeating.isRepeating = true;
+    firstRepeating.vector[0] = 7;
+    LongColumnVector firstDense = new LongColumnVector();
+    firstDense.vector[0] = 11;
+    firstDense.vector[1] = 13;
+    first.cols[0] = firstRepeating;
+    first.cols[1] = firstDense;
+    first.size = 2;
+
+    VectorizedRowBatch second = new VectorizedRowBatch(2);
+    LongColumnVector secondRepeating = new LongColumnVector();
+    secondRepeating.isRepeating = true;
+    secondRepeating.vector[0] = 7;
+    LongColumnVector secondDense = new LongColumnVector();
+    secondDense.vector[0] = 17;
+    secondDense.vector[1] = 19;
+    secondDense.vector[2] = 23;
+    second.cols[0] = secondRepeating;
+    second.cols[1] = secondDense;
+    second.size = 3;
+
+    byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
+    int length = serializer.serialize(first, new int[] {0, 1}, buffer, 0);
+    BytesWritable firstEncoded = new BytesWritable();
+    firstEncoded.set(buffer, 0, length);
+    accumulating.readHeader(firstEncoded);
+    accumulating.append(firstEncoded, destination);
+
+    length = serializer.serialize(second, new int[] {0, 1}, buffer, 0);
+    BytesWritable secondEncoded = new BytesWritable();
+    secondEncoded.set(buffer, 0, length);
+    assertTrue(isCompatible(accumulating, secondEncoded));
+    accumulating.append(secondEncoded, destination);
+
+    assertEquals(5, destination.size);
+    assertTrue(destination.cols[0].isRepeating);
+    assertFalse(destination.cols[1].isRepeating);
+    assertEquals(7, ((LongColumnVector) destination.cols[0]).vector[0]);
+    LongColumnVector actualDense = (LongColumnVector) destination.cols[1];
+    assertEquals(11, actualDense.vector[0]);
+    assertEquals(13, actualDense.vector[1]);
+    assertEquals(17, actualDense.vector[2]);
+    assertEquals(19, actualDense.vector[3]);
+    assertEquals(23, actualDense.vector[4]);
+
+    secondRepeating.vector[0] = 8;
+    length = serializer.serialize(second, new int[] {0, 1}, buffer, 0);
+    BytesWritable incompatible = new BytesWritable();
+    incompatible.set(buffer, 0, length);
+    assertFalse(isCompatible(accumulating, incompatible));
+  }
+
+  @Test
+  public void testAccumulationByteColumnBoundaries() throws Exception {
+    byte[][] values = {bytes("first"), bytes(""), null};
+    VectorizedRowBatch source = new VectorizedRowBatch(2);
+    BytesColumnVector strings = new BytesColumnVector();
+    LongColumnVector longs = new LongColumnVector();
+    source.cols[0] = strings;
+    source.cols[1] = longs;
+    source.reset();
+    source.size = values.length;
+    for (int row = 0; row < values.length; row++) {
+      if (values[row] == null) {
+        strings.noNulls = false;
+        strings.isNull[row] = true;
+      } else {
+        strings.setVal(row, values[row]);
+      }
+    }
+
+    VectorizedRowBatch destination = new VectorizedRowBatch(2);
+    destination.cols[0] = new BytesColumnVector();
+    destination.cols[1] = new LongColumnVector();
+    destination.reset();
+    VectorShuffleBatchAccumulatingDeserializer accumulating =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 2);
+    byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
+    int offset = 13;
+    for (int frame = 0; frame < 2; frame++) {
+      for (int row = 0; row < values.length; row++) {
+        longs.vector[row] = frame * 10 + row;
+      }
+      int length = serializer.serialize(source, new int[] {0, 1}, buffer, offset);
+      BytesWritable serialized = new BytesWritable(buffer, offset, length);
+      assertFalse(accumulating.readHeader(serialized).hasNestedRepeating());
+      if (destination.size > 0) {
+        assertTrue(accumulating.isCompatible());
+      }
+      accumulating.append(serialized, destination);
+      // The reader may reuse its backing buffer as soon as append returns.
+      Arrays.fill(buffer, (byte) 0xff);
+
+      assertEquals((frame + 1) * values.length, destination.size);
+      BytesColumnVector actualStrings = (BytesColumnVector) destination.cols[0];
+      LongColumnVector actualLongs = (LongColumnVector) destination.cols[1];
+      assertFalse(actualStrings.noNulls);
+      for (int row = 0; row < destination.size; row++) {
+        int sourceRow = row % values.length;
+        assertEquals(values[sourceRow] == null, actualStrings.isNull[row]);
+        if (values[sourceRow] != null) {
+          assertBytesValueEquals(values[sourceRow], actualStrings, row);
+        }
+        assertEquals((row / values.length) * 10 + sourceRow, actualLongs.vector[row]);
+      }
+    }
+  }
+
+  @Test
+  public void testAccumulationRepeatingListOfStrings() throws Exception {
+    BytesColumnVector child = new BytesColumnVector();
+    child.initBuffer();
+    child.setVal(0, bytes("x"));
+    child.setVal(1, bytes(""));
+    child.noNulls = false;
+    child.isNull[2] = true;
+    ListColumnVector list = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, child);
+    list.isRepeating = true;
+    list.lengths[0] = 3;
+    list.childCount = 3;
+    VectorizedRowBatch source = batchWithColumn(list, 3);
+
+    VectorizedRowBatch destination = batchWithColumn(
+        new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new BytesColumnVector()), 0);
+    destination.reset();
+    VectorShuffleBatchAccumulatingDeserializer accumulating =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
+    BytesWritable serialized = serialize(source);
+    for (int frame = 0; frame < 2; frame++) {
+      assertFalse(accumulating.readHeader(serialized).hasNestedRepeating());
+      if (destination.size > 0) {
+        assertTrue(accumulating.isCompatible());
+      }
+      accumulating.append(serialized, destination);
+      assertEquals((frame + 1) * source.size, destination.size);
+      ListColumnVector actual = (ListColumnVector) destination.cols[0];
+      assertTrue(actual.isRepeating);
+      assertEquals(0, actual.offsets[0]);
+      assertEquals(3, actual.lengths[0]);
+      assertEquals(3, actual.childCount);
+      BytesColumnVector actualChild = (BytesColumnVector) actual.child;
+      assertBytesValueEquals(bytes("x"), actualChild, 0);
+      assertBytesValueEquals(bytes(""), actualChild, 1);
+      assertFalse(actualChild.noNulls);
+      assertTrue(actualChild.isNull[2]);
+    }
+
+    child.setVal(0, bytes("different"));
+    assertFalse(isCompatible(accumulating, serialize(source)));
+  }
+
+  @Test
+  public void testNestedRepeatingFrameUsesStandaloneDecoding() throws Exception {
+    LongColumnVector child = new LongColumnVector();
+    child.isRepeating = true;
+    child.vector[0] = 41;
+    ListColumnVector list = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, child);
+    list.offsets[0] = 0;
+    list.lengths[0] = 3;
+    list.childCount = 3;
+
+    BytesWritable serialized = serialize(batchWithColumn(list, 1));
+    VectorizedRowBatch destination = batchWithColumn(
+        new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new LongColumnVector()), 0);
+    VectorShuffleBatchAccumulatingDeserializer accumulating =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
+
+    assertTrue(accumulating.readHeader(serialized).hasNestedRepeating());
+
+    // The receiver dispatches such a frame alone; it never expands the repeated children.
+    accumulating.deserialize(serialized, destination);
+    ListColumnVector decoded = (ListColumnVector) destination.cols[0];
+    assertEquals(1, destination.size);
+    assertEquals(3, decoded.lengths[0]);
+    assertTrue(decoded.child.isRepeating);
+    assertEquals(41, ((LongColumnVector) decoded.child).vector[0]);
+  }
+
+  @Test
+  public void testAccumulatingDecoderRejectsTrailingBytes() throws Exception {
+    LongColumnVector source = new LongColumnVector();
+    source.vector[0] = 7;
+    source.vector[1] = 8;
+    BytesWritable serialized = serialize(batchWithColumn(source, 2));
+    byte[] bytes = Arrays.copyOf(serialized.getBytes(), serialized.getLength() + 1);
+    BytesWritable trailing = new BytesWritable(bytes);
+
+    VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
+    VectorShuffleBatchAccumulatingDeserializer accumulating =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
+    accumulating.readHeader(trailing);
+    assertThrows(IOException.class, () -> accumulating.append(trailing, destination));
+    assertThrows(IOException.class,
+        () -> accumulating.deserialize(trailing, destination));
+  }
+
+  @Test
+  public void testRepeatingBitmapUsesLogicalOrderAndPartitionOffsets() throws Exception {
+    VectorizedRowBatch source = new VectorizedRowBatch(12);
+    source.size = 3;
+    source.selectedInUse = true;
+    source.selected[0] = 7;
+    source.selected[1] = 1;
+    source.selected[2] = 5;
+    for (int column = 0; column < source.cols.length; column++) {
+      LongColumnVector values = new LongColumnVector();
+      for (int row = 0; row < 8; row++) {
+        values.vector[row] = column * 100L + row;
+      }
+      source.cols[column] = values;
+    }
+    for (int column : new int[] {9, 3, 0, 10}) {
+      source.cols[column].isRepeating = true;
+    }
+    source.cols[10].noNulls = false;
+    source.cols[10].isNull[0] = true;
+    // Equal dense values must not be promoted into the repeating section.
+    Arrays.fill(((LongColumnVector) source.cols[2]).vector, 42L);
+    int[] mapping = {9, 2, 8, 1, 6, 4, 11, 3, 0, 10};
+    byte[] wholeBuffer = new byte[1024];
+    byte[] partitionBuffer = new byte[1024];
+    Arrays.fill(wholeBuffer, (byte) 0x7f);
+    Arrays.fill(partitionBuffer, (byte) 0x7f);
+    int offset = 11;
+    int length = serializer.serialize(source, mapping, wholeBuffer, offset);
+    int partitionLength = serializer.serialize(source, mapping, new int[] {99, 7, 1, 5, 99},
+        1, 3, partitionBuffer, offset);
+    assertEquals(length, partitionLength);
+    assertArrayEquals(wholeBuffer, partitionBuffer);
+    assertEquals(0x7f, wholeBuffer[offset - 1]);
+    assertEquals(0x7f, wholeBuffer[offset + length]);
+
+    BytesWritable serialized = new BytesWritable(wholeBuffer, offset, length);
+    VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+    header.read(serialized, mapping.length, 0);
+    assertEquals(2, header.getBitmapLength());
+    assertEquals(0x81, wholeBuffer[header.getBitmapOffset()] & 0xff);
+    assertEquals(0x03, wholeBuffer[header.getBitmapOffset() + 1] & 0xff);
+    assertEquals(29, header.getRepeatingEnd() - header.getRepeatingStart());
+    assertEquals(900L, ByteBuffer.wrap(wholeBuffer).order(ByteOrder.nativeOrder())
+        .getLong(header.getRepeatingStart() + 1));
+    assertEquals(300L, ByteBuffer.wrap(wholeBuffer).order(ByteOrder.nativeOrder())
+        .getLong(header.getRepeatingStart() + 10));
+    assertFalse(header.hasNestedRepeating());
+    for (boolean accumulate : new boolean[] {false, true}) {
+      VectorizedRowBatch destination = new VectorizedRowBatch(mapping.length);
+      for (int column = 0; column < mapping.length; column++) {
+        destination.cols[column] = new LongColumnVector();
+      }
+      destination.reset();
+      if (accumulate) {
+        VectorShuffleBatchAccumulatingDeserializer decoder =
+            new VectorShuffleBatchAccumulatingDeserializer(destination, mapping.length);
+        decoder.readHeader(serialized);
+        decoder.append(serialized, destination);
+      } else {
+        deserializer.deserialize(serialized, destination);
+      }
+      assertEquals(source.size, destination.size);
+      for (int column = 0; column < mapping.length; column++) {
+        ColumnVector original = source.cols[mapping[column]];
+        LongColumnVector actual = (LongColumnVector) destination.cols[column];
+        assertEquals(original.isRepeating, actual.isRepeating);
+        for (int row = 0; row < source.size; row++) {
+          int actualIndex = actual.isRepeating ? 0 : row;
+          assertEquals(mapping[column] == 10, isNull(actual, actualIndex));
+          if (mapping[column] != 10) {
+            int sourceIndex = original.isRepeating ? 0 : source.selected[row];
+            assertEquals(((LongColumnVector) original).vector[sourceIndex],
+                actual.vector[actualIndex]);
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testRepeatingBitmapWordAndArrayBoundaries() throws Exception {
+    for (int columns : new int[] {0, 1, 2, 63, 64, 65, 73}) {
+      for (boolean repeating : new boolean[] {false, true}) {
+        VectorizedRowBatch source = new VectorizedRowBatch(columns);
+        VectorizedRowBatch destination = new VectorizedRowBatch(columns);
+        for (int column = 0; column < columns; column++) {
+          LongColumnVector values = new LongColumnVector();
+          values.vector[0] = column * 10L;
+          values.vector[1] = column * 10L + 1;
+          values.isRepeating = repeating && (column == 0 || column == columns - 1);
+          source.cols[column] = values;
+          destination.cols[column] = new LongColumnVector();
+        }
+        source.size = 2;
+        destination.reset();
+        int[] mapping = identityMap(columns);
+        serializer.initialize(source.cols, mapping);
+        byte[] buffer = new byte[4096];
+        Arrays.fill(buffer, (byte) 0xff);
+        int length = serializer.serialize(source, mapping, buffer, 7);
+        BytesWritable serialized = new BytesWritable(buffer, 7, length);
+        VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+        header.read(serialized, columns, 0);
+        assertEquals(repeating && columns != 0, header.hasRepeatingColumns());
+        for (int column = 0; column < columns; column++) {
+          assertEquals(source.cols[column].isRepeating, header.isRepeating(column));
+        }
+        if (columns <= Long.SIZE) {
+          long expected = repeating && columns != 0 ? 1L | (1L << (columns - 1)) : 0;
+          assertEquals(expected, header.getRepeatingBits());
+        }
+        VectorShuffleBatchDeserializer legacy =
+            new VectorShuffleBatchDeserializer(destination, columns);
+        legacy.deserialize(serialized, destination);
+        assertEquals(2, destination.size);
+        for (int column = 0; column < columns; column++) {
+          assertEquals(source.cols[column].isRepeating, destination.cols[column].isRepeating);
+        }
+        destination.reset();
+        VectorShuffleBatchAccumulatingDeserializer decoder =
+            new VectorShuffleBatchAccumulatingDeserializer(destination, columns);
+        decoder.readHeader(serialized);
+        decoder.append(serialized, destination);
+        decoder.readHeader(serialized);
+        assertTrue(decoder.isCompatible());
+        decoder.append(serialized, destination);
+        assertEquals(4, destination.size);
+        for (int column = 0; column < columns; column++) {
+          LongColumnVector actual = (LongColumnVector) destination.cols[column];
+          assertEquals(source.cols[column].isRepeating, actual.isRepeating);
+          assertEquals(column * 10L, actual.vector[0]);
+          if (!actual.isRepeating) {
+            assertEquals(column * 10L + 1, actual.vector[3]);
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testCompatibilityReadsNoOrdinaryPayload() throws Exception {
+    for (boolean repeating : new boolean[] {false, true}) {
+      VectorizedRowBatch source = new VectorizedRowBatch(2);
+      LongColumnVector representative = new LongColumnVector();
+      representative.isRepeating = repeating;
+      representative.vector[0] = 7;
+      representative.vector[1] = 9;
+      source.cols[0] = representative;
+      source.cols[1] = new BytesColumnVector();
+      ((BytesColumnVector) source.cols[1]).initBuffer();
+      ((BytesColumnVector) source.cols[1]).setVal(0, bytes("first"));
+      ((BytesColumnVector) source.cols[1]).setVal(1, bytes("second"));
+      source.size = 2;
+      byte[] buffer = new byte[1024];
+      int length = serializer.serialize(source, new int[] {0, 1}, buffer, 0);
+      BytesWritable serialized = new BytesWritable(buffer, 0, length);
+      VectorizedRowBatch destination = new VectorizedRowBatch(2);
+      destination.cols[0] = new LongColumnVector();
+      destination.cols[1] = new BytesColumnVector();
+      destination.reset();
+      VectorShuffleBatchAccumulatingDeserializer decoder =
+          new VectorShuffleBatchAccumulatingDeserializer(destination, 2);
+      decoder.readHeader(serialized);
+      decoder.append(serialized, destination);
+
+      VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+      header.read(serialized, 2, 0);
+      // Removing every ordinary payload byte must not affect header/repeating compatibility.
+      BytesWritable headerAndRepeating = new BytesWritable(buffer, 0, header.getOrdinaryStart());
+      decoder.readHeader(headerAndRepeating);
+      assertTrue(decoder.isCompatible());
+      assertEquals(2, destination.size);
+      assertEquals(7, ((LongColumnVector) destination.cols[0]).vector[0]);
+      assertBytesValueEquals(bytes("second"), (BytesColumnVector) destination.cols[1], 1);
+      decoder.releaseHeader();
+    }
+  }
+
+  @Test
+  public void testRepeatingSectionCacheOwnsBorrowedBytes() throws Exception {
+    BytesColumnVector repeated = new BytesColumnVector();
+    repeated.initBuffer();
+    repeated.isRepeating = true;
+    repeated.setVal(0, bytes("alpha"));
+    VectorizedRowBatch source = batchWithColumn(repeated, 2);
+    VectorizedRowBatch destination = batchWithColumn(new BytesColumnVector(), 0);
+    destination.reset();
+    VectorShuffleBatchAccumulatingDeserializer decoder =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
+    byte[] buffer = new byte[1024];
+    int offset = 13;
+    int length = serializer.serialize(source, new int[] {0}, buffer, offset);
+    BytesWritable reused = new BytesWritable(buffer, offset, length);
+    decoder.readHeader(reused);
+    decoder.append(reused, destination);
+    Arrays.fill(buffer, (byte) 0xff);
+    assertBytesValueEquals(bytes("alpha"), (BytesColumnVector) destination.cols[0], 0);
+
+    repeated.setVal(0, bytes("alpHa"));
+    length = serializer.serialize(source, new int[] {0}, buffer, offset);
+    reused.setDirect(buffer, offset, length);
+    assertFalse(isCompatible(decoder, reused));
+    assertEquals(2, destination.size);
+    assertBytesValueEquals(bytes("alpha"), (BytesColumnVector) destination.cols[0], 0);
+
+    repeated.setVal(0, bytes("alpha"));
+    length = serializer.serialize(source, new int[] {0}, buffer, offset);
+    reused.setDirect(buffer, offset, length);
+    assertTrue(isCompatible(decoder, reused));
+    decoder.append(reused, destination);
+    assertEquals(4, destination.size);
+    assertTrue(destination.cols[0].isRepeating);
+    assertBytesValueEquals(bytes("alpha"), (BytesColumnVector) destination.cols[0], 0);
+
+    // Length is part of exact comparison, including when the decoded value has a common prefix.
+    repeated.setVal(0, bytes("alpha!"));
+    length = serializer.serialize(source, new int[] {0}, buffer, offset);
+    reused.setDirect(buffer, offset, length);
+    assertFalse(isCompatible(decoder, reused));
+    decoder.releaseHeader();
+  }
+
+  @Test
+  public void testCanonicalMetadataIncludesEmptyAndInactiveChildren() throws Exception {
+    VectorizedRowBatch source = metadataBatch();
+    BytesWritable serialized = serializeColumns(source);
+    VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+    header.read(serialized, 4, 2);
+    assertEquals(0x02, serialized.getBytesRaw()[header.getBitmapOffset()] & 0xff);
+    assertEquals(0xe3, serialized.getBytesRaw()[header.getMetadataOffset()] & 0xff);
+    assertEquals(0x01, serialized.getBytesRaw()[header.getMetadataOffset() + 1] & 0xff);
+    assertEquals(10, VectorShuffleBatchHeader.metadataBitCount(source.cols, 4));
+    for (boolean accumulate : new boolean[] {false, true}) {
+      VectorizedRowBatch destination = metadataBatch();
+      ((TimestampColumnVector) destination.cols[1]).setIsUTC(false);
+      ((TimestampColumnVector) destination.cols[1]).setUsingProlepticCalendar(true);
+      ((DateColumnVector) ((ListColumnVector) destination.cols[0]).child)
+          .setUsingProlepticCalendar(false);
+      if (accumulate) {
+        VectorShuffleBatchAccumulatingDeserializer decoder =
+            new VectorShuffleBatchAccumulatingDeserializer(destination, 4);
+        destination.reset();
+        decoder.readHeader(serialized);
+        decoder.append(serialized, destination);
+        assertTrue(isCompatible(decoder, serialized));
+        decoder.append(serialized, destination);
+        assertEquals(4, destination.size);
+        // The unused map key still contributes metadata and must force a flush on mismatch.
+        ((DateColumnVector) ((MapColumnVector) source.cols[2]).keys)
+            .setUsingProlepticCalendar(true);
+        assertFalse(isCompatible(decoder, serializeColumns(source)));
+        ((DateColumnVector) ((MapColumnVector) source.cols[2]).keys)
+            .setUsingProlepticCalendar(false);
+        assertEquals(4, destination.size);
+        decoder.releaseHeader();
+      } else {
+        deserializer.deserialize(serialized, destination);
+      }
+      assertTrue(((DateColumnVector) ((ListColumnVector) destination.cols[0]).child)
+          .isUsingProlepticCalendar());
+      TimestampColumnVector timestamp = (TimestampColumnVector) destination.cols[1];
+      assertTrue(timestamp.isUTC());
+      assertFalse(timestamp.usingProlepticCalendar());
+      assertEquals(-20000000000000L, timestamp.time[0]);
+      assertEquals(123456789, timestamp.nanos[0]);
+      MapColumnVector map = (MapColumnVector) destination.cols[2];
+      assertFalse(((DateColumnVector) map.keys).isUsingProlepticCalendar());
+      assertFalse(((TimestampColumnVector) map.values).isUTC());
+      assertTrue(((TimestampColumnVector) map.values).usingProlepticCalendar());
+      StructColumnVector struct = (StructColumnVector) destination.cols[3];
+      assertTrue(((DateColumnVector) struct.fields[0]).isUsingProlepticCalendar());
+      assertEquals(-200000L, ((DateColumnVector) struct.fields[0]).vector[0]);
+      UnionColumnVector union = (UnionColumnVector) struct.fields[1];
+      assertTrue(((TimestampColumnVector) union.fields[0]).isUTC());
+      assertTrue(((TimestampColumnVector) union.fields[0]).usingProlepticCalendar());
+      assertFalse(((DateColumnVector) union.fields[1]).isUsingProlepticCalendar());
+    }
+  }
+
+  @Test
+  public void testCachedMetadataPathsFollowReplacementBatchesAndMappedColumns() throws Exception {
+    int[] mapping = {3, 0, 1, 2, 1};
+    VectorizedRowBatch first = metadataBatch();
+    serializer.initialize(first.cols, mapping);
+    VectorizedRowBatch schema = mappedMetadataDestination();
+    VectorShuffleBatchDeserializer legacy = new VectorShuffleBatchDeserializer(schema, 5);
+    VectorShuffleBatchAccumulatingDeserializer accumulating =
+        new VectorShuffleBatchAccumulatingDeserializer(schema, 5);
+    byte[] buffer = new byte[4096];
+    for (int frame = 0; frame < 3; frame++) {
+      // Every frame replaces all vectors, including empty list/map and inactive union children.
+      VectorizedRowBatch source = frame == 0 ? first : metadataBatch();
+      boolean flipped = frame == 1;
+      setMetadataFlags(source, flipped);
+      Arrays.fill(buffer, (byte) 0xff);
+      int length = serializer.serialize(source, mapping, buffer, 13);
+      BytesWritable serialized = new BytesWritable(buffer, 13, length);
+      VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+      header.read(serialized, mapping.length, 2);
+      assertEquals(flipped ? 0xc8 : 0x37,
+          buffer[header.getMetadataOffset()] & 0xff);
+      assertEquals(flipped ? 0x09 : 0x06,
+          buffer[header.getMetadataOffset() + 1] & 0xff);
+      for (boolean accumulate : new boolean[] {false, true}) {
+        VectorizedRowBatch destination = mappedMetadataDestination();
+        if (accumulate) {
+          accumulating.resetAccumulation();
+          accumulating.readHeader(serialized);
+          accumulating.append(serialized, destination);
+        } else {
+          legacy.deserialize(serialized, destination);
+        }
+        assertEquals(source.size, destination.size);
+        for (int logical = 0; logical < mapping.length; logical++) {
+          assertMetadataEquals(source.cols[mapping[logical]], destination.cols[logical]);
+        }
+        assertEquals(-20000000000000L,
+            ((TimestampColumnVector) destination.cols[2]).time[0]);
+        assertEquals(-20000000000000L,
+            ((TimestampColumnVector) destination.cols[4]).time[0]);
+      }
+    }
+  }
+
+  @Test
+  public void testTimestampMetadataFlagsAcrossByteBoundary() throws Exception {
+    VectorizedRowBatch source = new VectorizedRowBatch(9);
+    VectorizedRowBatch destination = new VectorizedRowBatch(9);
+    for (int column = 0; column < 7; column++) {
+      source.cols[column] = new DateColumnVector().setUsingProlepticCalendar(column % 2 == 0);
+      destination.cols[column] = new DateColumnVector();
+    }
+    TimestampColumnVector timestamp = new TimestampColumnVector();
+    source.cols[7] = new ListColumnVector(1024, timestamp);
+    destination.cols[7] = new ListColumnVector(1024, new TimestampColumnVector());
+    source.cols[8] = new DateColumnVector().setUsingProlepticCalendar(true);
+    destination.cols[8] = new DateColumnVector();
+    source.size = 2;
+    destination.reset();
+    int[] mapping = identityMap(9);
+    serializer.initialize(source.cols, mapping);
+    VectorShuffleBatchDeserializer legacy = new VectorShuffleBatchDeserializer(destination, 9);
+    VectorShuffleBatchAccumulatingDeserializer accumulating =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 9);
+    byte[] buffer = new byte[1024];
+    for (int flags = 3; flags >= 0; flags--) {
+      timestamp.setIsUTC((flags & 1) != 0);
+      timestamp.setUsingProlepticCalendar((flags & 2) != 0);
+      Arrays.fill(buffer, (byte) 0xff);
+      int length = serializer.serialize(source, mapping, buffer, 11);
+      BytesWritable serialized = new BytesWritable(buffer, 11, length);
+      VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+      header.read(serialized, 9, 2);
+      assertEquals(0x55 | ((flags & 1) << 7), buffer[header.getMetadataOffset()] & 0xff);
+      assertEquals(2 | (flags >>> 1), buffer[header.getMetadataOffset() + 1] & 0xff);
+      for (boolean accumulate : new boolean[] {false, true}) {
+        destination.reset();
+        if (accumulate) {
+          accumulating.resetAccumulation();
+          accumulating.readHeader(serialized);
+          accumulating.append(serialized, destination);
+        } else {
+          legacy.deserialize(serialized, destination);
+        }
+        TimestampColumnVector actual =
+            (TimestampColumnVector) ((ListColumnVector) destination.cols[7]).child;
+        assertEquals(timestamp.isUTC(), actual.isUTC());
+        assertEquals(timestamp.usingProlepticCalendar(), actual.usingProlepticCalendar());
+        assertTrue(((DateColumnVector) destination.cols[8]).isUsingProlepticCalendar());
+      }
+    }
+  }
+
+  private static VectorizedRowBatch mappedMetadataDestination() {
+    VectorizedRowBatch template = metadataBatch();
+    VectorizedRowBatch destination = new VectorizedRowBatch(5);
+    destination.cols = new ColumnVector[] {template.cols[3], template.cols[0], template.cols[1],
+        template.cols[2], new TimestampColumnVector()};
+    destination.reset();
+    return destination;
+  }
+
+  private static void setMetadataFlags(VectorizedRowBatch batch, boolean flipped) {
+    ((DateColumnVector) ((ListColumnVector) batch.cols[0]).child)
+        .setUsingProlepticCalendar(!flipped);
+    TimestampColumnVector timestamp = (TimestampColumnVector) batch.cols[1];
+    timestamp.setIsUTC(!flipped);
+    timestamp.setUsingProlepticCalendar(flipped);
+    MapColumnVector map = (MapColumnVector) batch.cols[2];
+    ((DateColumnVector) map.keys).setUsingProlepticCalendar(flipped);
+    ((TimestampColumnVector) map.values).setIsUTC(flipped);
+    ((TimestampColumnVector) map.values).setUsingProlepticCalendar(!flipped);
+    StructColumnVector struct = (StructColumnVector) batch.cols[3];
+    ((DateColumnVector) struct.fields[0]).setUsingProlepticCalendar(!flipped);
+    UnionColumnVector union = (UnionColumnVector) struct.fields[1];
+    ((TimestampColumnVector) union.fields[0]).setIsUTC(!flipped);
+    ((TimestampColumnVector) union.fields[0]).setUsingProlepticCalendar(!flipped);
+    ((DateColumnVector) union.fields[1]).setUsingProlepticCalendar(flipped);
+  }
+
+  private static void assertMetadataEquals(ColumnVector expected, ColumnVector actual) {
+    if (expected instanceof DateColumnVector) {
+      assertEquals(((DateColumnVector) expected).isUsingProlepticCalendar(),
+          ((DateColumnVector) actual).isUsingProlepticCalendar());
+    } else if (expected instanceof TimestampColumnVector) {
+      assertEquals(((TimestampColumnVector) expected).isUTC(),
+          ((TimestampColumnVector) actual).isUTC());
+      assertEquals(((TimestampColumnVector) expected).usingProlepticCalendar(),
+          ((TimestampColumnVector) actual).usingProlepticCalendar());
+    } else if (expected instanceof ListColumnVector) {
+      assertMetadataEquals(((ListColumnVector) expected).child, ((ListColumnVector) actual).child);
+    } else if (expected instanceof MapColumnVector) {
+      assertMetadataEquals(((MapColumnVector) expected).keys, ((MapColumnVector) actual).keys);
+      assertMetadataEquals(((MapColumnVector) expected).values, ((MapColumnVector) actual).values);
+    } else {
+      ColumnVector[] expectedFields = expected instanceof StructColumnVector
+          ? ((StructColumnVector) expected).fields : ((UnionColumnVector) expected).fields;
+      ColumnVector[] actualFields = actual instanceof StructColumnVector
+          ? ((StructColumnVector) actual).fields : ((UnionColumnVector) actual).fields;
+      for (int field = 0; field < expectedFields.length; field++) {
+        assertMetadataEquals(expectedFields[field], actualFields[field]);
+      }
+    }
+  }
+
+  @Test
+  public void testNestedRepeatingFlagUsesSerializedChildCounts() throws Exception {
+    for (int children : new int[] {0, 1, 2}) {
+      LongColumnVector child = new LongColumnVector();
+      child.isRepeating = true;
+      child.vector[0] = 23;
+      ListColumnVector list = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, child);
+      list.isRepeating = true;
+      list.lengths[0] = children;
+      list.childCount = children;
+      assertNestedRepeating(batchWithColumn(list, 3), children > 1);
+      MapColumnVector map = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+          new LongColumnVector(), child);
+      map.isRepeating = true;
+      map.lengths[0] = children;
+      map.childCount = children;
+      assertNestedRepeating(batchWithColumn(map, 3), children > 1);
+    }
+
+    LongColumnVector structChild = new LongColumnVector();
+    structChild.isRepeating = true;
+    StructColumnVector struct = structOf(structChild);
+    struct.noNulls = false;
+    struct.isNull[1] = true;
+    assertNestedRepeating(batchWithColumn(struct, 2), false);
+    struct.isNull[1] = false;
+    assertNestedRepeating(batchWithColumn(struct, 2), true);
+    struct.isRepeating = true;
+    assertNestedRepeating(batchWithColumn(struct, 3), false);
+
+    LongColumnVector unionChild = new LongColumnVector();
+    unionChild.isRepeating = true;
+    UnionColumnVector union = unionOf(unionChild, new LongColumnVector());
+    union.tags[0] = 0;
+    union.tags[1] = 1;
+    assertNestedRepeating(batchWithColumn(union, 2), false);
+    union.tags[1] = 0;
+    assertNestedRepeating(batchWithColumn(union, 2), true);
+  }
+
+  @Test
+  public void testAccumulationOfSingletonRepeatingChildren() throws Exception {
+    LongColumnVector listChild = new LongColumnVector();
+    listChild.isRepeating = true;
+    listChild.vector[0] = 23;
+    ListColumnVector list = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, listChild);
+    list.lengths[0] = 1;
+    list.childCount = 1;
+    LongColumnVector mapValue = new LongColumnVector();
+    mapValue.isRepeating = true;
+    mapValue.vector[0] = 23;
+    MapColumnVector map = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+        new LongColumnVector(), mapValue);
+    map.lengths[0] = 1;
+    map.childCount = 1;
+    LongColumnVector structField = new LongColumnVector();
+    structField.isRepeating = true;
+    structField.vector[0] = 23;
+    StructColumnVector struct = structOf(structField);
+    struct.noNulls = false;
+    struct.isNull[1] = true;
+    LongColumnVector unionField = new LongColumnVector();
+    unionField.isRepeating = true;
+    unionField.vector[0] = 23;
+    UnionColumnVector union = unionOf(unionField, new LongColumnVector());
+    union.tags[1] = 1;
+    VectorizedRowBatch source = new VectorizedRowBatch(4);
+    source.cols = new ColumnVector[] {list, map, struct, union};
+    source.size = 2;
+    VectorizedRowBatch destination = new VectorizedRowBatch(4);
+    destination.cols[0] = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+        new LongColumnVector());
+    destination.cols[1] = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+        new LongColumnVector(), new LongColumnVector());
+    destination.cols[2] = structOf(new LongColumnVector());
+    destination.cols[3] = unionOf(new LongColumnVector(), new LongColumnVector());
+    destination.reset();
+    VectorShuffleBatchAccumulatingDeserializer decoder =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 4);
+    BytesWritable serialized = serializeColumns(source);
+    assertFalse(decoder.readHeader(serialized).hasNestedRepeating());
+    decoder.append(serialized, destination);
+    assertEquals(source.size, destination.size);
+    assertTrue(isCompatible(decoder, serialized));
+    decoder.append(serialized, destination);
+    assertEquals(4, destination.size);
+    ListColumnVector actualList = (ListColumnVector) destination.cols[0];
+    MapColumnVector actualMap = (MapColumnVector) destination.cols[1];
+    assertEquals(2, actualList.childCount);
+    assertEquals(2, actualMap.childCount);
+    for (ColumnVector child : new ColumnVector[] {actualList.child, actualMap.values}) {
+      assertFalse(child.isRepeating);
+      assertEquals(23, ((LongColumnVector) child).vector[0]);
+      assertEquals(23, ((LongColumnVector) child).vector[1]);
+    }
+    ColumnVector actualStructField = ((StructColumnVector) destination.cols[2]).fields[0];
+    ColumnVector actualUnionField = ((UnionColumnVector) destination.cols[3]).fields[0];
+    for (ColumnVector field : new ColumnVector[] {actualStructField, actualUnionField}) {
+      assertFalse(field.isRepeating);
+      assertEquals(23, ((LongColumnVector) field).vector[0]);
+      assertEquals(23, ((LongColumnVector) field).vector[2]);
+    }
+    assertTrue(destination.cols[2].isNull[1]);
+    assertTrue(destination.cols[2].isNull[3]);
+    assertArrayEquals(new int[] {0, 1, 0, 1},
+        Arrays.copyOf(((UnionColumnVector) destination.cols[3]).tags, 4));
+  }
+
+  @Test
+  public void testReadersRejectNegativeRowCount() throws Exception {
+    BytesWritable serialized = serialize(batchWithColumn(new LongColumnVector(), 2));
+    VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+    header.read(serialized, 1, 0);
+    ByteBuffer.wrap(serialized.getBytesRaw()).order(ByteOrder.nativeOrder())
+        .putInt(header.getRepeatingEnd(), -1);
+    assertThrows(IOException.class, () -> deserializer.deserialize(serialized,
+        batchWithColumn(new LongColumnVector(), 0)));
+    VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
+    VectorShuffleBatchAccumulatingDeserializer decoder =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
+    assertThrows(IOException.class, () -> decoder.readHeader(serialized));
+    assertThrows(IOException.class, () -> decoder.deserialize(serialized, destination));
+    assertEquals(0, destination.size);
+  }
+
+  @Test
+  public void testReadersRejectMismatchedRepeatingSectionLength() throws Exception {
+    LongColumnVector repeated = new LongColumnVector();
+    repeated.isRepeating = true;
+    repeated.vector[0] = 7;
+    BytesWritable serialized = serialize(batchWithColumn(repeated, 2));
+    VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+    header.read(serialized, 1, 0);
+    ByteBuffer.wrap(serialized.getBytesRaw()).order(ByteOrder.nativeOrder())
+        .putInt(header.getRepeatingStart() - Integer.BYTES,
+            header.getRepeatingEnd() - header.getRepeatingStart() - 1);
+    // Keep the relocated partition header valid so decoding reaches the section-end check.
+    ByteBuffer.wrap(serialized.getBytesRaw()).order(ByteOrder.nativeOrder())
+        .putInt(header.getRepeatingEnd() - 1, 2)
+        .put(header.getRepeatingEnd() - 1 + Integer.BYTES, (byte) 0);
+    assertThrows(IOException.class, () -> deserializer.deserialize(serialized,
+        batchWithColumn(new LongColumnVector(), 0)));
+    VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
+    VectorShuffleBatchAccumulatingDeserializer decoder =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
+    assertThrows(IOException.class, () -> decoder.deserialize(serialized, destination));
+    destination.reset();
+    decoder.readHeader(serialized);
+    assertThrows(IOException.class, () -> decoder.append(serialized, destination));
+  }
+
+  private void assertNestedRepeating(VectorizedRowBatch source, boolean expected) throws Exception {
+    VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+    header.read(serialize(source), 1,
+        (VectorShuffleBatchHeader.metadataBitCount(source.cols, 1) + 7) / 8);
+    assertEquals(expected, header.hasNestedRepeating());
+  }
+
+  private BytesWritable serializeColumns(VectorizedRowBatch source) {
+    byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
+    serializer.initialize(source.cols, identityMap(source.numCols));
+    int length = serializer.serialize(source, identityMap(source.numCols), buffer, 0);
+    return new BytesWritable(buffer, 0, length);
+  }
+
+  private static VectorizedRowBatch metadataBatch() {
+    VectorizedRowBatch batch = new VectorizedRowBatch(4);
+    batch.cols[0] = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+        new DateColumnVector().setUsingProlepticCalendar(true));
+    TimestampColumnVector timestamp = new TimestampColumnVector();
+    timestamp.setIsUTC(true);
+    timestamp.isRepeating = true;
+    timestamp.time[0] = -20000000000000L;
+    timestamp.nanos[0] = 123456789;
+    batch.cols[1] = timestamp;
+    TimestampColumnVector mapValues = new TimestampColumnVector();
+    mapValues.setUsingProlepticCalendar(true);
+    batch.cols[2] = new MapColumnVector(VectorizedRowBatch.DEFAULT_SIZE,
+        new DateColumnVector(), mapValues);
+    TimestampColumnVector unionTimestamp = new TimestampColumnVector();
+    unionTimestamp.setIsUTC(true);
+    unionTimestamp.setUsingProlepticCalendar(true);
+    DateColumnVector structDate = new DateColumnVector().setUsingProlepticCalendar(true);
+    structDate.vector[0] = -200000;
+    structDate.vector[1] = -199999;
+    batch.cols[3] = structOf(structDate, unionOf(unionTimestamp, new DateColumnVector()));
+    batch.size = 2;
+    return batch;
+  }
+
+  @Test
   public void testSerializerRejectsNegativeUnionTag() {
     UnionColumnVector union = unionOf(new LongColumnVector());
     union.tags[0] = -1;
@@ -481,25 +1592,23 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
-  public void testDeserializerRejectsInvalidEncodedUnionTag() {
-    BytesWritable invalid = new BytesWritable(new byte[] {
-        0, 0, 0, 1,  // row count
-        0, 0, 0, 1,  // column count
-        0,           // column flags
-        0, 0, 0, 1   // invalid union tag
-    });
+  public void testDeserializerRejectsInvalidEncodedUnionTag() throws Exception {
+    BytesWritable invalid = serialize(batchWithColumn(unionOf(new LongColumnVector()), 1));
+    VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+    header.read(invalid, 1, 0);
+    ByteBuffer.wrap(invalid.getBytesRaw()).order(ByteOrder.nativeOrder())
+        .putInt(header.getOrdinaryStart() + 1, 1);
     assertThrows(IOException.class, () -> deserializer.deserialize(invalid,
         batchWithColumn(unionOf(new LongColumnVector()), 0)));
   }
 
   @Test
-  public void testDeserializerRejectsTruncatedUnionTagSequence() {
-    BytesWritable truncated = new BytesWritable(new byte[] {
-        0, 0, 0, 1,  // row count
-        0, 0, 0, 1,  // column count
-        0,           // column flags
-        0, 0         // truncated union tag
-    });
+  public void testDeserializerRejectsTruncatedUnionTagSequence() throws Exception {
+    BytesWritable serialized = serialize(batchWithColumn(unionOf(new LongColumnVector()), 1));
+    VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+    header.read(serialized, 1, 0);
+    BytesWritable truncated = new BytesWritable(serialized.getBytesRaw(), serialized.getOffset(),
+        header.getOrdinaryStart() + 1 + 2 - serialized.getOffset());
     assertThrows(IOException.class, () -> deserializer.deserialize(truncated,
         batchWithColumn(unionOf(new LongColumnVector()), 0)));
   }
@@ -562,12 +1671,15 @@ public class TestVectorShuffleBatchSerde {
       BytesColumnVector source = new BytesColumnVector();
       applySliceValues(source, layout, expected, random, iteration);
 
-      VectorizedRowBatch destination = batchWithColumn(stringAdapter().createVector(), 0);
-      roundTrip(layout.batchWithColumn(source), new int[] {0}, destination);
-      String context = "bytes slice seed=" + seed + ", iteration=" + iteration + ", " + layout;
-      assertEquals(context, layout.size, destination.size);
-      assertFalse(context, destination.selectedInUse);
-      assertBytesColumnEquals(expected, (BytesColumnVector) destination.cols[0], context);
+      for (boolean accumulate : new boolean[] {false, true}) {
+        VectorizedRowBatch destination = batchWithColumn(stringAdapter().createVector(), 0);
+        roundTrip(layout.batchWithColumn(source), new int[] {0}, destination, accumulate);
+        String context = "bytes slice seed=" + seed + ", iteration=" + iteration + ", " + layout
+            + ", accumulate=" + accumulate;
+        assertEquals(context, layout.size, destination.size);
+        assertFalse(context, destination.selectedInUse);
+        assertBytesColumnEquals(expected, (BytesColumnVector) destination.cols[0], context);
+      }
     }
   }
 
@@ -578,12 +1690,14 @@ public class TestVectorShuffleBatchSerde {
       int sourceColumnCount = randomMappingSourceColumnCount(random, iteration);
       int[] sourceColumnMap = randomSourceColumnMap(random, iteration, sourceColumnCount);
       VectorizedRowBatch source = randomMappingSourceBatch(layout, sourceColumnCount);
-      VectorizedRowBatch destination = mappingDestinationBatch(sourceColumnMap);
-
-      roundTrip(source, sourceColumnMap, destination);
-      assertColumnMappingRoundTrip(layout, sourceColumnMap, destination,
-          "column mapping seed=" + seed + ", iteration=" + iteration + ", " + layout
-              + ", sourceColumnMap=" + Arrays.toString(sourceColumnMap));
+      for (boolean accumulate : new boolean[] {false, true}) {
+        VectorizedRowBatch destination = mappingDestinationBatch(sourceColumnMap);
+        roundTrip(source, sourceColumnMap, destination, accumulate);
+        assertColumnMappingRoundTrip(layout, sourceColumnMap, destination,
+            "column mapping seed=" + seed + ", iteration=" + iteration + ", " + layout
+                + ", sourceColumnMap=" + Arrays.toString(sourceColumnMap)
+                + ", accumulate=" + accumulate);
+      }
     }
   }
 
@@ -747,6 +1861,8 @@ public class TestVectorShuffleBatchSerde {
     for (int column = 0; column < sourceColumnMap.length; column++) {
       destination.cols[column] = mappingColumnVector(sourceColumnMap[column]);
     }
+    // Constructors set size to capacity; accumulation must start with an empty batch.
+    destination.reset();
     return destination;
   }
 
@@ -883,10 +1999,42 @@ public class TestVectorShuffleBatchSerde {
           }
         }
 
-        VectorizedRowBatch result = batchWithColumn(adapter.createDestinationVector(), 0);
-        roundTrip(scenario.batchLayout.batchWithColumn(sourceColumn), new int[] {0}, result);
-        assertColumnRoundTrip(expected, scenario, result, adapter,
-            typeName + ", seed=" + seed + ", iteration=" + iteration + ", " + scenario);
+        BytesWritable serialized = serialize(scenario.batchLayout.batchWithColumn(sourceColumn));
+        String context = typeName + ", seed=" + seed + ", iteration=" + iteration + ", " + scenario;
+        for (boolean accumulate : new boolean[] {false, true}) {
+          VectorizedRowBatch result = batchWithColumn(adapter.createDestinationVector(), 0);
+          if (!accumulate) {
+            deserializer.deserialize(serialized, result);
+          } else {
+            VectorShuffleBatchAccumulatingDeserializer accumulating =
+                new VectorShuffleBatchAccumulatingDeserializer(result, 1);
+            VectorShuffleBatchHeader header = accumulating.readHeader(serialized);
+            if (scenario.size() > 1 && scenario.size() < accumulating.getAppendCapacity()
+                && !header.hasNestedRepeating()) {
+              accumulating.append(serialized, result);
+              assertColumnRoundTrip(expected, scenario, result, adapter, context + ", first append");
+              if (scenario.size() <= accumulating.getAppendCapacity() / 2) {
+                assertTrue(context, isCompatible(accumulating, serialized));
+                accumulating.append(serialized, result);
+                assertEquals(context, scenario.size() * 2, result.size);
+                for (int logical = 0; logical < scenario.size(); logical++) {
+                  int actualIndex = result.cols[0].isRepeating ? 0 : scenario.size() + logical;
+                  assertEquals(context, scenario.isNull(logical),
+                      isNull(result.cols[0], actualIndex));
+                  if (!scenario.isNull(logical)) {
+                    adapter.assertValueEquals(context, expected.get(logical), result.cols[0],
+                        actualIndex);
+                  }
+                }
+                continue;
+              }
+            } else {
+              accumulating.deserialize(serialized, result);
+            }
+          }
+          assertColumnRoundTrip(expected, scenario, result, adapter,
+              context + ", accumulate=" + accumulate);
+        }
       }
     }
   }
@@ -1938,9 +3086,16 @@ public class TestVectorShuffleBatchSerde {
     return new UnionColumnVector(VectorizedRowBatch.DEFAULT_SIZE, fields);
   }
 
+  private static boolean isCompatible(VectorShuffleBatchAccumulatingDeserializer decoder,
+      BytesWritable serialized) throws IOException {
+    decoder.readHeader(serialized);
+    return decoder.isCompatible();
+  }
+
   private BytesWritable serialize(VectorizedRowBatch source) throws Exception {
     BytesWritable serialized = new BytesWritable();
     byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
+    serializer.initialize(source.cols, new int[] {0});
     int length = serializer.serialize(source, new int[] {0}, buffer, 0);
     serialized.set(buffer, 0, length);
     return serialized;
@@ -1948,11 +3103,29 @@ public class TestVectorShuffleBatchSerde {
 
   private void roundTrip(VectorizedRowBatch source, int[] sourceColumnMap,
       VectorizedRowBatch destination) throws Exception {
+    roundTrip(source, sourceColumnMap, destination, false);
+  }
+
+  private void roundTrip(VectorizedRowBatch source, int[] sourceColumnMap,
+      VectorizedRowBatch destination, boolean accumulate) throws Exception {
     BytesWritable serialized = new BytesWritable();
     byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
+    serializer.initialize(source.cols, sourceColumnMap);
     int length = serializer.serialize(source, sourceColumnMap, buffer, 0);
     serialized.set(buffer, 0, length);
-    deserializer.deserialize(serialized, destination);
+    if (!accumulate) {
+      deserializer.deserialize(serialized, destination);
+    } else {
+      VectorShuffleBatchAccumulatingDeserializer decoder =
+          new VectorShuffleBatchAccumulatingDeserializer(destination, sourceColumnMap.length);
+      VectorShuffleBatchHeader header = decoder.readHeader(serialized);
+      if (source.size > 1 && source.size < decoder.getAppendCapacity()
+          && !header.hasNestedRepeating()) {
+        decoder.append(serialized, destination);
+      } else {
+        decoder.deserialize(serialized, destination);
+      }
+    }
   }
 
   private static void assertBytesValueEquals(byte[] expected, BytesColumnVector actual,
