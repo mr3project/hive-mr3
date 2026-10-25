@@ -597,38 +597,50 @@ public class ReduceRecordSource implements RecordSource {
   }
 
   void consumeAllUnordered(RecordProgress progress) throws HiveException, InterruptedException {
-    // called when canConsumeAllUnordered() == true
+    // Keep the legacy exception handling and record dispatch unchanged when accumulation is off.
+    if (accumulateShuffleInput) {
+      consumeAllAccumulated(progress);
+      return;
+    }
     try {
-      if (accumulateShuffleInput) {
-        keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
-          shuffleAccumulator.process(keyWritable, valueWritable, isVectorBatchKey(keyWritable));
-          progress.onRecord();
-        });
-        // Only normal EOF may publish the partial batch, before downstream finalization.
-        shuffleAccumulator.flushPendingBatch();
-      } else {
-        keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
-          processVectorRecordUnorderedLegacy(keyWritable, valueWritable, tag);
-          progress.onRecord();
-        });
-      }
-    } catch (Error e) {
+      keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
+        // KeyValueReaderEdge provides unordered key/value records. The same logical key can
+        // appear again later, so every record must be treated as an independent final batch.
+        processVectorRecordUnorderedLegacy(keyWritable, valueWritable, tag);
+        progress.onRecord();
+      });
+    } catch (OutOfMemoryError e) {
       abort = true;
-      if (shuffleAccumulator != null) {
-        shuffleAccumulator.discardPendingBatch();
-      }
       throw e;
     } catch (InterruptedException e) {
       abort = true;
-      if (shuffleAccumulator != null) {
-        shuffleAccumulator.discardPendingBatch();
-      }
       throw e;
     } catch (Exception e) {
       abort = true;
-      if (shuffleAccumulator != null) {
-        shuffleAccumulator.discardPendingBatch();
-      }
+      throw new HiveException(e);
+    }
+  }
+
+  private void consumeAllAccumulated(RecordProgress progress)
+      throws HiveException, InterruptedException {
+    try {
+      keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
+        shuffleAccumulator.process(keyWritable, valueWritable, isVectorBatchKey(keyWritable));
+        progress.onRecord();
+      });
+      // Only normal EOF may publish the partial batch, before downstream finalization.
+      shuffleAccumulator.flushPendingBatch();
+    } catch (Error e) {
+      abort = true;
+      shuffleAccumulator.discardPendingBatch();
+      throw e;
+    } catch (InterruptedException e) {
+      abort = true;
+      shuffleAccumulator.discardPendingBatch();
+      throw e;
+    } catch (Exception e) {
+      abort = true;
+      shuffleAccumulator.discardPendingBatch();
       throw new HiveException(e);
     }
   }
