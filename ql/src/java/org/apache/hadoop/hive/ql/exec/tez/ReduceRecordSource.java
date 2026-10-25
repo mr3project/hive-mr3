@@ -662,10 +662,7 @@ public class ReduceRecordSource implements RecordSource {
     }
     // Snapshot the reusable inspection result before dispatch can invoke downstream code.
     final boolean standaloneCompact = compact && !frameInfo.isAppendCompatible();
-    if (incomingRows > accumulatorRowLimit) {
-      throw new IOException("Vector shuffle frame has " + incomingRows
-          + " rows; receiver accumulation limit is " + accumulatorRowLimit);
-    }
+    assert incomingRows > 0 && incomingRows <= accumulatorRowLimit;
     final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
     if (pendingRows > 0 && (standaloneCompact || incomingRows > accumulatorRowLimit - pendingRows
         || incomingBytes > BATCH_BYTES - pendingBytes)) {
@@ -703,18 +700,15 @@ public class ReduceRecordSource implements RecordSource {
   }
 
   private void checkAccumulationAbort() throws InterruptedException {
-    if (abortChecker != null) {
-      abortChecker.checkAbortCondition();
-    }
-    if (abort || Thread.currentThread().isInterrupted()) {
-      throw new InterruptedException("Vector shuffle accumulation aborted");
-    }
+    assert abortChecker != null;
+    assert !abort;
+    abortChecker.checkAbortCondition();
   }
 
   private void flushPendingBatch() throws HiveException, InterruptedException {
     checkAccumulationAbort();
     if (pendingRows == 0) {
-      pendingBytes = 0;
+      assert pendingBytes == 0;
       return;
     }
     batch.size = pendingRows;
