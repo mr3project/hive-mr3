@@ -620,8 +620,10 @@ public class ReduceRecordSource implements RecordSource {
     // called when canConsumeAllUnordered() == true
     try {
       if (accumulateShuffleInput) {
-        keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) ->
-            processVectorRecordUnordered(keyWritable, valueWritable, tag));
+        keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
+          processVectorRecordUnordered(keyWritable, valueWritable, tag);
+          progress.onRecord();
+        });
         // Only normal EOF may publish the partial batch, before downstream finalization.
         flushPendingBatch();
       } else {
