@@ -471,12 +471,13 @@ public final class VectorShuffleBatchDeserializer {
     readAppendColumn(column, null, offset, rowCount);
   }
 
-  // Appended rows occupy previously unwritten slots; resetInit() clears old null flags.
+  // A reused vector may retain ignored null bits when noNulls is true.
   private void readNulls(ColumnVector column, int[] indices, int offset, int count,
       boolean repeating, int bitmapOffset) {
     for (int i = 0; i < count; i++) {
-      if (isNull(bitmapOffset, i)) {
-        column.isNull[destinationIndex(indices, offset, i, repeating)] = true;
+      boolean isNull = isNull(bitmapOffset, i);
+      column.isNull[destinationIndex(indices, offset, i, repeating)] = isNull;
+      if (isNull) {
         column.noNulls = false;
       }
     }
@@ -584,6 +585,7 @@ public final class VectorShuffleBatchDeserializer {
         column.noNulls = false;
         return;
       }
+      Arrays.fill(column.isNull, offset + 1, end, false);
       if (column instanceof LongColumnVector) {
         LongColumnVector longs = (LongColumnVector) column;
         Arrays.fill(longs.vector, offset + 1, end, longs.vector[source]);
@@ -606,6 +608,7 @@ public final class VectorShuffleBatchDeserializer {
       column.noNulls = false;
       return;
     }
+    column.isNull[destination] = false;
     if (column instanceof BytesColumnVector) {
       BytesColumnVector bytes = (BytesColumnVector) column;
       // References are safe here: the original value was copied into destination-owned storage.
@@ -813,7 +816,6 @@ public final class VectorShuffleBatchDeserializer {
         : destinationIndices == null ? destinationOffset + logical : destinationIndices[logical];
   }
 
-  // New destination slots are already non-null after initialization or batch reset.
   private int nonNullDestinationIndex(ColumnVector column, int[] destinationIndices,
       int destinationOffset, int logical, boolean repeating, int bitmapOffset) {
     int index = destinationIndex(destinationIndices, destinationOffset, logical, repeating);
@@ -822,6 +824,7 @@ public final class VectorShuffleBatchDeserializer {
       column.noNulls = false;
       return -1;
     }
+    column.isNull[index] = false;
     return index;
   }
 

@@ -371,6 +371,131 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testReplacementClearsIgnoredPrimitiveNullBits() throws Exception {
+    LongColumnVector source = new LongColumnVector();
+    source.noNulls = false;
+    source.vector[0] = 10;
+    source.isNull[1] = true;
+    source.vector[2] = 30;
+
+    LongColumnVector result = new LongColumnVector();
+    // Null bits are ignored while noNulls is true, including during batch reset.
+    Arrays.fill(result.isNull, 0, 3, true);
+    assertTrue(result.noNulls);
+    VectorizedRowBatch destination = batchWithColumn(result, 0);
+    roundTrip(batchWithColumn(source, 3), new int[] {0}, destination);
+
+    assertEquals(3, destination.size);
+    assertFalse(result.noNulls);
+    assertFalse(result.isNull[0]);
+    assertTrue(result.isNull[1]);
+    assertFalse(result.isNull[2]);
+    assertEquals(10, result.vector[0]);
+    assertEquals(30, result.vector[2]);
+  }
+
+  @Test
+  public void testReplacementClearsIgnoredStructNullBits() throws Exception {
+    StructColumnVector source = structOf(new LongColumnVector());
+    source.noNulls = false;
+    source.isNull[1] = true;
+    ((LongColumnVector) source.fields[0]).vector[0] = 10;
+    ((LongColumnVector) source.fields[0]).vector[2] = 30;
+
+    StructColumnVector result = structOf(new LongColumnVector());
+    Arrays.fill(result.isNull, 0, 3, true);
+    Arrays.fill(result.fields[0].isNull, 0, 3, true);
+    assertTrue(result.noNulls);
+    assertTrue(result.fields[0].noNulls);
+    VectorizedRowBatch destination = batchWithColumn(result, 0);
+    roundTrip(batchWithColumn(source, 3), new int[] {0}, destination);
+
+    assertEquals(3, destination.size);
+    assertFalse(result.isNull[0]);
+    assertTrue(result.isNull[1]);
+    assertFalse(result.isNull[2]);
+    LongColumnVector values = (LongColumnVector) result.fields[0];
+    assertFalse(values.isNull[0]);
+    assertFalse(values.isNull[2]);
+    assertEquals(10, values.vector[0]);
+    assertEquals(30, values.vector[2]);
+  }
+
+  @Test
+  public void testInspectedAppendClearsIgnoredPrimitiveNullBits() throws Exception {
+    LongColumnVector result = new LongColumnVector();
+    Arrays.fill(result.isNull, 0, 6, true);
+    assertTrue(result.noNulls);
+    VectorizedRowBatch destination = batchWithColumn(result, 0);
+    VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
+
+    LongColumnVector nullValue = new LongColumnVector();
+    nullValue.noNulls = false;
+    nullValue.isNull[0] = true;
+    LongColumnVector values = new LongColumnVector();
+    values.vector[0] = 10;
+    values.vector[1] = 20;
+    LongColumnVector repeated = new LongColumnVector();
+    repeated.isRepeating = true;
+    repeated.vector[0] = 30;
+    for (BytesWritable frame : new BytesWritable[] {
+        serialize(batchWithColumn(nullValue, 1)), serialize(batchWithColumn(values, 2)),
+        serialize(batchWithColumn(repeated, 3))}) {
+      int rows = decoder.inspect(frame, destination).getRowCount();
+      decoder.appendInspected(frame, destination, rows);
+    }
+
+    assertEquals(6, destination.size);
+    assertFalse(result.noNulls);
+    assertTrue(result.isNull[0]);
+    for (int row = 1; row < 6; row++) {
+      assertFalse(result.isNull[row]);
+      assertEquals(row < 3 ? row * 10 : 30, result.vector[row]);
+    }
+  }
+
+  @Test
+  public void testInspectedAppendClearsIgnoredRepeatingStructNullBits() throws Exception {
+    StructColumnVector result = structOf(new LongColumnVector());
+    Arrays.fill(result.isNull, 0, 6, true);
+    Arrays.fill(result.fields[0].isNull, 0, 6, true);
+    assertTrue(result.noNulls);
+    assertTrue(result.fields[0].noNulls);
+    VectorizedRowBatch destination = batchWithColumn(result, 0);
+    VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
+
+    StructColumnVector nullValue = structOf(new LongColumnVector());
+    nullValue.noNulls = false;
+    nullValue.isNull[0] = true;
+    StructColumnVector values = structOf(new LongColumnVector());
+    values.fields[0].noNulls = false;
+    values.fields[0].isNull[1] = true;
+    ((LongColumnVector) values.fields[0]).vector[0] = 10;
+    StructColumnVector repeated = structOf(new LongColumnVector());
+    repeated.isRepeating = true;
+    ((LongColumnVector) repeated.fields[0]).vector[0] = 30;
+    for (BytesWritable frame : new BytesWritable[] {
+        serialize(batchWithColumn(nullValue, 1)), serialize(batchWithColumn(values, 2)),
+        serialize(batchWithColumn(repeated, 3))}) {
+      int rows = decoder.inspect(frame, destination).getRowCount();
+      decoder.appendInspected(frame, destination, rows);
+    }
+
+    assertEquals(6, destination.size);
+    assertTrue(result.isNull[0]);
+    LongColumnVector fields = (LongColumnVector) result.fields[0];
+    assertFalse(fields.noNulls);
+    assertTrue(fields.isNull[2]);
+    for (int row = 1; row < 6; row++) {
+      assertFalse(result.isNull[row]);
+      if (row != 2) {
+        assertFalse(fields.isNull[row]);
+        assertEquals(row == 1 ? 10 : 30, fields.vector[row]);
+      }
+    }
+  }
+
+  @Test
   public void testInspectedAppendReusesFrameHeaderAcrossFlush() throws Exception {
     VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
     VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
