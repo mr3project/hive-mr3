@@ -534,6 +534,72 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testAccumulationMixedRepeatingAndDenseColumns() throws Exception {
+    VectorizedRowBatch destination = new VectorizedRowBatch(2);
+    destination.cols[0] = new LongColumnVector();
+    destination.cols[1] = new LongColumnVector();
+    destination.projectionSize = 2;
+    VectorShuffleBatchAccumulatingDeserializer accumulating =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 2);
+
+    VectorizedRowBatch first = new VectorizedRowBatch(2);
+    LongColumnVector firstRepeating = new LongColumnVector();
+    firstRepeating.isRepeating = true;
+    firstRepeating.vector[0] = 7;
+    LongColumnVector firstDense = new LongColumnVector();
+    firstDense.vector[0] = 11;
+    firstDense.vector[1] = 13;
+    first.cols[0] = firstRepeating;
+    first.cols[1] = firstDense;
+    first.size = 2;
+
+    VectorizedRowBatch second = new VectorizedRowBatch(2);
+    LongColumnVector secondRepeating = new LongColumnVector();
+    secondRepeating.isRepeating = true;
+    secondRepeating.vector[0] = 7;
+    LongColumnVector secondDense = new LongColumnVector();
+    secondDense.vector[0] = 17;
+    secondDense.vector[1] = 19;
+    secondDense.vector[2] = 23;
+    second.cols[0] = secondRepeating;
+    second.cols[1] = secondDense;
+    second.size = 3;
+
+    byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
+    int length = serializer.serialize(first, new int[] {0, 1}, buffer, 0);
+    BytesWritable firstEncoded = new BytesWritable();
+    firstEncoded.set(buffer, 0, length);
+    assertTrue(accumulating.inspectAccumulation(firstEncoded, destination, 2)
+        .isRepeatingCompatible());
+    accumulating.appendInspectedAccumulation(firstEncoded, destination, 2);
+
+    length = serializer.serialize(second, new int[] {0, 1}, buffer, 0);
+    BytesWritable secondEncoded = new BytesWritable();
+    secondEncoded.set(buffer, 0, length);
+    assertTrue(accumulating.inspectAccumulation(secondEncoded, destination, 3)
+        .isRepeatingCompatible());
+    accumulating.appendInspectedAccumulation(secondEncoded, destination, 3);
+
+    assertEquals(5, destination.size);
+    assertTrue(destination.cols[0].isRepeating);
+    assertFalse(destination.cols[1].isRepeating);
+    assertEquals(7, ((LongColumnVector) destination.cols[0]).vector[0]);
+    LongColumnVector actualDense = (LongColumnVector) destination.cols[1];
+    assertEquals(11, actualDense.vector[0]);
+    assertEquals(13, actualDense.vector[1]);
+    assertEquals(17, actualDense.vector[2]);
+    assertEquals(19, actualDense.vector[3]);
+    assertEquals(23, actualDense.vector[4]);
+
+    secondRepeating.vector[0] = 8;
+    length = serializer.serialize(second, new int[] {0, 1}, buffer, 0);
+    BytesWritable incompatible = new BytesWritable();
+    incompatible.set(buffer, 0, length);
+    assertFalse(accumulating.inspectAccumulation(incompatible, destination, 3)
+        .isRepeatingCompatible());
+  }
+
+  @Test
   public void testNestedRepeatingFrameUsesStandaloneDecoding() throws Exception {
     LongColumnVector child = new LongColumnVector();
     child.isRepeating = true;
