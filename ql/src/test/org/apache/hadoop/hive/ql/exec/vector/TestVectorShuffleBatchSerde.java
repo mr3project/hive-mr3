@@ -484,6 +484,7 @@ public class TestVectorShuffleBatchSerde {
   @Test
   public void testInspectedAppendRepeatingStringAfterNull() throws Exception {
     VectorizedRowBatch destination = batchWithColumn(new BytesColumnVector(), 0);
+    destination.reset();
     VectorShuffleBatchDeserializer decoder = new VectorShuffleBatchDeserializer(destination, 1);
 
     BytesColumnVector nullValue = new BytesColumnVector();
