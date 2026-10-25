@@ -21,6 +21,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -462,6 +463,102 @@ public class TestVectorShuffleBatchSerde {
             actualChild.vector[(int) actual.offsets[row] + element]);
       }
     }
+  }
+
+  @Test
+  public void testAccumulationPreservesRepeatingAndFlushesOnConflict() throws Exception {
+    VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
+    VectorShuffleBatchDeserializer accumulating =
+        new VectorShuffleBatchDeserializer(destination, 1);
+
+    LongColumnVector repeated = new LongColumnVector();
+    repeated.isRepeating = true;
+    repeated.vector[0] = 17;
+    BytesWritable first = serialize(batchWithColumn(repeated, 3));
+    assertTrue(accumulating.inspectAccumulation(first, destination, 3).isAppendCompatible());
+    accumulating.appendInspectedAccumulation(first, destination, 3);
+    assertEquals(3, destination.size);
+    assertTrue(destination.cols[0].isRepeating);
+    assertTrue(accumulating.hasRepeatingColumns());
+
+    BytesWritable identical = serialize(batchWithColumn(repeated, 4));
+    assertTrue(accumulating.inspectAccumulation(identical, destination, 4)
+        .isRepeatingCompatible());
+    accumulating.appendInspectedAccumulation(identical, destination, 4);
+    assertEquals(7, destination.size);
+    assertTrue(destination.cols[0].isRepeating);
+    assertEquals(17, ((LongColumnVector) destination.cols[0]).vector[0]);
+
+    // A single non-repeating row with the same encoding also preserves the existing value.
+    LongColumnVector single = new LongColumnVector();
+    single.vector[0] = 17;
+    BytesWritable one = serialize(batchWithColumn(single, 1));
+    assertTrue(accumulating.inspectAccumulation(one, destination, 1)
+        .isRepeatingCompatible());
+    accumulating.appendInspectedAccumulation(one, destination, 1);
+    assertEquals(8, destination.size);
+    assertTrue(destination.cols[0].isRepeating);
+
+    LongColumnVector changed = new LongColumnVector();
+    changed.isRepeating = true;
+    changed.vector[0] = 23;
+    BytesWritable different = serialize(batchWithColumn(changed, 2));
+    assertFalse(accumulating.inspectAccumulation(different, destination, 2)
+        .isRepeatingCompatible());
+
+    // Simulate the receiver flushing the old batch before appending the conflicting frame.
+    destination.reset();
+    accumulating.resetAccumulation();
+    accumulating.appendInspectedAccumulation(different, destination, 2);
+    assertEquals(2, destination.size);
+    assertTrue(destination.cols[0].isRepeating);
+    assertEquals(23, ((LongColumnVector) destination.cols[0]).vector[0]);
+
+    LongColumnVector dense = new LongColumnVector();
+    dense.vector[0] = 31;
+    dense.vector[1] = 37;
+    BytesWritable nonRepeating = serialize(batchWithColumn(dense, 2));
+    assertFalse(accumulating.inspectAccumulation(nonRepeating, destination, 2)
+        .isRepeatingCompatible());
+
+    destination.reset();
+    accumulating.resetAccumulation();
+    accumulating.appendInspectedAccumulation(nonRepeating, destination, 2);
+    assertEquals(2, destination.size);
+    assertFalse(destination.cols[0].isRepeating);
+    assertEquals(31, ((LongColumnVector) destination.cols[0]).vector[0]);
+    assertEquals(37, ((LongColumnVector) destination.cols[0]).vector[1]);
+
+    assertFalse(accumulating.inspectAccumulation(first, destination, 3)
+        .isRepeatingCompatible());
+  }
+
+  @Test
+  public void testNestedRepeatingFrameUsesStandaloneDecoding() throws Exception {
+    LongColumnVector child = new LongColumnVector();
+    child.isRepeating = true;
+    child.vector[0] = 41;
+    ListColumnVector list = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, child);
+    list.offsets[0] = 0;
+    list.lengths[0] = 3;
+    list.childCount = 3;
+
+    BytesWritable serialized = serialize(batchWithColumn(list, 1));
+    VectorizedRowBatch destination = batchWithColumn(
+        new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new LongColumnVector()), 0);
+    VectorShuffleBatchDeserializer accumulating =
+        new VectorShuffleBatchDeserializer(destination, 1);
+
+    assertFalse(accumulating.inspectAccumulation(serialized, destination, 1)
+        .isAppendCompatible());
+
+    // The receiver dispatches such a frame alone; it never expands the repeated children.
+    accumulating.deserialize(serialized, destination);
+    ListColumnVector decoded = (ListColumnVector) destination.cols[0];
+    assertEquals(1, destination.size);
+    assertEquals(3, decoded.lengths[0]);
+    assertTrue(decoded.child.isRepeating);
+    assertEquals(41, ((LongColumnVector) decoded.child).vector[0]);
   }
 
   @Test
