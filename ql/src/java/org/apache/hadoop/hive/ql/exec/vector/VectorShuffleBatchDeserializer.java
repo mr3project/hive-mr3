@@ -252,7 +252,8 @@ public final class VectorShuffleBatchDeserializer {
         nestedRepeating |= skipColumn(map.values, children, true);
       }
     } else if ((flags & IS_DECIMAL_64) != 0
-        || column instanceof LongColumnVector || column instanceof DoubleColumnVector) {
+        || (column instanceof LongColumnVector && !(column instanceof Decimal64ColumnVector))
+        || column instanceof DoubleColumnVector) {
       position += nonNullCount * Long.BYTES;
     } else if (column instanceof BytesColumnVector) {
       for (int i = 0; i < nonNullCount; i++) {
