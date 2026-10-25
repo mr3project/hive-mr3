@@ -366,12 +366,33 @@ public final class VectorShuffleBatchDeserializer {
     return true;
   }
 
-  private void skipFixedValues(int count, int width) throws IOException {
+  private void checkFixedValues(int count, int width) throws IOException {
     assert count >= 0 && width > 0;
     if (count > (limit - position) / width) {
       throw new IOException("Truncated vector shuffle values");
     }
+  }
+
+  private void skipFixedValues(int count, int width) throws IOException {
+    checkFixedValues(count, width);
     position += count * width;
+  }
+
+  // Count encoded (non-null) values once per fixed-width column, not once per row.
+  private void checkFixedColumn(int bitmapOffset, int valueCount, int width) throws IOException {
+    int nonNullCount = valueCount;
+    if (bitmapOffset >= 0) {
+      int fullBytes = valueCount >>> 3;
+      for (int i = 0; i < fullBytes; i++) {
+        nonNullCount -= Integer.bitCount(buffer[bitmapOffset + i] & 0xff);
+      }
+      int remaining = valueCount & 7;
+      if (remaining != 0) {
+        int mask = (1 << remaining) - 1;
+        nonNullCount -= Integer.bitCount(buffer[bitmapOffset + fullBytes] & mask);
+      }
+    }
+    checkFixedValues(nonNullCount, width);
   }
 
   private void skipBytes(int length) throws IOException {
@@ -723,15 +744,21 @@ public final class VectorShuffleBatchDeserializer {
     return value;
   }
 
-  private long readLong() throws IOException {
-    requireBytes(Long.BYTES);
+  // Only use these after checkFixedColumn() has validated the full encoded column.
+  private int readFixedInt() {
+    int value = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + position);
+    position += Integer.BYTES;
+    return value;
+  }
+
+  private long readFixedLong() {
     long value = theUnsafe.getLong(buffer, BYTE_ARRAY_BASE_OFFSET + position);
     position += Long.BYTES;
     return value;
   }
 
-  private double readDouble() throws IOException {
-    return Double.longBitsToDouble(readLong());
+  private double readFixedDouble() {
+    return Double.longBitsToDouble(readFixedLong());
   }
 
   private boolean isNull(int bitmapOffset, int logical) {
@@ -786,13 +813,14 @@ public final class VectorShuffleBatchDeserializer {
       int valueCount, boolean repeating, int bitmapOffset, boolean sourceIsDecimal64)
       throws IOException {
     if (sourceIsDecimal64) {
+      checkFixedColumn(bitmapOffset, valueCount, Long.BYTES);
       if (column instanceof Decimal64ColumnVector) {
         Decimal64ColumnVector decimal64 = (Decimal64ColumnVector) column;
         for (int logical = 0; logical < valueCount; logical++) {
           int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
               repeating, bitmapOffset);
           if (index >= 0) {
-            decimal64.vector[index] = readLong();
+            decimal64.vector[index] = readFixedLong();
           }
         }
       } else {
@@ -802,7 +830,7 @@ public final class VectorShuffleBatchDeserializer {
           int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
               repeating, bitmapOffset);
           if (index >= 0) {
-            decimal.vector[index].deserialize64(readLong(), decimal.scale);
+            decimal.vector[index].deserialize64(readFixedLong(), decimal.scale);
           }
         }
       }
@@ -821,22 +849,24 @@ public final class VectorShuffleBatchDeserializer {
         }
       }
     } else if (column instanceof TimestampColumnVector) {
+      checkFixedColumn(bitmapOffset, valueCount, Long.BYTES + Integer.BYTES);
       TimestampColumnVector timestamp = (TimestampColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
             repeating, bitmapOffset);
         if (index >= 0) {
-          timestamp.time[index] = readLong();
-          timestamp.nanos[index] = readInt();
+          timestamp.time[index] = readFixedLong();
+          timestamp.nanos[index] = readFixedInt();
         }
       }
     } else if (column instanceof IntervalDayTimeColumnVector) {
+      checkFixedColumn(bitmapOffset, valueCount, Long.BYTES + Integer.BYTES);
       IntervalDayTimeColumnVector interval = (IntervalDayTimeColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
             repeating, bitmapOffset);
         if (index >= 0) {
-          interval.set(index, new HiveIntervalDayTime(readLong(), readInt()));
+          interval.set(index, new HiveIntervalDayTime(readFixedLong(), readFixedInt()));
         }
       }
     } else if (column instanceof Decimal64ColumnVector) {
@@ -863,21 +893,23 @@ public final class VectorShuffleBatchDeserializer {
       }
     } else if (column instanceof LongColumnVector) {
       // Decimal64ColumnVector is handled above; DateColumnVector shares this representation.
+      checkFixedColumn(bitmapOffset, valueCount, Long.BYTES);
       LongColumnVector longs = (LongColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
             repeating, bitmapOffset);
         if (index >= 0) {
-          longs.vector[index] = readLong();
+          longs.vector[index] = readFixedLong();
         }
       }
     } else if (column instanceof DoubleColumnVector) {
+      checkFixedColumn(bitmapOffset, valueCount, Long.BYTES);
       DoubleColumnVector doubles = (DoubleColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
             repeating, bitmapOffset);
         if (index >= 0) {
-          doubles.vector[index] = readDouble();
+          doubles.vector[index] = readFixedDouble();
         }
       }
     } else if (column instanceof VoidColumnVector) {
