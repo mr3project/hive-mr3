@@ -242,7 +242,7 @@ public class ReduceRecordSource implements RecordSource {
           accumulatorProjection = batch.projectedColumns;
           accumulatorSelection = batch.selected;
           captureSourceTypeMetadata();
-          prepareAccumulator(false);
+          initializeAccumulatorState();
         }
 
         // Setup vectorized deserialization for the key and value.
@@ -664,19 +664,21 @@ public class ReduceRecordSource implements RecordSource {
     // Snapshot the reusable inspection result before dispatch can invoke downstream code.
     final boolean standaloneCompact = compact && !frameInfo.isAppendCompatible();
     assert incomingRows > 0 && incomingRows <= accumulatorRowLimit;
-    final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
-    if (pendingRows > 0 && (standaloneCompact || incomingRows > accumulatorRowLimit - pendingRows
-        || incomingBytes > BATCH_BYTES - pendingBytes)) {
-      flushPendingBatch();
-    }
     if (standaloneCompact) {
+      if (pendingRows > 0) {
+        flushPendingBatch();
+      }
       // Full frames and frames with incompatible calendar/UTC flags are processed alone. The
       // common dispatch helper restores ordinary-row metadata before accepting another record.
       vectorShuffleBatchDeserializer.deserialize(valueWritable, batch);
       pendingRows = incomingRows;
-      pendingBytes = incomingBytes;
       flushPendingBatch();
       return;
+    }
+    final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
+    if (pendingRows > 0 && (incomingRows > accumulatorRowLimit - pendingRows
+        || incomingBytes > BATCH_BYTES - pendingBytes)) {
+      flushPendingBatch();
     }
     if (compact) {
       vectorShuffleBatchDeserializer.appendInspected(valueWritable, batch, incomingRows);
@@ -712,7 +714,7 @@ public class ReduceRecordSource implements RecordSource {
       assert pendingBytes == 0;
       return;
     }
-    batch.size = pendingRows;
+    assert batch.size == pendingRows;
     final boolean retained = reducer.batchNeedsClone();
     reducer.process(batch, tag);
     // Never reset a batch retained by downstream code. Allocate once per dispatch instead of
@@ -737,6 +739,11 @@ public class ReduceRecordSource implements RecordSource {
         restore.run();
       }
     }
+    initializeAccumulatorState();
+  }
+
+  // A newly created batch has already been reset by VectorizedRowBatchCtx.
+  private void initializeAccumulatorState() {
     batch.projectedColumns = accumulatorProjection;
     batch.selected = accumulatorSelection;
     batch.projectionSize = inputColumnCount;
