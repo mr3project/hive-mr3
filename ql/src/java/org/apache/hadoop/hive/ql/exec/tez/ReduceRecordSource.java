@@ -242,7 +242,7 @@ public class ReduceRecordSource implements RecordSource {
           accumulatorProjection = batch.projectedColumns;
           accumulatorSelection = batch.selected;
           captureSourceTypeMetadata();
-          prepareAccumulator(false);
+          initializeAccumulatorState();
         }
 
         // Setup vectorized deserialization for the key and value.
@@ -649,7 +649,8 @@ public class ReduceRecordSource implements RecordSource {
       processVectorRecordUnorderedLegacy(keyWritable, valueWritable, tag);
       return;
     }
-    checkAccumulationAbort();
+    // Cancellation is checked periodically by ReduceRecordProcessor's progress callback
+    // and immediately before dispatching a pending batch.
     assert !batch.selectedInUse && batch.size == pendingRows;
     final boolean compact = isVectorBatchKey(keyWritable);
     final VectorShuffleBatchDeserializer.FrameInfo frameInfo = compact
@@ -663,22 +664,24 @@ public class ReduceRecordSource implements RecordSource {
     // Snapshot the reusable inspection result before dispatch can invoke downstream code.
     final boolean standaloneCompact = compact && !frameInfo.isAppendCompatible();
     assert incomingRows > 0 && incomingRows <= accumulatorRowLimit;
-    final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
-    if (pendingRows > 0 && (standaloneCompact || incomingRows > accumulatorRowLimit - pendingRows
-        || incomingBytes > BATCH_BYTES - pendingBytes)) {
-      flushPendingBatch();
-    }
     if (standaloneCompact) {
+      if (pendingRows > 0) {
+        flushPendingBatch();
+      }
       // Full frames and frames with incompatible calendar/UTC flags are processed alone. The
       // common dispatch helper restores ordinary-row metadata before accepting another record.
       vectorShuffleBatchDeserializer.deserialize(valueWritable, batch);
       pendingRows = incomingRows;
-      pendingBytes = incomingBytes;
       flushPendingBatch();
       return;
     }
+    final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
+    if (pendingRows > 0 && (incomingRows > accumulatorRowLimit - pendingRows
+        || incomingBytes > BATCH_BYTES - pendingBytes)) {
+      flushPendingBatch();
+    }
     if (compact) {
-      vectorShuffleBatchDeserializer.append(valueWritable, batch);
+      vectorShuffleBatchDeserializer.appendInspected(valueWritable, batch, incomingRows);
     } else {
       keyBinarySortableDeserializeToRow.setBytes(keyWritable.getBytesRaw(), keyWritable.getOffset(),
           keyWritable.getLength());
@@ -711,7 +714,7 @@ public class ReduceRecordSource implements RecordSource {
       assert pendingBytes == 0;
       return;
     }
-    batch.size = pendingRows;
+    assert batch.size == pendingRows;
     final boolean retained = reducer.batchNeedsClone();
     reducer.process(batch, tag);
     // Never reset a batch retained by downstream code. Allocate once per dispatch instead of
@@ -736,16 +739,18 @@ public class ReduceRecordSource implements RecordSource {
         restore.run();
       }
     }
+    initializeAccumulatorState();
+  }
+
+  // A newly created batch has already been reset by VectorizedRowBatchCtx.
+  private void initializeAccumulatorState() {
     batch.projectedColumns = accumulatorProjection;
     batch.selected = accumulatorSelection;
     batch.projectionSize = inputColumnCount;
     for (int i = 0; i < batch.projectedColumns.length; i++) {
       batch.projectedColumns[i] = i;
     }
-    accumulatorRowLimit = Math.min(VectorizedRowBatch.DEFAULT_SIZE, batch.getMaxSize());
-    for (int i = 0; i < inputColumnCount; i++) {
-      accumulatorRowLimit = Math.min(accumulatorRowLimit, batch.cols[i].isNull.length);
-    }
+    accumulatorRowLimit = vectorShuffleBatchDeserializer.getAppendCapacity();
     assert accumulatorRowLimit > 0;
     discardPendingBatch();
   }

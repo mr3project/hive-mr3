@@ -38,10 +38,13 @@ public final class VectorShuffleBatchDeserializer {
   private int limit;
   private final FrameInfo frameInfo = new FrameInfo();
   private final boolean requiresMetadataInspection;
+  // Fixed-schema accumulation always uses batches created by the same VectorizedRowBatchCtx.
+  private final int fixedAppendCapacity;
 
   /** Keeps full metadata preinspection when the caller does not provide a fixed schema. */
   public VectorShuffleBatchDeserializer() {
     requiresMetadataInspection = true;
+    fixedAppendCapacity = 0;
   }
 
   /**
@@ -57,6 +60,13 @@ public final class VectorShuffleBatchDeserializer {
       hasMetadata |= hasTypeMetadata(schema.cols[i]);
     }
     requiresMetadataInspection = hasMetadata;
+    fixedAppendCapacity = calculateAppendCapacity(schema, inputColumnCount);
+  }
+
+  /** Row limit shared with the fixed-schema accumulation receiver. */
+  public int getAppendCapacity() {
+    assert fixedAppendCapacity > 0;
+    return fixedAppendCapacity;
   }
 
   private static boolean hasTypeMetadata(ColumnVector column) {
@@ -145,8 +155,8 @@ public final class VectorShuffleBatchDeserializer {
    * Appends directly into destination-owned storage, preserving its dense, nonrepeating prefix.
    * Only successful decoding publishes the new size. A failure invalidates the destination; callers
    * must fail the task and discard it, rather than dispatching the partially decoded batch.
-   * The receiver uses inspect() to choose a compatible representation first. This method rechecks
-   * dimensions and capacity, and checks metadata while decoding, without another inspection pass.
+   * This standalone API checks the frame header and capacity itself. The accumulation receiver
+   * uses appendInspected() to reuse the header already validated by inspect().
    */
   public void append(BytesWritable serialized, VectorizedRowBatch destination) throws IOException {
     assert destination != null && !destination.selectedInUse;
@@ -156,16 +166,40 @@ public final class VectorShuffleBatchDeserializer {
       int columnCount = readInt();
       int capacity = validateAppendDimensions(destination, rowCount, columnCount);
       validateAppendCapacity(destination, rowCount, capacity);
-      // Zero-count decoding validates empty frames without changing the accumulated prefix.
-      for (int i = 0; i < columnCount; i++) {
-        // Header/capacity validation already guarantees space in every top-level column.
-        readAppendColumn(destination.cols[i], null, destination.size, rowCount);
-      }
-      checkEnd();
-      destination.size += rowCount;
+      appendColumns(destination, columnCount, rowCount);
     } finally {
       buffer = null;
     }
+  }
+
+  /**
+   * Append a frame whose header has already been validated by inspect(). The caller supplies
+   * a snapshot of its row count because downstream processing may run between inspection and
+   * append. Reposition at the start of the columns without rereading either header integer or
+   * recomputing the destination's capacity. Payload validation, including checkEnd(), remains.
+   */
+  public void appendInspected(BytesWritable serialized, VectorizedRowBatch destination, int rowCount)
+      throws IOException {
+    assert destination != null && !destination.selectedInUse && fixedAppendCapacity > 0;
+    try {
+      start(serialized);
+      position += 2 * Integer.BYTES;
+      // The receiver may have flushed and replaced the destination since inspect().
+      validateAppendCapacity(destination, rowCount, fixedAppendCapacity);
+      appendColumns(destination, destination.projectionSize, rowCount);
+    } finally {
+      buffer = null;
+    }
+  }
+
+  private void appendColumns(VectorizedRowBatch destination, int columnCount, int rowCount)
+      throws IOException {
+    for (int i = 0; i < columnCount; i++) {
+      // Header/capacity validation already guarantees space in every top-level column.
+      readAppendColumn(destination.cols[i], null, destination.size, rowCount);
+    }
+    checkEnd();
+    destination.size += rowCount;
   }
 
   private void start(BytesWritable serialized) throws IOException {
@@ -214,10 +248,15 @@ public final class VectorShuffleBatchDeserializer {
   }
 
   private int appendCapacity(VectorizedRowBatch destination) {
-    int capacity = Math.min(VectorizedRowBatch.DEFAULT_SIZE, destination.selected.length);
-    for (int i = 0; i < destination.projectionSize; i++) {
-      assert destination.cols[i] != null;
-      capacity = Math.min(capacity, destination.cols[i].isNull.length);
+    return fixedAppendCapacity > 0
+        ? fixedAppendCapacity : calculateAppendCapacity(destination, destination.projectionSize);
+  }
+
+  private static int calculateAppendCapacity(VectorizedRowBatch batch, int columnCount) {
+    int capacity = Math.min(VectorizedRowBatch.DEFAULT_SIZE, batch.selected.length);
+    for (int i = 0; i < columnCount; i++) {
+      assert batch.cols[i] != null;
+      capacity = Math.min(capacity, batch.cols[i].isNull.length);
     }
     return capacity;
   }
@@ -366,12 +405,33 @@ public final class VectorShuffleBatchDeserializer {
     return true;
   }
 
-  private void skipFixedValues(int count, int width) throws IOException {
+  private void checkFixedValues(int count, int width) throws IOException {
     assert count >= 0 && width > 0;
     if (count > (limit - position) / width) {
       throw new IOException("Truncated vector shuffle values");
     }
+  }
+
+  private void skipFixedValues(int count, int width) throws IOException {
+    checkFixedValues(count, width);
     position += count * width;
+  }
+
+  // Count encoded (non-null) values once per fixed-width column, not once per row.
+  private void checkFixedColumn(int bitmapOffset, int valueCount, int width) throws IOException {
+    int nonNullCount = valueCount;
+    if (bitmapOffset >= 0) {
+      int fullBytes = valueCount >>> 3;
+      for (int i = 0; i < fullBytes; i++) {
+        nonNullCount -= Integer.bitCount(buffer[bitmapOffset + i] & 0xff);
+      }
+      int remaining = valueCount & 7;
+      if (remaining != 0) {
+        int mask = (1 << remaining) - 1;
+        nonNullCount -= Integer.bitCount(buffer[bitmapOffset + fullBytes] & mask);
+      }
+    }
+    checkFixedValues(nonNullCount, width);
   }
 
   private void skipBytes(int length) throws IOException {
@@ -411,12 +471,12 @@ public final class VectorShuffleBatchDeserializer {
     readAppendColumn(column, null, offset, rowCount);
   }
 
+  // Appended rows occupy previously unwritten slots; resetInit() clears old null flags.
   private void readNulls(ColumnVector column, int[] indices, int offset, int count,
       boolean repeating, int bitmapOffset) {
     for (int i = 0; i < count; i++) {
-      boolean isNull = isNull(bitmapOffset, i);
-      column.isNull[destinationIndex(indices, offset, i, repeating)] = isNull;
-      if (isNull) {
+      if (isNull(bitmapOffset, i)) {
+        column.isNull[destinationIndex(indices, offset, i, repeating)] = true;
         column.noNulls = false;
       }
     }
@@ -527,13 +587,11 @@ public final class VectorShuffleBatchDeserializer {
       if (column instanceof LongColumnVector) {
         LongColumnVector longs = (LongColumnVector) column;
         Arrays.fill(longs.vector, offset + 1, end, longs.vector[source]);
-        Arrays.fill(column.isNull, offset + 1, end, false);
         return;
       }
       if (column instanceof DoubleColumnVector) {
         DoubleColumnVector doubles = (DoubleColumnVector) column;
         Arrays.fill(doubles.vector, offset + 1, end, doubles.vector[source]);
-        Arrays.fill(column.isNull, offset + 1, end, false);
         return;
       }
     }
@@ -543,8 +601,8 @@ public final class VectorShuffleBatchDeserializer {
   }
 
   private void copyRepeatedElement(ColumnVector column, int source, int destination) {
-    column.isNull[destination] = column.isNull[source];
     if (column.isNull[source]) {
+      column.isNull[destination] = true;
       column.noNulls = false;
       return;
     }
@@ -723,15 +781,21 @@ public final class VectorShuffleBatchDeserializer {
     return value;
   }
 
-  private long readLong() throws IOException {
-    requireBytes(Long.BYTES);
+  // Only use these after checkFixedColumn() has validated the full encoded column.
+  private int readFixedInt() {
+    int value = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + position);
+    position += Integer.BYTES;
+    return value;
+  }
+
+  private long readFixedLong() {
     long value = theUnsafe.getLong(buffer, BYTE_ARRAY_BASE_OFFSET + position);
     position += Long.BYTES;
     return value;
   }
 
-  private double readDouble() throws IOException {
-    return Double.longBitsToDouble(readLong());
+  private double readFixedDouble() {
+    return Double.longBitsToDouble(readFixedLong());
   }
 
   private boolean isNull(int bitmapOffset, int logical) {
@@ -749,12 +813,12 @@ public final class VectorShuffleBatchDeserializer {
         : destinationIndices == null ? destinationOffset + logical : destinationIndices[logical];
   }
 
+  // New destination slots are already non-null after initialization or batch reset.
   private int nonNullDestinationIndex(ColumnVector column, int[] destinationIndices,
       int destinationOffset, int logical, boolean repeating, int bitmapOffset) {
     int index = destinationIndex(destinationIndices, destinationOffset, logical, repeating);
-    boolean isNull = isNull(bitmapOffset, logical);
-    column.isNull[index] = isNull;
-    if (isNull) {
+    if (isNull(bitmapOffset, logical)) {
+      column.isNull[index] = true;
       column.noNulls = false;
       return -1;
     }
@@ -786,13 +850,14 @@ public final class VectorShuffleBatchDeserializer {
       int valueCount, boolean repeating, int bitmapOffset, boolean sourceIsDecimal64)
       throws IOException {
     if (sourceIsDecimal64) {
+      checkFixedColumn(bitmapOffset, valueCount, Long.BYTES);
       if (column instanceof Decimal64ColumnVector) {
         Decimal64ColumnVector decimal64 = (Decimal64ColumnVector) column;
         for (int logical = 0; logical < valueCount; logical++) {
           int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
               repeating, bitmapOffset);
           if (index >= 0) {
-            decimal64.vector[index] = readLong();
+            decimal64.vector[index] = readFixedLong();
           }
         }
       } else {
@@ -802,7 +867,7 @@ public final class VectorShuffleBatchDeserializer {
           int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
               repeating, bitmapOffset);
           if (index >= 0) {
-            decimal.vector[index].deserialize64(readLong(), decimal.scale);
+            decimal.vector[index].deserialize64(readFixedLong(), decimal.scale);
           }
         }
       }
@@ -821,22 +886,24 @@ public final class VectorShuffleBatchDeserializer {
         }
       }
     } else if (column instanceof TimestampColumnVector) {
+      checkFixedColumn(bitmapOffset, valueCount, Long.BYTES + Integer.BYTES);
       TimestampColumnVector timestamp = (TimestampColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
             repeating, bitmapOffset);
         if (index >= 0) {
-          timestamp.time[index] = readLong();
-          timestamp.nanos[index] = readInt();
+          timestamp.time[index] = readFixedLong();
+          timestamp.nanos[index] = readFixedInt();
         }
       }
     } else if (column instanceof IntervalDayTimeColumnVector) {
+      checkFixedColumn(bitmapOffset, valueCount, Long.BYTES + Integer.BYTES);
       IntervalDayTimeColumnVector interval = (IntervalDayTimeColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
             repeating, bitmapOffset);
         if (index >= 0) {
-          interval.set(index, new HiveIntervalDayTime(readLong(), readInt()));
+          interval.set(index, new HiveIntervalDayTime(readFixedLong(), readFixedInt()));
         }
       }
     } else if (column instanceof Decimal64ColumnVector) {
@@ -863,21 +930,23 @@ public final class VectorShuffleBatchDeserializer {
       }
     } else if (column instanceof LongColumnVector) {
       // Decimal64ColumnVector is handled above; DateColumnVector shares this representation.
+      checkFixedColumn(bitmapOffset, valueCount, Long.BYTES);
       LongColumnVector longs = (LongColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
             repeating, bitmapOffset);
         if (index >= 0) {
-          longs.vector[index] = readLong();
+          longs.vector[index] = readFixedLong();
         }
       }
     } else if (column instanceof DoubleColumnVector) {
+      checkFixedColumn(bitmapOffset, valueCount, Long.BYTES);
       DoubleColumnVector doubles = (DoubleColumnVector) column;
       for (int logical = 0; logical < valueCount; logical++) {
         int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
             repeating, bitmapOffset);
         if (index >= 0) {
-          doubles.vector[index] = readDouble();
+          doubles.vector[index] = readFixedDouble();
         }
       }
     } else if (column instanceof VoidColumnVector) {
