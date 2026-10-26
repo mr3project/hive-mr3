@@ -255,8 +255,11 @@ public class TestMurmur3 {
     final int seed = 123, arraySize = 1023;
     byte[] bytes = new byte[arraySize];
     new Random(seed).nextBytes(bytes);
-    // IncrementalHash32 implements XXHash32, not MurmurHash3.
-    int expected = -2016226344;
+    // Hash the complete input once as the reference for every partitioning.
+    IncrementalHash32 reference = new IncrementalHash32();
+    reference.start(Murmur3.DEFAULT_SEED);
+    reference.add(bytes, 0, arraySize);
+    int expected = reference.end();
     Murmur3.IncrementalHash32 same = new IncrementalHash32(), diff = new IncrementalHash32();
     for (int blockSize = 1; blockSize <= arraySize; ++blockSize) {
       byte[] block = new byte[blockSize];
