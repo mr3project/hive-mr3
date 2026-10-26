@@ -304,8 +304,8 @@ POSTHOOK: query: select id, dateMap from parquet_map_type_date
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@parquet_map_type_date
 #### A masked pattern was here ####
-1	{"2015-11-29":"1970-01-01","2016-11-29":"2017-11-29"}
-2	{"1970-01-01":"1970-01-01"}
+1	{"2015-11-29":null,"2016-11-29":"2017-11-29"}
+2	{}
 PREHOOK: query: select id, dateMap[CAST('2015-11-29' AS DATE)] from parquet_map_type_date group by id, dateMap[CAST('2015-11-29' AS DATE)]
 PREHOOK: type: QUERY
 PREHOOK: Input: default@parquet_map_type_date
@@ -314,5 +314,5 @@ POSTHOOK: query: select id, dateMap[CAST('2015-11-29' AS DATE)] from parquet_map
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@parquet_map_type_date
 #### A masked pattern was here ####
-1	1970-01-01
+1	NULL
 2	NULL
