@@ -27,7 +27,11 @@ import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.io.BytesWritable;
 
-/** Deserializes trusted compact vector shuffle frames into a schema-initialized batch. */
+/**
+ * Deserializes trusted compact vector shuffle frames into a schema-initialized batch.
+ * String/binary values retain immutable input slices with the ownership and whole-array retention
+ * cost described by {@link VectorShuffleBatchDeserializer}.
+ */
 public final class VectorShuffleBatchAccumulatingDeserializer {
   private static final int IS_REPEATING = 1;
   private static final int HAS_NULLS = 2;
@@ -729,7 +733,7 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
             repeating, bitmapOffset);
         if (index >= 0) {
           int length = readInt();
-          bytesColumn.setVal(index, buffer, position, length);
+          bytesColumn.setRef(index, buffer, position, length);
           position += length;
         }
       }

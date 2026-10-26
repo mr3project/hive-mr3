@@ -26,10 +26,62 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 public class TestBytesColumnVector {
+  @Test
+  public void testResetReleasesReferencesWithoutBufferAllocations() {
+    for (boolean initialize : new boolean[] {false, true}) {
+      BytesColumnVector column = new BytesColumnVector(8);
+      if (initialize) {
+        column.initBuffer();
+      }
+      byte[] input = new byte[1024];
+      column.setRef(0, input, 5, 1);
+      column.setRef(7, input, 20, 2);
+      column.noNulls = false;
+      column.isNull[7] = true;
+      column.reset();
+      for (byte[] value : column.vector) {
+        assertNull(value);
+      }
+    }
+  }
+
+  @Test
+  public void testBatchResetReleasesNestedAndScratchReferences() {
+    BytesColumnVector[] bytes = new BytesColumnVector[7];
+    for (int i = 0; i < bytes.length; i++) {
+      bytes[i] = new BytesColumnVector(8);
+      bytes[i].initBuffer();
+      bytes[i].setRef(0, new byte[1024], 10, 1);
+      bytes[i].setRef(7, new byte[1024], 20, 1);
+      bytes[i].noNulls = false;
+      bytes[i].isNull[7] = true;
+    }
+    VectorizedRowBatch batch = new VectorizedRowBatch(6, 8);
+    batch.cols[0] = bytes[0];
+    batch.cols[1] = new StructColumnVector(8, bytes[1]);
+    batch.cols[2] = new UnionColumnVector(8, bytes[2]);
+    batch.cols[3] = new ListColumnVector(8, bytes[3]);
+    batch.cols[4] = new MapColumnVector(8, bytes[4], bytes[5]);
+    batch.cols[5] = bytes[6]; // Scratch column outside the input projection.
+    batch.projectionSize = 5;
+    batch.size = 1;
+    batch.selectedInUse = true;
+    batch.selected[0] = 0;
+
+    batch.reset();
+
+    for (BytesColumnVector column : bytes) {
+      for (byte[] value : column.vector) {
+        assertNull(value);
+      }
+    }
+  }
+
   @Test
   public void testSmallBufferReuse() {
     BytesColumnVector col = new BytesColumnVector();

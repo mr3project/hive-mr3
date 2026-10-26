@@ -268,6 +268,8 @@ public class ReduceRecordSource implements RecordSource {
         if (accumulateShuffleInput) {
           shuffleAccumulator = new VectorShuffleBatchAccumulator(batchContext, reducer, batch,
               totalColumns, tag, keyBinarySortableDeserializeToRow, valueLazyBinaryDeserializeToRow);
+          // The accumulator owns and replaces its batch, including batches retained downstream.
+          batch = null;
         }
       } else {
         ois.add(keyObjectInspector);
@@ -446,6 +448,9 @@ public class ReduceRecordSource implements RecordSource {
     row.add(inputKeySerDe.deserializeBytesWritable(keyWritable));
     row.add(inputValueSerDe.deserializeBytesWritable(valueWritable));
     reducer.process(row, tag);
+    if (vectorBatchLogicalRow == batch.size) {
+      batch.reset();
+    }
     return true;
   }
 
@@ -663,6 +668,8 @@ public class ReduceRecordSource implements RecordSource {
         reducer.process(batch, tag);
         if (!reducer.batchNeedsClone()) {
           batch.reset();
+        } else {
+          batch = null;
         }
         return;
       } catch (Exception e) {
@@ -700,6 +707,8 @@ public class ReduceRecordSource implements RecordSource {
       // reset only when we reuse the batch
       if (!reducer.batchNeedsClone()) {
         batch.reset();
+      } else {
+        batch = null;
       }
     } catch (Exception e) {
       String rowString = null;
@@ -819,6 +828,8 @@ public class ReduceRecordSource implements RecordSource {
       // reset only when we reuse the batch
       if (!reducer.batchNeedsClone()) {
         batch.reset();
+      } else {
+        batch = null;
       }
     } catch (Exception e) {
       String rowString = null;
@@ -854,6 +865,12 @@ public class ReduceRecordSource implements RecordSource {
         // signal new failure to map-reduce
         throw new RuntimeException("Hive Runtime Error while closing operators: "
             + e.getMessage(), e);
+      }
+    } finally {
+      // Never reset a batch retained downstream; releasing the source's ownership is sufficient.
+      batch = null;
+      if (shuffleAccumulator != null) {
+        shuffleAccumulator.discardPendingBatch();
       }
     }
     return !abort;

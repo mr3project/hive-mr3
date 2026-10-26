@@ -26,7 +26,16 @@ import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.io.BytesWritable;
 
-/** Deserializes a compact vector shuffle payload into an already schema-initialized batch. */
+/**
+ * Deserializes a compact vector shuffle payload into an already schema-initialized batch.
+ * String/binary values retain input array slices. Callers must keep published input arrays immutable
+ * for as long as any downstream consumer retains a slice, including asynchronous work after reader
+ * advancement or close. The BytesWritable wrapper may be reused. Tez's KeyValueReaderEdge and
+ * KeyValuesReaderEdge provide this array ownership contract.
+ *
+ * A short value can retain an entire fetched buffer after Tez releases its memory reservation.
+ * Reset a destination only after its consumers have finished; reset releases its slice references.
+ */
 public final class VectorShuffleBatchDeserializer {
   private static final int IS_REPEATING = 1;
   private static final int HAS_NULLS = 2;
@@ -43,39 +52,41 @@ public final class VectorShuffleBatchDeserializer {
       throws IOException {
     assert serialized != null && destination != null;
 
-    buffer = serialized.getBytesRaw();
-    position = serialized.getOffset();
-    limit = position + serialized.getLength();
+    try {
+      buffer = serialized.getBytesRaw();
+      position = serialized.getOffset();
+      limit = position + serialized.getLength();
 
-    final int rowCount = readInt();
-    final int columnCount = readInt();
-    if (rowCount < 0 || columnCount < 0 || columnCount > destination.cols.length) {
-      throw new IOException("Invalid vector shuffle batch dimensions: " + rowCount + " rows, "
-          + columnCount + " columns");
-    }
-
-    destination.reset();
-    for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
-      if (destination.cols[columnIndex] != null) {
-        destination.cols[columnIndex].ensureSize(rowCount, false);
+      final int rowCount = readInt();
+      final int columnCount = readInt();
+      if (rowCount < 0 || columnCount < 0 || columnCount > destination.cols.length) {
+        throw new IOException("Invalid vector shuffle batch dimensions: " + rowCount + " rows, "
+            + columnCount + " columns");
       }
-    }
-    destination.size = rowCount;
-    destination.selectedInUse = false;
-    destination.projectionSize = columnCount;
-    for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
-      destination.projectedColumns[columnIndex] = columnIndex;
-      ColumnVector column = destination.cols[columnIndex];
-      if (column == null) {
-        throw new IOException("Destination column " + columnIndex + " is not initialized");
-      }
-      readColumn(column, rowCount);
-    }
-    if (position != limit) {
-      throw new IOException("Vector shuffle batch has " + (limit - position) + " trailing bytes");
-    }
 
-    buffer = null;
+      destination.reset();
+      for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+        if (destination.cols[columnIndex] != null) {
+          destination.cols[columnIndex].ensureSize(rowCount, false);
+        }
+      }
+      destination.size = rowCount;
+      destination.selectedInUse = false;
+      destination.projectionSize = columnCount;
+      for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+        destination.projectedColumns[columnIndex] = columnIndex;
+        ColumnVector column = destination.cols[columnIndex];
+        if (column == null) {
+          throw new IOException("Destination column " + columnIndex + " is not initialized");
+        }
+        readColumn(column, rowCount);
+      }
+      if (position != limit) {
+        throw new IOException("Vector shuffle batch has " + (limit - position) + " trailing bytes");
+      }
+    } finally {
+      buffer = null;
+    }
   }
 
   private void readColumn(ColumnVector column, int rowCount) throws IOException {
@@ -299,7 +310,7 @@ public final class VectorShuffleBatchDeserializer {
           if (length < 0) {
             throw new IOException("Negative byte-vector value length " + length);
           }
-          bytesColumn.setVal(destinationIndex(destinationIndices, logical, repeating),
+          bytesColumn.setRef(destinationIndex(destinationIndices, logical, repeating),
               buffer, position, length);
           position += length;
         }

@@ -154,9 +154,15 @@ final class VectorShuffleBatchAccumulator {
     prepareAccumulator(retained);
   }
 
+  /** Release input ownership on abort or close; this accumulator is no longer reusable. */
   void discardPendingBatch() {
     pendingRows = 0;
     pendingBytes = 0;
+    decoder.resetAccumulation();
+    restoreSourceTypeMetadata.clear();
+    // A failed dispatch may already have published this batch to asynchronous consumers.
+    // Drop our ownership rather than modifying any of its columns.
+    batch = null;
   }
 
   private void prepareAccumulator(boolean replace) {
@@ -183,7 +189,8 @@ final class VectorShuffleBatchAccumulator {
       batch.projectedColumns[i] = i;
     }
     decoder.resetAccumulation();
-    discardPendingBatch();
+    pendingRows = 0;
+    pendingBytes = 0;
   }
 
   private void captureSourceTypeMetadata() {

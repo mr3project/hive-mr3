@@ -20,6 +20,8 @@ package org.apache.hadoop.hive.ql.exec.vector;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -437,6 +439,104 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testStandaloneByteInputOwnership() throws Exception {
+    byte[] value = {0, (byte) 0xff, 42};
+    BytesColumnVector child = new BytesColumnVector();
+    child.initBuffer();
+    child.setVal(0, value);
+    child.setVal(1, bytes(""));
+    ListColumnVector list = new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, child);
+    list.lengths[0] = 2;
+    list.childCount = 2;
+    list.noNulls = false;
+    list.isNull[1] = true;
+    VectorizedRowBatch source = batchWithColumn(list, 2);
+
+    for (boolean accumulating : new boolean[] {false, true}) {
+      BytesWritable serialized = serializeAtOffset(source, 13);
+      byte[] input = serialized.getBytesRaw();
+      VectorizedRowBatch destination = batchWithColumn(
+          new ListColumnVector(VectorizedRowBatch.DEFAULT_SIZE, new BytesColumnVector()), 0);
+      if (accumulating) {
+        new VectorShuffleBatchAccumulatingDeserializer().deserialize(serialized, destination);
+      } else {
+        new VectorShuffleBatchDeserializer().deserialize(serialized, destination);
+      }
+      ListColumnVector actualList = (ListColumnVector) destination.cols[0];
+      BytesColumnVector actual = (BytesColumnVector) actualList.child;
+      assertSame(input, actual.vector[0]);
+      assertSame(input, actual.vector[1]);
+      assertTrue(actual.start[0] >= 13);
+      // Reader reuse replaces only the wrapper's slice; the published array remains valid.
+      serialized.setDirect(new byte[1], 0, 1);
+      assertBytesValueEquals(value, actual, 0);
+      assertBytesValueEquals(bytes(""), actual, 1);
+      assertTrue(actualList.isNull[1]);
+    }
+  }
+
+  @Test
+  public void testAppendingByteInputOwnership() throws Exception {
+    byte[] value = {0, (byte) 0xff, 42};
+    BytesColumnVector strings = new BytesColumnVector();
+    strings.initBuffer();
+    strings.setVal(0, value);
+    strings.setVal(1, bytes(""));
+    strings.noNulls = false;
+    strings.isNull[2] = true;
+    VectorizedRowBatch source = batchWithColumn(strings, 3);
+    VectorizedRowBatch destination = batchWithColumn(new BytesColumnVector(), 0);
+    destination.reset();
+    VectorShuffleBatchAccumulatingDeserializer decoder =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
+    BytesWritable serialized = serializeAtOffset(source, 13);
+    byte[] firstInput = serialized.getBytesRaw();
+    decoder.append(serialized, destination, source.size);
+    BytesWritable next = serializeAtOffset(source, 19);
+    byte[] secondInput = next.getBytesRaw();
+    serialized.setDirect(secondInput, next.getOffset(), next.getLength());
+    assertTrue(decoder.inspectAccumulation(serialized, destination, source.size)
+        .isRepeatingCompatible());
+    decoder.appendInspectedAccumulation(serialized, destination, source.size);
+    BytesColumnVector actual = (BytesColumnVector) destination.cols[0];
+    assertSame(firstInput, actual.vector[0]);
+    assertSame(secondInput, actual.vector[3]);
+    assertTrue(actual.start[0] >= 13);
+    assertTrue(actual.start[3] >= 19);
+    serialized.setDirect(new byte[1], 0, 1);
+    assertEquals(6, destination.size);
+    for (int row : new int[] {0, 3}) {
+      assertBytesValueEquals(value, actual, row);
+      assertBytesValueEquals(bytes(""), actual, row + 1);
+      assertTrue(actual.isNull[row + 2]);
+    }
+  }
+
+  @Test
+  public void testImmutableRepeatingByteAccumulationRetainsFirstArray() throws Exception {
+    BytesColumnVector strings = new BytesColumnVector();
+    strings.initBuffer();
+    strings.setVal(0, bytes("repeated"));
+    strings.isRepeating = true;
+    VectorizedRowBatch source = batchWithColumn(strings, 3);
+    VectorizedRowBatch destination = batchWithColumn(new BytesColumnVector(), 0);
+    destination.reset();
+    VectorShuffleBatchAccumulatingDeserializer decoder =
+        new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
+    BytesWritable serialized = serializeAtOffset(source, 13);
+    byte[] firstInput = serialized.getBytesRaw();
+    decoder.append(serialized, destination, source.size);
+    BytesWritable next = serializeAtOffset(source, 19);
+    serialized.setDirect(next.getBytesRaw(), next.getOffset(), next.getLength());
+    decoder.append(serialized, destination, source.size);
+    BytesColumnVector actual = (BytesColumnVector) destination.cols[0];
+    assertEquals(6, destination.size);
+    assertTrue(actual.isRepeating);
+    assertSame(firstInput, actual.vector[0]);
+    assertBytesValueEquals(bytes("repeated"), actual, 0);
+  }
+
+  @Test
   public void testMultiValuedLengthEncodingBoundaries() throws Exception {
     int[] lengths = {0, 1, 127, 128, 255, 256};
     LongColumnVector child = new LongColumnVector(1024);
@@ -625,9 +725,9 @@ public class TestVectorShuffleBatchSerde {
     destination.reset();
     VectorShuffleBatchAccumulatingDeserializer accumulating =
         new VectorShuffleBatchAccumulatingDeserializer(destination, 2);
-    byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
     int offset = 13;
     for (int frame = 0; frame < 2; frame++) {
+      byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
       for (int row = 0; row < values.length; row++) {
         longs.vector[row] = frame * 10 + row;
       }
@@ -638,11 +738,9 @@ public class TestVectorShuffleBatchSerde {
       assertTrue(info.isAppendCompatible());
       assertTrue(info.isRepeatingCompatible());
       accumulating.appendInspectedAccumulation(serialized, destination, source.size);
-      // The reader may reuse its backing buffer as soon as append returns.
-      Arrays.fill(buffer, (byte) 0xff);
-
       assertEquals((frame + 1) * values.length, destination.size);
       BytesColumnVector actualStrings = (BytesColumnVector) destination.cols[0];
+      assertSame(buffer, actualStrings.vector[frame * values.length]);
       LongColumnVector actualLongs = (LongColumnVector) destination.cols[1];
       assertFalse(actualStrings.noNulls);
       for (int row = 0; row < destination.size; row++) {
@@ -742,8 +840,10 @@ public class TestVectorShuffleBatchSerde {
         new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
     assertThrows(IOException.class,
         () -> accumulating.inspectAccumulation(trailing, destination, 2));
+    assertDecoderReleasedInput(accumulating);
     assertThrows(IOException.class,
         () -> accumulating.deserialize(trailing, destination));
+    assertDecoderReleasedInput(accumulating);
   }
 
   @Test
@@ -812,6 +912,7 @@ public class TestVectorShuffleBatchSerde {
     assertThrows(IOException.class,
         () -> deserializer.deserialize(new BytesWritable(trailingBytes),
             batchWithColumn(unionOf(new LongColumnVector()), 0)));
+    assertDecoderReleasedInput(deserializer);
   }
 
   @Test
@@ -2226,6 +2327,18 @@ public class TestVectorShuffleBatchSerde {
     int length = serializer.serialize(source, new int[] {0}, buffer, 0);
     serialized.set(buffer, 0, length);
     return serialized;
+  }
+
+  private static void assertDecoderReleasedInput(Object decoder) throws Exception {
+    java.lang.reflect.Field buffer = decoder.getClass().getDeclaredField("buffer");
+    buffer.setAccessible(true);
+    assertNull(buffer.get(decoder));
+  }
+
+  private BytesWritable serializeAtOffset(VectorizedRowBatch source, int offset) throws Exception {
+    byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
+    int length = serializer.serialize(source, new int[] {0}, buffer, offset);
+    return new BytesWritable(buffer, offset, length);
   }
 
   private void roundTrip(VectorizedRowBatch source, int[] sourceColumnMap,

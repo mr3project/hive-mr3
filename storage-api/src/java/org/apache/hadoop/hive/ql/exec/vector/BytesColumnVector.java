@@ -94,17 +94,19 @@ public class BytesColumnVector extends ColumnVector {
   }
 
   /**
-   * Additional reset work for BytesColumnVector (releasing scratch bytes for by value strings).
+   * Release references to input arrays and scratch bytes before reusing the column.
    */
   @Override
   public void reset() {
     super.reset();
+    Arrays.fill(vector, null);
     initBuffer(0);
   }
 
   @Override
   public void resetInit() {
     super.resetInit();
+    Arrays.fill(vector, null);
     initBuffer(0);
   }
 
