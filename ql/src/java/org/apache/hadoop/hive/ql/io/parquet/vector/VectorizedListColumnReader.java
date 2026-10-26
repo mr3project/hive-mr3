@@ -17,6 +17,8 @@ import org.apache.hadoop.hive.ql.exec.vector.ListColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.DecimalColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.DateColumnVector;
+import org.apache.hadoop.hive.common.type.CalendarUtils;
 import org.apache.hadoop.hive.ql.exec.vector.DoubleColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
@@ -280,7 +282,6 @@ public class VectorizedListColumnReader extends BaseVectorizedColumnReader {
     case INT:
     case BYTE:
     case SHORT:
-    case DATE:
     case INTERVAL_YEAR_MONTH:
     case LONG:
       lcv.child = new LongColumnVector(total);
@@ -289,6 +290,22 @@ public class VectorizedListColumnReader extends BaseVectorizedColumnReader {
           lcv.child.isNull[i] = true;
         } else {
           ((LongColumnVector) lcv.child).vector[i] = ((List<Long>) valueList).get(i);
+        }
+      }
+      break;
+    case DATE:
+      DateColumnVector date = new DateColumnVector(total);
+      date.setUsingProlepticCalendar(true);
+      lcv.child = date;
+      for (int i = 0; i < total; i++) {
+        Long value = (Long) valueList.get(i);
+        if (value == null) {
+          date.isNull[i] = true;
+          date.noNulls = false;
+        } else {
+          long day = value;
+          date.vector[i] = skipProlepticConversion || day >= CalendarUtils.SWITCHOVER_DAYS
+              ? day : CalendarUtils.convertDateToProleptic((int) day);
         }
       }
       break;
