@@ -33,8 +33,8 @@ import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
  * union vectors are supported recursively.</p>
  *
  * <p>Use {@link #initialize(ColumnVector[], int[])} once for a fixed schema and mapping to
- * reuse schema metadata and scratch arrays. Without explicit initialization, each call supports
- * a different schema or mapping.</p>
+ * reuse schema metadata and scratch arrays. Without explicit initialization, each call to
+ * {@code serialize()} supports a different schema or mapping.</p>
  *
  * <p>Frames contain the common prefix described by {@link VectorShuffleBatchHeader}, followed by
  * the partition row count, nested-repetition flag, and ordinary column payloads. Prepare the prefix
@@ -133,14 +133,13 @@ public final class VectorShuffleBatchSerializer {
    * reusable storage. A prefix that does not fit throws ArrayIndexOutOfBoundsException, just like
    * frame serialization, allowing the caller to fall back to row input without unbounded growth.
    * Call once, lazily, after obtaining the first eligible partition's output buffer.
+   * Requires prior {@link #initialize(ColumnVector[], int[])}.
    */
   public CommonPrefix prepareCommonPrefix(VectorizedRowBatch source, int[] sourceColumnMap,
       byte[] buffer, int position) {
     assert source != null && source.size > 1 :
         "Common prefix preparation requires a multi-row input batch";
-    if (!schemaInitialized) {
-      initializeSchema(source.cols, sourceColumnMap);
-    }
+    assert schemaInitialized;
     reset(buffer, position);
     int ordinaryCount = writeCommonPrefix(source, sourceColumnMap, null, 0, source.size);
     if (preparedPrefix == null) {
