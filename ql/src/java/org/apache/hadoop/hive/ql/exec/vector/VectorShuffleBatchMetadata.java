@@ -73,13 +73,13 @@ public final class VectorShuffleBatchMetadata {
       if (descriptor.timestamp) {
         TimestampColumnVector timestamp = (TimestampColumnVector) column;
         if (timestamp.isUTC()) {
-          bytes[offset + descriptor.byteOffset] |= descriptor.mask;
+          setBit(bytes, offset, descriptor.bit);
         }
         if (timestamp.usingProlepticCalendar()) {
-          bytes[offset + descriptor.calendarByteOffset] |= descriptor.calendarMask;
+          setBit(bytes, offset, descriptor.bit + 1);
         }
       } else if (((DateColumnVector) column).isUsingProlepticCalendar()) {
-        bytes[offset + descriptor.byteOffset] |= descriptor.mask;
+        setBit(bytes, offset, descriptor.bit);
       }
     }
   }
@@ -88,16 +88,24 @@ public final class VectorShuffleBatchMetadata {
   public void apply(ColumnVector[] columns, byte[] bytes, int offset) {
     for (Descriptor descriptor : descriptors) {
       ColumnVector column = descriptor.resolve(columns);
-      boolean flag = (bytes[offset + descriptor.byteOffset] & descriptor.mask) != 0;
+      boolean flag = getBit(bytes, offset, descriptor.bit);
       if (descriptor.timestamp) {
         TimestampColumnVector timestamp = (TimestampColumnVector) column;
         timestamp.setIsUTC(flag);
         timestamp.setUsingProlepticCalendar(
-            (bytes[offset + descriptor.calendarByteOffset] & descriptor.calendarMask) != 0);
+            getBit(bytes, offset, descriptor.bit + 1));
       } else {
         ((DateColumnVector) column).setUsingProlepticCalendar(flag);
       }
     }
+  }
+
+  private static boolean getBit(byte[] bytes, int offset, int bit) {
+    return (bytes[offset + (bit >>> 3)] & (1 << (bit & 7))) != 0;
+  }
+
+  private static void setBit(byte[] bytes, int offset, int bit) {
+    bytes[offset + (bit >>> 3)] |= 1 << (bit & 7);
   }
 
   /** Restore the metadata policy of a fresh execution batch before decoding row input. */
@@ -151,19 +159,18 @@ public final class VectorShuffleBatchMetadata {
     private final int sourceColumn;
     private final int[] path;
     private final boolean timestamp;
-    private final int byteOffset;
-    private final int mask;
-    private final int calendarByteOffset;
-    private final int calendarMask;
+    private final int bit;
 
     private Descriptor(int sourceColumn, int[] path, int bit, boolean timestamp) {
       this.sourceColumn = sourceColumn;
       this.path = path;
       this.timestamp = timestamp;
-      byteOffset = bit >>> 3;
-      mask = 1 << (bit & 7);
-      calendarByteOffset = (bit + 1) >>> 3;
-      calendarMask = 1 << ((bit + 1) & 7);
+      this.bit = bit;
+      // Equivalent offsets and masks, derived when accessing the metadata bitmap:
+      // byteOffset = bit >>> 3;
+      // mask = 1 << (bit & 7);
+      // calendarByteOffset = (bit + 1) >>> 3;
+      // calendarMask = 1 << ((bit + 1) & 7);
     }
 
     private ColumnVector resolve(ColumnVector[] columns) {
