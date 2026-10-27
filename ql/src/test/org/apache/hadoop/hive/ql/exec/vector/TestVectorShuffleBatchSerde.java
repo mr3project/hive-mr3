@@ -1191,7 +1191,6 @@ public class TestVectorShuffleBatchSerde {
     assertEquals(0x02, serialized.getBytesRaw()[header.getBitmapOffset()] & 0xff);
     assertEquals(0xe3, serialized.getBytesRaw()[header.getMetadataOffset()] & 0xff);
     assertEquals(0x01, serialized.getBytesRaw()[header.getMetadataOffset() + 1] & 0xff);
-    assertEquals(10, VectorShuffleBatchHeader.metadataBitCount(source.cols, 4));
     for (boolean accumulate : new boolean[] {false, true}) {
       VectorizedRowBatch destination = metadataBatch();
       ((TimestampColumnVector) destination.cols[1]).setIsUTC(false);
@@ -1539,7 +1538,7 @@ public class TestVectorShuffleBatchSerde {
   private void assertNestedRepeating(VectorizedRowBatch source, boolean expected) throws Exception {
     VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
     header.read(serialize(source), 1,
-        (VectorShuffleBatchHeader.metadataBitCount(source.cols, 1) + 7) / 8);
+        new VectorShuffleBatchMetadata(source.cols, 1).getByteCount());
     assertEquals(expected, header.hasNestedRepeating());
   }
 

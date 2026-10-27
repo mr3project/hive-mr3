@@ -181,34 +181,6 @@ public final class VectorShuffleBatchHeader {
     return bit(buffer, bitmapOffset, logicalColumn);
   }
 
-  public static int metadataBitCount(ColumnVector[] columns, int columnCount) {
-    int result = 0;
-    for (int i = 0; i < columnCount; i++) {
-      result += metadataBitCount(columns[i]);
-    }
-    return result;
-  }
-
-  public static int metadataBitCount(ColumnVector column) {
-    if (column instanceof DateColumnVector) {
-      return 1;
-    } else if (column instanceof TimestampColumnVector) {
-      return 2;
-    } else if (column instanceof ListColumnVector) {
-      return metadataBitCount(((ListColumnVector) column).child);
-    } else if (column instanceof MapColumnVector) {
-      MapColumnVector map = (MapColumnVector) column;
-      return metadataBitCount(map.keys) + metadataBitCount(map.values);
-    } else if (column instanceof StructColumnVector) {
-      ColumnVector[] fields = ((StructColumnVector) column).fields;
-      return metadataBitCount(fields, fields.length);
-    } else if (column instanceof UnionColumnVector) {
-      ColumnVector[] fields = ((UnionColumnVector) column).fields;
-      return metadataBitCount(fields, fields.length);
-    }
-    return 0;
-  }
-
   private static boolean bit(byte[] bytes, int offset, int bit) {
     return (bytes[offset + (bit >>> 3)] & (1 << (bit & 7))) != 0;
   }
