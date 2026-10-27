@@ -43,8 +43,24 @@ final class VectorShuffleBatchAccumulator {
   private final int inputColumnCount;
   private final byte tag;
 
-  private final VectorDeserializeRow<BinarySortableDeserializeRead> keyBinarySortableDeserializeToRow;
-  private final VectorDeserializeRow<LazyBinaryDeserializeRead> valueLazyBinaryDeserializeToRow;
+  @FunctionalInterface
+  interface RowDeserializerFactory {
+    RowDeserializers create() throws HiveException;
+  }
+
+  static final class RowDeserializers {
+    final VectorDeserializeRow<BinarySortableDeserializeRead> key;
+    final VectorDeserializeRow<LazyBinaryDeserializeRead> value;
+
+    RowDeserializers(VectorDeserializeRow<BinarySortableDeserializeRead> key,
+        VectorDeserializeRow<LazyBinaryDeserializeRead> value) {
+      this.key = key;
+      this.value = value;
+    }
+  }
+
+  private final RowDeserializerFactory rowDeserializerFactory;
+  private RowDeserializers rowDeserializers;
 
   private final VectorShuffleBatchAccumulatingDeserializer decoder;
   private final int accumulatorRowLimit;
@@ -64,15 +80,13 @@ final class VectorShuffleBatchAccumulator {
 
   VectorShuffleBatchAccumulator(VectorizedRowBatchCtx batchContext, Operator<?> reducer,
       VectorizedRowBatch batch, int inputColumnCount, byte tag,
-      VectorDeserializeRow<BinarySortableDeserializeRead> keyBinarySortableDeserializeToRow,
-      VectorDeserializeRow<LazyBinaryDeserializeRead> valueLazyBinaryDeserializeToRow) {
+      RowDeserializerFactory rowDeserializerFactory) {
     this.batchContext = batchContext;
     this.reducer = reducer;
     this.inputColumnCount = inputColumnCount;
     this.tag = tag;
 
-    this.keyBinarySortableDeserializeToRow = keyBinarySortableDeserializeToRow;
-    this.valueLazyBinaryDeserializeToRow = valueLazyBinaryDeserializeToRow;
+    this.rowDeserializerFactory = rowDeserializerFactory;
 
     this.decoder = new VectorShuffleBatchAccumulatingDeserializer(batch, inputColumnCount);
     this.accumulatorRowLimit = decoder.getAppendCapacity();
@@ -141,13 +155,16 @@ final class VectorShuffleBatchAccumulator {
     if (compact) {
       decoder.append(valueWritable, batch);
     } else {
-      keyBinarySortableDeserializeToRow.setBytes(
+      if (rowDeserializers == null) {
+        rowDeserializers = rowDeserializerFactory.create();
+      }
+      rowDeserializers.key.setBytes(
           keyWritable.getBytesRaw(), keyWritable.getOffset(), keyWritable.getLength());
-      keyBinarySortableDeserializeToRow.deserialize(batch, pendingRows);
-      if (valueLazyBinaryDeserializeToRow != null) {
-        valueLazyBinaryDeserializeToRow.setBytes(
+      rowDeserializers.key.deserialize(batch, pendingRows);
+      if (rowDeserializers.value != null) {
+        rowDeserializers.value.setBytes(
             valueWritable.getBytesRaw(), valueWritable.getOffset(), valueWritable.getLength());
-        valueLazyBinaryDeserializeToRow.deserialize(batch, pendingRows);
+        rowDeserializers.value.deserialize(batch, pendingRows);
       }
       batch.size = pendingRows + 1;
     }

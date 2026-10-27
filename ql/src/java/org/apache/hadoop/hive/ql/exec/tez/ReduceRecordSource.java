@@ -31,8 +31,6 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.CommonMergeJoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
-import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
-import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorDeserializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchDeserializer;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
@@ -218,55 +216,18 @@ public class ReduceRecordSource implements RecordSource {
             valueStructInspectors);
         batch = batchContext.createVectorizedRowBatch();
 
-        // Setup vectorized deserialization for the key and value.
-        BinarySortableSerDe binarySortableSerDe = (BinarySortableSerDe) inputKeySerDe;
-
-        keyBinarySortableDeserializeToRow =
-            new VectorDeserializeRow<BinarySortableDeserializeRead>(
-                new BinarySortableDeserializeRead(
-                    VectorizedBatchUtil.typeInfosFromStructObjectInspector(
-                        keyStructInspector),
-                    (batchContext.getRowdataTypePhysicalVariations().length > firstValueColumnOffset)
-                        ? Arrays.copyOfRange(batchContext.getRowdataTypePhysicalVariations(), 0,
-                            firstValueColumnOffset)
-                        : batchContext.getRowdataTypePhysicalVariations(),
-                    /* useExternalBuffer */ true,
-                    binarySortableSerDe.getSortOrders(),
-                    binarySortableSerDe.getNullMarkers(),
-                    binarySortableSerDe.getNotNullMarkers()));
-        keyBinarySortableDeserializeToRow.init(0);
-
-        final int valuesSize = valueStructInspectors.getAllStructFieldRefs().size();
-        if (valuesSize > 0) {
-          valueLazyBinaryDeserializeToRow =
-              new VectorDeserializeRow<LazyBinaryDeserializeRead>(
-                  new LazyBinaryDeserializeRead(
-                      VectorizedBatchUtil.typeInfosFromStructObjectInspector(
-                          valueStructInspectors),
-                      (batchContext.getRowdataTypePhysicalVariations().length >= totalColumns)
-                          ? Arrays.copyOfRange(batchContext.getRowdataTypePhysicalVariations(),
-                              firstValueColumnOffset, totalColumns)
-                          : null,
-                      /* useExternalBuffer */ true));
-          valueLazyBinaryDeserializeToRow.init(firstValueColumnOffset);
-
-          // Create data buffers for value bytes column vectors.
-          for (int i = firstValueColumnOffset; i < batch.numCols; i++) {
-            ColumnVector colVector = batch.cols[i];
-            if (colVector instanceof BytesColumnVector) {
-              BytesColumnVector bytesColumnVector = (BytesColumnVector) colVector;
-              bytesColumnVector.initBuffer();
-            }
-          }
-        }
-
         // accumulate only for unordered vector input
         accumulateShuffleInput = isKeyValueReader && HiveConf.getBoolVar(jconf,
             HiveConf.ConfVars.HIVE_VECTORIZATION_REDUCE_SHUFFLE_INPUT_ACCUMULATE);
         if (accumulateShuffleInput) {
+          // Compact-only inputs need no row deserializers.
           shuffleAccumulator = new VectorShuffleBatchAccumulator(batchContext, reducer, batch,
-            totalColumns, tag, keyBinarySortableDeserializeToRow, valueLazyBinaryDeserializeToRow);
+              totalColumns, tag, this::createRowDeserializers);
         } else {
+          // Preserve eager setup on the legacy and ordered paths.
+          VectorShuffleBatchAccumulator.RowDeserializers readers = createRowDeserializers();
+          keyBinarySortableDeserializeToRow = readers.key;
+          valueLazyBinaryDeserializeToRow = readers.value;
           vectorShuffleBatchDeserializer = new VectorShuffleBatchDeserializer(batch, totalColumns);
         }
       } else {
@@ -290,6 +251,42 @@ public class ReduceRecordSource implements RecordSource {
 
   public TableDesc getKeyTableDesc() {
     return keyTableDesc;
+  }
+
+  /**
+   * Construct the row-mode readers together. The accumulating path calls this only when
+   * the first ordinary shuffle record arrives; the legacy path calls it during init().
+   */
+  private VectorShuffleBatchAccumulator.RowDeserializers createRowDeserializers()
+      throws HiveException {
+    BinarySortableSerDe binarySortableSerDe = (BinarySortableSerDe) inputKeySerDe;
+    VectorDeserializeRow<BinarySortableDeserializeRead> keyReader =
+        new VectorDeserializeRow<>(new BinarySortableDeserializeRead(
+            VectorizedBatchUtil.typeInfosFromStructObjectInspector(keyStructInspector),
+            (batchContext.getRowdataTypePhysicalVariations().length > firstValueColumnOffset)
+                ? Arrays.copyOfRange(batchContext.getRowdataTypePhysicalVariations(), 0,
+                    firstValueColumnOffset)
+                : batchContext.getRowdataTypePhysicalVariations(),
+            /* useExternalBuffer */ true,
+            binarySortableSerDe.getSortOrders(),
+            binarySortableSerDe.getNullMarkers(),
+            binarySortableSerDe.getNotNullMarkers()));
+    keyReader.init(0);
+
+    VectorDeserializeRow<LazyBinaryDeserializeRead> valueReader = null;
+    final int valuesSize = valueStructInspectors.getAllStructFieldRefs().size();
+    if (valuesSize > 0) {
+      final int totalColumns = firstValueColumnOffset + valuesSize;
+      valueReader = new VectorDeserializeRow<>(new LazyBinaryDeserializeRead(
+          VectorizedBatchUtil.typeInfosFromStructObjectInspector(valueStructInspectors),
+          (batchContext.getRowdataTypePhysicalVariations().length >= totalColumns)
+              ? Arrays.copyOfRange(batchContext.getRowdataTypePhysicalVariations(),
+                  firstValueColumnOffset, totalColumns)
+              : null,
+          /* useExternalBuffer */ true));
+      valueReader.init(firstValueColumnOffset);
+    }
+    return new VectorShuffleBatchAccumulator.RowDeserializers(keyReader, valueReader);
   }
 
   private void initializeRowModeVectorShuffle(VectorizedRowBatchCtx batchContext,
