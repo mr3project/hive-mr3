@@ -32,9 +32,9 @@ import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
  * omitted, and repeating columns are represented by a single value. Primitive, list, map, struct, and
  * union vectors are supported recursively.</p>
  *
- * <p>Use {@link #initialize(ColumnVector[], int[])} once for a fixed schema and mapping to
- * reuse schema metadata and scratch arrays. Without explicit initialization, each call to
- * {@code serialize()} supports a different schema or mapping.</p>
+ * <p>Call {@link #initialize(ColumnVector[], int[])} before serializing to set the schema and
+ * column mapping and reuse schema metadata and scratch arrays. Call it again when the schema
+ * or mapping changes.</p>
  *
  * <p>Frames contain the common prefix described by {@link VectorShuffleBatchHeader}, followed by
  * the partition row count, nested-repetition flag, and ordinary column payloads. Prepare the prefix
@@ -51,7 +51,6 @@ public final class VectorShuffleBatchSerializer {
   // Accumulates nested repetition while serializing the current frame.
   private boolean nestedRepeating;
   private VectorShuffleBatchMetadata metadata;
-  private boolean schemaInitialized;
   private int columnCount;
   private int bitmapLength;
   private int commonHeaderSize;
@@ -99,11 +98,6 @@ public final class VectorShuffleBatchSerializer {
    * vectors of the same schema does not require reinitialization.
    */
   public void initialize(ColumnVector[] columns, int[] sourceColumnMap) {
-    initializeSchema(columns, sourceColumnMap);
-    schemaInitialized = true;
-  }
-
-  private void initializeSchema(ColumnVector[] columns, int[] sourceColumnMap) {
     metadata = new VectorShuffleBatchMetadata(columns, sourceColumnMap);
     columnCount = sourceColumnMap.length;
     bitmapLength = (columnCount + 7) / 8;
@@ -139,7 +133,7 @@ public final class VectorShuffleBatchSerializer {
       byte[] buffer, int position) {
     assert source != null && source.size > 1 :
         "Common prefix preparation requires a multi-row input batch";
-    assert schemaInitialized;
+    assert metadata != null;
     reset(buffer, position);
     int ordinaryCount = writeCommonPrefix(source, sourceColumnMap, null, 0, source.size);
     if (preparedPrefix == null) {
@@ -170,9 +164,7 @@ public final class VectorShuffleBatchSerializer {
 
   private int serializeColumns(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
       int rowOffset, int rowCount, byte[] buffer, int position) {
-    if (!schemaInitialized) {
-      initializeSchema(source.cols, sourceColumnMap);
-    }
+    assert metadata != null;
     reset(buffer, position);
     int ordinaryCount = writeCommonPrefix(source, sourceColumnMap, rowIndices, rowOffset, rowCount);
     writePartition(source, ordinaryColumns, ordinaryCount, rowIndices, rowOffset, rowCount);
