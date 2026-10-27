@@ -74,6 +74,23 @@ public final class VectorShuffleBatchSerializer {
 
     private CommonPrefix() {
     }
+
+    private void prepare(byte[] source, int offset, int length, int[] columns, int count,
+        boolean nestedRepeating) {
+      if (bytes.length < length) {
+        bytes = new byte[length];
+      }
+      System.arraycopy(source, offset, bytes, 0, length);
+
+      if (ordinaryColumns.length < count) {
+        ordinaryColumns = new int[count];
+      }
+      System.arraycopy(columns, 0, ordinaryColumns, 0, count);
+
+      this.length = length;
+      this.ordinaryCount = count;
+      this.nestedRepeating = nestedRepeating;
+    }
   }
 
   /**
@@ -126,21 +143,11 @@ public final class VectorShuffleBatchSerializer {
     }
     reset(buffer, position);
     int ordinaryCount = writeCommonPrefix(source, sourceColumnMap, null, 0, source.size);
-    int length = this.position - position;
     if (preparedPrefix == null) {
       preparedPrefix = new CommonPrefix();
     }
-    if (preparedPrefix.bytes.length < length) {
-      preparedPrefix.bytes = new byte[length];
-    }
-    System.arraycopy(buffer, position, preparedPrefix.bytes, 0, length);
-    if (preparedPrefix.ordinaryColumns.length < ordinaryCount) {
-      preparedPrefix.ordinaryColumns = new int[ordinaryCount];
-    }
-    System.arraycopy(ordinaryColumns, 0, preparedPrefix.ordinaryColumns, 0, ordinaryCount);
-    preparedPrefix.length = length;
-    preparedPrefix.ordinaryCount = ordinaryCount;
-    preparedPrefix.nestedRepeating = nestedRepeating;
+    preparedPrefix.prepare(buffer, position, this.position - position,
+        ordinaryColumns, ordinaryCount, nestedRepeating);
     return preparedPrefix;
   }
 
