@@ -76,7 +76,8 @@ public final class VectorShuffleBatchMetadata {
           setBit(bytes, offset, descriptor.bit);
         }
         if (timestamp.usingProlepticCalendar()) {
-          setBit(bytes, offset, descriptor.bit + 1);
+          int calendarBit = descriptor.bit + 1;
+          setBit(bytes, offset, calendarBit);
         }
       } else if (((DateColumnVector) column).isUsingProlepticCalendar()) {
         setBit(bytes, offset, descriptor.bit);
@@ -92,20 +93,25 @@ public final class VectorShuffleBatchMetadata {
       if (descriptor.timestamp) {
         TimestampColumnVector timestamp = (TimestampColumnVector) column;
         timestamp.setIsUTC(flag);
-        timestamp.setUsingProlepticCalendar(
-            getBit(bytes, offset, descriptor.bit + 1));
+        int calendarBit = descriptor.bit + 1;
+        timestamp.setUsingProlepticCalendar(getBit(bytes, offset, calendarBit));
       } else {
         ((DateColumnVector) column).setUsingProlepticCalendar(flag);
       }
     }
   }
 
+  /** Derive the byte offset and mask from a metadata bit index. */
   private static boolean getBit(byte[] bytes, int offset, int bit) {
-    return (bytes[offset + (bit >>> 3)] & (1 << (bit & 7))) != 0;
+    int byteOffset = bit >>> 3;
+    int mask = 1 << (bit & 7);
+    return (bytes[offset + byteOffset] & mask) != 0;
   }
 
   private static void setBit(byte[] bytes, int offset, int bit) {
-    bytes[offset + (bit >>> 3)] |= 1 << (bit & 7);
+    int byteOffset = bit >>> 3;
+    int mask = 1 << (bit & 7);
+    bytes[offset + byteOffset] |= mask;
   }
 
   /** Restore the metadata policy of a fresh execution batch before decoding row input. */
@@ -166,7 +172,9 @@ public final class VectorShuffleBatchMetadata {
       this.path = path;
       this.timestamp = timestamp;
       this.bit = bit;
-      // Equivalent offsets and masks, derived when accessing the metadata bitmap:
+      // For DATE, bit stores the proleptic-calendar flag. For TIMESTAMP,
+      // bit stores the UTC flag and bit + 1 stores the proleptic-calendar flag.
+      // getBit() and setBit() derive the byte offset and mask from either index:
       // byteOffset = bit >>> 3;
       // mask = 1 << (bit & 7);
       // calendarByteOffset = (bit + 1) >>> 3;
