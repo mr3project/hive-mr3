@@ -38,7 +38,7 @@ import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
  *
  * <p>Frames contain the common prefix described by {@link VectorShuffleBatchHeader}, followed by
  * the partition row count, nested-repetition flag, and ordinary column payloads. Prepare the prefix
- * once with {@link #prepareCommonPrefix(VectorizedRowBatch, int[], byte[], int)} to reuse it across
+ * once with {@link #setupCommonPrefix(VectorizedRowBatch, int[], byte[], int)} to reuse it across
  * multiple compact partitions of the same input batch.</p>
  */
 public final class VectorShuffleBatchSerializer {
@@ -63,7 +63,7 @@ public final class VectorShuffleBatchSerializer {
    * The source input columns must remain unchanged while this prefix is being used. Neither the
    * preparation buffer nor the source vectors are retained here.
    */
-  public static final class CommonPrefix {
+  private static final class CommonPrefix {
     private byte[] bytes = new byte[0];
     private int length;
     private int[] ordinaryColumns = new int[0];
@@ -129,7 +129,7 @@ public final class VectorShuffleBatchSerializer {
    * Call once, lazily, after obtaining the first eligible partition's output buffer.
    * Requires prior {@link #initialize(ColumnVector[], int[])}.
    */
-  public CommonPrefix prepareCommonPrefix(VectorizedRowBatch source, int[] sourceColumnMap,
+  public void setupCommonPrefix(VectorizedRowBatch source, int[] sourceColumnMap,
       byte[] buffer, int position) {
     assert source != null && source.size > 1 :
         "Common prefix preparation requires a multi-row input batch";
@@ -141,24 +141,22 @@ public final class VectorShuffleBatchSerializer {
     }
     preparedPrefix.prepare(buffer, position, this.position - position,
         ordinaryColumns, ordinaryCount, nestedRepeating);
-    return preparedPrefix;
   }
 
-  /** Append one multi-row partition to an explicitly prepared common prefix. */
-  public int serializePartition(CommonPrefix prefix, VectorizedRowBatch source, int[] rowIndices,
+  /** Append one multi-row partition using the prefix set up for this input batch. */
+  public int serializePartition(VectorizedRowBatch source, int[] rowIndices,
       int rowOffset, int rowCount, byte[] buffer, int position) {
-    assert prefix != null && prefix == preparedPrefix :
-        "Common prefix must be prepared by this serializer";
+    assert preparedPrefix != null : "Common prefix must be set up before serialization";
     assert rowCount > 1 : "Compact partitions must contain multiple rows";
     assert rowIndices != null && rowOffset >= 0
         && rowCount <= rowIndices.length - rowOffset : "Invalid partition row slice";
     reset(buffer, position);
-    ensureCapacity(prefix.length);
-    System.arraycopy(prefix.bytes, 0, buffer, position, prefix.length);
-    this.position += prefix.length;
-    nestedRepeating = prefix.nestedRepeating;
-    writePartition(source, prefix.ordinaryColumns, prefix.ordinaryCount, rowIndices, rowOffset,
-        rowCount);
+    ensureCapacity(preparedPrefix.length);
+    System.arraycopy(preparedPrefix.bytes, 0, buffer, position, preparedPrefix.length);
+    this.position += preparedPrefix.length;
+    nestedRepeating = preparedPrefix.nestedRepeating;
+    writePartition(source, preparedPrefix.ordinaryColumns, preparedPrefix.ordinaryCount,
+        rowIndices, rowOffset, rowCount);
     return this.position - position;
   }
 
