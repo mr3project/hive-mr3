@@ -27,12 +27,15 @@ import org.apache.hadoop.io.BytesWritable;
 /**
  * Reusable view of a compact shuffle frame's fixed-schema header. No column values are read.
  *
- * <p>The layout is row count, column count, repeating bitmap, nested-repeating byte, metadata
- * bitmap, optional repeating-section length, repeating payloads, ordinary payloads. Ints retain
+ * <p>The common prefix is column count, repeating bitmap, metadata bitmap, optional
+ * repeating-section length, and repeating payloads. The partition-specific suffix is row count,
+ * nested-repeating byte, and ordinary payloads. The nested-repeating byte summarizes both payload
+ * sections. The repeating-section length locates the suffix without scanning payloads. Ints retain
  * the scalar payload's native byte order. Bitmap bit {@code i} is bit {@code i % 8} of byte
  * {@code i / 8}. Repeating bits use logical input column order, and both payload sections retain
  * that order. Only effectively repeating top-level columns (more than one row) enter the first
- * section. Its single length is present iff any repeating bit is set.</p>
+ * section. Its single length is present iff any repeating bit is set. This layout replaces the
+ * row-count-first format; producers and receivers must use the same format.</p>
  *
  * <p>Metadata bits follow depth-first schema order, independent of payload order and child counts:
  * top-level logical columns; list child; map keys then values; struct/union fields in field order.
@@ -40,6 +43,8 @@ import org.apache.hadoop.io.BytesWritable;
  * Padding bits are zero. The fixed schema determines the metadata bitmap's length.</p>
  */
 public final class VectorShuffleBatchHeader {
+  private static final int PARTITION_HEADER_SIZE = Integer.BYTES + Byte.BYTES;
+
   private byte[] buffer;
   private int rowCount;
   private int columnCount;
@@ -60,20 +65,18 @@ public final class VectorShuffleBatchHeader {
     buffer = serialized.getBytesRaw();
     int position = serialized.getOffset();
     limit = position + serialized.getLength();
-    if (serialized.getLength() < 2 * Integer.BYTES) {
+    if (serialized.getLength() < Integer.BYTES) {
       throw new IOException("Truncated vector shuffle batch header");
     }
-    rowCount = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + position);
-    columnCount = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + position + Integer.BYTES);
-    if (rowCount < 0 || columnCount != expectedColumnCount || columnCount < 0) {
-      throw new IOException("Invalid vector shuffle batch dimensions: " + rowCount + " rows, "
-          + columnCount + " columns");
+    columnCount = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + position);
+    if (columnCount != expectedColumnCount || columnCount < 0) {
+      throw new IOException("Invalid vector shuffle batch column count " + columnCount);
     }
-    position += 2 * Integer.BYTES;
+    position += Integer.BYTES;
     bitmapOffset = position;
-    bitmapLength = (columnCount + 7) / 8;
+    bitmapLength = (int) ((columnCount + 7L) / 8);
     metadataLength = metadataByteCount;
-    if (bitmapLength + 1 + metadataLength > limit - position) {
+    if ((long) bitmapLength + metadataLength + PARTITION_HEADER_SIZE > limit - position) {
       throw new IOException("Truncated vector shuffle batch header");
     }
     repeatingBits = 0;
@@ -88,22 +91,26 @@ public final class VectorShuffleBatchHeader {
         repeating |= buffer[position++] != 0;
       }
     }
-    nestedRepeating = buffer[position++] != 0;
     metadataOffset = position;
     position += metadataLength;
     int repeatingLength = 0;
     if (repeating) {
-      if (position > limit - Integer.BYTES) {
+      if (position > limit - Integer.BYTES - PARTITION_HEADER_SIZE) {
         throw new IOException("Truncated vector shuffle repeating-section length");
       }
       repeatingLength = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + position);
       position += Integer.BYTES;
-      if (repeatingLength < 0 || repeatingLength > limit - position) {
+      if (repeatingLength < 0 || repeatingLength > limit - position - PARTITION_HEADER_SIZE) {
         throw new IOException("Invalid vector shuffle repeating-section length " + repeatingLength);
       }
     }
     repeatingStart = position;
     repeatingEnd = position + repeatingLength;
+    rowCount = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + repeatingEnd);
+    if (rowCount < 0) {
+      throw new IOException("Invalid vector shuffle batch row count " + rowCount);
+    }
+    nestedRepeating = buffer[repeatingEnd + Integer.BYTES] != 0;
   }
 
   /** Release the borrowed frame, preserving small header fields for the caller's decisions. */
@@ -148,7 +155,7 @@ public final class VectorShuffleBatchHeader {
   }
 
   public int getOrdinaryStart() {
-    return repeatingEnd;
+    return repeatingEnd + PARTITION_HEADER_SIZE;
   }
 
   public int getLimit() {

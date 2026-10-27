@@ -290,11 +290,11 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
     assert serialized != null && destination != null;
     int columnCount = inputColumnCount;
     if (columnCount < 0) {
-      if (serialized.getLength() < 2 * Integer.BYTES) {
+      if (serialized.getLength() < Integer.BYTES) {
         throw new IOException("Truncated vector shuffle batch header");
       }
       columnCount = theUnsafe.getInt(serialized.getBytesRaw(),
-          BYTE_ARRAY_BASE_OFFSET + serialized.getOffset() + Integer.BYTES);
+          BYTE_ARRAY_BASE_OFFSET + serialized.getOffset());
       if (columnCount < 0 || columnCount > destination.cols.length) {
         throw new IOException("Invalid vector shuffle batch column count " + columnCount);
       }
@@ -337,6 +337,7 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
         readRepeatingColumns(destination, columnCount, rowCount);
       }
       checkRepeatingSectionEnd();
+      position = header.getOrdinaryStart();
       if (!header.hasRepeatingColumns()) {
         for (int i = 0; i < columnCount; i++) {
           readColumn(destination.cols[i], rowCount);

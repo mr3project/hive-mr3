@@ -1496,7 +1496,10 @@ public class TestVectorShuffleBatchSerde {
   @Test
   public void testReadersRejectNegativeRowCount() throws Exception {
     BytesWritable serialized = serialize(batchWithColumn(new LongColumnVector(), 2));
-    ByteBuffer.wrap(serialized.getBytesRaw()).order(ByteOrder.nativeOrder()).putInt(0, -1);
+    VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+    header.read(serialized, 1, 0);
+    ByteBuffer.wrap(serialized.getBytesRaw()).order(ByteOrder.nativeOrder())
+        .putInt(header.getRepeatingEnd(), -1);
     assertThrows(IOException.class, () -> deserializer.deserialize(serialized,
         batchWithColumn(new LongColumnVector(), 0)));
     VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
@@ -1518,6 +1521,10 @@ public class TestVectorShuffleBatchSerde {
     ByteBuffer.wrap(serialized.getBytesRaw()).order(ByteOrder.nativeOrder())
         .putInt(header.getRepeatingStart() - Integer.BYTES,
             header.getRepeatingEnd() - header.getRepeatingStart() - 1);
+    // Keep the relocated partition header valid so decoding reaches the section-end check.
+    ByteBuffer.wrap(serialized.getBytesRaw()).order(ByteOrder.nativeOrder())
+        .putInt(header.getRepeatingEnd() - 1, 2)
+        .put(header.getRepeatingEnd() - 1 + Integer.BYTES, (byte) 0);
     assertThrows(IOException.class, () -> deserializer.deserialize(serialized,
         batchWithColumn(new LongColumnVector(), 0)));
     VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);

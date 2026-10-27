@@ -31,6 +31,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.tez.ReduceRecordSource;
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor;
 import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchSerializer;
+import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchSerializer.CommonPrefix;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
@@ -439,6 +440,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       vectorShufflePartitionRowIndices[vectorShufflePartitionPositions[partition]++] = batchIndex;
     }
 
+    CommonPrefix commonPrefix = null;
     for (int partition = 0; partition < numUnorderedPartitions; partition++) {
       final int rowCount = vectorShufflePartitionCounts[partition];
       if (rowCount == 0) {
@@ -456,7 +458,13 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         }
         final int valueLength;
         try {
-          valueLength = vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
+          if (commonPrefix == null) {
+            // Prepare only after the first compact partition obtains a usable writer buffer.
+            // Keep this local: input values, repeating flags, and metadata may change next batch.
+            commonPrefix = vectorShuffleBatchSerializer.prepareCommonPrefix(batch,
+                vectorShuffleBatchColumnMap, valueBytes.buffer, valueBytes.offsetToValueBytes);
+          }
+          valueLength = vectorShuffleBatchSerializer.serializePartition(commonPrefix, batch,
               vectorShufflePartitionRowIndices, vectorShufflePartitionOffsets[partition], rowCount,
               valueBytes.buffer, valueBytes.offsetToValueBytes);
         } catch (ArrayIndexOutOfBoundsException ex) {

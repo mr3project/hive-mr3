@@ -44,6 +44,7 @@ import org.apache.hadoop.hive.ql.exec.vector.ListColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorDeserializeRow;
+import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchHeader;
 import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchSerializer;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
@@ -320,8 +321,10 @@ public class TestVectorShuffleBatchAccumulator {
     assertEquals(2, harness.initial.size);
     // Mutate only the header: negative frames must be rejected before pending-batch mutation.
     BytesWritable negative = serialize(longs(0, 0));
+    VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+    header.read(negative, 1, 0);
     org.apache.tez.util.FastByteComparisons.theUnsafe.putInt(negative.getBytesRaw(),
-        org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET + negative.getOffset(), -1);
+        org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET + header.getRepeatingEnd(), -1);
     assertThrows(IOException.class, () -> harness.accumulator.process(EMPTY, negative, true));
     assertEquals(2, harness.initial.size);
     harness.accumulator.discardPendingBatch();
