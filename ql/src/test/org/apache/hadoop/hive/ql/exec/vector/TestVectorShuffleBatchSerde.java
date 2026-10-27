@@ -437,6 +437,47 @@ public class TestVectorShuffleBatchSerde {
     assertEquals(70L, actual.vector[2]);
   }
 
+
+  @Test
+  public void testCommonPrefixSetupAcrossPartitionsAndInputBatches() throws Exception {
+    VectorShuffleBatchSerializer prefixSerializer = new VectorShuffleBatchSerializer();
+    int[] mapping = {0, 1};
+    int[] partitionRows = {0, 2, 4, 1, 3, 5};
+    byte[] buffer = new byte[1024];
+    byte[] expected = new byte[1024];
+    int offset = 11;
+
+    for (int batchNumber = 0; batchNumber < 2; batchNumber++) {
+      VectorizedRowBatch source = new VectorizedRowBatch(2);
+      LongColumnVector repeating = new LongColumnVector();
+      repeating.isRepeating = true;
+      repeating.vector[0] = 100 + batchNumber;
+      LongColumnVector ordinary = new LongColumnVector();
+      for (int row = 0; row < 6; row++) {
+        ordinary.vector[row] = batchNumber * 1000 + row;
+      }
+      source.cols[0] = repeating;
+      source.cols[1] = ordinary;
+      source.size = 6;
+
+      if (batchNumber == 0) {
+        prefixSerializer.initialize(source.cols, mapping);
+      }
+      prefixSerializer.setupCommonPrefix(source, mapping, buffer, offset);
+      for (int partition = 0; partition < 2; partition++) {
+        int rowOffset = partition * 3;
+        int expectedLength = prefixSerializer.serialize(
+            source, mapping, partitionRows, rowOffset, 3, expected, offset);
+        int actualLength = prefixSerializer.serializePartition(
+            source, partitionRows, rowOffset, 3, buffer, offset);
+        assertEquals(expectedLength, actualLength);
+        assertArrayEquals(
+            Arrays.copyOfRange(expected, offset, offset + expectedLength),
+            Arrays.copyOfRange(buffer, offset, offset + actualLength));
+      }
+    }
+  }
+
   @Test
   public void testDenseFixedWidthFastPathsForConsecutiveSelectedAndPartitionRows()
       throws Exception {
