@@ -356,7 +356,7 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
-  public void testDefaultSerdeAcceptsChangingSchemasAndMappings() throws Exception {
+  public void testReinitializedSerdeAcceptsChangingSchemasAndMappings() throws Exception {
     VectorShuffleBatchSerializer dynamicSerializer = new VectorShuffleBatchSerializer();
     VectorShuffleBatchDeserializer dynamicDeserializer = new VectorShuffleBatchDeserializer();
     VectorizedRowBatch source = new VectorizedRowBatch(2);
@@ -377,6 +377,7 @@ public class TestVectorShuffleBatchSerde {
         destination.cols[column] = mapping[column] == 0
             ? new DateColumnVector() : new TimestampColumnVector();
       }
+      dynamicSerializer.initialize(source.cols, mapping);
       int length = dynamicSerializer.serialize(source, mapping, buffer, 0);
       dynamicDeserializer.deserialize(new BytesWritable(buffer, 0, length), destination);
       assertEquals(2, destination.size);
@@ -421,7 +422,10 @@ public class TestVectorShuffleBatchSerde {
     BytesWritable serialized = new BytesWritable();
 
     byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
-    int length = serializer.serialize(batchWithColumn(source, 8), new int[] {0},
+    VectorizedRowBatch batch = batchWithColumn(source, 8);
+    int[] mapping = {0};
+    serializer.initialize(batch.cols, mapping);
+    int length = serializer.serialize(batch, mapping,
         new int[] {5, 1, 7}, 0, 3, buffer, 0);
     serialized.set(buffer, 0, length);
     deserializer.deserialize(serialized, destination);
@@ -516,6 +520,7 @@ public class TestVectorShuffleBatchSerde {
     VectorizedRowBatch destination = batchWithColumn(new LongColumnVector(), 0);
     VectorShuffleBatchAccumulatingDeserializer decoder =
         new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
+    serializer.initialize(first.cols, mapping);
 
     for (VectorizedRowBatch source : new VectorizedRowBatch[] {first, next}) {
       int length = serializer.serialize(source, mapping, bytes, 13);
@@ -785,13 +790,15 @@ public class TestVectorShuffleBatchSerde {
     second.size = 3;
 
     byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
-    int length = serializer.serialize(first, new int[] {0, 1}, buffer, 0);
+    int[] mapping = {0, 1};
+    serializer.initialize(first.cols, mapping);
+    int length = serializer.serialize(first, mapping, buffer, 0);
     BytesWritable firstEncoded = new BytesWritable();
     firstEncoded.set(buffer, 0, length);
     accumulating.readHeader(firstEncoded);
     accumulating.append(firstEncoded, destination);
 
-    length = serializer.serialize(second, new int[] {0, 1}, buffer, 0);
+    length = serializer.serialize(second, mapping, buffer, 0);
     BytesWritable secondEncoded = new BytesWritable();
     secondEncoded.set(buffer, 0, length);
     assertTrue(isCompatible(accumulating, secondEncoded));
@@ -809,7 +816,7 @@ public class TestVectorShuffleBatchSerde {
     assertEquals(23, actualDense.vector[4]);
 
     secondRepeating.vector[0] = 8;
-    length = serializer.serialize(second, new int[] {0, 1}, buffer, 0);
+    length = serializer.serialize(second, mapping, buffer, 0);
     BytesWritable incompatible = new BytesWritable();
     incompatible.set(buffer, 0, length);
     assertFalse(isCompatible(accumulating, incompatible));
@@ -842,11 +849,13 @@ public class TestVectorShuffleBatchSerde {
         new VectorShuffleBatchAccumulatingDeserializer(destination, 2);
     byte[] buffer = new byte[SERIALIZE_BUFFER_SIZE];
     int offset = 13;
+    int[] mapping = {0, 1};
+    serializer.initialize(source.cols, mapping);
     for (int frame = 0; frame < 2; frame++) {
       for (int row = 0; row < values.length; row++) {
         longs.vector[row] = frame * 10 + row;
       }
-      int length = serializer.serialize(source, new int[] {0, 1}, buffer, offset);
+      int length = serializer.serialize(source, mapping, buffer, offset);
       BytesWritable serialized = new BytesWritable(buffer, offset, length);
       assertFalse(accumulating.readHeader(serialized).hasNestedRepeating());
       if (destination.size > 0) {
@@ -982,6 +991,7 @@ public class TestVectorShuffleBatchSerde {
     // Equal dense values must not be promoted into the repeating section.
     Arrays.fill(((LongColumnVector) source.cols[2]).vector, 42L);
     int[] mapping = {9, 2, 8, 1, 6, 4, 11, 3, 0, 10};
+    serializer.initialize(source.cols, mapping);
     byte[] wholeBuffer = new byte[1024];
     byte[] partitionBuffer = new byte[1024];
     Arrays.fill(wholeBuffer, (byte) 0x7f);
@@ -1114,7 +1124,9 @@ public class TestVectorShuffleBatchSerde {
       ((BytesColumnVector) source.cols[1]).setVal(1, bytes("second"));
       source.size = 2;
       byte[] buffer = new byte[1024];
-      int length = serializer.serialize(source, new int[] {0, 1}, buffer, 0);
+      int[] mapping = {0, 1};
+      serializer.initialize(source.cols, mapping);
+      int length = serializer.serialize(source, mapping, buffer, 0);
       BytesWritable serialized = new BytesWritable(buffer, 0, length);
       VectorizedRowBatch destination = new VectorizedRowBatch(2);
       destination.cols[0] = new LongColumnVector();
@@ -1151,7 +1163,9 @@ public class TestVectorShuffleBatchSerde {
         new VectorShuffleBatchAccumulatingDeserializer(destination, 1);
     byte[] buffer = new byte[1024];
     int offset = 13;
-    int length = serializer.serialize(source, new int[] {0}, buffer, offset);
+    int[] mapping = {0};
+    serializer.initialize(source.cols, mapping);
+    int length = serializer.serialize(source, mapping, buffer, offset);
     BytesWritable reused = new BytesWritable(buffer, offset, length);
     decoder.readHeader(reused);
     decoder.append(reused, destination);
