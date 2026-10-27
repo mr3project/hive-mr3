@@ -74,7 +74,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private static final String CLASS_NAME = VectorReduceSinkCommonOperator.class.getName();
   private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
 
-  private static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 1;
+  public static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 1;
   private static final int SERIALIZE_BUFFER_SIZE = 100 * 1024;
   private static final int MIN_VALUE_BYTES_THRESHOLD = 128;
 

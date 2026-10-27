@@ -49,13 +49,6 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
   private byte[] repeatingSection;
   private boolean hasRepeatingColumns;
 
-  public VectorShuffleBatchAccumulatingDeserializer() {
-    fixedAppendCapacity = 0;
-    inputColumnCount = -1;
-    accumulatorRepeatingBitmap = null;
-    accumulatorMetadata = null;
-  }
-
   /** Cache the fixed input schema's capacity and header sizes, excluding scratch columns. */
   public VectorShuffleBatchAccumulatingDeserializer(VectorizedRowBatch schema, int inputColumnCount) {
     assert schema != null;
@@ -63,6 +56,7 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
     this.inputColumnCount = inputColumnCount;
     initialize(schema.cols, inputColumnCount);
     fixedAppendCapacity = calculateAppendCapacity(schema, inputColumnCount);
+    assert fixedAppendCapacity > 0;
     accumulatorRepeatingBitmap = inputColumnCount <= Long.SIZE
         ? null : new byte[(inputColumnCount + 7) / 8];
     accumulatorMetadata = new byte[metadata.getByteCount()];
@@ -77,7 +71,6 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
 
   /** Row limit shared with the fixed-schema accumulation receiver. */
   public int getAppendCapacity() {
-    assert fixedAppendCapacity > 0;
     return fixedAppendCapacity;
   }
 

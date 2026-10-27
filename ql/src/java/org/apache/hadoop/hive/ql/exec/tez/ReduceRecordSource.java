@@ -629,13 +629,9 @@ public class ReduceRecordSource implements RecordSource {
         shuffleAccumulator.process(keyWritable, valueWritable, isVectorBatchKey(keyWritable));
         progress.onRecord();
       });
-      // Only normal EOF may publish the partial batch, before downstream finalization.
+      // only normal EOF may publish the partial batch, before downstream finalization
       shuffleAccumulator.flushPendingBatch();
-    } catch (Error e) {
-      abort = true;
-      shuffleAccumulator.discardPendingBatch();
-      throw e;
-    } catch (InterruptedException e) {
+    } catch (Error | InterruptedException e) {
       abort = true;
       shuffleAccumulator.discardPendingBatch();
       throw e;
