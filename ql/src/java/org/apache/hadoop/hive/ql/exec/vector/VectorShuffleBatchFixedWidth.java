@@ -23,10 +23,11 @@ import static org.apache.tez.util.FastByteComparisons.theUnsafe;
 /**
  * Native-endian fixed-width payload movement for the existing compact shuffle frame format.
  * The format writes longs with Unsafe.putLong and doubles with Double.doubleToLongBits.
- * Raw double copying is safe only when reading those already-serialized bits, not when
- * writing arbitrary source doubles (which may contain non-canonical NaN payloads).
+ * Raw double copying is safe only when reading those already-serialized bits,
+ * not when writing arbitrary source doubles (which may contain non-canonical NaN payloads).
  */
 final class VectorShuffleBatchFixedWidth {
+
   private static final int BULK_COPY_MIN_ROWS = 2;
   private static final long LONG_ARRAY_BASE_OFFSET = theUnsafe.arrayBaseOffset(long[].class);
   private static final long DOUBLE_ARRAY_BASE_OFFSET = theUnsafe.arrayBaseOffset(double[].class);
