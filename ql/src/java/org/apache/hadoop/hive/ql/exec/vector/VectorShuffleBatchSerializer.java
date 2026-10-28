@@ -405,11 +405,6 @@ public final class VectorShuffleBatchSerializer {
     writeLong(Double.doubleToLongBits(value));
   }
 
-  private void writeBytes(byte[] bytes, int offset, int length) {
-    System.arraycopy(bytes, offset, buffer, position, length);
-    position += length;
-  }
-
   private void ensureCapacity(long length) {
     if (length < 0 || length > buffer.length - (long) position) {
       throw new ArrayIndexOutOfBoundsException(
@@ -432,9 +427,11 @@ public final class VectorShuffleBatchSerializer {
           if (length < 0) {
             throw new IllegalArgumentException("Negative byte length: " + length);
           }
-          ensureCapacity(Integer.BYTES + (long) length); // once per non-null byte value
-          writeInt(length);
-          writeBytes(bytes.vector[index], bytes.start[index], length);
+          // Copy first: arraycopy validates space for the payload and preceding length before unchecked putInt.
+          int valueOffset = position + Integer.BYTES;
+          System.arraycopy(bytes.vector[index], bytes.start[index], buffer, valueOffset, length);
+          theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position, length);
+          position = valueOffset + length;
         }
       }
     } else if (column instanceof TimestampColumnVector) {
