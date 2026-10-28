@@ -44,6 +44,7 @@ import org.apache.hadoop.hive.ql.exec.vector.ListColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorDeserializeRow;
+import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchHeader;
 import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchSerializer;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatchCtx;
@@ -123,9 +124,11 @@ public class TestVectorShuffleBatchAccumulator {
             new TypeInfo[] {TypeInfoFactory.longTypeInfo}, false));
     rowReader.init();
     Harness harness = new Harness(() -> batch(new LongColumnVector()), 1, rowReader);
+    assertEquals(0, harness.rowDeserializerFactoryCalls);
     VectorizedRowBatch source = longs(2, 7);
     source.cols[0].isRepeating = true;
     harness.process(source);
+    assertEquals(0, harness.rowDeserializerFactoryCalls);
 
     Output rowBytes = new Output();
     BinarySortableSerializeWrite writer = new BinarySortableSerializeWrite(1);
@@ -134,6 +137,7 @@ public class TestVectorShuffleBatchAccumulator {
     BytesWritable key = new BytesWritable();
     key.setDirect(rowBytes.getData(), 0, rowBytes.getLength());
     harness.accumulator.process(key, EMPTY, false);
+    assertEquals(1, harness.rowDeserializerFactoryCalls);
     assertEquals(Arrays.asList(2), harness.sizes);
     assertEquals(1, harness.initial.size);
     assertFalse(harness.initial.cols[0].isRepeating);
@@ -320,8 +324,10 @@ public class TestVectorShuffleBatchAccumulator {
     assertEquals(2, harness.initial.size);
     // Mutate only the header: negative frames must be rejected before pending-batch mutation.
     BytesWritable negative = serialize(longs(0, 0));
+    VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
+    header.read(negative, 1, 0);
     org.apache.tez.util.FastByteComparisons.theUnsafe.putInt(negative.getBytesRaw(),
-        org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET + negative.getOffset(), -1);
+        org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET + header.getRepeatingEnd(), -1);
     assertThrows(IOException.class, () -> harness.accumulator.process(EMPTY, negative, true));
     assertEquals(2, harness.initial.size);
     harness.accumulator.discardPendingBatch();
@@ -367,6 +373,7 @@ public class TestVectorShuffleBatchAccumulator {
     private final VectorizedRowBatch initial;
     private final VectorShuffleBatchAccumulator accumulator;
     private final List<Integer> sizes = new ArrayList<>();
+    private int rowDeserializerFactoryCalls;
 
     private Harness(Supplier<VectorizedRowBatch> factory, int inputColumns,
         VectorDeserializeRow<BinarySortableDeserializeRead> rowReader) throws Exception {
@@ -379,7 +386,10 @@ public class TestVectorShuffleBatchAccumulator {
         return null;
       }).when(reducer).process(any(), anyInt());
       accumulator = new VectorShuffleBatchAccumulator(context, reducer, initial, inputColumns,
-          (byte) 0, rowReader, null);
+          (byte) 0, () -> {
+            rowDeserializerFactoryCalls++;
+            return new VectorShuffleBatchAccumulator.RowDeserializers(rowReader, null);
+          });
     }
 
     private void process(VectorizedRowBatch source) throws Exception {

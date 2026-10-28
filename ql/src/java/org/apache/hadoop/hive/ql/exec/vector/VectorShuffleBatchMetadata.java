@@ -26,6 +26,7 @@ import java.util.List;
  * replacement batches and nested vectors use the same layout without another schema traversal.
  */
 public final class VectorShuffleBatchMetadata {
+
   private static final int LIST_CHILD = Integer.MIN_VALUE;
   private static final int MAP_KEYS = Integer.MIN_VALUE + 1;
   private static final int MAP_VALUES = Integer.MIN_VALUE + 2;
@@ -73,13 +74,14 @@ public final class VectorShuffleBatchMetadata {
       if (descriptor.timestamp) {
         TimestampColumnVector timestamp = (TimestampColumnVector) column;
         if (timestamp.isUTC()) {
-          bytes[offset + descriptor.byteOffset] |= descriptor.mask;
+          setBit(bytes, offset, descriptor.bit);
         }
         if (timestamp.usingProlepticCalendar()) {
-          bytes[offset + descriptor.calendarByteOffset] |= descriptor.calendarMask;
+          int calendarBit = descriptor.bit + 1;
+          setBit(bytes, offset, calendarBit);
         }
       } else if (((DateColumnVector) column).isUsingProlepticCalendar()) {
-        bytes[offset + descriptor.byteOffset] |= descriptor.mask;
+        setBit(bytes, offset, descriptor.bit);
       }
     }
   }
@@ -88,16 +90,29 @@ public final class VectorShuffleBatchMetadata {
   public void apply(ColumnVector[] columns, byte[] bytes, int offset) {
     for (Descriptor descriptor : descriptors) {
       ColumnVector column = descriptor.resolve(columns);
-      boolean flag = (bytes[offset + descriptor.byteOffset] & descriptor.mask) != 0;
+      boolean flag = getBit(bytes, offset, descriptor.bit);
       if (descriptor.timestamp) {
         TimestampColumnVector timestamp = (TimestampColumnVector) column;
         timestamp.setIsUTC(flag);
-        timestamp.setUsingProlepticCalendar(
-            (bytes[offset + descriptor.calendarByteOffset] & descriptor.calendarMask) != 0);
+        int calendarBit = descriptor.bit + 1;
+        timestamp.setUsingProlepticCalendar(getBit(bytes, offset, calendarBit));
       } else {
         ((DateColumnVector) column).setUsingProlepticCalendar(flag);
       }
     }
+  }
+
+  /** Derive the byte offset and mask from a metadata bit index. */
+  private static boolean getBit(byte[] bytes, int offset, int bit) {
+    int byteOffset = bit >>> 3;
+    int mask = 1 << (bit & 7);
+    return (bytes[offset + byteOffset] & mask) != 0;
+  }
+
+  private static void setBit(byte[] bytes, int offset, int bit) {
+    int byteOffset = bit >>> 3;
+    int mask = 1 << (bit & 7);
+    bytes[offset + byteOffset] |= mask;
   }
 
   /** Restore the metadata policy of a fresh execution batch before decoding row input. */
@@ -151,19 +166,20 @@ public final class VectorShuffleBatchMetadata {
     private final int sourceColumn;
     private final int[] path;
     private final boolean timestamp;
-    private final int byteOffset;
-    private final int mask;
-    private final int calendarByteOffset;
-    private final int calendarMask;
+    private final int bit;
 
     private Descriptor(int sourceColumn, int[] path, int bit, boolean timestamp) {
       this.sourceColumn = sourceColumn;
       this.path = path;
       this.timestamp = timestamp;
-      byteOffset = bit >>> 3;
-      mask = 1 << (bit & 7);
-      calendarByteOffset = (bit + 1) >>> 3;
-      calendarMask = 1 << ((bit + 1) & 7);
+      this.bit = bit;
+      // For DATE, bit stores the proleptic-calendar flag.
+      // For TIMESTAMP, bit stores the UTC flag and bit + 1 stores the proleptic-calendar flag.
+      // getBit() and setBit() derive the byte offset and mask from either index:
+      // byteOffset = bit >>> 3;
+      // mask = 1 << (bit & 7);
+      // calendarByteOffset = (bit + 1) >>> 3;
+      // calendarMask = 1 << ((bit + 1) & 7);
     }
 
     private ColumnVector resolve(ColumnVector[] columns) {

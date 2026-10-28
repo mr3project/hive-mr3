@@ -49,13 +49,6 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
   private byte[] repeatingSection;
   private boolean hasRepeatingColumns;
 
-  public VectorShuffleBatchAccumulatingDeserializer() {
-    fixedAppendCapacity = 0;
-    inputColumnCount = -1;
-    accumulatorRepeatingBitmap = null;
-    accumulatorMetadata = null;
-  }
-
   /** Cache the fixed input schema's capacity and header sizes, excluding scratch columns. */
   public VectorShuffleBatchAccumulatingDeserializer(VectorizedRowBatch schema, int inputColumnCount) {
     assert schema != null;
@@ -63,6 +56,7 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
     this.inputColumnCount = inputColumnCount;
     initialize(schema.cols, inputColumnCount);
     fixedAppendCapacity = calculateAppendCapacity(schema, inputColumnCount);
+    assert fixedAppendCapacity > 0;
     accumulatorRepeatingBitmap = inputColumnCount <= Long.SIZE
         ? null : new byte[(inputColumnCount + 7) / 8];
     accumulatorMetadata = new byte[metadata.getByteCount()];
@@ -77,7 +71,6 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
 
   /** Row limit shared with the fixed-schema accumulation receiver. */
   public int getAppendCapacity() {
-    assert fixedAppendCapacity > 0;
     return fixedAppendCapacity;
   }
 
@@ -290,11 +283,11 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
     assert serialized != null && destination != null;
     int columnCount = inputColumnCount;
     if (columnCount < 0) {
-      if (serialized.getLength() < 2 * Integer.BYTES) {
+      if (serialized.getLength() < Integer.BYTES) {
         throw new IOException("Truncated vector shuffle batch header");
       }
       columnCount = theUnsafe.getInt(serialized.getBytesRaw(),
-          BYTE_ARRAY_BASE_OFFSET + serialized.getOffset() + Integer.BYTES);
+          BYTE_ARRAY_BASE_OFFSET + serialized.getOffset());
       if (columnCount < 0 || columnCount > destination.cols.length) {
         throw new IOException("Invalid vector shuffle batch column count " + columnCount);
       }
@@ -337,6 +330,7 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
         readRepeatingColumns(destination, columnCount, rowCount);
       }
       checkRepeatingSectionEnd();
+      position = header.getOrdinaryStart();
       if (!header.hasRepeatingColumns()) {
         for (int i = 0; i < columnCount; i++) {
           readColumn(destination.cols[i], rowCount);
