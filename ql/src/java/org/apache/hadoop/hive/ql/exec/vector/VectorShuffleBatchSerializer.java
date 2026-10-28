@@ -150,7 +150,7 @@ public final class VectorShuffleBatchSerializer {
     assert rowOffset >= 0 && rowCount <= rowIndices.length - rowOffset;
 
     reset(buffer, position);
-    ensureCapacity(commonPrefix.length);
+    ensureCapacity(commonPrefix.length); // once per partition prefix
     System.arraycopy(commonPrefix.bytes, 0, buffer, position, commonPrefix.length);
 
     this.position += commonPrefix.length;
@@ -172,7 +172,7 @@ public final class VectorShuffleBatchSerializer {
   private int writeCommonPrefix(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
       int rowOffset, int rowCount) {
     // add Integer.BYTES for writeInt() when repeatingCount != 0
-    ensureCapacity(commonHeaderSize + Integer.BYTES);
+    ensureCapacity(commonHeaderSize + Integer.BYTES); // once per common prefix
     theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position, columnCount);
 
     // Bits refer to the sourceColumnMap's logical order, least significant bit first.
@@ -213,7 +213,7 @@ public final class VectorShuffleBatchSerializer {
 
   private void writePartition(VectorizedRowBatch source, int[] ordinaryColumns, int ordinaryCount,
       int[] rowIndices, int rowOffset, int rowCount) {
-    ensureCapacity(Integer.BYTES + Byte.BYTES);
+    ensureCapacity(Integer.BYTES + Byte.BYTES); // once per partition header
     writeInt(rowCount);
     final int nestedRepeatingOffset = position;
     writeByte(0);
@@ -240,7 +240,7 @@ public final class VectorShuffleBatchSerializer {
 
     final boolean hasNulls = firstNull < valueCount;
     final int nullBitmapLength = hasNulls ? (valueCount + 7) / 8 : 0;
-    ensureCapacity(Byte.BYTES + nullBitmapLength);
+    ensureCapacity(Byte.BYTES + nullBitmapLength); // once per column header
     writeByte((repeating ? IS_REPEATING : 0)
         | (column instanceof Decimal64ColumnVector ? IS_DECIMAL_64 : 0)
         | (hasNulls ? HAS_NULLS : 0));
@@ -312,7 +312,7 @@ public final class VectorShuffleBatchSerializer {
 
   private void writeUnionChildren(UnionColumnVector union, int[] indices, int rowOffset,
       int valueCount, boolean repeating, int nullBitmapOffset, int nonNullCount) {
-    ensureCapacity((long) nonNullCount * Integer.BYTES);
+    ensureCapacity((long) nonNullCount * Integer.BYTES); // once per union-tag section
     int[] fieldCounts = new int[union.fields.length];
     for (int logical = 0; logical < valueCount; logical++) {
       if (!isNull(nullBitmapOffset, logical)) {
@@ -351,7 +351,7 @@ public final class VectorShuffleBatchSerializer {
   private void writeMultiValuedChildren(MultiValuedColumnVector parent, ColumnVector firstChild,
       ColumnVector secondChild, int[] indices, int rowOffset, int valueCount, boolean repeating,
       int nullBitmapOffset, int nonNullCount) {
-    ensureCapacity((long) nonNullCount * Integer.BYTES);
+    ensureCapacity((long) nonNullCount * Integer.BYTES); // once per list/map length section
     int childCount = 0;
     for (int logical = 0; logical < valueCount; logical++) {
       if (!isNull(nullBitmapOffset, logical)) {
@@ -432,14 +432,14 @@ public final class VectorShuffleBatchSerializer {
           if (length < 0) {
             throw new IllegalArgumentException("Negative byte length: " + length);
           }
-          ensureCapacity(Integer.BYTES + (long) length);
+          ensureCapacity(Integer.BYTES + (long) length); // once per non-null byte value
           writeInt(length);
           writeBytes(bytes.vector[index], bytes.start[index], length);
         }
       }
     } else if (column instanceof TimestampColumnVector) {
       TimestampColumnVector timestamp = (TimestampColumnVector) column;
-      ensureCapacity((long) nonNullCount * (Long.BYTES + Integer.BYTES));
+      ensureCapacity((long) nonNullCount * (Long.BYTES + Integer.BYTES)); // once per timestamp column
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmapOffset, logical)) {
           int index = physicalIndex(indices, rowOffset, logical, repeating);
@@ -449,7 +449,7 @@ public final class VectorShuffleBatchSerializer {
       }
     } else if (column instanceof IntervalDayTimeColumnVector) {
       IntervalDayTimeColumnVector intervalColumn = (IntervalDayTimeColumnVector) column;
-      ensureCapacity((long) nonNullCount * (Long.BYTES + Integer.BYTES));
+      ensureCapacity((long) nonNullCount * (Long.BYTES + Integer.BYTES)); // once per interval day-time column
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmapOffset, logical)) {
           HiveIntervalDayTime interval =
@@ -470,7 +470,7 @@ public final class VectorShuffleBatchSerializer {
     } else if (column instanceof LongColumnVector) {
       // Includes Decimal64ColumnVector and DateColumnVector: all use native-endian longs.
       LongColumnVector longs = (LongColumnVector) column;
-      ensureCapacity((long) nonNullCount * Long.BYTES);
+      ensureCapacity((long) nonNullCount * Long.BYTES); // once per long column
       if (nullBitmapOffset < 0 && !repeating) {
         int bytes = valueCount * Long.BYTES;
         if (indices == null) {
@@ -493,7 +493,7 @@ public final class VectorShuffleBatchSerializer {
       }
     } else if (column instanceof DoubleColumnVector) {
       DoubleColumnVector doubles = (DoubleColumnVector) column;
-      ensureCapacity((long) nonNullCount * Double.BYTES);
+      ensureCapacity((long) nonNullCount * Double.BYTES); // once per double column
       if (nullBitmapOffset < 0 && !repeating) {
         int bytes = valueCount * Double.BYTES;
         // Do not bulk-copy raw doubles: doubleToLongBits canonicalizes NaN payloads.
