@@ -479,6 +479,112 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testSerializerCapacityReservationsForPrimitiveColumns() {
+    LongColumnVector longs = new LongColumnVector();
+    DoubleColumnVector doubles = new DoubleColumnVector();
+    TimestampColumnVector timestamps = new TimestampColumnVector();
+    IntervalDayTimeColumnVector intervals = new IntervalDayTimeColumnVector();
+    BytesColumnVector strings = new BytesColumnVector();
+    strings.initBuffer();
+
+    for (int row = 0; row < 4; row++) {
+      longs.vector[row] = row * 17L;
+      doubles.vector[row] = row / 7.0;
+      timestamps.time[row] = row * 1000L;
+      timestamps.nanos[row] = row * 12345;
+      intervals.set(row, new HiveIntervalDayTime(row * 3600L, row * 12345));
+      strings.setVal(row, bytes("value-" + row));
+    }
+    longs.noNulls = false;
+    longs.isNull[1] = true;
+    doubles.noNulls = false;
+    doubles.isNull[2] = true;
+    timestamps.noNulls = false;
+    timestamps.isNull[1] = true;
+    intervals.noNulls = false;
+    intervals.isNull[3] = true;
+    strings.noNulls = false;
+    strings.isNull[0] = true;
+
+    for (ColumnVector column : new ColumnVector[] {
+        longs, doubles, timestamps, intervals, strings}) {
+      assertSerializeFitsExactBuffer(batchWithColumn(column, 4));
+    }
+
+    // A repeating nullable column writes one value, not four.
+    longs.isRepeating = true;
+    longs.isNull[0] = false;
+    assertSerializeFitsExactBuffer(batchWithColumn(longs, 4));
+  }
+
+  @Test
+  public void testSerializerCapacityReservationsForNestedColumns() {
+    LongColumnVector elements = new LongColumnVector();
+    ListColumnVector list = new ListColumnVector(1024, elements);
+    list.offsets[0] = 0;
+    list.lengths[0] = 2;
+    list.offsets[1] = 2;
+    list.lengths[1] = 0;
+    list.offsets[2] = 2;
+    list.lengths[2] = 1;
+    list.childCount = 3;
+    elements.vector[0] = 10;
+    elements.vector[1] = 20;
+    elements.vector[2] = 30;
+    list.noNulls = false;
+    list.isNull[1] = true;
+    assertSerializeFitsExactBuffer(batchWithColumn(list, 3));
+
+    LongColumnVector keys = new LongColumnVector();
+    BytesColumnVector values = new BytesColumnVector();
+    values.initBuffer();
+    MapColumnVector map = new MapColumnVector(1024, keys, values);
+    map.offsets[0] = 0;
+    map.lengths[0] = 1;
+    map.offsets[1] = 1;
+    map.lengths[1] = 0;
+    map.offsets[2] = 1;
+    map.lengths[2] = 1;
+    map.childCount = 2;
+    keys.vector[0] = 7;
+    keys.vector[1] = 9;
+    values.setVal(0, bytes("one"));
+    values.setVal(1, bytes("two"));
+    assertSerializeFitsExactBuffer(batchWithColumn(map, 3));
+
+    LongColumnVector unionLongs = new LongColumnVector();
+    TimestampColumnVector unionTimestamps = new TimestampColumnVector();
+    UnionColumnVector union = unionOf(unionLongs, unionTimestamps);
+    union.tags[0] = 0;
+    union.tags[1] = 1;
+    union.tags[2] = 0;
+    unionLongs.vector[0] = 5;
+    unionLongs.vector[2] = 8;
+    unionTimestamps.time[1] = 123456L;
+    unionTimestamps.nanos[1] = 789;
+    assertSerializeFitsExactBuffer(batchWithColumn(union, 3));
+  }
+
+  private static void assertSerializeFitsExactBuffer(VectorizedRowBatch source) {
+    VectorShuffleBatchSerializer batchSerializer = new VectorShuffleBatchSerializer();
+    int[] mapping = identityMap(source.numCols);
+    batchSerializer.initialize(source.cols, mapping);
+    int offset = 13;
+    byte[] reference = new byte[4096];
+    int length = batchSerializer.serialize(source, mapping, reference, offset);
+
+    byte[] exact = new byte[offset + length];
+    assertEquals(length, batchSerializer.serialize(source, mapping, exact, offset));
+    assertArrayEquals(
+        Arrays.copyOfRange(reference, offset, offset + length),
+        Arrays.copyOfRange(exact, offset, offset + length));
+
+    byte[] tooSmall = new byte[offset + length - 1];
+    assertThrows(ArrayIndexOutOfBoundsException.class,
+        () -> batchSerializer.serialize(source, mapping, tooSmall, offset));
+  }
+
+  @Test
   public void testDenseFixedWidthFastPathsForConsecutiveSelectedAndPartitionRows()
       throws Exception {
     for (int rows : new int[] {1, 7, 8, 10, 16}) {
