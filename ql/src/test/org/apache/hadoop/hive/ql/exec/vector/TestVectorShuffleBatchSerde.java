@@ -515,6 +515,13 @@ public class TestVectorShuffleBatchSerde {
     longs.isRepeating = true;
     longs.isNull[0] = false;
     assertSerializeFitsExactBuffer(batchWithColumn(longs, 4));
+
+    // Nullable-but-not-null and all-null columns reserve exactly their emitted payload.
+    longs.isRepeating = false;
+    Arrays.fill(longs.isNull, 0, 4, false);
+    assertSerializeFitsExactBuffer(batchWithColumn(longs, 4));
+    Arrays.fill(longs.isNull, 0, 4, true);
+    assertSerializeFitsExactBuffer(batchWithColumn(longs, 4));
   }
 
   @Test
