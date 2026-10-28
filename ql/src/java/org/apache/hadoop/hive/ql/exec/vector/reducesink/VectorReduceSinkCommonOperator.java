@@ -156,7 +156,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient int vectorShuffleNumUnorderedPartitions;
 
   // Mutually exclusive outcomes for nonempty partition-batch groups handled by compact batching.
-  // One normal-close summary: xxxxx compact singleton null-buffer small-region overflow.
+  // One normal-close summary for unordered Tez output:
+  // xxxxx partitions compact singleton null-buffer small-region overflow.
   private transient long shuffleCompactFrames;
   private transient long shuffleSingletonPartitions;
   private transient long shuffleNullBufferFallbacks;
@@ -803,10 +804,13 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       reducerHash.flush();
     }
     super.closeOp(abort);
-    if (!abort && !shuffleSummaryLogged) {
-      LOG.error("xxxxx {} {} {} {} {}", shuffleCompactFrames, shuffleSingletonPartitions,
-          shuffleNullBufferFallbacks, shuffleSmallRegionFallbacks, shuffleOverflowFallbacks);
-      shuffleSummaryLogged = true;
+    if (!abort && !shuffleSummaryLogged && out != null) {
+      final int partitions = out.getNumUnorderedPartitions();
+      if (partitions > 0) {
+        LOG.error("xxxxx {} {} {} {} {} {}", partitions, shuffleCompactFrames, shuffleSingletonPartitions,
+            shuffleNullBufferFallbacks, shuffleSmallRegionFallbacks, shuffleOverflowFallbacks);
+        shuffleSummaryLogged = true;
+      }
     }
     out = null;
     reducerHash = null;
