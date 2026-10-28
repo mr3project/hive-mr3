@@ -241,7 +241,6 @@ public final class VectorShuffleBatchSerializer {
     final boolean hasNulls = firstNull < valueCount;
     final int nullBitmapLength = hasNulls ? (valueCount + 7) / 8 : 0;
     ensureCapacity(Byte.BYTES + nullBitmapLength);
-    final int flagsOffset = position;
     writeByte((repeating ? IS_REPEATING : 0)
         | (column instanceof Decimal64ColumnVector ? IS_DECIMAL_64 : 0)
         | (hasNulls ? HAS_NULLS : 0));
