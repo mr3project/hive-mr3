@@ -155,6 +155,15 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient boolean vectorShuffleBatchAllowed;
   private transient int vectorShuffleNumUnorderedPartitions;
 
+  // Mutually exclusive outcomes for nonempty partition-batch groups handled by compact batching.
+  // One normal-close summary: xxxxx compact singleton null-buffer small-region overflow.
+  private transient long shuffleCompactFrames;
+  private transient long shuffleSingletonPartitions;
+  private transient long shuffleNullBufferFallbacks;
+  private transient long shuffleSmallRegionFallbacks;
+  private transient long shuffleOverflowFallbacks;
+  private transient boolean shuffleSummaryLogged;
+
   private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
   private transient byte[] vectorShuffleSerializeBuffer;
   private transient int[] vectorShuffleBatchColumnMap;
@@ -353,6 +362,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShufflePartitionRowIndices = null;
     vectorShuffleNumUnorderedPartitions = -1;
     vectorShufflePartitionerType = -1;
+    shuffleCompactFrames = 0;
+    shuffleSingletonPartitions = 0;
+    shuffleNullBufferFallbacks = 0;
+    shuffleSmallRegionFallbacks = 0;
+    shuffleOverflowFallbacks = 0;
+    shuffleSummaryLogged = false;
   }
 
   protected boolean tryCollectVectorShuffleBatch(VectorizedRowBatch batch, int tag)
@@ -383,6 +398,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       final int logicalRecordCount = batch.size;
       if (logicalRecordCount <= NUM_ROWS_THRESHOLD_FOR_BATCH) {
         collectVectorShuffleRows(batch, null, 0, logicalRecordCount, 0, tag);
+        shuffleSingletonPartitions++;
       } else {
         while (true) {
           try {
@@ -393,6 +409,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
           }
         }
         doCollectBatch(vectorShuffleBatchKey, vectorShuffleBatchValue, 0, logicalRecordCount);
+        shuffleCompactFrames++;
       }
       return true;
     }
@@ -448,11 +465,17 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       if (rowCount <= NUM_ROWS_THRESHOLD_FOR_BATCH) {
         collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
             vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
+        shuffleSingletonPartitions++;
       } else {
         WriteValueBytes valueBytes = out.requestWriteValueBytes(vectorShuffleBatchKey, partition);
         if (valueBytes == null || valueBytes.maxValueBytes <= MIN_VALUE_BYTES_THRESHOLD) {
           collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
               vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
+          if (valueBytes == null) {
+            shuffleNullBufferFallbacks++;
+          } else {
+            shuffleSmallRegionFallbacks++;
+          }
           continue;
         }
         final int valueLength;
@@ -470,9 +493,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         } catch (ArrayIndexOutOfBoundsException ex) {
           collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
               vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
+          shuffleOverflowFallbacks++;
           continue;
         }
         out.completeWriteValueBytes(vectorShuffleBatchKey, valueLength, partition);
+        shuffleCompactFrames++;
         recordCollectedBatch(rowCount);
       }
     }
@@ -778,6 +803,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       reducerHash.flush();
     }
     super.closeOp(abort);
+    if (!abort && !shuffleSummaryLogged) {
+      LOG.error("xxxxx {} {} {} {} {}", shuffleCompactFrames, shuffleSingletonPartitions,
+          shuffleNullBufferFallbacks, shuffleSmallRegionFallbacks, shuffleOverflowFallbacks);
+      shuffleSummaryLogged = true;
+    }
     out = null;
     reducerHash = null;
     LOG.info("{}::: records written - {}", this, numRows);
