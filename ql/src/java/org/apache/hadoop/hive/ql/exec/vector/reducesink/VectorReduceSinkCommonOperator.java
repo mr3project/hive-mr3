@@ -155,16 +155,18 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient boolean vectorShuffleBatchAllowed;
   private transient int vectorShuffleNumUnorderedPartitions;
 
-  // The first five counters classify nonempty partition-batch groups handled by compact batching.
-  // The sixth counts single-partition serialization-overflow attempts, including repeated retries.
+  // N1-N5 classify nonempty partition-batch groups handled by compact batching.
+  // N6 counts single-partition serialization-overflow attempts, including repeated retries.
   // One normal-close summary for unordered Tez output:
-  // xxxxx partitions compact singleton null-buffer small-region overflow single-partition-overflow.
+  // xxxxx P B R N1 N2 N3 N4 N5 N6; R includes logical output rows in compact frames.
+  // B counts nonempty input batches after key/value expressions, even when compact batching is disabled.
   private transient long shuffleCompactFrames;
   private transient long shuffleSingletonPartitions;
   private transient long shuffleNullBufferFallbacks;
   private transient long shuffleSmallRegionFallbacks;
   private transient long shuffleOverflowFallbacks;
   private transient long shuffleSinglePartitionOverflows;
+  private transient long shuffleNonemptyBatches;
   private transient boolean shuffleSummaryLogged;
 
   private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
@@ -371,11 +373,15 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     shuffleSmallRegionFallbacks = 0;
     shuffleOverflowFallbacks = 0;
     shuffleSinglePartitionOverflows = 0;
+    shuffleNonemptyBatches = 0;
     shuffleSummaryLogged = false;
   }
 
   protected boolean tryCollectVectorShuffleBatch(VectorizedRowBatch batch, int tag)
       throws HiveException, IOException {
+    if (batch.size > 0) {
+      shuffleNonemptyBatches++;
+    }
     if (!vectorShuffleBatchAllowed || out == null) {
       return false;
     }
@@ -811,9 +817,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     if (!abort && !shuffleSummaryLogged && out != null) {
       final int partitions = out.getNumUnorderedPartitions();
       if (partitions > 0) {
-        LOG.error("xxxxx {} {} {} {} {} {} {}", partitions, shuffleCompactFrames, shuffleSingletonPartitions,
-            shuffleNullBufferFallbacks, shuffleSmallRegionFallbacks, shuffleOverflowFallbacks,
-            shuffleSinglePartitionOverflows);
+        LOG.error("xxxxx {} {} {} {} {} {} {} {} {}", partitions, shuffleNonemptyBatches, numRows,
+            shuffleCompactFrames, shuffleSingletonPartitions, shuffleNullBufferFallbacks,
+            shuffleSmallRegionFallbacks, shuffleOverflowFallbacks, shuffleSinglePartitionOverflows);
         shuffleSummaryLogged = true;
       }
     }
