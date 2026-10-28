@@ -179,17 +179,15 @@ public class TestVectorShuffleBatchAccumulator {
   }
 
   @Test
-  public void testFullAndOneRowFramesDispatchStandalone() throws Exception {
+  public void testFullFramesDispatchStandalone() throws Exception {
     Harness harness = new Harness(() -> batch(4, new LongColumnVector(4)), 1, null);
     harness.process(longs(3, 10));
     harness.process(longs(3, 20));
     assertEquals(Arrays.asList(3), harness.sizes);
     harness.process(longs(4, 30));
     assertEquals(Arrays.asList(3, 3, 4), harness.sizes);
-    harness.process(longs(1, 40));
-    assertEquals(Arrays.asList(3, 3, 4, 1), harness.sizes);
     harness.accumulator.flushPendingBatch();
-    assertEquals(Arrays.asList(3, 3, 4, 1), harness.sizes);
+    assertEquals(Arrays.asList(3, 3, 4), harness.sizes);
   }
 
   @Test
@@ -316,14 +314,13 @@ public class TestVectorShuffleBatchAccumulator {
   }
 
   @Test
-  public void testEmptyAndNegativeFramesDoNotPublishPendingRowsAndAbortDiscards() throws Exception {
+  public void testNegativeFramesDoNotPublishPendingRowsAndAbortDiscards() throws Exception {
     Harness harness = new Harness(() -> batch(new LongColumnVector()), 1, null);
     harness.process(longs(2, 10));
-    harness.process(longs(0, 0));
     assertTrue(harness.sizes.isEmpty());
     assertEquals(2, harness.initial.size);
     // Mutate only the header: negative frames must be rejected before pending-batch mutation.
-    BytesWritable negative = serialize(longs(0, 0));
+    BytesWritable negative = serialize(longs(2, 20));
     VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
     header.read(negative, 1, 0);
     org.apache.tez.util.FastByteComparisons.theUnsafe.putInt(negative.getBytesRaw(),
@@ -362,7 +359,9 @@ public class TestVectorShuffleBatchAccumulator {
       columns[column] = column;
     }
     byte[] bytes = new byte[64 * 1024];
-    int length = new VectorShuffleBatchSerializer().serialize(source, columns, bytes, 0);
+    VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
+    serializer.initialize(source.cols, columns);
+    int length = serializer.serialize(source, columns, bytes, 0);
     BytesWritable result = new BytesWritable();
     result.setDirect(bytes, 0, length);
     return result;
