@@ -150,7 +150,7 @@ public final class VectorShuffleBatchSerializer {
     assert rowOffset >= 0 && rowCount <= rowIndices.length - rowOffset;
 
     reset(buffer, position);
-    ensureCapacity(commonPrefix.length); // once per partition prefix
+    ensureCapacity((long) commonPrefix.length + Integer.BYTES + Byte.BYTES); // once per partition prefix and header
     System.arraycopy(commonPrefix.bytes, 0, buffer, position, commonPrefix.length);
 
     this.position += commonPrefix.length;
@@ -165,6 +165,7 @@ public final class VectorShuffleBatchSerializer {
       int rowOffset, int rowCount, byte[] buffer, int position) {
     reset(buffer, position);
     int ordinaryCount = writeCommonPrefix(source, sourceColumnMap, rowIndices, rowOffset, rowCount);
+    ensureCapacity(Integer.BYTES + Byte.BYTES); // once per partition header
     writePartition(source, ordinaryColumns, ordinaryCount, rowIndices, rowOffset, rowCount);
     return this.position - position;
   }
@@ -213,7 +214,6 @@ public final class VectorShuffleBatchSerializer {
 
   private void writePartition(VectorizedRowBatch source, int[] ordinaryColumns, int ordinaryCount,
       int[] rowIndices, int rowOffset, int rowCount) {
-    ensureCapacity(Integer.BYTES + Byte.BYTES); // once per partition header
     writeInt(rowCount);
     final int nestedRepeatingOffset = position;
     writeByte(0);
