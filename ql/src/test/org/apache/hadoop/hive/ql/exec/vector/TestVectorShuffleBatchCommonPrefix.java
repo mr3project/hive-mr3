@@ -292,8 +292,8 @@ public class TestVectorShuffleBatchCommonPrefix {
       numbers.isRepeating = repeating;
       VectorizedRowBatch source = batch(2, numbers);
       VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
-    serializer.initialize(source.cols, mapping);
       int[] mapping = {0};
+      serializer.initialize(source.cols, mapping);
       serializer.setupCommonPrefix(source, mapping,
           new byte[BUFFER_SIZE], 0);
       BytesWritable frame = assertPreparedFrame(serializer, source, mapping,
