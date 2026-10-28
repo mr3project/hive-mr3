@@ -794,6 +794,23 @@ public class TestVectorShuffleBatchSerde {
   }
 
   @Test
+  public void testSerializerRejectsNegativeBytesColumnLength() {
+    BytesColumnVector bytes = new BytesColumnVector();
+    VectorizedRowBatch source = batchWithColumn(bytes, 1);
+    VectorShuffleBatchSerializer batchSerializer = new VectorShuffleBatchSerializer();
+    int[] mapping = {0};
+    batchSerializer.initialize(source.cols, mapping);
+    byte[] buffer = new byte[1024];
+
+    for (int length : new int[] {-1, -4, Integer.MIN_VALUE}) {
+      bytes.setRef(0, new byte[0], 0, length);
+      IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+          () -> batchSerializer.serialize(source, mapping, buffer, 0));
+      assertEquals("Negative byte length: " + length, exception.getMessage());
+    }
+  }
+
+  @Test
   public void testVariableLengthEncodingBoundaries() throws Exception {
     int[] lengths = {0, 1, 127, 128, 255, 256};
     BytesColumnVector source = new BytesColumnVector();
