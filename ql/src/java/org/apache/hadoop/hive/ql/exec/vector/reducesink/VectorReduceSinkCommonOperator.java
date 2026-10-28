@@ -73,7 +73,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private static final String CLASS_NAME = VectorReduceSinkCommonOperator.class.getName();
   private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
 
-  private static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 1;
+  public static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 1;
   private static final int SERIALIZE_BUFFER_SIZE = 100 * 1024;
   private static final int MIN_VALUE_BYTES_THRESHOLD = 128;
 
@@ -439,6 +439,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       vectorShufflePartitionRowIndices[vectorShufflePartitionPositions[partition]++] = batchIndex;
     }
 
+    boolean prefixPrepared = false;
     for (int partition = 0; partition < numUnorderedPartitions; partition++) {
       final int rowCount = vectorShufflePartitionCounts[partition];
       if (rowCount == 0) {
@@ -456,7 +457,14 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         }
         final int valueLength;
         try {
-          valueLength = vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
+          if (!prefixPrepared) {
+            // Set up only after the first compact partition obtains a usable writer buffer.
+            // Keep this local: input values, repeating flags, and metadata may change next batch.
+            vectorShuffleBatchSerializer.setupCommonPrefix(batch, vectorShuffleBatchColumnMap,
+                valueBytes.buffer, valueBytes.offsetToValueBytes);
+            prefixPrepared = true;
+          }
+          valueLength = vectorShuffleBatchSerializer.serializePartition(batch,
               vectorShufflePartitionRowIndices, vectorShufflePartitionOffsets[partition], rowCount,
               valueBytes.buffer, valueBytes.offsetToValueBytes);
         } catch (ArrayIndexOutOfBoundsException ex) {
