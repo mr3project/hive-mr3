@@ -431,6 +431,9 @@ public final class VectorShuffleBatchSerializer {
         if (!isNull(nullBitmapOffset, logical)) {
           int index = physicalIndex(indices, rowOffset, logical, repeating);
           int length = bytes.length[index];
+          if (length < 0) {
+            throw new IllegalArgumentException("Negative byte length: " + length);
+          }
           ensureCapacity(Integer.BYTES + (long) length);
           writeInt(length);
           writeBytes(bytes.vector[index], bytes.start[index], length);
