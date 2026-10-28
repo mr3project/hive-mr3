@@ -185,7 +185,6 @@ final class VectorShuffleBatchAccumulator {
     final boolean retained = reducer.batchNeedsClone();
     reducer.process(batch, tag);
     // Never reset a batch retained by downstream code.
-    // Allocate once per dispatch instead of once per incoming record.
     // The counters must not depend on the returned batch.size.
     prepareAccumulator(retained);
   }
@@ -206,11 +205,7 @@ final class VectorShuffleBatchAccumulator {
       batch.reset();  // includes scratch columns, nested storage, selection, and EOF state
       batchMetadata.reset(batch.cols);
     }
-    initializeAccumulatorState();
-  }
 
-  // A newly created batch has already been reset by VectorizedRowBatchCtx.
-  private void initializeAccumulatorState() {
     batch.projectedColumns = accumulatorProjection;
     batch.selected = accumulatorSelection;
     batch.projectionSize = inputColumnCount;
@@ -219,5 +214,4 @@ final class VectorShuffleBatchAccumulator {
     }
     discardPendingBatch();
   }
-
 }

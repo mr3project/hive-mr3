@@ -26,6 +26,7 @@ import java.util.List;
  * replacement batches and nested vectors use the same layout without another schema traversal.
  */
 public final class VectorShuffleBatchMetadata {
+
   private static final int LIST_CHILD = Integer.MIN_VALUE;
   private static final int MAP_KEYS = Integer.MIN_VALUE + 1;
   private static final int MAP_VALUES = Integer.MIN_VALUE + 2;
@@ -172,8 +173,8 @@ public final class VectorShuffleBatchMetadata {
       this.path = path;
       this.timestamp = timestamp;
       this.bit = bit;
-      // For DATE, bit stores the proleptic-calendar flag. For TIMESTAMP,
-      // bit stores the UTC flag and bit + 1 stores the proleptic-calendar flag.
+      // For DATE, bit stores the proleptic-calendar flag.
+      // For TIMESTAMP, bit stores the UTC flag and bit + 1 stores the proleptic-calendar flag.
       // getBit() and setBit() derive the byte offset and mask from either index:
       // byteOffset = bit >>> 3;
       // mask = 1 << (bit & 7);

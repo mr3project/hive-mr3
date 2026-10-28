@@ -43,6 +43,7 @@ import org.apache.hadoop.io.BytesWritable;
  * Padding bits are zero. The fixed schema determines the metadata bitmap's length.</p>
  */
 public final class VectorShuffleBatchHeader {
+
   private static final int PARTITION_HEADER_SIZE = Integer.BYTES + Byte.BYTES;
 
   private byte[] buffer;
@@ -59,7 +60,6 @@ public final class VectorShuffleBatchHeader {
   private boolean nestedRepeating;
   private long repeatingBits;
 
-  /** Borrows the serialized bytes until {@link #clear()}; does not allocate or scan payloads. */
   public void read(BytesWritable serialized, int expectedColumnCount, int metadataByteCount)
       throws IOException {
     buffer = serialized.getBytesRaw();
@@ -68,10 +68,12 @@ public final class VectorShuffleBatchHeader {
     if (serialized.getLength() < Integer.BYTES) {
       throw new IOException("Truncated vector shuffle batch header");
     }
+
     columnCount = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + position);
-    if (columnCount != expectedColumnCount || columnCount < 0) {
+    if (columnCount != expectedColumnCount) {
       throw new IOException("Invalid vector shuffle batch column count " + columnCount);
     }
+
     position += Integer.BYTES;
     bitmapOffset = position;
     bitmapLength = (int) ((columnCount + 7L) / 8);
@@ -79,6 +81,7 @@ public final class VectorShuffleBatchHeader {
     if ((long) bitmapLength + metadataLength + PARTITION_HEADER_SIZE > limit - position) {
       throw new IOException("Truncated vector shuffle batch header");
     }
+
     repeatingBits = 0;
     if (columnCount <= Long.SIZE) {
       for (int i = 0; i < bitmapLength; i++) {
@@ -91,7 +94,9 @@ public final class VectorShuffleBatchHeader {
         repeating |= buffer[position++] != 0;
       }
     }
+
     metadataOffset = position;
+
     position += metadataLength;
     int repeatingLength = 0;
     if (repeating) {
@@ -104,12 +109,14 @@ public final class VectorShuffleBatchHeader {
         throw new IOException("Invalid vector shuffle repeating-section length " + repeatingLength);
       }
     }
+
     repeatingStart = position;
     repeatingEnd = position + repeatingLength;
     rowCount = theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + repeatingEnd);
     if (rowCount < 0) {
       throw new IOException("Invalid vector shuffle batch row count " + rowCount);
     }
+
     nestedRepeating = buffer[repeatingEnd + Integer.BYTES] != 0;
   }
 
