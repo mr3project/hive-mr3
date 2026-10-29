@@ -40,6 +40,7 @@ import org.apache.hadoop.hive.ql.exec.OperatorUtils;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.DAG;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.Edge;
+import org.apache.hadoop.hive.ql.exec.mr3.dag.EdgeProperty;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.GroupInputEdge;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.Vertex;
 import org.apache.hadoop.hive.ql.exec.mr3.dag.VertexGroup;
@@ -47,6 +48,7 @@ import org.apache.hadoop.hive.ql.exec.mr3.session.MR3Session;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManager;
 import org.apache.hadoop.hive.ql.exec.mr3.session.MR3SessionManagerImpl;
 import org.apache.hadoop.hive.ql.exec.mr3.status.MR3JobRef;
+import org.apache.hadoop.hive.ql.exec.vector.reducesink.VectorReduceSinkCommonOperator;
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -296,6 +298,7 @@ public class MR3Task {
         if (dagStatus == null) {
           throw new MR3Exception("DAGStatus not available with return code == 0");
         }
+        logP1ShuffleLogicalDeliveries(dagStatus);
         String dagIdStr = mr3JobRef.getDagIdStr();    // may throw MR3Exception
         collectCommitInformation(tezWork, dagStatus, dagIdStr);
         Map<String, String> resultPreviewAttributes = collectDagOutputs(dagStatus, context, resultSchema);
@@ -344,6 +347,89 @@ public class MR3Task {
     }
 
     return returnCode;
+  }
+
+  /**
+   * Sum logical row deliveries for unordered P=1 ReduceSink outputs.
+   * The per-operator counter is reported only for P=1; each broadcast edge
+   * replicates its rows to every successful destination task. All other
+   * routing types have fanout one for this diagnostic.
+   */
+  private void logP1ShuffleLogicalDeliveries(DAGStatus dagStatus) {
+    if (counters == null || workToVertex == null) {
+      LOG.warn("Unable to calculate P=1 shuffle deliveries: missing counters or vertex mapping");
+      return;
+    }
+
+    CounterGroup group = counters.getGroup(
+        HiveConf.getVar(conf, HiveConf.ConfVars.HIVE_COUNTER_GROUP));
+    if (group == null) {
+      LOG.warn("Unable to calculate P=1 shuffle deliveries: missing Hive counter group");
+      return;
+    }
+
+    final String counterPrefix = VectorReduceSinkCommonOperator.SHUFFLE_P1_ROWS_COUNTER_PREFIX;
+    final Set<String> seenOperatorIds = new HashSet<>();
+    long total = 0;
+    try {
+      for (Map.Entry<BaseWork, Vertex> entry : workToVertex.entrySet()) {
+        Vertex sourceVertex = entry.getValue();
+        for (Operator<?> op : entry.getKey().getAllOperators()) {
+          if (!op.getIsReduceSink()) {
+            continue;
+          }
+          String operatorId = op.getOperatorId();
+          TezCounter rowCounter = group.findCounter(counterPrefix + operatorId, false);
+          if (rowCounter == null) {
+            continue;
+          }
+          if (!seenOperatorIds.add(operatorId)) {
+            LOG.warn("Unable to calculate P=1 shuffle deliveries: duplicate operator {}", operatorId);
+            return;
+          }
+
+          String outputName = op.getReduceOutputName();
+          long fanout = 0;
+          for (Edge edge : sourceVertex.getOutputEdges()) {
+            if (!edge.getDestVertex().getName().equals(outputName)) {
+              continue;
+            }
+            long edgeFanout = 1;
+            if (edge.getEdgeProperty().getDataMovementType()
+                == EdgeProperty.DataMovementType.BROADCAST) {
+              if (!dagStatus.vertexStatusMap().contains(outputName)) {
+                LOG.warn("Unable to calculate P=1 shuffle deliveries: missing destination {} for {}",
+                    outputName, operatorId);
+                return;
+              }
+              edgeFanout = dagStatus.vertexStatusMap().apply(outputName)
+                  .progress().numSucceededTasks();
+            }
+            fanout = Math.addExact(fanout, edgeFanout);
+          }
+          if (fanout == 0) {
+            LOG.warn("Unable to calculate P=1 shuffle deliveries: no edge from {} to {} for {}",
+                sourceVertex.getName(), outputName, operatorId);
+            return;
+          }
+          total = Math.addExact(total, Math.multiplyExact(rowCounter.getValue(), fanout));
+        }
+      }
+
+      // Do not log a partial total if an operator was not found in the plan.
+      for (TezCounter counter : group) {
+        if (counter.getName().startsWith(counterPrefix)
+            && !seenOperatorIds.contains(counter.getName().substring(counterPrefix.length()))) {
+          LOG.warn("Unable to calculate P=1 shuffle deliveries: unmatched counter {}",
+              counter.getName());
+          return;
+        }
+      }
+      LOG.error("yyyyy {}", total);
+    } catch (RuntimeException e) {
+      // Diagnostic accounting must not fail an otherwise successful DAG.
+      LOG.warn("Unable to calculate P=1 shuffle deliveries", e);
+    }
   }
 
   private void collectCommitInformation(TezWork work, DAGStatus dagStatus, String dagIdStr) {
