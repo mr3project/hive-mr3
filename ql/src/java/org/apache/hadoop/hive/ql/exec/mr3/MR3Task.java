@@ -390,10 +390,12 @@ public class MR3Task {
 
           String outputName = op.getReduceOutputName();
           long fanout = 0;
+          boolean foundEdge = false;
           for (Edge edge : sourceVertex.getOutputEdges()) {
             if (!edge.getDestVertex().getName().equals(outputName)) {
               continue;
             }
+            foundEdge = true;
             long edgeFanout = 1;
             if (edge.getEdgeProperty().getDataMovementType()
                 == EdgeProperty.DataMovementType.BROADCAST) {
@@ -407,7 +409,7 @@ public class MR3Task {
             }
             fanout = Math.addExact(fanout, edgeFanout);
           }
-          if (fanout == 0) {
+          if (!foundEdge) {
             LOG.warn("Unable to calculate P=1 shuffle deliveries: no edge from {} to {} for {}",
                 sourceVertex.getName(), outputName, operatorId);
             return;
