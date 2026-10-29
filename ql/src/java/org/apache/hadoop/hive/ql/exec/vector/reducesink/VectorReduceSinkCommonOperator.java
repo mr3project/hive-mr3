@@ -155,6 +155,21 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient boolean vectorShuffleBatchAllowed;
   private transient int vectorShuffleNumUnorderedPartitions;
 
+  // N1-N5 classify nonempty partition-batch groups handled by compact batching.
+  // N6 counts single-partition serialization-overflow attempts, including repeated retries.
+  // One normal-close summary for unordered Tez output:
+  // xxxxx P B R N1 N2 N3 N4 N5 N6; R includes logical output rows in compact frames.
+  // B counts nonempty input batches after key/value expressions, even when compact batching is disabled.
+  private transient long shuffleCompactFrames;
+  private transient long shuffleSingletonPartitions;
+  private transient long shuffleNullBufferFallbacks;
+  // N4 includes the initial <=128-byte gate and prepared-frame lower-bound rejection.
+  private transient long shuffleSmallRegionFallbacks;
+  private transient long shuffleOverflowFallbacks;
+  private transient long shuffleSinglePartitionOverflows;
+  private transient long shuffleNonemptyBatches;
+  private transient boolean shuffleSummaryLogged;
+
   private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
   private transient byte[] vectorShuffleSerializeBuffer;
   private transient int[] vectorShuffleBatchColumnMap;
@@ -353,10 +368,21 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShufflePartitionRowIndices = null;
     vectorShuffleNumUnorderedPartitions = -1;
     vectorShufflePartitionerType = -1;
+    shuffleCompactFrames = 0;
+    shuffleSingletonPartitions = 0;
+    shuffleNullBufferFallbacks = 0;
+    shuffleSmallRegionFallbacks = 0;
+    shuffleOverflowFallbacks = 0;
+    shuffleSinglePartitionOverflows = 0;
+    shuffleNonemptyBatches = 0;
+    shuffleSummaryLogged = false;
   }
 
   protected boolean tryCollectVectorShuffleBatch(VectorizedRowBatch batch, int tag)
       throws HiveException, IOException {
+    if (batch.size > 0) {
+      shuffleNonemptyBatches++;
+    }
     if (!vectorShuffleBatchAllowed || out == null) {
       return false;
     }
@@ -383,16 +409,19 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       final int logicalRecordCount = batch.size;
       if (logicalRecordCount <= NUM_ROWS_THRESHOLD_FOR_BATCH) {
         collectVectorShuffleRows(batch, null, 0, logicalRecordCount, 0, tag);
+        shuffleSingletonPartitions++;
       } else {
         while (true) {
           try {
             serializeVectorShuffleBatch(batch);
             break;
           } catch (ArrayIndexOutOfBoundsException ex) {
+            shuffleSinglePartitionOverflows++;
             growVectorShuffleSerializeBuffer();
           }
         }
         doCollectBatch(vectorShuffleBatchKey, vectorShuffleBatchValue, 0, logicalRecordCount);
+        shuffleCompactFrames++;
       }
       return true;
     }
@@ -452,9 +481,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       if (rowCount <= NUM_ROWS_THRESHOLD_FOR_BATCH) {
         collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
             vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
+        shuffleSingletonPartitions++;
       } else {
         WriteValueBytes valueBytes = out.requestWriteValueBytes(vectorShuffleBatchKey, partition);
         int valueLength = 0;
+        boolean serializationOverflow = false;
         if (valueBytes != null &&
             (commonPrefixReady || valueBytes.maxValueBytes > MIN_VALUE_BYTES_THRESHOLD)) {
           try {
@@ -472,14 +503,23 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
                 valueBytes.buffer, valueBytes.offsetToValueBytes, valueBytes.maxValueBytes);
           } catch (ArrayIndexOutOfBoundsException ex) {
             // The bound omits payloads that require scanning; retain overflow fallback.
+            serializationOverflow = true;
           }
         }
         if (valueLength == 0) {
           collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
               vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
+          if (valueBytes == null) {
+            shuffleNullBufferFallbacks++;
+          } else if (serializationOverflow) {
+            shuffleOverflowFallbacks++;
+          } else {
+            shuffleSmallRegionFallbacks++;
+          }
           continue;
         }
         out.completeWriteValueBytes(vectorShuffleBatchKey, valueLength, partition);
+        shuffleCompactFrames++;
         recordCollectedBatch(rowCount);
       }
     }
@@ -785,6 +825,15 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       reducerHash.flush();
     }
     super.closeOp(abort);
+    if (!abort && !shuffleSummaryLogged && out != null) {
+      final int partitions = out.getNumUnorderedPartitions();
+      if (partitions > 0) {
+        LOG.error("xxxxx {} {} {} {} {} {} {} {} {}", partitions, shuffleNonemptyBatches, numRows,
+            shuffleCompactFrames, shuffleSingletonPartitions, shuffleNullBufferFallbacks,
+            shuffleSmallRegionFallbacks, shuffleOverflowFallbacks, shuffleSinglePartitionOverflows);
+        shuffleSummaryLogged = true;
+      }
+    }
     out = null;
     reducerHash = null;
     LOG.info("{}::: records written - {}", this, numRows);
