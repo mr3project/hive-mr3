@@ -181,6 +181,12 @@ public class VectorMapJoinFastLongHashMapContainer extends VectorMapJoinFastHash
     vectorMapJoinFastLongHashMaps[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey, currentValue);
   }
 
+  @Override
+  public void putRowNative(long hashCode, long key, boolean isNull, BytesWritable currentValue)
+      throws HiveException, IOException {
+    vectorMapJoinFastLongHashMaps[(int) ((numThreads - 1) & hashCode)].putRowNative(hashCode, key, isNull, currentValue);
+  }
+
   public JoinUtil.JoinResult lookup(long key, VectorMapJoinHashMapResult hashMapResult) {
     long hashCode = HashCodeUtil.calculateLongHashCode(key);
     return vectorMapJoinFastLongHashMaps[(int) ((numThreads - 1) & hashCode)].lookup(key, hashMapResult);

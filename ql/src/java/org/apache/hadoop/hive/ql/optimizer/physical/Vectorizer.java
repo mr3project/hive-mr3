@@ -54,6 +54,7 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.gen.DecimalColDivideDec
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinAntiJoinLongOperator;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinAntiJoinMultiKeyOperator;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinAntiJoinStringOperator;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinCommonOperator;
 import org.apache.hadoop.hive.ql.exec.vector.reducesink.*;
 import org.apache.hadoop.hive.ql.exec.vector.udf.VectorUDFArgDesc;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
@@ -1075,6 +1076,7 @@ public class Vectorizer implements PhysicalPlanResolver {
             logMergeJoinWorkExplainVectorization(mergeJoinWork);
           }
         }
+        configureVectorMapJoinBatchOutputs(work);
       } else if (currTask instanceof FetchTask) {
         LOG.info("Vectorizing Fetch not supported");
       } else {
@@ -2476,6 +2478,99 @@ public class Vectorizer implements PhysicalPlanResolver {
       vectorTaskColumnInfo.setReduceColumnNullOrder(columnNullOrder);
 
       return true;
+    }
+  }
+
+  /**
+   * Match entry-batch producers to the final FAST consumers after all vertices have been
+   * vectorized. Producer vertices precede their consumers in the vectorization traversal.
+   */
+  private void configureVectorMapJoinBatchOutputs(TezWork tezWork) {
+    Map<String, BaseWork> workMap = tezWork.getWorkMap();
+    for (BaseWork work : workMap.values()) {
+      for (Operator<?> operator : work.getAllOperators()) {
+        if (operator.getConf() instanceof ReduceSinkDesc) {
+          ((ReduceSinkDesc) operator.getConf()).setVectorMapJoinBatchKeyType(null);
+        }
+        if (operator instanceof MapJoinOperator) {
+          ((MapJoinOperator) operator).getConf().clearVectorMapJoinBatchInputs();
+        }
+      }
+    }
+
+    for (BaseWork source : workMap.values()) {
+      Map<String, List<Operator<?>>> outputs = new LinkedHashMap<>();
+      for (Operator<?> operator : source.getAllOperators()) {
+        if (operator.getConf() instanceof ReduceSinkDesc) {
+          ReduceSinkDesc desc = (ReduceSinkDesc) operator.getConf();
+          outputs.computeIfAbsent(desc.getOutputName(), name -> new ArrayList<>()).add(operator);
+        }
+      }
+      for (Entry<String, List<Operator<?>>> output : outputs.entrySet()) {
+        BaseWork destination = workMap.get(output.getKey());
+        if (destination == null) {
+          continue;
+        }
+        boolean compatible = true;
+        for (Operator<?> sink : output.getValue()) {
+          ReduceSinkDesc desc = (ReduceSinkDesc) sink.getConf();
+          if (!(sink instanceof VectorReduceSinkCommonOperator) || !desc.getSkipTag()
+              || desc.isVectorShuffleBatchEnabled()) {
+            compatible = false;
+            break;
+          }
+        }
+        if (!compatible) {
+          continue;
+        }
+
+        HashTableKeyType keyType = null;
+        List<MapJoinDesc> consumers = new ArrayList<>();
+        for (Operator<?> operator : destination.getAllOperators()) {
+          if (!(operator instanceof MapJoinOperator)) {
+            continue;
+          }
+          MapJoinDesc desc = ((MapJoinOperator) operator).getConf();
+          boolean readsSource = false;
+          for (Entry<Integer, String> input : desc.getParentToInput().entrySet()) {
+            if (input.getKey() != desc.getPosBigTable() && source.getName().equals(input.getValue())) {
+              readsSource = true;
+              break;
+            }
+          }
+          if (!readsSource) {
+            continue;
+          }
+          if (!(operator instanceof VectorMapJoinCommonOperator)) {
+            compatible = false;
+            break;
+          }
+          VectorMapJoinDesc vectorDesc = (VectorMapJoinDesc)
+              ((VectorMapJoinCommonOperator) operator).getVectorDesc();
+          HashTableKeyType consumerKeyType = vectorDesc.getHashTableKeyType();
+          if (vectorDesc.getHashTableImplementationType() != HashTableImplementationType.FAST
+              || consumerKeyType == null || consumerKeyType == HashTableKeyType.NONE
+              || (keyType != null && keyType != consumerKeyType)) {
+            compatible = false;
+            break;
+          }
+          keyType = consumerKeyType;
+          consumers.add(desc);
+        }
+        if (!compatible || keyType == null) {
+          continue;
+        }
+        for (Operator<?> sink : output.getValue()) {
+          ((ReduceSinkDesc) sink.getConf()).setVectorMapJoinBatchKeyType(keyType);
+        }
+        for (MapJoinDesc desc : consumers) {
+          for (Entry<Integer, String> input : desc.getParentToInput().entrySet()) {
+            if (input.getKey() != desc.getPosBigTable() && source.getName().equals(input.getValue())) {
+              desc.setVectorMapJoinBatchInput(input.getKey());
+            }
+          }
+        }
+      }
     }
   }
 
