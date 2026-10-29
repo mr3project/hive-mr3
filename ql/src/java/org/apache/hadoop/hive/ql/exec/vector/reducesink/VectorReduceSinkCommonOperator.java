@@ -53,6 +53,7 @@ import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableSerialize
 import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.WritableComparator;
 import org.apache.hive.common.util.Murmur3;
 import org.apache.hadoop.mapred.OutputCollector;
@@ -74,6 +75,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
 
   public static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 1;
+  public static final String SHUFFLE_P1_ROWS_COUNTER_PREFIX = "SHUFFLE_P1_ROWS_";
   private static final int SERIALIZE_BUFFER_SIZE = 100 * 1024;
   private static final int MIN_VALUE_BYTES_THRESHOLD = 128;
 
@@ -820,6 +822,10 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         LOG.error("xxxxx {} {} {} {} {} {} {} {} {}", partitions, shuffleNonemptyBatches, numRows,
             shuffleCompactFrames, shuffleSingletonPartitions, shuffleNullBufferFallbacks,
             shuffleSmallRegionFallbacks, shuffleOverflowFallbacks, shuffleSinglePartitionOverflows);
+        if (partitions == 1) {
+          // Report logical rows on single-partition unordered outputs for DAG-level fanout accounting.
+          statsMap.put(SHUFFLE_P1_ROWS_COUNTER_PREFIX + getOperatorId(), new LongWritable(numRows));
+        }
         shuffleSummaryLogged = true;
       }
     }
