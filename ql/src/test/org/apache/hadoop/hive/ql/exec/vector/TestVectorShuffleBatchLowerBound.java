@@ -43,11 +43,11 @@ public class TestVectorShuffleBatchLowerBound {
     serializer.initialize(source.cols, mapping);
     serializer.setupCommonPrefix(source, mapping, buffer, 11, 2);
     assertEquals(19 + 68L * Integer.MAX_VALUE,
-        serializer.getPreparedPartitionLowerBound(Integer.MAX_VALUE));
+        serializer.getCommonPartitionLowerBound(Integer.MAX_VALUE));
     int[] rows = {5, 1, 3, 0, 4, 2};
     for (int rowOffset : new int[] {0, 3}) {
       int expected = directLength(source, mapping, rows, rowOffset, 3);
-      assertEquals(expected, serializer.getPreparedPartitionLowerBound(3));
+      assertEquals(expected, serializer.getCommonPartitionLowerBound(3));
       assertEquals(expected, serializer.serializePartition(source, rows, rowOffset, 3,
           buffer, 11, expected));
     }
@@ -71,7 +71,7 @@ public class TestVectorShuffleBatchLowerBound {
     serializer.initialize(source.cols, mapping);
     serializer.setupCommonPrefix(source, mapping, new byte[1024], 0, 2);
     // Six prefix bytes, five partition-header bytes, twelve nodes, eight bytes per row.
-    assertEquals(47, serializer.getPreparedPartitionLowerBound(3));
+    assertEquals(47, serializer.getCommonPartitionLowerBound(3));
     assertEquals(49, directLength(source, mapping, new int[] {0, 1, 2}, 0, 3));
   }
 
@@ -88,8 +88,8 @@ public class TestVectorShuffleBatchLowerBound {
     VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
     serializer.initialize(source.cols, mapping);
     serializer.setupCommonPrefix(source, mapping, new byte[1024], 0, 2);
-    assertEquals(237, serializer.getPreparedPartitionLowerBound(2));
-    assertTrue(serializer.getPreparedPartitionLowerBound(2)
+    assertEquals(237, serializer.getCommonPartitionLowerBound(2));
+    assertTrue(serializer.getCommonPartitionLowerBound(2)
         <= directLength(source, mapping, new int[] {0, 1}, 0, 2));
 
     strings.isRepeating = false;
@@ -103,8 +103,8 @@ public class TestVectorShuffleBatchLowerBound {
     source.cols[2] = decimals;
     // Reuse the initialized schema: decimal64 can be replaced by arbitrary decimal vectors.
     serializer.setupCommonPrefix(source, mapping, new byte[1024], 0, 2);
-    assertEquals(37, serializer.getPreparedPartitionLowerBound(2));
-    assertTrue(serializer.getPreparedPartitionLowerBound(2)
+    assertEquals(37, serializer.getCommonPartitionLowerBound(2));
+    assertTrue(serializer.getCommonPartitionLowerBound(2)
         <= directLength(source, mapping, new int[] {0, 1}, 0, 2));
   }
 
@@ -121,7 +121,7 @@ public class TestVectorShuffleBatchLowerBound {
     byte[] buffer = new byte[256];
     serializer.setupCommonPrefix(source, mapping, buffer, 7, 2);
     byte[] beforeRejection = buffer.clone();
-    assertEquals(72, serializer.getPreparedPartitionLowerBound(4));
+    assertEquals(72, serializer.getCommonPartitionLowerBound(4));
     assertEquals(0, serializer.serializePartition(source, rows, 0, 4, buffer, 7, 71));
     assertArrayEquals(beforeRejection, buffer);
     Arrays.fill(buffer, (byte) 0x5a); // Row fallback overwrites the first writer region.
@@ -146,7 +146,7 @@ public class TestVectorShuffleBatchLowerBound {
     serializer.initialize(source.cols, mapping);
     byte[] limited = new byte[32];
     serializer.setupCommonPrefix(source, mapping, limited, 0, 2);
-    assertEquals(19, serializer.getPreparedPartitionLowerBound(2));
+    assertEquals(19, serializer.getCommonPartitionLowerBound(2));
     assertThrows(ArrayIndexOutOfBoundsException.class,
         () -> serializer.serializePartition(source, rows, 0, 2, limited, 0, limited.length));
     int expected = directLength(source, mapping, rows, 0, 2);

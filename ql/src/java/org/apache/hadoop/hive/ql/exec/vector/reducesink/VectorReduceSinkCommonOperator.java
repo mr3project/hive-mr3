@@ -443,7 +443,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       vectorShufflePartitionRowIndices[vectorShufflePartitionPositions[partition]++] = batchIndex;
     }
 
-    boolean prefixPrepared = false;
+    boolean commonPrefixReady = false;
     for (int partition = 0; partition < numUnorderedPartitions; partition++) {
       final int rowCount = vectorShufflePartitionCounts[partition];
       if (rowCount == 0) {
@@ -456,15 +456,15 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         WriteValueBytes valueBytes = out.requestWriteValueBytes(vectorShuffleBatchKey, partition);
         int valueLength = 0;
         if (valueBytes != null &&
-            (prefixPrepared || valueBytes.maxValueBytes > MIN_VALUE_BYTES_THRESHOLD)) {
+            (commonPrefixReady || valueBytes.maxValueBytes > MIN_VALUE_BYTES_THRESHOLD)) {
           try {
-            if (!prefixPrepared) {
+            if (!commonPrefixReady) {
               // Keep this local: repeating flags, nullability, and metadata can change with
               // the next batch. Preparation also computes the reusable lower-bound terms.
               vectorShuffleBatchSerializer.setupCommonPrefix(batch,
                   vectorShuffleBatchColumnMap, valueBytes.buffer, valueBytes.offsetToValueBytes,
                   compactCandidateCount);
-              prefixPrepared = true;
+              commonPrefixReady = true;
             }
             // Includes the first partition. Zero means its writer region cannot fit the bound.
             valueLength = vectorShuffleBatchSerializer.serializePartition(batch,
