@@ -178,6 +178,15 @@ public class Vertex {
     return Collections.unmodifiableList(outputVertices);
   }
 
+  /**
+   * Get the output edges for this vertex.
+   *
+   * @return unmodifiableList of OutputEdges
+   */
+  public List<Edge> getOutputEdges() {
+    return Collections.unmodifiableList(outputEdges);
+  }
+
   int getDistanceFromRoot() {
     if (distanceFromRoot >= 0) {
       return distanceFromRoot;
