@@ -162,7 +162,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient long mapJoinBatchFrames;
   private transient long mapJoinOversizedRows;
 
-  // N1-N5 classify nonempty partition-batch groups handled by compact batching.
+  // N1 counts submitted compact vector frames and dedicated map-join frames.
+  // N2 counts singleton partitions in compact vector shuffle, or rows in dedicated map-join frames.
+  // N3-N5 classify compact vector-shuffle fallback groups.
   // N6 counts single-partition serialization-overflow attempts, including repeated retries.
   // One normal-close summary for unordered Tez output:
   // xxxxx P B R N1 N2 N3 N4 N5 N6; R includes logical output rows in compact frames.
@@ -511,6 +513,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
     // The synchronous Tez write consumes this borrowed frame before the serializer is reset.
     doCollectBatch(mapJoinBatchKey, mapJoinBatchSerializer.getValue(), 0, rowCount);
+    shuffleCompactFrames++;
+    shuffleSingletonPartitions += rowCount;
     mapJoinBatchFrames++;
     mapJoinBatchSerializer.reset();
   }
