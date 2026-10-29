@@ -150,7 +150,7 @@ public class TestVectorShuffleBatchCommonPrefix {
     VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
     Field bytes = CommonPrefix.class.getDeclaredField("bytes");
     bytes.setAccessible(true);
-    Field prepared = VectorShuffleBatchSerializer.class.getDeclaredField("preparedPrefix");
+    Field prepared = VectorShuffleBatchSerializer.class.getDeclaredField("commonPrefix");
     prepared.setAccessible(true);
 
     byte[] singleBuffer = new byte[BUFFER_SIZE];
