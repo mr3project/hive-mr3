@@ -39,7 +39,7 @@ import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
  *
  * <p>Frames contain the common prefix described by {@link VectorShuffleBatchHeader}, followed by
  * the partition row count, nested-repetition flag, and ordinary column payloads. Prepare the prefix
- * once with {@link #setupCommonPrefix(VectorizedRowBatch, int[], byte[], int)} to reuse it across
+ * once with {@link #setupCommonPrefix(VectorizedRowBatch, int[], byte[], int, int)} to reuse it across
  * multiple compact partitions of the same input batch.</p>
  */
 public final class VectorShuffleBatchSerializer {
@@ -58,6 +58,7 @@ public final class VectorShuffleBatchSerializer {
   private int[] repeatingColumns;
   private int[] ordinaryColumns;
   private CommonPrefix commonPrefix;
+  private boolean firstPartitionReady;
 
   /**
    * Serializer-owned preparation storage, valid until the next preparation or schema change.
@@ -65,31 +66,13 @@ public final class VectorShuffleBatchSerializer {
    * preparation buffer nor the source vectors are retained here.
    */
   public static final class CommonPrefix {
-
     private byte[] bytes = new byte[0];
     private int length;
     private int[] ordinaryColumns = new int[0];
     private int ordinaryCount;
-    // Preserve the prefix's flag before partition-specific columns are serialized.
     private boolean nestedRepeating;
 
     private CommonPrefix() {
-    }
-
-    private void setup(byte[] source, int offset, int length, int[] columns, int count, boolean nestedRepeating) {
-      if (bytes.length < length) {
-        bytes = new byte[length];
-      }
-      System.arraycopy(source, offset, bytes, 0, length);
-
-      if (ordinaryColumns.length < count) {
-        ordinaryColumns = new int[count];
-      }
-      System.arraycopy(columns, 0, ordinaryColumns, 0, count);
-
-      this.length = length;
-      this.ordinaryCount = count;
-      this.nestedRepeating = nestedRepeating;
     }
   }
 
@@ -99,6 +82,7 @@ public final class VectorShuffleBatchSerializer {
    * vectors of the same schema does not require reinitialization.
    */
   public void initialize(ColumnVector[] columns, int[] sourceColumnMap) {
+    firstPartitionReady = false;
     metadata = new VectorShuffleBatchMetadata(columns, sourceColumnMap);
     columnCount = sourceColumnMap.length;
     bitmapLength = (columnCount + 7) / 8;
@@ -123,39 +107,64 @@ public final class VectorShuffleBatchSerializer {
   }
 
   /**
-   * Prepare the common bytes for multi-row partitions of one input batch. The supplied bounded
-   * output buffer is scratch for encoding; successful preparation copies the prefix into owned,
-   * reusable storage. A prefix that does not fit throws ArrayIndexOutOfBoundsException, just like
-   * frame serialization, allowing the caller to fall back to row input without unbounded growth.
-   * Call once, lazily, after obtaining the first eligible partition's output buffer.
-   * Requires prior {@link #initialize(ColumnVector[], int[])}.
+   * Write the common prefix directly into the first partition's output buffer. Retain an owned
+   * copy only when multiple compact partitions can use it. A bounded buffer overflow throws
+   * ArrayIndexOutOfBoundsException so that the caller can fall back to row serialization.
+   * Requires prior initialization, as does direct serialization on this branch.
    */
   public void setupCommonPrefix(VectorizedRowBatch source, int[] sourceColumnMap,
-      byte[] buffer, int position) {
+      byte[] buffer, int position, int compactCandidateCount) {
     assert source.size > NUM_ROWS_THRESHOLD_FOR_BATCH;
+    assert compactCandidateCount > 0;
     reset(buffer, position);
+
     int ordinaryCount = writeCommonPrefix(source, sourceColumnMap, null, 0, source.size);
+    int length = this.position - position;
     if (commonPrefix == null) {
       commonPrefix = new CommonPrefix();
     }
-    commonPrefix.setup(buffer, position, this.position - position,
-        ordinaryColumns, ordinaryCount, nestedRepeating);
+
+    if (compactCandidateCount > 1) {
+      if (commonPrefix.bytes.length < length) {
+        commonPrefix.bytes = new byte[length];
+      }
+      System.arraycopy(buffer, position, commonPrefix.bytes, 0, length);
+    }
+
+    if (commonPrefix.ordinaryColumns.length < ordinaryCount) {
+      commonPrefix.ordinaryColumns = new int[ordinaryCount];
+    }
+    System.arraycopy(ordinaryColumns, 0, commonPrefix.ordinaryColumns, 0, ordinaryCount);
+
+    commonPrefix.length = length;
+    commonPrefix.ordinaryCount = ordinaryCount;
+    commonPrefix.nestedRepeating = nestedRepeating;
+    firstPartitionReady = true;
   }
 
-  /** Append one multi-row partition using the prefix set up for this input batch. */
+  /**
+   * Append a compact partition. The first partition reuses the prefix already in the
+   * writer buffer; subsequent partitions use the serializer-owned prefix copy.
+   */
   public int serializePartition(VectorizedRowBatch source, int[] rowIndices,
       int rowOffset, int rowCount, byte[] buffer, int position) {
-    assert commonPrefix != null;
+    CommonPrefix prefix = commonPrefix;
     assert rowCount > NUM_ROWS_THRESHOLD_FOR_BATCH;
-    assert rowOffset >= 0 && rowCount <= rowIndices.length - rowOffset;
+    assert rowIndices != null && rowOffset >= 0 && rowCount <= rowIndices.length - rowOffset;
 
-    reset(buffer, position);
-    ensureCapacity((long) commonPrefix.length + Integer.BYTES + Byte.BYTES);  // once per partition prefix and header
-    System.arraycopy(commonPrefix.bytes, 0, buffer, position, commonPrefix.length);
-
-    this.position += commonPrefix.length;
-    nestedRepeating = commonPrefix.nestedRepeating;
-    writePartition(source, commonPrefix.ordinaryColumns, commonPrefix.ordinaryCount,
+    if (firstPartitionReady && this.buffer == buffer && this.position - position == prefix.length) {
+      firstPartitionReady = false;
+      // writePartition() uses unchecked header writes on this branch.
+      ensureCapacity(Integer.BYTES + Byte.BYTES);
+    } else {
+      // Subsequent partitions reuse the prefix cached during preparation.
+      reset(buffer, position);
+      ensureCapacity((long) prefix.length + Integer.BYTES + Byte.BYTES);
+      System.arraycopy(prefix.bytes, 0, buffer, position, prefix.length);
+      this.position += prefix.length;
+    }
+    nestedRepeating = prefix.nestedRepeating;
+    writePartition(source, prefix.ordinaryColumns, prefix.ordinaryCount,
         rowIndices, rowOffset, rowCount);
 
     return this.position - position;
@@ -389,6 +398,7 @@ public final class VectorShuffleBatchSerializer {
     assert position >= 0 && position <= buffer.length;
     this.buffer = buffer;
     this.position = position;
+    firstPartitionReady = false;
   }
 
   // Callers reserve the complete header or payload before these unchecked writes.

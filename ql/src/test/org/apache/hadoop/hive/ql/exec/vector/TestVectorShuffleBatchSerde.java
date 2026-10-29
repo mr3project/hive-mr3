@@ -441,6 +441,7 @@ public class TestVectorShuffleBatchSerde {
   @Test
   public void testCommonPrefixSetupAcrossPartitionsAndInputBatches() throws Exception {
     VectorShuffleBatchSerializer prefixSerializer = new VectorShuffleBatchSerializer();
+    VectorShuffleBatchSerializer directSerializer = new VectorShuffleBatchSerializer();
     int[] mapping = {0, 1};
     int[] partitionRows = {0, 2, 4, 1, 3, 5};
     byte[] buffer = new byte[1024];
@@ -462,11 +463,12 @@ public class TestVectorShuffleBatchSerde {
 
       if (batchNumber == 0) {
         prefixSerializer.initialize(source.cols, mapping);
+        directSerializer.initialize(source.cols, mapping);
       }
-      prefixSerializer.setupCommonPrefix(source, mapping, buffer, offset);
+      prefixSerializer.setupCommonPrefix(source, mapping, buffer, offset, 2);
       for (int partition = 0; partition < 2; partition++) {
         int rowOffset = partition * 3;
-        int expectedLength = prefixSerializer.serialize(
+        int expectedLength = directSerializer.serialize(
             source, mapping, partitionRows, rowOffset, 3, expected, offset);
         int actualLength = prefixSerializer.serializePartition(
             source, partitionRows, rowOffset, 3, buffer, offset);

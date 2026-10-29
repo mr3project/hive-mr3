@@ -20,15 +20,18 @@ package org.apache.hadoop.hive.ql.exec.vector;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
+import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchSerializer.CommonPrefix;
 import org.apache.hadoop.io.BytesWritable;
 import org.junit.Test;
 
@@ -66,16 +69,22 @@ public class TestVectorShuffleBatchCommonPrefix {
     VectorizedRowBatch source = batch(6, ordinary, repeatedNull, repeatedList, date, timestamps);
     int[] mapping = {2, 0, 3, 1, 4};
     VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
-    serializer.initialize(source.cols, mapping);
     byte[] preparationBuffer = new byte[BUFFER_SIZE];
-    serializer.setupCommonPrefix(source, mapping, preparationBuffer, 7);
+    Arrays.fill(preparationBuffer, (byte) 0x5a);
+    prepareCommonPrefix(serializer, source, mapping, preparationBuffer, 7, 2);
     // The initial writer may reuse its buffer before the next partition is emitted.
-    Arrays.fill(preparationBuffer, (byte) 0xff);
     int[] indices = {99, 5, 1, 3, 99, 4, 0, 99};
     byte[] commonBytes = null;
     for (int[] partition : new int[][] {{1, 3}, {5, 2}}) {
-      BytesWritable frame = assertPreparedFrame(serializer, source, mapping, indices,
-          partition[0], partition[1]);
+      BytesWritable frame;
+      if (commonBytes == null) {
+        frame = assertFirstPreparedFrame(serializer, source, mapping, indices,
+            partition[0], partition[1], preparationBuffer, 7);
+      } else {
+        Arrays.fill(preparationBuffer, (byte) 0xff);
+        frame = assertPreparedFrame(serializer, source, mapping, indices,
+            partition[0], partition[1]);
+      }
       VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
       header.read(frame, mapping.length, 1);
       assertEquals(mapping.length, ByteBuffer.wrap(frame.getBytesRaw())
@@ -124,6 +133,55 @@ public class TestVectorShuffleBatchCommonPrefix {
   }
 
   @Test
+  public void testSingleCompactPartitionSkipsOwnedPrefixCopy() throws Exception {
+    LongColumnVector ordinary = new LongColumnVector();
+    for (int row = 0; row < 4; row++) {
+      ordinary.vector[row] = 100 + row;
+    }
+    BytesColumnVector repeated = new BytesColumnVector();
+    repeated.isRepeating = true;
+    byte[] repeatedBytes = new byte[256];
+    Arrays.fill(repeatedBytes, (byte) 37);
+    repeated.setRef(0, repeatedBytes, 0, repeatedBytes.length);
+
+    VectorizedRowBatch source = batch(4, repeated, ordinary);
+    int[] mapping = {0, 1};
+    int[] indices = {0, 2, 1, 3};
+    VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
+    Field bytes = CommonPrefix.class.getDeclaredField("bytes");
+    bytes.setAccessible(true);
+    Field prepared = VectorShuffleBatchSerializer.class.getDeclaredField("preparedPrefix");
+    prepared.setAccessible(true);
+
+    byte[] singleBuffer = new byte[BUFFER_SIZE];
+    Arrays.fill(singleBuffer, (byte) 0x5a);
+    prepareCommonPrefix(serializer, source, mapping, singleBuffer, FRAME_OFFSET, 1);
+    CommonPrefix prefix = (CommonPrefix) prepared.get(serializer);
+    assertEquals(0, ((byte[]) bytes.get(prefix)).length);
+    assertFirstPreparedFrame(serializer, source, mapping, indices,
+        0, 2, singleBuffer, FRAME_OFFSET);
+
+    byte[] multiBuffer = new byte[BUFFER_SIZE];
+    Arrays.fill(multiBuffer, (byte) 0x5a);
+    prepareCommonPrefix(serializer, source, mapping, multiBuffer, FRAME_OFFSET, 2);
+    assertSame(prefix, prepared.get(serializer));
+    byte[] cachedBytes = (byte[]) bytes.get(prefix);
+    assertTrue(cachedBytes.length > 0);
+    assertFirstPreparedFrame(serializer, source, mapping, indices,
+        0, 2, multiBuffer, FRAME_OFFSET);
+    assertPreparedFrame(serializer, source, mapping, indices, 2, 2);
+
+    // A single-partition batch must reuse storage without copying stale prefix bytes.
+    byte[] nextSingleBuffer = new byte[BUFFER_SIZE];
+    Arrays.fill(nextSingleBuffer, (byte) 0x5a);
+    prepareCommonPrefix(serializer, source, mapping, nextSingleBuffer, FRAME_OFFSET, 1);
+    assertSame(prefix, prepared.get(serializer));
+    assertSame(cachedBytes, bytes.get(prefix));
+    assertFirstPreparedFrame(serializer, source, mapping, indices,
+        2, 2, nextSingleBuffer, FRAME_OFFSET);
+  }
+
+  @Test
   public void testPartitionNestedFlagIncludesBothPayloadSections() throws Exception {
     for (boolean repeatingSectionNested : new boolean[] {false, true}) {
       LongColumnVector repeatedChild = new LongColumnVector();
@@ -149,9 +207,8 @@ public class TestVectorShuffleBatchCommonPrefix {
       VectorizedRowBatch source = batch(4, repeated, ordinary);
       int[] mapping = {0, 1};
       VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
-    serializer.initialize(source.cols, mapping);
-      serializer.setupCommonPrefix(source, mapping,
-          new byte[BUFFER_SIZE], 0);
+      prepareCommonPrefix(serializer, source, mapping,
+          new byte[BUFFER_SIZE], 0, 2);
       int[] indices = {0, 1, 2, 3};
       for (int partition = 0; partition < 2; partition++) {
         BytesWritable frame = assertPreparedFrame(serializer, source, mapping, indices,
@@ -186,11 +243,15 @@ public class TestVectorShuffleBatchCommonPrefix {
     int[] indices = {0, 1, 2, 3, 4};
     VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
     serializer.initialize(source.cols, mapping);
-    serializer.initialize(source.cols, mapping);
     assertThrows(ArrayIndexOutOfBoundsException.class,
-        () -> serializer.setupCommonPrefix(source, mapping, new byte[3], 0));
-    serializer.setupCommonPrefix(source, mapping,
-        new byte[BUFFER_SIZE], 0);
+        () -> prepareCommonPrefix(serializer, source, mapping, new byte[3], 0, 2));
+    byte[] limitedBuffer = new byte[16];
+    prepareCommonPrefix(serializer, source, mapping, limitedBuffer, 0, 2);
+    assertThrows(ArrayIndexOutOfBoundsException.class,
+        () -> serializer.serializePartition(source, indices, 0, 3,
+            limitedBuffer, 0));
+    prepareCommonPrefix(serializer, source, mapping,
+        new byte[BUFFER_SIZE], 0, 2);
     BytesWritable expected = assertPreparedFrame(serializer, source, mapping, indices, 0, 3);
     VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
     header.read(expected, 2, 0);
@@ -204,7 +265,8 @@ public class TestVectorShuffleBatchCommonPrefix {
     otherStrings.setVal(0, "other".getBytes(StandardCharsets.UTF_8));
     serializer.serialize(batch(2, otherNumbers, otherStrings), mapping,
         new byte[BUFFER_SIZE], 0);
-    assertThrows(ArrayIndexOutOfBoundsException.class, () -> serializer.serializePartition(source, indices, 0, 3, new byte[expected.getLength() - 1], 0));
+    assertThrows(ArrayIndexOutOfBoundsException.class, () -> serializer.serializePartition(
+        source, indices, 0, 3, new byte[expected.getLength() - 1], 0));
     BytesWritable retried = assertPreparedFrame(serializer, source, mapping, indices, 0, 3);
     assertArrayEquals(expected.copyBytes(), retried.copyBytes());
     BytesWritable next = assertPreparedFrame(serializer, source, mapping, indices, 3, 2);
@@ -225,27 +287,25 @@ public class TestVectorShuffleBatchCommonPrefix {
     VectorizedRowBatch source = batch(2, repeated, new LongColumnVector());
     int[] mapping = {0, 1};
     VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
-    serializer.initialize(source.cols, mapping);
     assertThrows(ArrayIndexOutOfBoundsException.class,
-        () -> serializer.setupCommonPrefix(source, mapping, new byte[32], 0));
-    serializer.setupCommonPrefix(source, mapping,
-        new byte[BUFFER_SIZE], 0);
+        () -> prepareCommonPrefix(serializer, source, mapping, new byte[32], 0, 2));
+    prepareCommonPrefix(serializer, source, mapping,
+        new byte[BUFFER_SIZE], 0, 2);
     assertPreparedFrame(serializer, source, mapping, new int[] {0, 1}, 0, 2);
   }
 
   @Test
-  public void testPreparedWriterRejectsInsufficientBufferCapacity() {
+  public void testPreparedWriterSupportsValidBufferOffsets() {
     VectorizedRowBatch source = batch(2, new LongColumnVector());
     int[] mapping = {0};
+    int[] indices = {0, 1};
     VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
-    serializer.initialize(source.cols, mapping);
-    byte[] buffer = new byte[BUFFER_SIZE];
-    serializer.setupCommonPrefix(source, mapping, buffer, 0);
-    for (int offset : new int[] {BUFFER_SIZE - 1, BUFFER_SIZE}) {
-      assertThrows(ArrayIndexOutOfBoundsException.class,
-          () -> serializer.setupCommonPrefix(source, mapping, buffer, offset));
-      assertThrows(ArrayIndexOutOfBoundsException.class, () -> serializer.serializePartition(source,
-          new int[] {0, 1}, 0, 2, buffer, offset));
+    for (int offset : new int[] {3, 11, BUFFER_SIZE - 32}) {
+      byte[] buffer = new byte[BUFFER_SIZE];
+      Arrays.fill(buffer, (byte) 0x5a);
+      prepareCommonPrefix(serializer, source, mapping, buffer, offset, 2);
+      assertFirstPreparedFrame(serializer, source, mapping, indices,
+          0, 2, buffer, offset);
     }
   }
 
@@ -259,17 +319,16 @@ public class TestVectorShuffleBatchCommonPrefix {
     int[] mapping = {0};
     int[] indices = {0, 1};
     VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
-    serializer.initialize(source.cols, mapping);
-    serializer.setupCommonPrefix(source, mapping,
-        new byte[BUFFER_SIZE], 0);
+    prepareCommonPrefix(serializer, source, mapping,
+        new byte[BUFFER_SIZE], 0, 2);
     BytesWritable first = assertPreparedFrame(serializer, source, mapping, indices, 0, 2);
     byte[] firstBytes = first.copyBytes();
     dates.isRepeating = false;
     dates.setUsingProlepticCalendar(false);
     dates.vector[0] = 10;
     dates.vector[1] = 11;
-    serializer.setupCommonPrefix(source, mapping,
-        new byte[BUFFER_SIZE], 0);
+    prepareCommonPrefix(serializer, source, mapping,
+        new byte[BUFFER_SIZE], 0, 2);
     BytesWritable second = assertPreparedFrame(serializer, source, mapping,
         indices, 0, 2);
     assertArrayEquals(firstBytes, first.copyBytes());
@@ -293,9 +352,8 @@ public class TestVectorShuffleBatchCommonPrefix {
       VectorizedRowBatch source = batch(2, numbers);
       VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
       int[] mapping = {0};
-      serializer.initialize(source.cols, mapping);
-      serializer.setupCommonPrefix(source, mapping,
-          new byte[BUFFER_SIZE], 0);
+      prepareCommonPrefix(serializer, source, mapping,
+          new byte[BUFFER_SIZE], 0, 2);
       BytesWritable frame = assertPreparedFrame(serializer, source, mapping,
           new int[] {0, 1}, 0, 2);
       VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
@@ -308,6 +366,48 @@ public class TestVectorShuffleBatchCommonPrefix {
             () -> new VectorShuffleBatchHeader().read(truncated, 1, 0));
       }
     }
+  }
+
+  @Test
+  public void testPreparedWriterRejectsInsufficientBufferCapacity() {
+    VectorizedRowBatch source = batch(2, new LongColumnVector());
+    int[] mapping = {0};
+    VectorShuffleBatchSerializer serializer = new VectorShuffleBatchSerializer();
+    byte[] buffer = new byte[BUFFER_SIZE];
+    for (int offset : new int[] {BUFFER_SIZE - 1, BUFFER_SIZE}) {
+      assertThrows(ArrayIndexOutOfBoundsException.class,
+          () -> prepareCommonPrefix(serializer, source, mapping, buffer, offset, 2));
+    }
+    prepareCommonPrefix(serializer, source, mapping, buffer, 0, 2);
+    for (int offset : new int[] {BUFFER_SIZE - 1, BUFFER_SIZE}) {
+      assertThrows(ArrayIndexOutOfBoundsException.class,
+          () -> serializer.serializePartition(source,
+              new int[] {0, 1}, 0, 2, buffer, offset));
+    }
+  }
+
+  private static void prepareCommonPrefix(VectorShuffleBatchSerializer serializer,
+      VectorizedRowBatch source, int[] mapping, byte[] buffer, int position,
+      int compactCandidateCount) {
+    serializer.initialize(source.cols, mapping);
+    serializer.setupCommonPrefix(source, mapping, buffer, position, compactCandidateCount);
+  }
+
+  private static BytesWritable assertFirstPreparedFrame(VectorShuffleBatchSerializer serializer,
+      VectorizedRowBatch source, int[] mapping, int[] indices,
+      int rowOffset, int rowCount, byte[] buffer, int offset) {
+    byte[] expected = Arrays.copyOf(buffer, buffer.length);
+    VectorShuffleBatchSerializer direct = new VectorShuffleBatchSerializer();
+    direct.initialize(source.cols, mapping);
+    int directLength = direct.serialize(source, mapping, indices, rowOffset, rowCount,
+        expected, offset);
+    int length = serializer.serializePartition(source, indices, rowOffset, rowCount,
+        buffer, offset);
+    assertEquals(directLength, length);
+    assertArrayEquals(expected, buffer);
+    assertEquals(0x5a, buffer[offset - 1] & 0xff);
+    assertEquals(0x5a, buffer[offset + length] & 0xff);
+    return new BytesWritable(buffer, offset, length);
   }
 
   private static BytesWritable assertPreparedFrame(VectorShuffleBatchSerializer serializer,

@@ -427,10 +427,14 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
 
     vectorShufflePartitionOffsets[0] = 0;
+    int compactCandidateCount = 0;
     for (int partition = 0; partition < numUnorderedPartitions; partition++) {
       vectorShufflePartitionOffsets[partition + 1] =
           vectorShufflePartitionOffsets[partition] + vectorShufflePartitionCounts[partition];
       vectorShufflePartitionPositions[partition] = vectorShufflePartitionOffsets[partition];
+      if (vectorShufflePartitionCounts[partition] > NUM_ROWS_THRESHOLD_FOR_BATCH) {
+        compactCandidateCount++;
+      }
     }
 
     for (int logical = 0; logical < size; logical++) {
@@ -458,10 +462,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         final int valueLength;
         try {
           if (!prefixPrepared) {
-            // Set up only after the first compact partition obtains a usable writer buffer.
-            // Keep this local: input values, repeating flags, and metadata may change next batch.
-            vectorShuffleBatchSerializer.setupCommonPrefix(batch, vectorShuffleBatchColumnMap,
-                valueBytes.buffer, valueBytes.offsetToValueBytes);
+            // Prepare after obtaining the first usable writer buffer. The serializer chooses
+            // whether an owned copy is necessary for subsequent compact partitions.
+            // Keep this local: repeating flags and metadata can change with the next batch.
+            vectorShuffleBatchSerializer.setupCommonPrefix(batch,
+                vectorShuffleBatchColumnMap, valueBytes.buffer, valueBytes.offsetToValueBytes,
+                compactCandidateCount);
             prefixPrepared = true;
           }
           valueLength = vectorShuffleBatchSerializer.serializePartition(batch,
