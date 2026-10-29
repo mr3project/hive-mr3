@@ -454,26 +454,27 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
             vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
       } else {
         WriteValueBytes valueBytes = out.requestWriteValueBytes(vectorShuffleBatchKey, partition);
-        if (valueBytes == null || valueBytes.maxValueBytes <= MIN_VALUE_BYTES_THRESHOLD) {
-          collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
-              vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
-          continue;
-        }
-        final int valueLength;
-        try {
-          if (!prefixPrepared) {
-            // Prepare after obtaining the first usable writer buffer. The serializer chooses
-            // whether an owned copy is necessary for subsequent compact partitions.
-            // Keep this local: repeating flags and metadata can change with the next batch.
-            vectorShuffleBatchSerializer.setupCommonPrefix(batch,
-                vectorShuffleBatchColumnMap, valueBytes.buffer, valueBytes.offsetToValueBytes,
-                compactCandidateCount);
-            prefixPrepared = true;
+        int valueLength = 0;
+        if (valueBytes != null &&
+            (prefixPrepared || valueBytes.maxValueBytes > MIN_VALUE_BYTES_THRESHOLD)) {
+          try {
+            if (!prefixPrepared) {
+              // Keep this local: repeating flags, nullability, and metadata can change with
+              // the next batch. Preparation also computes the reusable lower-bound terms.
+              vectorShuffleBatchSerializer.setupCommonPrefix(batch,
+                  vectorShuffleBatchColumnMap, valueBytes.buffer, valueBytes.offsetToValueBytes,
+                  compactCandidateCount);
+              prefixPrepared = true;
+            }
+            // Includes the first partition. Zero means its writer region cannot fit the bound.
+            valueLength = vectorShuffleBatchSerializer.serializePartition(batch,
+                vectorShufflePartitionRowIndices, vectorShufflePartitionOffsets[partition], rowCount,
+                valueBytes.buffer, valueBytes.offsetToValueBytes, valueBytes.maxValueBytes);
+          } catch (ArrayIndexOutOfBoundsException ex) {
+            // The bound omits payloads that require scanning; retain overflow fallback.
           }
-          valueLength = vectorShuffleBatchSerializer.serializePartition(batch,
-              vectorShufflePartitionRowIndices, vectorShufflePartitionOffsets[partition], rowCount,
-              valueBytes.buffer, valueBytes.offsetToValueBytes);
-        } catch (ArrayIndexOutOfBoundsException ex) {
+        }
+        if (valueLength == 0) {
           collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
               vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
           continue;

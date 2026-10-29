@@ -57,6 +57,8 @@ public final class VectorShuffleBatchSerializer {
   private int commonHeaderSize;
   private int[] repeatingColumns;
   private int[] ordinaryColumns;
+  // Subtree sizes in logical output order, including duplicate mappings.
+  private long[] columnNodeCounts;
   private CommonPrefix commonPrefix;
   private boolean firstPartitionReady;
 
@@ -71,6 +73,8 @@ public final class VectorShuffleBatchSerializer {
     private int[] ordinaryColumns = new int[0];
     private int ordinaryCount;
     private boolean nestedRepeating;
+    private long baseBytes;
+    private long minimumPayloadBytesPerRow;
 
     private CommonPrefix() {
     }
@@ -90,6 +94,10 @@ public final class VectorShuffleBatchSerializer {
     if (repeatingColumns == null || repeatingColumns.length != columnCount) {
       repeatingColumns = new int[columnCount];
       ordinaryColumns = new int[columnCount];
+    }
+    columnNodeCounts = new long[columnCount];
+    for (int logical = 0; logical < columnCount; logical++) {
+      columnNodeCounts[logical] = countColumnNodes(columns[sourceColumnMap[logical]]);
     }
   }
 
@@ -118,11 +126,13 @@ public final class VectorShuffleBatchSerializer {
     assert compactCandidateCount > 0;
     reset(buffer, position);
 
-    int ordinaryCount = writeCommonPrefix(source, sourceColumnMap, null, 0, source.size);
-    int length = this.position - position;
     if (commonPrefix == null) {
       commonPrefix = new CommonPrefix();
     }
+    int ordinaryCount = writeCommonPrefix(source, sourceColumnMap, null, 0, source.size,
+        commonPrefix);
+    int length = this.position - position;
+    commonPrefix.baseBytes += length;
 
     if (compactCandidateCount > 1) {
       if (commonPrefix.bytes.length < length) {
@@ -140,6 +150,30 @@ public final class VectorShuffleBatchSerializer {
     commonPrefix.ordinaryCount = ordinaryCount;
     commonPrefix.nestedRepeating = nestedRepeating;
     firstPartitionReady = true;
+  }
+
+  /**
+   * Lower bound for a partition of the input batch whose prefix was successfully prepared.
+   * Only the row count varies across partitions; no source values or nulls are scanned here.
+   */
+  public long getPreparedPartitionLowerBound(int rowCount) {
+    assert commonPrefix != null;
+    assert rowCount > NUM_ROWS_THRESHOLD_FOR_BATCH;
+    return commonPrefix.baseBytes + rowCount * commonPrefix.minimumPayloadBytesPerRow;
+  }
+
+  /**
+   * Return zero without serializing when the writer region cannot fit the lower bound.
+   * Overflow can still occur for payloads omitted from the bound. After rejection the writer
+   * may overwrite its region with rows, so subsequent partitions must copy the owned prefix.
+   */
+  public int serializePartition(VectorizedRowBatch source, int[] rowIndices,
+      int rowOffset, int rowCount, byte[] buffer, int position, int maxValueBytes) {
+    if (maxValueBytes < getPreparedPartitionLowerBound(rowCount)) {
+      firstPartitionReady = false;
+      return 0;
+    }
+    return serializePartition(source, rowIndices, rowOffset, rowCount, buffer, position);
   }
 
   /**
@@ -173,14 +207,15 @@ public final class VectorShuffleBatchSerializer {
   private int serializeColumns(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
       int rowOffset, int rowCount, byte[] buffer, int position) {
     reset(buffer, position);
-    int ordinaryCount = writeCommonPrefix(source, sourceColumnMap, rowIndices, rowOffset, rowCount);
+    int ordinaryCount = writeCommonPrefix(source, sourceColumnMap, rowIndices, rowOffset, rowCount,
+        null);
     ensureCapacity(Integer.BYTES + Byte.BYTES);   // once per partition header
     writePartition(source, ordinaryColumns, ordinaryCount, rowIndices, rowOffset, rowCount);
     return this.position - position;
   }
 
   private int writeCommonPrefix(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
-      int rowOffset, int rowCount) {
+      int rowOffset, int rowCount, CommonPrefix preparation) {
     // add Integer.BYTES for writeInt() when repeatingCount != 0
     ensureCapacity(commonHeaderSize + Integer.BYTES);   // once per common prefix
     theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position, columnCount);
@@ -192,6 +227,10 @@ public final class VectorShuffleBatchSerializer {
     Arrays.fill(buffer, bitmapOffset, metadataOffset, (byte) 0);
     int repeatingCount = 0;
     int ordinaryCount = 0;
+    if (preparation != null) {
+      preparation.baseBytes = Integer.BYTES + Byte.BYTES;
+      preparation.minimumPayloadBytesPerRow = 0;
+    }
     for (int logical = 0; logical < columnCount; logical++) {
       int sourceColumn = sourceColumnMap[logical];
       if (rowCount > 1 && source.cols[sourceColumn].isRepeating) {
@@ -199,6 +238,14 @@ public final class VectorShuffleBatchSerializer {
         repeatingColumns[repeatingCount++] = sourceColumn;
       } else {
         ordinaryColumns[ordinaryCount++] = sourceColumn;
+        if (preparation != null) {
+          preparation.baseBytes += columnNodeCounts[logical];
+          ColumnVector column = source.cols[sourceColumn];
+          if (column.noNulls) {
+            // Inspect this batch's representation: decimal64 and decimal vectors can differ.
+            preparation.minimumPayloadBytesPerRow += minimumPayloadWidth(column);
+          }
+        }
       }
     }
     if (metadata.getByteCount() != 0) {
@@ -220,6 +267,39 @@ public final class VectorShuffleBatchSerializer {
     }
 
     return ordinaryCount;
+  }
+
+  private static long countColumnNodes(ColumnVector column) {
+    long count = 1; // Every node writes flags, even when its active value count is zero.
+    if (column instanceof ListColumnVector) {
+      count += countColumnNodes(((ListColumnVector) column).child);
+    } else if (column instanceof MapColumnVector) {
+      MapColumnVector map = (MapColumnVector) column;
+      count += countColumnNodes(map.keys) + countColumnNodes(map.values);
+    } else if (column instanceof StructColumnVector) {
+      for (ColumnVector field : ((StructColumnVector) column).fields) {
+        count += countColumnNodes(field);
+      }
+    } else if (column instanceof UnionColumnVector) {
+      for (ColumnVector field : ((UnionColumnVector) column).fields) {
+        count += countColumnNodes(field);
+      }
+    }
+    return count;
+  }
+
+  private static int minimumPayloadWidth(ColumnVector column) {
+    if (column instanceof TimestampColumnVector || column instanceof IntervalDayTimeColumnVector) {
+      return Long.BYTES + Integer.BYTES;
+    } else if (column instanceof LongColumnVector || column instanceof DoubleColumnVector) {
+      // Long includes date and decimal64, but not arbitrary DecimalColumnVector values.
+      return Long.BYTES;
+    } else if (column instanceof BytesColumnVector || column instanceof MultiValuedColumnVector
+        || column instanceof UnionColumnVector) {
+      // A non-null value always has a byte length, collection length, or union tag.
+      return Integer.BYTES;
+    }
+    return 0;
   }
 
   private void writePartition(VectorizedRowBatch source, int[] ordinaryColumns, int ordinaryCount,
