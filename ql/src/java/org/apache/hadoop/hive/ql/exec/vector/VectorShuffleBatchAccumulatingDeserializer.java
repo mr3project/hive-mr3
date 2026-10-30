@@ -29,6 +29,7 @@ import org.apache.hadoop.io.BytesWritable;
 
 /** Deserializes trusted compact vector shuffle frames into a schema-initialized batch. */
 public final class VectorShuffleBatchAccumulatingDeserializer {
+
   private static final int IS_REPEATING = 1;
   private static final int HAS_NULLS = 2;
   private static final int IS_DECIMAL_64 = 4;
@@ -36,37 +37,29 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
   private byte[] buffer;
   private int position;
   private int limit;
+
   // Fixed-schema accumulation always uses batches created by the same VectorizedRowBatchCtx.
   private final int fixedAppendCapacity;
   private final int inputColumnCount;
-  private VectorShuffleBatchMetadata metadata;
-  private int standaloneColumnCount;
-  private boolean fixedStandaloneSchema;
   private final VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
   private final byte[] accumulatorRepeatingBitmap;
   private final byte[] accumulatorMetadata;
+
+  private VectorShuffleBatchMetadata metadata;
+
   private long accumulatorRepeatingBits;
   private byte[] repeatingSection;
   private boolean hasRepeatingColumns;
 
   /** Cache the fixed input schema's capacity and header sizes, excluding scratch columns. */
   public VectorShuffleBatchAccumulatingDeserializer(VectorizedRowBatch schema, int inputColumnCount) {
-    assert schema != null;
     assert inputColumnCount >= 0 && inputColumnCount <= schema.cols.length;
     this.inputColumnCount = inputColumnCount;
-    initialize(schema.cols, inputColumnCount);
-    fixedAppendCapacity = calculateAppendCapacity(schema, inputColumnCount);
-    assert fixedAppendCapacity > 0;
-    accumulatorRepeatingBitmap = inputColumnCount <= Long.SIZE
-        ? null : new byte[(inputColumnCount + 7) / 8];
-    accumulatorMetadata = new byte[metadata.getByteCount()];
-  }
-
-  /** Initialize a standalone decoder once for a fixed schema. */
-  public void initialize(ColumnVector[] columns, int columnCount) {
-    standaloneColumnCount = columnCount;
-    metadata = new VectorShuffleBatchMetadata(columns, columnCount);
-    fixedStandaloneSchema = true;
+    this.fixedAppendCapacity = calculateAppendCapacity(schema, inputColumnCount);
+    this.accumulatorRepeatingBitmap =
+        inputColumnCount <= Long.SIZE ? null : new byte[(inputColumnCount + 7) / 8];
+    this.metadata = new VectorShuffleBatchMetadata(schema.cols, inputColumnCount);
+    this.accumulatorMetadata = new byte[metadata.getByteCount()];
   }
 
   /** Row limit shared with the fixed-schema accumulation receiver. */
@@ -84,7 +77,6 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
 
   /** Forget pending summaries without invalidating a header read before a flush. */
   public void resetAccumulation() {
-    assert inputColumnCount >= 0;
     // The first compact append overwrites summary bytes before any compatibility comparison.
     accumulatorRepeatingBits = 0;
     repeatingSection = null;
@@ -93,7 +85,6 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
 
   /** Read only the fixed-size header; no column payload is visited. */
   public VectorShuffleBatchHeader readHeader(BytesWritable serialized) throws IOException {
-    assert inputColumnCount >= 0;
     header.read(serialized, inputColumnCount, metadata.getByteCount());
     return header;
   }
@@ -108,63 +99,37 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
    * identical complete repeating encodings decode to identical representative values.
    */
   public boolean isCompatible() {
-    assert header.getBuffer() != null && inputColumnCount >= 0;
     if (hasRepeatingColumns != header.hasRepeatingColumns()) {
       return false;
     }
+
     byte[] incoming = header.getBuffer();
+
     if (hasRepeatingColumns) {
       if (inputColumnCount <= Long.SIZE) {
         if (accumulatorRepeatingBits != header.getRepeatingBits()) {
           return false;
         }
       } else if (!Arrays.equals(accumulatorRepeatingBitmap, 0, accumulatorRepeatingBitmap.length,
-          incoming, header.getBitmapOffset(), header.getBitmapOffset() + header.getBitmapLength())) {
+            incoming, header.getBitmapOffset(), header.getBitmapOffset() + header.getBitmapLength())) {
         return false;
       }
     }
-    if (accumulatorMetadata.length != 0
-        && !Arrays.equals(accumulatorMetadata, 0, accumulatorMetadata.length,
+
+    if (accumulatorMetadata.length != 0 &&
+        !Arrays.equals(accumulatorMetadata, 0, accumulatorMetadata.length,
             incoming, header.getMetadataOffset(), header.getMetadataOffset() + header.getMetadataLength())) {
       return false;
     }
+
     if (!hasRepeatingColumns) {
       return true;
     }
-    int length = header.getRepeatingEnd() - header.getRepeatingStart();
-    return repeatingSection != null && repeatingSection.length == length
-        && Arrays.equals(repeatingSection, 0, length,
-            incoming, header.getRepeatingStart(), header.getRepeatingEnd());
-  }
 
-  /** Returns whether a vector or any nested child carries metadata; null has none. */
-  public static boolean hasTypeMetadata(ColumnVector column) {
-    // DateColumnVector extends LongColumnVector, but still carries batch-wide metadata.
-    if (column instanceof DateColumnVector || column instanceof TimestampColumnVector) {
-      return true;
-    }
-    if (column instanceof ListColumnVector) {
-      return hasTypeMetadata(((ListColumnVector) column).child);
-    }
-    if (column instanceof MapColumnVector) {
-      MapColumnVector map = (MapColumnVector) column;
-      boolean hasMetadata = hasTypeMetadata(map.keys);
-      hasMetadata |= hasTypeMetadata(map.values);
-      return hasMetadata;
-    }
-    ColumnVector[] fields;
-    if (column instanceof StructColumnVector) {
-      fields = ((StructColumnVector) column).fields;
-    } else if (column instanceof UnionColumnVector) {
-      fields = ((UnionColumnVector) column).fields;
-    } else {
-      return false;
-    }
-    boolean hasMetadata = false;
-    for (ColumnVector field : fields) {
-      hasMetadata |= hasTypeMetadata(field);
-    }
-    return hasMetadata;
+    int length = header.getRepeatingEnd() - header.getRepeatingStart();
+    return repeatingSection != null && repeatingSection.length == length &&
+        Arrays.equals(repeatingSection, 0, length,
+            incoming, header.getRepeatingStart(), header.getRepeatingEnd());
   }
 
   /**
@@ -176,12 +141,14 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
     assert header.getBuffer() == serialized.getBytesRaw();
     assert !header.hasNestedRepeating() && !destination.selectedInUse;
     assert destination.projectionSize == inputColumnCount;
+
     try {
       buffer = header.getBuffer();
       limit = header.getLimit();
       final int originalRows = destination.size;
       final int rowCount = header.getRowCount();
       assert originalRows <= fixedAppendCapacity - rowCount;
+
       if (originalRows == 0) {
         metadata.apply(destination.cols, buffer, header.getMetadataOffset());
         position = header.getRepeatingStart();
@@ -190,6 +157,7 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
         }
         checkRepeatingSectionEnd();
       }
+
       position = header.getOrdinaryStart();
       if (!header.hasRepeatingColumns()) {
         for (int i = 0; i < inputColumnCount; i++) {
@@ -209,24 +177,25 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
           }
         }
       }
+
       checkFrameEnd();
+
       destination.size += rowCount;
       if (originalRows == 0) {
         if (accumulatorMetadata.length != 0) {
-          System.arraycopy(buffer, header.getMetadataOffset(), accumulatorMetadata, 0,
-              accumulatorMetadata.length);
+          System.arraycopy(buffer, header.getMetadataOffset(), accumulatorMetadata,
+              0, accumulatorMetadata.length);
         }
         hasRepeatingColumns = header.hasRepeatingColumns();
         if (hasRepeatingColumns) {
           if (inputColumnCount <= Long.SIZE) {
             accumulatorRepeatingBits = header.getRepeatingBits();
           } else {
-            System.arraycopy(buffer, header.getBitmapOffset(), accumulatorRepeatingBitmap, 0,
-                accumulatorRepeatingBitmap.length);
+            System.arraycopy(buffer, header.getBitmapOffset(), accumulatorRepeatingBitmap,
+                0, accumulatorRepeatingBitmap.length);
           }
           // The shuffle reader may reuse the incoming BytesWritable immediately after this call.
-          repeatingSection = Arrays.copyOfRange(buffer,
-              header.getRepeatingStart(), header.getRepeatingEnd());
+          repeatingSection = Arrays.copyOfRange(buffer, header.getRepeatingStart(), header.getRepeatingEnd());
         }
       }
     } finally {
@@ -272,7 +241,6 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
   private static int calculateAppendCapacity(VectorizedRowBatch batch, int columnCount) {
     int capacity = Math.min(VectorizedRowBatch.DEFAULT_SIZE, batch.selected.length);
     for (int i = 0; i < columnCount; i++) {
-      assert batch.cols[i] != null;
       capacity = Math.min(capacity, batch.cols[i].isNull.length);
     }
     return capacity;
@@ -280,25 +248,8 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
 
   public void deserialize(BytesWritable serialized, VectorizedRowBatch destination)
       throws IOException {
-    assert serialized != null && destination != null;
-    int columnCount = inputColumnCount;
-    if (columnCount < 0) {
-      if (serialized.getLength() < Integer.BYTES) {
-        throw new IOException("Truncated vector shuffle batch header");
-      }
-      columnCount = theUnsafe.getInt(serialized.getBytesRaw(),
-          BYTE_ARRAY_BASE_OFFSET + serialized.getOffset());
-      if (columnCount < 0 || columnCount > destination.cols.length) {
-        throw new IOException("Invalid vector shuffle batch column count " + columnCount);
-      }
-      if (fixedStandaloneSchema) {
-        columnCount = standaloneColumnCount;
-      } else {
-        metadata = new VectorShuffleBatchMetadata(destination.cols, columnCount);
-      }
-    }
     try {
-      header.read(serialized, columnCount, metadata.getByteCount());
+      header.read(serialized, inputColumnCount, metadata.getByteCount());
     } catch (IOException e) {
       header.clear();
       throw e;
@@ -310,14 +261,16 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
   public void deserializeWithHeader(BytesWritable serialized, VectorizedRowBatch destination)
       throws IOException {
     assert header.getBuffer() == serialized.getBytesRaw();
+
     final int columnCount = header.getColumnCount();
     try {
       buffer = header.getBuffer();
       limit = header.getLimit();
       final int rowCount = header.getRowCount();
+
       destination.reset();
+
       for (int i = 0; i < columnCount; i++) {
-        assert destination.cols[i] != null;
         destination.cols[i].ensureSize(rowCount, false);
         destination.projectedColumns[i] = i;
       }
@@ -329,7 +282,9 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
       if (header.hasRepeatingColumns()) {
         readRepeatingColumns(destination, columnCount, rowCount);
       }
+
       checkRepeatingSectionEnd();
+
       position = header.getOrdinaryStart();
       if (!header.hasRepeatingColumns()) {
         for (int i = 0; i < columnCount; i++) {
@@ -365,15 +320,8 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
     return bitmapOffset;
   }
 
-  private void readAppendColumn(ColumnVector column, int[] indices, int rowCount)
-      throws IOException {
-    column.ensureSize(requiredSize(indices, rowCount, false), true);
-    readAppendColumn(column, indices, 0, rowCount);
-  }
-
   private void readAppendColumnConsecutive(ColumnVector column, int offset, int rowCount)
       throws IOException {
-    assert offset >= 0 && rowCount >= 0 && offset <= Integer.MAX_VALUE - rowCount;
     // Nested storage grows independently of the top-level accumulator's fixed row capacity.
     column.ensureSize(offset + rowCount, true);
     readAppendColumn(column, null, offset, rowCount);
@@ -395,10 +343,12 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
   private void readAppendColumn(ColumnVector column, int[] indices, int offset, int rowCount)
       throws IOException {
     assert !column.isRepeating;
+
     int flags = readUnsignedByte();
     boolean repeating = (flags & IS_REPEATING) != 0;
     // Effective top-level repetition is decoded before append; nested repetition is standalone.
     assert !repeating || rowCount <= 1;
+
     int count = repeating ? Math.min(rowCount, 1) : rowCount;
     int bitmapOffset = readNullBitmap(flags, count);
     if (!repeating && bitmapOffset < 0 && indices == null
@@ -432,7 +382,7 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
         }
       }
       for (ColumnVector field : ((StructColumnVector) column).fields) {
-        readAppendColumn(field, active, activeCount);
+        readAppendColumn(field, active, 0, activeCount);
       }
     } else if (column instanceof UnionColumnVector) {
       UnionColumnVector union = (UnionColumnVector) column;
@@ -457,7 +407,7 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
         }
       }
       for (int tag = 0; tag < union.fields.length; tag++) {
-        readAppendColumn(union.fields[tag], active[tag], counts[tag]);
+        readAppendColumn(union.fields[tag], active[tag], 0, counts[tag]);
       }
     } else if (column instanceof MultiValuedColumnVector) {
       MultiValuedColumnVector multi = (MultiValuedColumnVector) column;
@@ -472,8 +422,7 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
       }
       int incomingChildren = childCount - oldChildCount;
       if (column instanceof ListColumnVector) {
-        readAppendColumnConsecutive(((ListColumnVector) column).child, oldChildCount,
-            incomingChildren);
+        readAppendColumnConsecutive(((ListColumnVector) column).child, oldChildCount, incomingChildren);
       } else {
         MapColumnVector map = (MapColumnVector) column;
         readAppendColumnConsecutive(map.keys, oldChildCount, incomingChildren);
@@ -496,7 +445,6 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
     final boolean repeating = (flags & IS_REPEATING) != 0;
     final boolean hasNulls = (flags & HAS_NULLS) != 0;
     final int valueCount = repeating ? Math.min(rowCount, 1) : rowCount;
-    column.ensureSize(requiredSize(destinationIndices, valueCount, repeating), false);
 
     int bitmapOffset = readNullBitmap(flags, valueCount);
 
@@ -509,8 +457,9 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
       readDenseFixedWidth(column, 0, valueCount);
       return;
     }
-    if (column instanceof StructColumnVector || column instanceof UnionColumnVector
-        || column instanceof MultiValuedColumnVector) {
+    if (column instanceof StructColumnVector ||
+        column instanceof UnionColumnVector ||
+        column instanceof MultiValuedColumnVector) {
       readNulls(column, destinationIndices, 0, valueCount, repeating, bitmapOffset);
     }
 
@@ -555,7 +504,7 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
     }
 
     for (ColumnVector field : struct.fields) {
-      field.ensureSize(requiredSize(activeDestinationIndices, activeCount, false), false);
+      assert field.isNull.length >= struct.isNull.length;
       readColumn(field, activeDestinationIndices, activeCount);
     }
   }
@@ -587,13 +536,13 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
 
     for (int tag = 0; tag < union.fields.length; tag++) {
       ColumnVector field = union.fields[tag];
-      field.ensureSize(requiredSize(fieldDestinationIndices[tag], fieldCounts[tag], false), false);
+      assert field.isNull.length >= union.tags.length;
       readColumn(field, fieldDestinationIndices[tag], fieldCounts[tag]);
     }
   }
 
-  private int readMultiValuedLengths(MultiValuedColumnVector column, int[] destinationIndices,
-      int valueCount, boolean repeating) throws IOException {
+  private int readMultiValuedLengths(
+      MultiValuedColumnVector column, int[] destinationIndices, int valueCount, boolean repeating) {
     int childCount = 0;
     for (int logical = 0; logical < valueCount; logical++) {
       int destinationIndex = destinationIndex(destinationIndices, logical, repeating);
@@ -631,8 +580,7 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
   }
 
   private boolean isNull(int bitmapOffset, int logical) {
-    return bitmapOffset >= 0
-        && (buffer[bitmapOffset + (logical >>> 3)] & (1 << (logical & 7))) != 0;
+    return bitmapOffset >= 0 && (buffer[bitmapOffset + (logical >>> 3)] & (1 << (logical & 7))) != 0;
   }
 
   private int destinationIndex(int[] destinationIndices, int logical, boolean repeating) {
@@ -641,8 +589,8 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
 
   private int destinationIndex(int[] destinationIndices, int destinationOffset, int logical,
       boolean repeating) {
-    return repeating ? 0
-        : destinationIndices == null ? destinationOffset + logical : destinationIndices[logical];
+    return repeating ? 0 :
+      (destinationIndices == null ? destinationOffset + logical : destinationIndices[logical]);
   }
 
   private int nonNullDestinationIndex(ColumnVector column, int[] destinationIndices,
@@ -655,17 +603,6 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
     }
     column.isNull[index] = false;
     return index;
-  }
-
-  private int requiredSize(int[] destinationIndices, int valueCount, boolean repeating) {
-    if (repeating || destinationIndices == null) {
-      return valueCount;
-    }
-    int requiredSize = 0;
-    for (int logical = 0; logical < valueCount; logical++) {
-      requiredSize = Math.max(requiredSize, destinationIndices[logical] + 1);
-    }
-    return requiredSize;
   }
 
   private void readDenseFixedWidth(ColumnVector column, int destinationOffset, int count)
@@ -686,8 +623,8 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
       if (column instanceof Decimal64ColumnVector) {
         Decimal64ColumnVector decimal64 = (Decimal64ColumnVector) column;
         for (int logical = 0; logical < valueCount; logical++) {
-          int index = nonNullDestinationIndex(column, destinationIndices, destinationOffset, logical,
-              repeating, bitmapOffset);
+          int index = nonNullDestinationIndex(
+              column, destinationIndices, destinationOffset, logical, repeating, bitmapOffset);
           if (index >= 0) {
             decimal64.vector[index] = readLong();
           }

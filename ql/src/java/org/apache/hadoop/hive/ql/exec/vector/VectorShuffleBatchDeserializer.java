@@ -29,6 +29,7 @@ import org.apache.hadoop.io.BytesWritable;
 
 /** Deserializes a compact vector shuffle payload into an already schema-initialized batch. */
 public final class VectorShuffleBatchDeserializer {
+
   private static final int IS_REPEATING = 1;
   private static final int HAS_NULLS = 2;
   private static final int IS_DECIMAL_64 = 4;
@@ -36,6 +37,7 @@ public final class VectorShuffleBatchDeserializer {
   private byte[] buffer;
   private int position;
   private int limit;
+
   private final VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
   private VectorShuffleBatchMetadata metadata;
   private int inputColumnCount;
@@ -45,13 +47,9 @@ public final class VectorShuffleBatchDeserializer {
   }
 
   public VectorShuffleBatchDeserializer(VectorizedRowBatch schema, int inputColumnCount) {
-    initialize(schema.cols, inputColumnCount);
-  }
-
-  /** Initialize once for a fixed schema; later batches may use different column vectors. */
-  public void initialize(ColumnVector[] columns, int inputColumnCount) {
+    // initialize once for a fixed schema; later batches may use different column vectors.
     this.inputColumnCount = inputColumnCount;
-    metadata = new VectorShuffleBatchMetadata(columns, inputColumnCount);
+    metadata = new VectorShuffleBatchMetadata(schema.cols, inputColumnCount);
     fixedSchema = true;
   }
 
@@ -60,16 +58,16 @@ public final class VectorShuffleBatchDeserializer {
   // IOException is for handling in-transit data corruption.
   public void deserialize(BytesWritable serialized, VectorizedRowBatch destination)
       throws IOException {
-    assert serialized != null && destination != null;
-
     if (serialized.getLength() < Integer.BYTES) {
       throw new IOException("Truncated vector shuffle batch header");
     }
+
     final int columnCount = theUnsafe.getInt(serialized.getBytesRaw(),
         BYTE_ARRAY_BASE_OFFSET + serialized.getOffset());
     if (columnCount < 0 || columnCount > destination.cols.length) {
       throw new IOException("Invalid vector shuffle batch column count " + columnCount);
     }
+
     if (!fixedSchema) {
       for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
         if (destination.cols[columnIndex] == null) {
@@ -106,6 +104,7 @@ public final class VectorShuffleBatchDeserializer {
       if (position != header.getRepeatingEnd()) {
         throw new IOException("Vector shuffle repeating section length does not match its payload");
       }
+
       position = header.getOrdinaryStart();
       if (!header.hasRepeatingColumns()) {
         for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
@@ -125,6 +124,7 @@ public final class VectorShuffleBatchDeserializer {
           }
         }
       }
+
       if (position != limit) {
         throw new IOException("Vector shuffle batch has " + (limit - position) + " trailing bytes");
       }
@@ -166,7 +166,6 @@ public final class VectorShuffleBatchDeserializer {
     final boolean repeating = (flags & IS_REPEATING) != 0;
     final boolean hasNulls = (flags & HAS_NULLS) != 0;
     final int valueCount = repeating ? Math.min(rowCount, 1) : rowCount;
-    column.ensureSize(requiredSize(destinationIndices, valueCount, repeating), false);
 
     int nullBitmap = -1;
     if (hasNulls) {
@@ -176,17 +175,19 @@ public final class VectorShuffleBatchDeserializer {
 
     column.isRepeating = repeating;
     column.noNulls = !hasNulls;
-    if (!repeating && !hasNulls && destinationIndices == null
-        && VectorShuffleBatchFixedWidth.canRead(column, (flags & IS_DECIMAL_64) != 0)) {
+    if (!repeating && !hasNulls && destinationIndices == null &&
+        VectorShuffleBatchFixedWidth.canRead(column, (flags & IS_DECIMAL_64) != 0)) {
       // Preserve null-bitmap semantics when reusing a standalone destination batch.
       Arrays.fill(column.isNull, 0, valueCount, false);
       readDenseFixedWidth(column, 0, valueCount);
       return;
     }
+
     for (int logical = 0; logical < valueCount; logical++) {
       int destinationIndex = destinationIndex(destinationIndices, logical, repeating);
       column.isNull[destinationIndex] = hasNulls && isNull(nullBitmap, logical);
     }
+
     if (column instanceof StructColumnVector) {
       readStructChildren((StructColumnVector) column, destinationIndices, valueCount, repeating);
     } else if (column instanceof UnionColumnVector) {
@@ -228,7 +229,7 @@ public final class VectorShuffleBatchDeserializer {
     }
 
     for (ColumnVector field : struct.fields) {
-      field.ensureSize(requiredSize(activeDestinationIndices, activeCount, false), false);
+      assert field.isNull.length >= struct.isNull.length;
       readColumn(field, activeDestinationIndices, activeCount);
     }
   }
@@ -263,7 +264,7 @@ public final class VectorShuffleBatchDeserializer {
 
     for (int tag = 0; tag < union.fields.length; tag++) {
       ColumnVector field = union.fields[tag];
-      field.ensureSize(requiredSize(fieldDestinationIndices[tag], fieldCounts[tag], false), false);
+      assert field.isNull.length >= union.tags.length;
       readColumn(field, fieldDestinationIndices[tag], fieldCounts[tag]);
     }
   }
@@ -316,17 +317,6 @@ public final class VectorShuffleBatchDeserializer {
 
   private int destinationIndex(int[] destinationIndices, int logical, boolean repeating) {
     return repeating ? 0 : destinationIndices == null ? logical : destinationIndices[logical];
-  }
-
-  private int requiredSize(int[] destinationIndices, int valueCount, boolean repeating) {
-    if (repeating || destinationIndices == null) {
-      return valueCount;
-    }
-    int requiredSize = 0;
-    for (int logical = 0; logical < valueCount; logical++) {
-      requiredSize = Math.max(requiredSize, destinationIndices[logical] + 1);
-    }
-    return requiredSize;
   }
 
   private void readDenseFixedWidth(ColumnVector column, int destinationOffset, int count)

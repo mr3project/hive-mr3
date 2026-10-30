@@ -43,6 +43,7 @@ import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
  * multiple compact partitions of the same input batch.</p>
  */
 public final class VectorShuffleBatchSerializer {
+
   private static final int IS_REPEATING = 1;
   private static final int HAS_NULLS = 2;
   private static final int IS_DECIMAL_64 = 4;
