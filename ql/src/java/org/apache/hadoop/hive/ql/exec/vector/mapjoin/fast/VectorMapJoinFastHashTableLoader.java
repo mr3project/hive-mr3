@@ -271,29 +271,24 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
         Long keyCountObj = parentKeyCounts.get(pos);
         long estKeyCount = (keyCountObj == null) ? -1 : keyCountObj;
 
-        long inputRecords = -1;
+        long approximateLogicalRecords = -1;
         try {
-          inputRecords = ((AbstractLogicalInput) input).getContext().getCounters()
+          approximateLogicalRecords = ((AbstractLogicalInput) input).getContext().getCounters()
             .findCounter(TaskCounter.APPROXIMATE_INPUT_RECORDS)
             .getValue();
         } catch (Exception e) {
           LOG.debug("Failed to get value for counter APPROXIMATE_INPUT_RECORDS", e);
         }
-        if (batchInput && inputRecords >= 0) {
-          // This counter measures outer records. Frames contain at most DEFAULT_SIZE rows;
-          // partial frames and ordinary fallback records make this a conservative estimate.
-          inputRecords = inputRecords > Long.MAX_VALUE / VectorizedRowBatch.DEFAULT_SIZE
-              ? Long.MAX_VALUE : inputRecords * VectorizedRowBatch.DEFAULT_SIZE;
-        }
-        long keyCount = Math.max(estKeyCount, inputRecords);
+        // The counter already estimates logical rows, including rows encoded in frames.
+        long keyCount = Math.max(estKeyCount, approximateLogicalRecords);
         initHTLoadingService(keyCount);
 
         VectorMapJoinFastTableContainer tableContainer =
             new VectorMapJoinFastTableContainer(desc, hconf, keyCount, numLoadThreads);
 
         LOG.info("Loading hash table for input: {} cacheKey: {} tableContainer: {} smallTablePos: {} " +
-                "estKeyCount : {} keyCount : {}", inputName, cacheKey,
-                tableContainer.getClass().getSimpleName(), pos, estKeyCount, keyCount);
+                "estKeyCount : {} approximateLogicalRecords : {} keyCount : {}", inputName, cacheKey,
+                tableContainer.getClass().getSimpleName(), pos, estKeyCount, approximateLogicalRecords, keyCount);
 
         tableContainer.setSerde(null, null); // No SerDes here.
         // Submit parallel loading Threads

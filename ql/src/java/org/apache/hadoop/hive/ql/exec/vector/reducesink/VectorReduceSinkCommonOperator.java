@@ -436,7 +436,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
             growVectorShuffleSerializeBuffer();
           }
         }
-        doCollectBatch(vectorShuffleBatchKey, vectorShuffleBatchValue, 0, logicalRecordCount);
+        doCollectBatch(vectorShuffleBatchKey, vectorShuffleBatchValue, logicalRecordCount);
         shuffleCompactFrames++;
       }
       return true;
@@ -512,7 +512,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       return;
     }
     // The synchronous Tez write consumes this borrowed frame before the serializer is reset.
-    doCollectBatch(mapJoinBatchKey, mapJoinBatchSerializer.getValue(), 0, rowCount);
+    doCollectBatch(mapJoinBatchKey, mapJoinBatchSerializer.getValue(), rowCount);
     shuffleCompactFrames++;
     shuffleSingletonPartitions += rowCount;
     mapJoinBatchFrames++;
@@ -782,7 +782,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
           LOG.debug("{}: records written - {}", this, numRows);
         }
       }
-      out.writeWithPartition(keyWritable, valueWritable, partition);
+      if (out.getNumUnorderedPartitions() == 1) {
+        out.writeForSinglePartition(keyWritable, valueWritable, 1);
+      } else {
+        out.writeWithPartition(keyWritable, valueWritable, partition);
+      }
     }
   }
 
@@ -890,7 +894,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       //     " valueWritable " + valueBytesWritable.getLength() +
       //     VectorizedBatchUtil.displayBytes(valueBytesWritable.getBytes(), 0, valueBytesWritable.getLength()));
 
-      out.collect(keyWritable, valueWritable);
+      if (out.getNumUnorderedPartitions() == 1) {
+        out.writeForSinglePartition(keyWritable, valueWritable, 1);
+      } else {
+        out.collect(keyWritable, valueWritable);
+      }
     }
   }
 
@@ -904,11 +912,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
   }
 
-  private void doCollectBatch(HiveKey keyWritable, BytesWritable valueWritable, int partition,
-                              long logicalRecordCount) throws IOException {
+  private void doCollectBatch(HiveKey keyWritable, BytesWritable valueWritable,
+                              int logicalRecordCount) throws IOException {
     if (null != out) {
       recordCollectedBatch(logicalRecordCount);
-      out.writeWithPartition(keyWritable, valueWritable, partition);
+      out.writeForSinglePartition(keyWritable, valueWritable, logicalRecordCount);
     }
   }
 
