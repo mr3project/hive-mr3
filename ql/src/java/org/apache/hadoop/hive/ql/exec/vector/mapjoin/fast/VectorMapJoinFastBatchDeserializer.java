@@ -21,10 +21,13 @@ import java.io.IOException;
 
 import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKeyType;
 import org.apache.hadoop.io.BytesWritable;
+import org.apache.hive.common.util.HashCodeUtil;
 
 /** Parses immutable frame slices without copying keys or values. Getter state lasts until next(). */
 public final class VectorMapJoinFastBatchDeserializer {
   private final HashTableKeyType keyType;
+  private final int numericKeyWidth;
+  private final int entryHeaderBytes;
   private byte[] bytes;
   private int position;
   private int limit;
@@ -39,7 +42,9 @@ public final class VectorMapJoinFastBatchDeserializer {
   private int valueLength;
 
   public VectorMapJoinFastBatchDeserializer(HashTableKeyType keyType) {
-    VectorMapJoinFastBatch.encoding(keyType);
+    numericKeyWidth = VectorMapJoinFastBatch.numericWidth(keyType);
+    entryHeaderBytes = numericKeyWidth > 0
+        ? VectorMapJoinFastBatch.NUMERIC_ENTRY_HEADER_BYTES : VectorMapJoinFastBatch.BYTES_ENTRY_HEADER_BYTES;
     this.keyType = keyType;
   }
 
@@ -52,15 +57,9 @@ public final class VectorMapJoinFastBatchDeserializer {
       throw new IOException("Invalid FAST map-join batch slice");
     }
     limit = position + length;
-    final int version = readInt();
-    final int encoding = readInt();
-    if (version != VectorMapJoinFastBatch.VERSION
-        || encoding != VectorMapJoinFastBatch.encoding(keyType)) {
-      throw new IOException("Unexpected FAST map-join batch version or key encoding");
-    }
     rowCount = readInt();
     if (rowCount < 1 || rowCount > VectorMapJoinFastBatch.MAX_ROWS
-        || rowCount > (limit - position) / VectorMapJoinFastBatch.ENTRY_HEADER_BYTES) {
+        || rowCount > (limit - position) / entryHeaderBytes) {
       throw new IOException("Invalid FAST map-join batch row count " + rowCount);
     }
     remaining = rowCount;
@@ -73,12 +72,19 @@ public final class VectorMapJoinFastBatchDeserializer {
       }
       return false;
     }
-    hash = readInt();
-    keyLength = readInt();
+    if (limit - position < entryHeaderBytes) {
+      throw new IOException("Truncated FAST map-join batch metadata");
+    }
+    if (numericKeyWidth > 0) {
+      isNull = bytes[position++] == 0;
+      keyLength = isNull ? -1 : numericKeyWidth;
+    } else {
+      keyLength = readInt();
+      isNull = keyLength == -1;
+    }
     valueLength = readInt();
-    isNull = keyLength == -1;
     if (keyLength < -1 || valueLength < 0
-        || (isNull && (keyType == HashTableKeyType.MULTI_KEY || hash != 0))) {
+        || (isNull && keyType == HashTableKeyType.MULTI_KEY)) {
       throw new IOException("Invalid FAST map-join batch entry lengths or NULL key");
     }
     final int payloadKeyLength = isNull ? 0 : keyLength;
@@ -88,14 +94,10 @@ public final class VectorMapJoinFastBatchDeserializer {
     }
     keyOffset = position;
     longKey = 0;
-    final int width = VectorMapJoinFastBatch.numericWidth(keyType);
-    if (!isNull && width > 0) {
-      if (keyLength != width) {
-        throw new IOException("Invalid native numeric key width " + keyLength);
-      }
+    if (!isNull && numericKeyWidth > 0) {
       // Seed with a signed byte to sign-extend byte/short/int as well as long keys.
       longKey = bytes[position];
-      for (int i = 1; i < width; i++) {
+      for (int i = 1; i < numericKeyWidth; i++) {
         longKey = (longKey << Byte.SIZE) | (bytes[position + i] & 0xffL);
       }
       if (keyType == HashTableKeyType.BOOLEAN && longKey != 0 && longKey != 1) {
@@ -108,6 +110,13 @@ public final class VectorMapJoinFastBatchDeserializer {
     remaining--;
     if (remaining == 0 && position != limit) {
       throw new IOException("Trailing bytes in FAST map-join batch");
+    }
+    if (isNull) {
+      hash = 0;
+    } else if (numericKeyWidth > 0) {
+      hash = HashCodeUtil.calculateLongHashCode(longKey);
+    } else {
+      hash = HashCodeUtil.murmurHash(bytes, keyOffset, keyLength);
     }
     return true;
   }

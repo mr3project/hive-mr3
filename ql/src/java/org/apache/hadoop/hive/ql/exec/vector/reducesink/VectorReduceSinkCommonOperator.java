@@ -447,7 +447,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   }
 
   /**
-   * Map-join loaders receive native join entries with precomputed table hashes. These frames
+   * Map-join loaders receive native join entries and compute their table hashes. These frames
    * use a separate protocol from compact vector shuffle and only target a single output partition.
    * All key/value expressions have been evaluated by the concrete operator before this call.
    */

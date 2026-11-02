@@ -32,7 +32,6 @@ import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableSerialize
 import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
-import org.apache.hive.common.util.HashCodeUtil;
 
 import com.google.common.base.Preconditions;
 
@@ -40,6 +39,8 @@ import com.google.common.base.Preconditions;
 public final class VectorMapJoinFastBatchSerializer {
   private static final int INITIAL_BYTES = 64 * 1024;
   private final HashTableKeyType keyType;
+  private final int numericKeyWidth;
+  private final int entryHeaderBytes;
   private final int[] keyColumnMap;
   private final BinarySortableSerializeWrite keyWriter;
   private final VectorSerializeRow<BinarySortableSerializeWrite> keyRow;
@@ -52,7 +53,9 @@ public final class VectorMapJoinFastBatchSerializer {
   public VectorMapJoinFastBatchSerializer(HashTableKeyType keyType, TypeInfo[] keyTypes,
       int[] keyColumnMap, Properties keyProperties, TypeInfo[] valueTypes, int[] valueColumnMap)
       throws HiveException {
-    VectorMapJoinFastBatch.encoding(keyType);
+    numericKeyWidth = VectorMapJoinFastBatch.numericWidth(keyType);
+    entryHeaderBytes = numericKeyWidth > 0
+        ? VectorMapJoinFastBatch.NUMERIC_ENTRY_HEADER_BYTES : VectorMapJoinFastBatch.BYTES_ENTRY_HEADER_BYTES;
     Preconditions.checkArgument(keyTypes.length == keyColumnMap.length);
     Preconditions.checkArgument(valueTypes.length == valueColumnMap.length);
     Preconditions.checkArgument(keyType == HashTableKeyType.MULTI_KEY || keyColumnMap.length == 1);
@@ -87,34 +90,29 @@ public final class VectorMapJoinFastBatchSerializer {
       return false;
     }
     final int entryStart = output.getLength();
-    output.reserve(VectorMapJoinFastBatch.ENTRY_HEADER_BYTES);
+    output.reserve(entryHeaderBytes);
     final int keyStart = output.getLength();
     int keyLength;
-    int hash;
     if (keyType == HashTableKeyType.MULTI_KEY) {
       if (keyRow != null) {
         keyWriter.setAppend(output);
         keyRow.serializeWrite(batch, physicalRow);
       }
       keyLength = output.getLength() - keyStart;
-      hash = HashCodeUtil.murmurHash(output.getData(), keyStart, keyLength);
     } else {
       final ColumnVector column = batch.cols[keyColumnMap[0]];
       final int row = column.isRepeating ? 0 : physicalRow;
       if (!column.noNulls && column.isNull[row]) {
         keyLength = -1;
-        hash = 0;
       } else if (keyType == HashTableKeyType.STRING) {
         // This family includes CHAR, VARCHAR and BINARY. Expressions already provide
         // their logical bytes; do not introduce text conversion or padding here.
         final BytesColumnVector bytes = (BytesColumnVector) column;
         keyLength = bytes.length[row];
-        hash = HashCodeUtil.murmurHash(bytes.vector[row], bytes.start[row], keyLength);
         output.write(bytes.vector[row], bytes.start[row], keyLength);
       } else {
         final long key = normalize(((LongColumnVector) column).vector[row]);
-        keyLength = VectorMapJoinFastBatch.numericWidth(keyType);
-        hash = HashCodeUtil.calculateLongHashCode(key);
+        keyLength = numericKeyWidth;
         for (int shift = (keyLength - 1) * Byte.SIZE; shift >= 0; shift -= Byte.SIZE) {
           output.write((int) (key >>> shift) & 0xff);
         }
@@ -130,9 +128,12 @@ public final class VectorMapJoinFastBatchSerializer {
       output.setWritePosition(entryStart);
       return false;
     }
-    output.writeInt(entryStart, hash);
-    output.writeInt(entryStart + Integer.BYTES, keyLength);
-    output.writeInt(entryStart + 2 * Integer.BYTES, valueLength);
+    if (numericKeyWidth > 0) {
+      output.writeByte(entryStart, (byte) (keyLength == -1 ? 0 : 1));
+    } else {
+      output.writeInt(entryStart, keyLength);
+    }
+    output.writeInt(entryStart + entryHeaderBytes - Integer.BYTES, valueLength);
     rowCount++;
     return true;
   }
@@ -156,7 +157,7 @@ public final class VectorMapJoinFastBatchSerializer {
   /** Borrowed until reset/append; the current single-partition writer consumes it synchronously. */
   public BytesWritable getValue() {
     Preconditions.checkState(rowCount > 0);
-    output.writeInt(2 * Integer.BYTES, rowCount);
+    output.writeInt(0, rowCount);
     value.setDirect(output.getData(), 0, output.getLength());
     return value;
   }
@@ -171,8 +172,6 @@ public final class VectorMapJoinFastBatchSerializer {
     // Release the wrapper's borrowed reference before reusing/replacing the scratch array.
     value.setDirect(output.getData(), 0, 0);
     rowCount = 0;
-    output.appendInt(VectorMapJoinFastBatch.VERSION);
-    output.appendInt(VectorMapJoinFastBatch.encoding(keyType));
     output.appendInt(0);
   }
 }
