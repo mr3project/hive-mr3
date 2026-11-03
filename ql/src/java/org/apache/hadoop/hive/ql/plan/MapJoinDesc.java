@@ -68,6 +68,8 @@ public class MapJoinDesc extends JoinDesc implements Serializable {
   private Map<Integer, String> parentToInput = new HashMap<Integer, String>();
   private Map<Integer, Long> parentKeyCounts = new HashMap<Integer, Long>();
   private Map<Integer, Long> parentDataSizes = new HashMap<Integer, Long>();
+  // Inputs whose physical record counts include native FAST map-join entry batches.
+  private Set<Integer> vectorMapJoinBatchInputs = new LinkedHashSet<>();
 
   // table alias (small) --> input file name (big) --> target file names (small)
   private Map<String, Map<String, List<String>>> aliasBucketFileNameMapping;
@@ -110,6 +112,7 @@ public class MapJoinDesc extends JoinDesc implements Serializable {
     this.parentToInput = clone.parentToInput;
     this.parentKeyCounts = clone.parentKeyCounts;
     this.parentDataSizes = clone.parentDataSizes;
+    this.vectorMapJoinBatchInputs = new LinkedHashSet<>(clone.vectorMapJoinBatchInputs);
     this.isBucketMapJoin = clone.isBucketMapJoin;
     this.isHybridHashJoin = clone.isHybridHashJoin;
     this.cacheKey = clone.cacheKey;
@@ -155,6 +158,18 @@ public class MapJoinDesc extends JoinDesc implements Serializable {
 
   public void setParentToInput(Map<Integer, String> parentToInput) {
     this.parentToInput = parentToInput;
+  }
+
+  public boolean isVectorMapJoinBatchInput(int pos) {
+    return vectorMapJoinBatchInputs.contains(pos);
+  }
+
+  public void setVectorMapJoinBatchInput(int pos) {
+    vectorMapJoinBatchInputs.add(pos);
+  }
+
+  public void clearVectorMapJoinBatchInputs() {
+    vectorMapJoinBatchInputs.clear();
   }
 
   public Map<Integer, Long> getParentKeyCounts() {

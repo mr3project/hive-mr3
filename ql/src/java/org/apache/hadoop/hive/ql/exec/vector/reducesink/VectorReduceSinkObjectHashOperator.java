@@ -195,6 +195,29 @@ public class VectorReduceSinkObjectHashOperator extends VectorReduceSinkCommonOp
   }
 
   @Override
+  protected boolean isMapJoinBatchEligible() {
+    // This expression is evaluated per row in the ordinary path after bucket extraction.
+    return bucketExpr == null;
+  }
+
+  @Override
+  protected void evaluatePartitionExpressions(VectorizedRowBatch batch) throws HiveException {
+    // Perform any bucket expressions. Results will go into scratch columns.
+    if (reduceSinkBucketExpressions != null) {
+      for (VectorExpression ve : reduceSinkBucketExpressions) {
+        ve.evaluate(batch);
+      }
+    }
+
+    // Perform any partition expressions. Results will go into scratch columns.
+    if (reduceSinkPartitionExpressions != null) {
+      for (VectorExpression ve : reduceSinkPartitionExpressions) {
+        ve.evaluate(batch);
+      }
+    }
+  }
+
+  @Override
   public void process(Object row, int tag) throws HiveException {
 
     try {
@@ -239,19 +262,7 @@ public class VectorReduceSinkObjectHashOperator extends VectorReduceSinkCommonOp
         return;
       }
 
-      // Perform any bucket expressions.  Results will go into scratch columns.
-      if (reduceSinkBucketExpressions != null) {
-        for (VectorExpression ve : reduceSinkBucketExpressions) {
-          ve.evaluate(batch);
-        }
-      }
-
-      // Perform any partition expressions.  Results will go into scratch columns.
-      if (reduceSinkPartitionExpressions != null) {
-        for (VectorExpression ve : reduceSinkPartitionExpressions) {
-          ve.evaluate(batch);
-        }
-      }
+      evaluatePartitionExpressions(batch);
 
       final boolean selectedInUse = batch.selectedInUse;
       int[] selected = batch.selected;
