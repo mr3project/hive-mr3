@@ -176,8 +176,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient VectorSerializeRow<BinarySortableSerializeWrite> vectorShuffleRowKeySerializeRow;
 
   // Scratch hash codes for active rows in the current batch, indexed by physical row.
-  protected transient int[] batchKeyHashCodes;
-  protected transient int[] batchValueHashCodes;
+  protected transient int[] batchHashCodes;
   private transient int[] vectorShufflePartitionCounts;
   private transient int[] vectorShufflePartitionOffsets;
   private transient int[] vectorShufflePartitionPositions;
@@ -349,8 +348,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     mapJoinBatchSerializer = null;
     mapJoinBatchFrames = 0;
 
-    batchKeyHashCodes = null;
-    batchValueHashCodes = null;
+    batchHashCodes = null;
     vectorShuffleBatchSerializer = null;
     vectorShuffleSerializeBuffer = null;
     vectorShuffleBatchColumnMap = null;
@@ -511,13 +509,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     evaluatePartitionExpressions(batch);
     clearVectorShuffleRowKeyBatchCache();
 
-    final int[] hashCodes;
+    final int[] hashCodes = batchHashCodes;
     final int partitionerType = vectorShufflePartitionerType;
     if (partitionerType == 0) {
-      hashCodes = batchKeyHashCodes;
       computeKeyHashCodes(batch, hashCodes);
     } else {
-      hashCodes = batchValueHashCodes;
       computeValueHashCodes(batch, hashCodes);
     }
 
@@ -653,11 +649,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShufflePartitionPositions = new int[numUnorderedPartitions];
     vectorShuffleRowPartitions = new int[VectorizedRowBatch.DEFAULT_SIZE];
     vectorShufflePartitionRowIndices = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    if (vectorShufflePartitionerType == 0) {
-      batchKeyHashCodes = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    } else {
-      batchValueHashCodes = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    }
+    batchHashCodes = new int[VectorizedRowBatch.DEFAULT_SIZE];
   }
 
   private void initializeVectorShuffleRowKeyScratch() throws HiveException {
