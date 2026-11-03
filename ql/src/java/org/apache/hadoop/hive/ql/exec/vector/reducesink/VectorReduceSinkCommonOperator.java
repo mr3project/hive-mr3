@@ -160,11 +160,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   protected transient long batchCounter;
 
   private transient ShuffleBatchType shuffleBatchType;
-  private transient int numUnorderedPartitions;
   private transient HiveKey shuffleBatchKey;
 
   private transient VectorMapJoinFastBatchSerializer mapJoinBatchSerializer;
-  private transient long mapJoinBatchFrames;
 
   private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
   private transient byte[] vectorShuffleSerializeBuffer;
@@ -183,6 +181,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient int[] vectorShuffleRowPartitions;
   private transient int[] vectorShufflePartitionRowIndices;
   private transient int vectorShufflePartitionerType;
+
+  private transient int numUnorderedPartitions;
 
   //---------------------------------------------------------------------------
 
@@ -345,8 +345,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
     shuffleBatchType = null;
     shuffleBatchKey = null;
+
     mapJoinBatchSerializer = null;
-    mapJoinBatchFrames = 0;
 
     batchHashCodes = null;
     vectorShuffleBatchSerializer = null;
@@ -361,18 +361,20 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShufflePartitionPositions = null;
     vectorShuffleRowPartitions = null;
     vectorShufflePartitionRowIndices = null;
-    numUnorderedPartitions = -1;
     vectorShufflePartitionerType = -1;
+
+    numUnorderedPartitions = -1;
   }
 
   /**
    * Select the frame format after concrete operator initialization and output writer startup.
-   * The reduce processor attaches its collector before starting the writer, so this setup
-   * runs on the first batch rather than in initializeOp() or setOutputCollector().
+   * The reduce processor attaches its collector before starting the writer,
+   * so this setup runs on the first batch rather than in initializeOp() or setOutputCollector().
    */
   private void initializeShuffleBatchOutput(VectorizedRowBatch batch) throws HiveException {
     numUnorderedPartitions = out == null ? -1 : out.getNumUnorderedPartitions();
     shuffleBatchType = ShuffleBatchType.NONE;
+
     if (numUnorderedPartitions < 1 || reducerHash != null) {
       return;
     }
@@ -389,9 +391,14 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       return;
     }
 
+    // for VECTOR_SHUFFLE, we call serializeVectorShuffleRow()
+    //   e.g., if batch.size <= NUM_ROWS_THRESHOLD_FOR_BATCH
+    // for MAP_JOIN, we call serializeVectorShuffleRow()
+    //   e.g., when a destination partition receives at most NUM_ROWS_THRESHOLD_FOR_BATCH row(s)
     if (shuffleBatchType == ShuffleBatchType.VECTOR_SHUFFLE || numUnorderedPartitions > 1) {
       initializeVectorShuffleRowKeyScratch();
     }
+
     if (numUnorderedPartitions > 1) {
       initializeShufflePartitionScratch();
     }
@@ -414,6 +421,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
 
     final boolean mapJoin = shuffleBatchType == ShuffleBatchType.MAP_JOIN;
+
     if (batch.size <= NUM_ROWS_THRESHOLD_FOR_BATCH) {
       if (mapJoin) {
         return false;
@@ -423,9 +431,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         return true;
       }
     }
-    if (mapJoin) {
-      assert mapJoinBatchSerializer.getRowCount() == 0;
-    }
+
+    assert !mapJoin || mapJoinBatchSerializer.getRowCount() == 0;
+
     if (numUnorderedPartitions == 1) {
       if (mapJoin) {
         collectSinglePartitionMapJoinBatch(batch);
@@ -435,6 +443,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     } else {
       collectPartitionedShuffleBatch(batch, tag);
     }
+
     return true;
   }
 
@@ -452,15 +461,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   }
 
   /**
-   * Map-join loaders receive native join entries and compute their table hashes. These frames
-   * use a separate protocol from compact vector shuffle. Partitioned output shares its routing
-   * and grouping, but writes native join entries instead of vector columns.
+   * Map-join loaders receive native join entries and compute their table hashes.
+   * Partitioned output shares its routing and grouping, but writes native join entries instead of vector columns.
    * All key/value expressions have been evaluated by the concrete operator before this call.
    */
-  private void collectSinglePartitionMapJoinBatch(VectorizedRowBatch batch)
-      throws HiveException, IOException {
+  private void collectSinglePartitionMapJoinBatch(VectorizedRowBatch batch) throws IOException {
     clearVectorShuffleRowKeyBatchCache();
-
     for (int logical = 0; logical < batch.size; logical++) {
       final int batchIndex = batch.selectedInUse ? batch.selected[logical] : logical;
       if (mapJoinBatchSerializer.append(batch, batchIndex)) {
@@ -484,6 +490,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         conf.getKeySerializeInfo().getProperties(),
         isEmptyValue ? new TypeInfo[0] : reduceSinkValueTypeInfos,
         isEmptyValue ? new int[0] : reduceSinkValueColumnMap);
+
     shuffleBatchKey = new HiveKey(VectorMapJoinFastBatch.KEY_BYTES, 0);
     shuffleBatchKey.setDistKeyLength(VectorMapJoinFastBatch.KEY_BYTES.length);
   }
@@ -495,13 +502,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
     // The synchronous Tez write consumes this borrowed frame before the serializer is reset.
     doCollectBatch(shuffleBatchKey, mapJoinBatchSerializer.getValue(), rowCount);
-    mapJoinBatchFrames++;
     mapJoinBatchSerializer.reset();
   }
 
   /**
-   * Group active physical row indices by destination partition, preserving their logical order
-   * within each partition. Routing and grouping do not depend on the output frame format.
+   * Group active physical row indices by destination partition, preserving their logical order within each partition.
+   * Routing and grouping do not depend on the output frame format.
    * Returns the number of partitions whose row count exceeds the batching threshold.
    */
   private int preparePartitionedRows(VectorizedRowBatch batch)
@@ -544,6 +550,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       final int partition = vectorShuffleRowPartitions[logical];
       vectorShufflePartitionRowIndices[vectorShufflePartitionPositions[partition]++] = batchIndex;
     }
+
     return compactCandidateCount;
   }
 
@@ -589,15 +596,13 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
           }
         }
         if (valueLength == 0) {
-          // The buffer request is only a peek. Discard any uncommitted frame bytes and let
-          // ordinary writes advance/switch buffers, retaining the original routing decisions.
+          // The buffer request is only a peek.
+          // Discard any uncommitted frame bytes and let ordinary writes advance/switch buffers,
+          // retaining the original routing decisions.
           collectOrdinaryPartitionRows(batch, partition, rowCount, tag);
           continue;
         }
         completePartitionBatch(valueLength, rowCount, partition);
-        if (mapJoin) {
-          mapJoinBatchFrames++;
-        }
       }
     }
   }
@@ -615,9 +620,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   }
 
   private void initializeVectorShuffleBatchSerializer(VectorizedRowBatch batch) {
-    assert vectorShuffleBatchSerializer == null;
-    assert numUnorderedPartitions >= 1;
-
     vectorShuffleBatchSerializer = new VectorShuffleBatchSerializer();
     if (numUnorderedPartitions == 1) {
       vectorShuffleSerializeBuffer = new byte[SERIALIZE_BUFFER_SIZE];
@@ -925,9 +927,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     out = null;
     reducerHash = null;
     mapJoinBatchSerializer = null;
-    if (!abort && conf.getVectorMapJoinBatchKeyType() != null) {
-      LOG.info("Map-join batch frames: {}", mapJoinBatchFrames);
-    }
     LOG.info("{}::: records written - {}", this, numRows);
     this.runTimeNumRows = numRows;
   }
