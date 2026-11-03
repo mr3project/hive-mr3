@@ -165,8 +165,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient VectorMapJoinFastBatchSerializer mapJoinBatchSerializer;
   private transient HiveKey mapJoinBatchKey;
   private transient long mapJoinBatchFrames;
-  // Oversized rows using ordinary encoding in single-partition output.
-  private transient long mapJoinOversizedRows;
 
   private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
   private transient byte[] vectorShuffleSerializeBuffer;
@@ -351,7 +349,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     mapJoinBatchSerializer = null;
     mapJoinBatchKey = null;
     mapJoinBatchFrames = 0;
-    mapJoinOversizedRows = 0;
 
     batchKeyHashCodes = null;
     batchValueHashCodes = null;
@@ -455,7 +452,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     initializeMapJoinBatchSerializer();
     assert mapJoinBatchSerializer.getRowCount() == 0;
     if (numUnorderedPartitions == 1) {
-      collectSinglePartitionMapJoinBatch(batch, tag);
+      collectSinglePartitionMapJoinBatch(batch);
     } else {
       if (vectorShufflePartitionCounts == null) {
         assert vectorShuffleNumUnorderedPartitions == -1
@@ -470,7 +467,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     return true;
   }
 
-  private void collectSinglePartitionMapJoinBatch(VectorizedRowBatch batch, int tag)
+  private void collectSinglePartitionMapJoinBatch(VectorizedRowBatch batch)
       throws HiveException, IOException {
     clearVectorShuffleRowKeyBatchCache();
 
@@ -479,19 +476,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       if (mapJoinBatchSerializer.append(batch, batchIndex)) {
         continue;
       }
-      if (mapJoinBatchSerializer.getRowCount() > 0) {
-        flushMapJoinBatch();
-        if (mapJoinBatchSerializer.append(batch, batchIndex)) {
-          continue;
-        }
-      }
-
-      // A row larger than an empty frame's byte limit keeps the ordinary record encoding.
-      // Initialize only the row serializer: compact vector-shuffle scratch is not needed here.
-      initializeVectorShuffleRowKeyScratch();
-      doCollectRowWithPartition(keyWritable, serializeVectorShuffleRow(batch, batchIndex, tag), 0);
-      mapJoinOversizedRows++;
-      mapJoinBatchSerializer.reset();
+      flushMapJoinBatch();
+      mapJoinBatchSerializer.append(batch, batchIndex);
     }
     flushMapJoinBatch();
   }
@@ -972,8 +958,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     reducerHash = null;
     mapJoinBatchSerializer = null;
     if (!abort && conf.getVectorMapJoinBatchKeyType() != null) {
-      LOG.info("Map-join batch frames: {}, oversized ordinary rows: {}",
-          mapJoinBatchFrames, mapJoinOversizedRows);
+      LOG.info("Map-join batch frames: {}", mapJoinBatchFrames);
     }
     LOG.info("{}::: records written - {}", this, numRows);
     this.runTimeNumRows = numRows;

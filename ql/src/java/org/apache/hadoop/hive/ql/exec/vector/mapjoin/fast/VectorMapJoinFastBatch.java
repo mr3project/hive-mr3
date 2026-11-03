@@ -51,9 +51,9 @@ import org.apache.hadoop.io.BytesWritable;
  * destination, preserving logical order within each partition. Groups above the batching
  * threshold are assembled directly into the writer's value buffer using one-entry scratch;
  * smaller groups and groups that cannot fit retain ordinary record encoding. The row limit
- * uses DEFAULT_SIZE; both the protocol byte limit and the writer's available slice constrain
- * partitioned frames. Single-partition frames only use the protocol byte limit because that
- * writer does not offer direct value-buffer requests.</p>
+ * uses DEFAULT_SIZE; the writer's available slice constrains partitioned frames.
+ * Single-partition frames use growing scratch storage because that writer does not offer
+ * direct value-buffer requests. Neither path imposes a protocol byte limit.</p>
  *
  * <p>Loaders accept mixed ordinary records and frames. Entry descriptors retain immutable
  * Tez backing arrays and primitive offsets, and route using the computed hash and the
@@ -68,7 +68,6 @@ public final class VectorMapJoinFastBatch {
   // Keep this distinct from ReduceRecordSource.VECTOR_BATCH_KEY_BYTES (0x02).
   public static final byte[] KEY_BYTES = { 0x03 };
   public static final int MAX_ROWS = VectorizedRowBatch.DEFAULT_SIZE;
-  public static final int MAX_BYTES = 1024 * 1024;
   static final int HEADER_BYTES = Integer.BYTES;
   static final int NUMERIC_ENTRY_HEADER_BYTES = 1 + Integer.BYTES;
   static final int BYTES_ENTRY_HEADER_BYTES = 2 * Integer.BYTES;

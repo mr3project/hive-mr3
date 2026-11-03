@@ -18,6 +18,7 @@
 package org.apache.hadoop.hive.ql.exec.vector.mapjoin.fast;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Properties;
 
 import org.apache.hadoop.hive.ql.exec.vector.BytesColumnVector;
@@ -37,7 +38,7 @@ import com.google.common.base.Preconditions;
 
 /** Builds bounded join-entry frames directly from evaluated vector columns. */
 public final class VectorMapJoinFastBatchSerializer {
-  private static final int INITIAL_BYTES = 64 * 1024;
+  private static final int BUFFER_INCREMENT = 100 * 1024;
   private final HashTableKeyType keyType;
   private final int numericKeyWidth;
   private final int entryHeaderBytes;
@@ -47,7 +48,11 @@ public final class VectorMapJoinFastBatchSerializer {
   private final LazyBinarySerializeWrite valueWriter;
   private final VectorSerializeRow<LazyBinarySerializeWrite> valueRow;
   private final BytesWritable value = new BytesWritable();
-  private Output output = new Output(INITIAL_BYTES);
+  // Entry scratch uses the ordinary byte-stream growth policy. Only single-partition
+  // output assembles an owned frame; partitioned output copies entries into the writer slice.
+  private final Output output = new Output(BUFFER_INCREMENT);
+  private byte[] frame = new byte[0];
+  private int frameLength;
   private int rowCount;
 
   public VectorMapJoinFastBatchSerializer(HashTableKeyType keyType, TypeInfo[] keyTypes,
@@ -81,14 +86,32 @@ public final class VectorMapJoinFastBatchSerializer {
   }
 
   /**
-   * Append one physical row. False leaves previously appended entries intact: flush them
-   * and retry the row in a fresh frame, or use an ordinary record if that is still too large.
-   * A variable-width row can transiently exceed the byte limit before its length is known.
+   * Append one physical row, growing scratch storage in 100 KiB increments as needed.
+   * False means the row limit was reached and leaves previously appended entries intact.
    */
   public boolean append(VectorizedRowBatch batch, int physicalRow) throws IOException {
     if (rowCount == VectorMapJoinFastBatch.MAX_ROWS) {
       return false;
     }
+    final int entryLength = serializeEntry(batch, physicalRow);
+    ensureFrameCapacity(entryLength);
+    System.arraycopy(output.getData(), 0, frame, frameLength, entryLength);
+    frameLength += entryLength;
+    rowCount++;
+    return true;
+  }
+
+  private void ensureFrameCapacity(int entryLength) {
+    final long required = (long) frameLength + entryLength;
+    if (required > frame.length) {
+      final int capacity = (int) (((required + BUFFER_INCREMENT - 1) / BUFFER_INCREMENT)
+          * BUFFER_INCREMENT);
+      frame = Arrays.copyOf(frame, capacity);
+    }
+  }
+
+  private int serializeEntry(VectorizedRowBatch batch, int physicalRow) throws IOException {
+    output.reset();
     final int entryStart = output.getLength();
     output.reserve(entryHeaderBytes);
     final int keyStart = output.getLength();
@@ -124,23 +147,18 @@ public final class VectorMapJoinFastBatchSerializer {
       valueRow.serializeWrite(batch, physicalRow);
     }
     final int valueLength = output.getLength() - valueStart;
-    if (output.getLength() > VectorMapJoinFastBatch.MAX_BYTES) {
-      output.setWritePosition(entryStart);
-      return false;
-    }
     if (numericKeyWidth > 0) {
       output.writeByte(entryStart, (byte) (keyLength == -1 ? 0 : 1));
     } else {
       output.writeInt(entryStart, keyLength);
     }
     output.writeInt(entryStart + entryHeaderBytes - Integer.BYTES, valueLength);
-    rowCount++;
-    return true;
+    return output.getLength();
   }
 
   /**
    * Write one partition's rows into a caller-owned slice. Zero means the complete frame does
-   * not fit the slice or the protocol limits; any bytes already written remain uncommitted.
+   * not fit the slice or the row limit; any bytes already written remain uncommitted.
    * Each entry uses the same encoder as {@link #append}, with reusable single-entry scratch
    * rather than an intermediate assembled frame. Owned scratch is empty on return or error.
    */
@@ -155,28 +173,22 @@ public final class VectorMapJoinFastBatchSerializer {
     if (partitionRowCount == 0 || partitionRowCount > VectorMapJoinFastBatch.MAX_ROWS) {
       return 0;
     }
-    final int capacity = Math.min(maxBytes, VectorMapJoinFastBatch.MAX_BYTES);
     final long minimumBytes = VectorMapJoinFastBatch.HEADER_BYTES
         + (long) partitionRowCount * entryHeaderBytes;
-    if (minimumBytes > capacity) {
+    if (minimumBytes > maxBytes) {
       return 0;
     }
 
     int position = destinationOffset + VectorMapJoinFastBatch.HEADER_BYTES;
-    final int limit = destinationOffset + capacity;
+    final int limit = destinationOffset + maxBytes;
     try {
       for (int logical = 0; logical < partitionRowCount; logical++) {
         // Keep scratch bounded to one entry and preserve append's native key/NULL semantics.
-        reset();
-        if (!append(batch, rowIndices[rowOffset + logical])) {
-          return 0;
-        }
-        final int entryLength = output.getLength() - VectorMapJoinFastBatch.HEADER_BYTES;
+        final int entryLength = serializeEntry(batch, rowIndices[rowOffset + logical]);
         if (entryLength > limit - position) {
           return 0;
         }
-        System.arraycopy(output.getData(), VectorMapJoinFastBatch.HEADER_BYTES,
-            destination, position, entryLength);
+        System.arraycopy(output.getData(), 0, destination, position, entryLength);
         position += entryLength;
       }
       // All entry copies fit; publish the existing big-endian row-count header last.
@@ -209,21 +221,18 @@ public final class VectorMapJoinFastBatchSerializer {
   /** Borrowed until reset/append; the current single-partition writer consumes it synchronously. */
   public BytesWritable getValue() {
     Preconditions.checkState(rowCount > 0);
-    output.writeInt(0, rowCount);
-    value.setDirect(output.getData(), 0, output.getLength());
+    for (int i = 0; i < Integer.BYTES; i++) {
+      frame[i] = (byte) (rowCount >>> ((Integer.BYTES - 1 - i) * Byte.SIZE));
+    }
+    value.setDirect(frame, 0, frameLength);
     return value;
   }
 
   public void reset() {
-    // Do not retain a huge scratch array after an oversized row takes the legacy path.
-    if (output.getData().length > 2 * VectorMapJoinFastBatch.MAX_BYTES) {
-      output = new Output(INITIAL_BYTES);
-    } else {
-      output.reset();
-    }
-    // Release the wrapper's borrowed reference before reusing/replacing the scratch array.
-    value.setDirect(output.getData(), 0, 0);
+    output.reset();
+    // Release the wrapper's borrowed slice before reusing the scratch array.
+    value.setDirect(frame, 0, 0);
     rowCount = 0;
-    output.appendInt(0);
+    frameLength = VectorMapJoinFastBatch.HEADER_BYTES;
   }
 }

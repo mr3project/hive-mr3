@@ -52,7 +52,7 @@ public final class VectorMapJoinFastBatchDeserializer {
     bytes = value.getBytesRaw();
     position = value.getOffset();
     final int length = value.getLength();
-    if (length < VectorMapJoinFastBatch.HEADER_BYTES || length > VectorMapJoinFastBatch.MAX_BYTES
+    if (length < VectorMapJoinFastBatch.HEADER_BYTES
         || position < 0 || position > bytes.length - length) {
       throw new IOException("Invalid FAST map-join batch slice");
     }
