@@ -334,7 +334,10 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
     batchCounter = 0;
 
-    vectorShuffleBatchAllowed = conf.isVectorShuffleBatchEnabled() && reducerHash == null;
+    // skipTag identifies a map-join small-table producer. Its single-partition output
+    // can use vector frames because hash-table loaders expand them back into ordinary rows.
+    vectorShuffleBatchAllowed = (conf.isVectorShuffleBatchEnabled() || reduceSkipTag)
+        && reducerHash == null;
 
     batchKeyHashCodes = null;
     batchValueHashCodes = null;
@@ -363,7 +366,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
     if (vectorShuffleNumUnorderedPartitions == -1) {  // if this is the first call
       vectorShuffleNumUnorderedPartitions = out.getNumUnorderedPartitions();
-      if (vectorShuffleNumUnorderedPartitions < 1) {
+      if (vectorShuffleNumUnorderedPartitions < 1
+          || (!conf.isVectorShuffleBatchEnabled()
+              && (vectorShuffleNumUnorderedPartitions != 1 || !isMapJoinBatchEligible()))) {
         vectorShuffleBatchAllowed = false;  // we never check vectorShuffleNumUnorderedPartitions again
         return false;
       }
@@ -392,12 +397,16 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
             growVectorShuffleSerializeBuffer();
           }
         }
-        doCollectBatch(vectorShuffleBatchKey, vectorShuffleBatchValue, 0, logicalRecordCount);
+        doCollectBatch(vectorShuffleBatchKey, vectorShuffleBatchValue, logicalRecordCount);
       }
       return true;
     }
 
     collectPartitionedVectorShuffleBatch(batch, vectorShuffleNumUnorderedPartitions, tag);
+    return true;
+  }
+
+  protected boolean isMapJoinBatchEligible() {
     return true;
   }
 
@@ -771,11 +780,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
   }
 
-  private void doCollectBatch(HiveKey keyWritable, BytesWritable valueWritable, int partition,
-                              long logicalRecordCount) throws IOException {
+  private void doCollectBatch(HiveKey keyWritable, BytesWritable valueWritable,
+      int logicalRecordCount) throws IOException {
     if (null != out) {
       recordCollectedBatch(logicalRecordCount);
-      out.writeWithPartition(keyWritable, valueWritable, partition);
+      out.writeForSinglePartition(keyWritable, valueWritable, logicalRecordCount);
     }
   }
 

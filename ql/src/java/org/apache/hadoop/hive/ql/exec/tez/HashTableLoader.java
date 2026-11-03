@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.ql.exec.MemoryMonitorInfo;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionError;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatchReader;
 import org.apache.tez.common.counters.TaskCounter;
 import org.apache.tez.common.counters.TezCounter;
 import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
@@ -199,7 +200,9 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
       }
 
       try {
-        KeyValueReaderEdge kvReader = (KeyValueReaderEdge) input.getReader();
+        VectorMapJoinBatchReader kvReader = new VectorMapJoinBatchReader(
+            (KeyValueReaderEdge) input.getReader(), mapJoinTableSerdes[pos],
+            desc.getKeyTblDesc().getProperties());
         MapJoinObjectSerDeContext keyCtx = mapJoinTableSerdes[pos].getKeyContext(),
           valCtx = mapJoinTableSerdes[pos].getValueContext();
         if (useOptimizedTables) {
@@ -227,6 +230,7 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
         } catch (Exception e) {
           LOG.debug("Failed to get value for counter APPROXIMATE_INPUT_RECORDS", e);
         }
+        // Single-partition producers report logical rows, including rows inside vector frames.
         long keyCount = Math.max(estKeyCount, inputRecords);
 
         long memory = 0;

@@ -34,6 +34,7 @@ import org.apache.hadoop.hive.ql.exec.MemoryMonitorInfo;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionError;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatchReader;
 import org.apache.hive.common.util.FixedSizedObjectPool;
 import org.apache.tez.common.counters.TaskCounter;
 import org.apache.tez.common.counters.TezCounter;
@@ -250,7 +251,9 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       }
 
       try {
-        KeyValueReaderEdge kvReader = (KeyValueReaderEdge) input.getReader();
+        VectorMapJoinBatchReader kvReader = new VectorMapJoinBatchReader(
+            (KeyValueReaderEdge) input.getReader(), mapJoinTableSerdes[pos],
+            desc.getKeyTblDesc().getProperties());
 
         Long keyCountObj = parentKeyCounts.get(pos);
         long estKeyCount = (keyCountObj == null) ? -1 : keyCountObj;
@@ -263,6 +266,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
         } catch (Exception e) {
           LOG.debug("Failed to get value for counter APPROXIMATE_INPUT_RECORDS", e);
         }
+        // Single-partition producers report logical rows, including rows inside vector frames.
         long keyCount = Math.max(estKeyCount, inputRecords);
         initHTLoadingService(keyCount);
 

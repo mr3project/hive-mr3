@@ -140,8 +140,8 @@ public class ReduceSinkMapJoinProc implements SemanticNodeProcessor {
 
   public static Object processReduceSinkToHashJoin(ReduceSinkOperator parentRS, MapJoinOperator mapJoinOp,
       GenTezProcContext context) throws SemanticException {
-    // Map-join hash-table loaders consume ordinary key/value records rather than vector batches.
-    // Mark every map-join input explicitly because map-join inputs can use several edge types.
+    // Disable general vector shuffle output for map-join inputs, which can use several edge types.
+    // Native vector sinks opt back in for single-partition output once the writer is available.
     parentRS.getConf().setVectorShuffleBatchEnabled(false);
 
     // remove the tag for in-memory side of mapjoin
