@@ -17,6 +17,9 @@
  */
 package org.apache.hadoop.hive.ql.exec.vector.mapjoin;
 
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
+
 import java.io.IOException;
 
 import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKeyType;
@@ -116,13 +119,8 @@ public final class VectorMapJoinBatchDeserializer {
     return true;
   }
 
-  private int readInt() throws IOException {
-    if (limit - position < Integer.BYTES) {
-      throw new IOException("Truncated map-join batch metadata");
-    }
-    final int result = ((bytes[position] & 0xff) << 24)
-        | ((bytes[position + 1] & 0xff) << 16)
-        | ((bytes[position + 2] & 0xff) << 8) | (bytes[position + 3] & 0xff);
+  private int readInt() {
+    final int result = theUnsafe.getInt(bytes, BYTE_ARRAY_BASE_OFFSET + position);
     position += Integer.BYTES;
     return result;
   }

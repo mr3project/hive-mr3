@@ -17,6 +17,9 @@
  */
 package org.apache.hadoop.hive.ql.exec.vector.mapjoin;
 
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
+
 import java.io.IOException;
 import java.util.Properties;
 
@@ -123,9 +126,9 @@ public final class VectorMapJoinBatchSerializer {
     if (numericKeyWidth > 0) {
       output.writeByte(entryStart, (byte) (keyLength == -1 ? 0 : 1));
     } else {
-      output.writeInt(entryStart, keyLength);
+      writeInt(entryStart, keyLength);
     }
-    output.writeInt(entryStart + entryHeaderBytes - Integer.BYTES, valueLength);
+    writeInt(entryStart + entryHeaderBytes - Integer.BYTES, valueLength);
     rowCount++;
   }
 
@@ -148,7 +151,7 @@ public final class VectorMapJoinBatchSerializer {
   /** Borrowed until reset/append; the current single-partition writer consumes it synchronously. */
   public BytesWritable getValue() {
     assert rowCount > 0;
-    output.writeInt(0, rowCount);
+    writeInt(0, rowCount);
     value.setDirect(output.getData(), 0, output.getLength());
     return value;
   }
@@ -158,6 +161,10 @@ public final class VectorMapJoinBatchSerializer {
     // Release the wrapper's borrowed reference before reusing the scratch array.
     value.setDirect(output.getData(), 0, 0);
     rowCount = 0;
-    output.appendInt(0);
+    output.reserve(VectorMapJoinBatch.HEADER_BYTES);
+  }
+
+  private void writeInt(int offset, int value) {
+    theUnsafe.putInt(output.getData(), BYTE_ARRAY_BASE_OFFSET + offset, value);
   }
 }

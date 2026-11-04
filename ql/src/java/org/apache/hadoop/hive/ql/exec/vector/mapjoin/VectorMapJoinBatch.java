@@ -29,7 +29,8 @@ import org.apache.hadoop.io.BytesWritable;
 
 /**
  * Frames for single-partition map-join inputs.
- * Integers are big endian.
+ * Row counts and lengths use native byte order.
+ * Numeric key payloads use big-endian byte order.
  * Endpoints derive the key family from their schemas and the multikey-only setting.
  * No hashes are transmitted.
  *
