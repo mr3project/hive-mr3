@@ -63,8 +63,6 @@ import org.apache.tez.runtime.library.api.KeyValueWriterEdge.WriteValueBytes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Preconditions;
-
 /**
  * This class is common operator class for native vectorized reduce sink.
  */
@@ -870,7 +868,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       if (firstIndex == TopNHash.FORWARD) {
         doCollect(keyWritable, valueWritable);
       } else {
-        Preconditions.checkState(firstIndex >= 0);
+        assert firstIndex >= 0;
         reducerHash.storeValue(firstIndex, keyWritable.hashCode(), valueWritable, false);
       }
     } else {

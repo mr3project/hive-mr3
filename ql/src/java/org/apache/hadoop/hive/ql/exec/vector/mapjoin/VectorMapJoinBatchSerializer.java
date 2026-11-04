@@ -33,8 +33,6 @@ import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
 
-import com.google.common.base.Preconditions;
-
 /** Builds bounded join-entry frames directly from evaluated vector columns. */
 public final class VectorMapJoinBatchSerializer {
   private static final int INITIAL_BYTES = 64 * 1024;
@@ -56,9 +54,9 @@ public final class VectorMapJoinBatchSerializer {
     numericKeyWidth = VectorMapJoinBatch.numericWidth(keyType);
     entryHeaderBytes = numericKeyWidth > 0
         ? VectorMapJoinBatch.NUMERIC_ENTRY_HEADER_BYTES : VectorMapJoinBatch.BYTES_ENTRY_HEADER_BYTES;
-    Preconditions.checkArgument(keyTypes.length == keyColumnMap.length);
-    Preconditions.checkArgument(valueTypes.length == valueColumnMap.length);
-    Preconditions.checkArgument(keyType == HashTableKeyType.MULTI_KEY || keyColumnMap.length == 1);
+    assert keyTypes.length == keyColumnMap.length;
+    assert valueTypes.length == valueColumnMap.length;
+    assert keyType == HashTableKeyType.MULTI_KEY || keyColumnMap.length == 1;
     this.keyType = keyType;
     this.keyColumnMap = keyColumnMap.clone();
     if (keyType == HashTableKeyType.MULTI_KEY && keyColumnMap.length > 0) {
@@ -81,8 +79,9 @@ public final class VectorMapJoinBatchSerializer {
   }
 
   /**
-   * Append one physical row. False leaves previously appended entries intact: flush them
-   * and retry the row in a fresh frame, or use an ordinary record if that is still too large.
+   * Append one physical row.
+   * False leaves previously appended entries intact.
+   * Flush them and retry the row in a fresh frame, or use an ordinary record if it is still too large.
    * A variable-width row can transiently exceed the byte limit before its length is known.
    */
   public boolean append(VectorizedRowBatch batch, int physicalRow) throws IOException {
@@ -105,8 +104,9 @@ public final class VectorMapJoinBatchSerializer {
       if (!column.noNulls && column.isNull[row]) {
         keyLength = -1;
       } else if (keyType == HashTableKeyType.STRING) {
-        // This family includes CHAR, VARCHAR and BINARY. Expressions already provide
-        // their logical bytes; do not introduce text conversion or padding here.
+        // This family includes CHAR, VARCHAR and BINARY.
+        // Expressions already provide their logical bytes.
+        // Do not introduce text conversion or padding here.
         final BytesColumnVector bytes = (BytesColumnVector) column;
         keyLength = bytes.length[row];
         output.write(bytes.vector[row], bytes.start[row], keyLength);
@@ -156,7 +156,7 @@ public final class VectorMapJoinBatchSerializer {
 
   /** Borrowed until reset/append; the current single-partition writer consumes it synchronously. */
   public BytesWritable getValue() {
-    Preconditions.checkState(rowCount > 0);
+    assert rowCount > 0;
     output.writeInt(0, rowCount);
     value.setDirect(output.getData(), 0, output.getLength());
     return value;

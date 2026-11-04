@@ -20,8 +20,6 @@ package org.apache.hadoop.hive.ql.exec.vector.mapjoin.fast;
 
 import java.io.IOException;
 
-import com.google.common.base.Preconditions;
-
 import org.apache.hadoop.hive.ql.exec.JoinUtil;
 import org.apache.hadoop.hive.ql.exec.persistence.MatchTracker;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinBytesHashMap;
@@ -140,7 +138,7 @@ public class VectorMapJoinFastMultiKeyHashMapContainer
   @Override
   public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
       boolean isNull, BytesWritable currentValue) throws HiveException, IOException {
-    Preconditions.checkArgument(!isNull, "Multi-key nulls must remain encoded in the key bytes");
+    assert !isNull : "Multi-key nulls must remain encoded in the key bytes";
     vectorMapJoinFastMultiKeyHashMaps[(int) ((numThreads - 1) & hashCode)]
         .add(keyBytes, keyOffset, keyLength, currentValue, hashCode);
   }
