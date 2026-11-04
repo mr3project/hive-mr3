@@ -29,6 +29,9 @@ import org.apache.hadoop.hive.ql.exec.MemoryMonitorInfo;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionError;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatch;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatchDeserializer;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatchKeyReader;
 import org.apache.tez.common.counters.TaskCounter;
 import org.apache.tez.common.counters.TezCounter;
 import org.apache.tez.runtime.library.api.KeyValueReaderEdge;
@@ -50,11 +53,13 @@ import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainerSerDe;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
+import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKeyType;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.tez.runtime.api.Input;
 import org.apache.tez.runtime.api.LogicalInput;
@@ -95,6 +100,9 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
 
     Map<Integer, String> parentToInput = desc.getParentToInput();
     Map<Integer, Long> parentKeyCounts = desc.getParentKeyCounts();
+    HashTableKeyType batchKeyType = VectorMapJoinBatch.getKeyType(
+        desc.getKeys().get((byte) desc.getPosBigTable()), HiveConf.getBoolVar(hconf,
+            HiveConf.ConfVars.HIVE_VECTORIZATION_MAPJOIN_NATIVE_MULTIKEY_ONLY_ENABLED));
 
     boolean isCrossProduct = false;
     List<ExprNodeDesc> joinExprs = desc.getKeys().values().iterator().next();
@@ -255,28 +263,49 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
                 tableContainer.getClass().getSimpleName(), pos, estKeyCount, keyCount);
 
         tableContainer.setSerde(keyCtx, valCtx);
+        VectorMapJoinBatchDeserializer batchReader = new VectorMapJoinBatchDeserializer(batchKeyType);
+        VectorMapJoinBatchKeyReader batchKeyReader =
+            new VectorMapJoinBatchKeyReader(batchKeyType, desc.getKeyTblDesc().getProperties());
+        BytesWritable batchValue = new BytesWritable();
         long startTime = System.currentTimeMillis();
         while (kvReader.next()) {
-          tableContainer.putRow(kvReader.getCurrentKey(), kvReader.getCurrentValue());
-          numEntries++;
-          if ((numEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
-            throw new InterruptedException("Hash table loading interrupted");
+          BytesWritable currentKey = kvReader.getCurrentKey();
+          BytesWritable currentValue = kvReader.getCurrentValue();
+          boolean isBatch = VectorMapJoinBatch.isBatchKey(currentKey);
+          if (isBatch) {
+            batchReader.set(currentValue);
           }
-          if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
-            final long estMemUsage = tableContainer.getEstimatedMemorySize();
-            if (estMemUsage > effectiveThreshold) {
-              String msg = "Hash table loading exceeded memory limits for input: " + inputName +
-                " numEntries: " + numEntries + " estimatedMemoryUsage: " + estMemUsage +
-                " effectiveThreshold: " + effectiveThreshold + " memoryMonitorInfo: " + memoryMonitorInfo;
-              LOG.error(msg);
-              throw new MapJoinMemoryExhaustionError(msg);
+          do {
+            if (isBatch) {
+              if (!batchReader.next()) {
+                break;
+              }
+              batchValue.setDirect(batchReader.getBytes(), batchReader.getValueOffset(),
+                  batchReader.getValueLength());
+              tableContainer.putRow(batchKeyReader.getKey(batchReader), batchValue);
             } else {
-              if (LOG.isDebugEnabled()) { LOG.debug(
-                  "Checking hash table loader memory usage for input: {} numEntries: {} "
-                      + "estimatedMemoryUsage: {} effectiveThreshold: {}",
-                  inputName, numEntries, estMemUsage, effectiveThreshold); }
+              tableContainer.putRow(currentKey, currentValue);
             }
-          }
+            numEntries++;
+            if ((numEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
+              throw new InterruptedException("Hash table loading interrupted");
+            }
+            if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
+              final long estMemUsage = tableContainer.getEstimatedMemorySize();
+              if (estMemUsage > effectiveThreshold) {
+                String msg = "Hash table loading exceeded memory limits for input: " + inputName +
+                  " numEntries: " + numEntries + " estimatedMemoryUsage: " + estMemUsage +
+                  " effectiveThreshold: " + effectiveThreshold + " memoryMonitorInfo: " + memoryMonitorInfo;
+                LOG.error(msg);
+                throw new MapJoinMemoryExhaustionError(msg);
+              } else {
+                if (LOG.isDebugEnabled()) { LOG.debug(
+                    "Checking hash table loader memory usage for input: {} numEntries: {} "
+                        + "estimatedMemoryUsage: {} effectiveThreshold: {}",
+                    inputName, numEntries, estMemUsage, effectiveThreshold); }
+              }
+            }
+          } while (isBatch);
         }
         long delta = System.currentTimeMillis() - startTime;
         htLoadCounter.increment(delta);
