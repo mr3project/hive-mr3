@@ -26,9 +26,6 @@ import org.apache.hadoop.hive.serde2.WriteBuffers;
 import org.apache.hadoop.hive.serde2.WriteBuffers.ByteSegmentRef;
 import org.apache.hadoop.hive.serde2.WriteBuffers.Position;
 
-import com.google.common.base.Preconditions;
-
-
 // Supports random access.
 
 public class VectorMapJoinFastValueStore implements MemoryEstimate {
@@ -671,9 +668,8 @@ public class VectorMapJoinFastValueStore implements MemoryEstimate {
     if (!isNewValueSmall) {
       // Use magic value to indicating we are writing the big value length.
       newValueRef |= ((long) SmallValueLength.allBitsOn << SmallValueLength.bitShift);
-      Preconditions.checkState(
-          (int) ((newValueRef & SmallValueLength.bitMask) >> SmallValueLength.bitShift) ==
-              SmallValueLength.allBitsOn);
+      assert (int) ((newValueRef & SmallValueLength.bitMask) >> SmallValueLength.bitShift) ==
+          SmallValueLength.allBitsOn;
       writeBuffers.writeVInt(valueLength);
 
     } else {

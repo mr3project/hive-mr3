@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.TerminalOperator;
 import org.apache.hadoop.hive.ql.exec.TopNHash;
@@ -37,6 +38,8 @@ import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContextRegion;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationOperator;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatch;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatchSerializer;
 import org.apache.hadoop.hive.ql.io.HiveKey;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
@@ -60,8 +63,6 @@ import org.apache.tez.runtime.library.api.KeyValueWriterEdge.WriteValueBytes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.base.Preconditions;
-
 /**
  * This class is common operator class for native vectorized reduce sink.
  */
@@ -74,8 +75,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
 
   public static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 1;
-  private static final int SERIALIZE_BUFFER_SIZE = 100 * 1024;
-  private static final int MIN_VALUE_BYTES_THRESHOLD = 128;
+  private static final int SERIALIZE_BUFFER_SIZE_FOR_BATCH = 100 * 1024;  // only for single-partition output
+  private static final int MIN_VALUE_BYTES_FOR_BATCH = 128;
 
   /**
    * Information about our native vectorized reduce sink created by the Vectorizer class during
@@ -138,6 +139,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   // Where to write our key and value pairs.
   private transient TezProcessor.TezKVOutputCollector out;
+  private transient int numUnorderedPartitionsOut;
   // This is true only for the current Tez-MR3 LogicalOutputEdge implementations:
   // OrderedPartitionedKVOutput, UnorderedPartitionedKVOutput, and UnorderedKVOutput.
   // All consume/copy value bytes synchronously before a writer call returns.
@@ -153,7 +155,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   protected transient long batchCounter;
 
   private transient boolean vectorShuffleBatchAllowed;
-  private transient int vectorShuffleNumUnorderedPartitions;
+
+  private transient VectorMapJoinBatchSerializer mapJoinBatchSerializer;
+  private transient HiveKey mapJoinBatchKey;
 
   private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
   private transient byte[] vectorShuffleSerializeBuffer;
@@ -335,6 +339,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     batchCounter = 0;
 
     vectorShuffleBatchAllowed = conf.isVectorShuffleBatchEnabled() && reducerHash == null;
+    mapJoinBatchSerializer = null;
+    mapJoinBatchKey = null;
 
     batchKeyHashCodes = null;
     batchValueHashCodes = null;
@@ -351,20 +357,22 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShufflePartitionPositions = null;
     vectorShuffleRowPartitions = null;
     vectorShufflePartitionRowIndices = null;
-    vectorShuffleNumUnorderedPartitions = -1;
     vectorShufflePartitionerType = -1;
   }
 
   protected boolean tryCollectVectorShuffleBatch(VectorizedRowBatch batch, int tag)
       throws HiveException, IOException {
+    if (tryCollectMapJoinBatch(batch, tag)) {
+      return true;
+    }
+
     if (!vectorShuffleBatchAllowed || out == null) {
       return false;
     }
 
-    if (vectorShuffleNumUnorderedPartitions == -1) {  // if this is the first call
-      vectorShuffleNumUnorderedPartitions = out.getNumUnorderedPartitions();
-      if (vectorShuffleNumUnorderedPartitions < 1) {
-        vectorShuffleBatchAllowed = false;  // we never check vectorShuffleNumUnorderedPartitions again
+    if (vectorShuffleBatchSerializer == null) {
+      if (numUnorderedPartitionsOut < 1) {
+        vectorShuffleBatchAllowed = false;
         return false;
       }
       initializeVectorShuffleOutputScratch(batch);
@@ -377,9 +385,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       return true;
     }
 
-    if (vectorShuffleNumUnorderedPartitions == 1) {
-      // VectorizedRowBatch.size is the number of active logical rows. When
-      // selectedInUse is true, selected[0..size) contains their physical indices.
+    if (numUnorderedPartitionsOut == 1) {
+      // VectorizedRowBatch.size is the number of active logical rows.
+      // When selectedInUse is true, selected[0..size) contains their physical indices.
       final int logicalRecordCount = batch.size;
       if (logicalRecordCount <= NUM_ROWS_THRESHOLD_FOR_BATCH) {
         collectVectorShuffleRows(batch, null, 0, logicalRecordCount, 0, tag);
@@ -392,13 +400,74 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
             growVectorShuffleSerializeBuffer();
           }
         }
-        doCollectBatch(vectorShuffleBatchKey, vectorShuffleBatchValue, 0, logicalRecordCount);
+        doCollectBatch(vectorShuffleBatchKey, vectorShuffleBatchValue, logicalRecordCount);
       }
       return true;
     }
 
-    collectPartitionedVectorShuffleBatch(batch, vectorShuffleNumUnorderedPartitions, tag);
+    collectPartitionedVectorShuffleBatch(batch, numUnorderedPartitionsOut, tag);
     return true;
+  }
+
+  /**
+   * Map-join loaders receive framed join entries and compute their own table hashes.
+   * These frames target a single output partition only.
+   * All key/value expressions have been evaluated by the concrete operator before this call.
+   */
+  private boolean tryCollectMapJoinBatch(VectorizedRowBatch batch, int tag)
+      throws HiveException, IOException {
+    if (!conf.isMapJoinOutput()) {
+      return false;
+    }
+    assert reduceSkipTag;
+    if (reducerHash != null ||          // TopN processing is active
+        !isMapJoinBatchEligible() ||    // VectorReduceSinkObjectHashOperator may return false
+        numUnorderedPartitionsOut != 1) {    // map-join frames are available only for single-partition output
+      return false;
+    }
+
+    if (batch.size == 0) {
+      return true;
+    }
+    if (batch.size <= NUM_ROWS_THRESHOLD_FOR_BATCH) {
+      return false;
+    }
+
+    if (mapJoinBatchSerializer == null) {
+      mapJoinBatchSerializer = new VectorMapJoinBatchSerializer(
+          VectorMapJoinBatch.getKeyType(conf.getKeyCols(), HiveConf.getBoolVar(getConfiguration(),
+              HiveConf.ConfVars.HIVE_VECTORIZATION_MAPJOIN_NATIVE_MULTIKEY_ONLY_ENABLED)),
+          isEmptyKey ? new TypeInfo[0] : reduceSinkKeyTypeInfos,
+          isEmptyKey ? new int[0] : reduceSinkKeyColumnMap,
+          conf.getKeySerializeInfo().getProperties(),
+          isEmptyValue ? new TypeInfo[0] : reduceSinkValueTypeInfos,
+          isEmptyValue ? new int[0] : reduceSinkValueColumnMap);
+      mapJoinBatchKey = new HiveKey(VectorMapJoinBatch.KEY_BYTES, 0);
+      mapJoinBatchKey.setDistKeyLength(VectorMapJoinBatch.KEY_BYTES.length);
+    }
+    assert mapJoinBatchSerializer.getRowCount() == 0;
+    clearVectorShuffleRowKeyBatchCache();
+
+    for (int logical = 0; logical < batch.size; logical++) {
+      final int batchIndex = batch.selectedInUse ? batch.selected[logical] : logical;
+      mapJoinBatchSerializer.append(batch, batchIndex);
+    }
+    flushMapJoinBatch();
+    return true;
+  }
+
+  protected boolean isMapJoinBatchEligible() {
+    return true;
+  }
+
+  private void flushMapJoinBatch() throws IOException {
+    final int rowCount = mapJoinBatchSerializer.getRowCount();
+    if (rowCount == 0) {
+      return;
+    }
+    // The synchronous Tez write consumes this borrowed frame before the serializer is reset.
+    doCollectBatch(mapJoinBatchKey, mapJoinBatchSerializer.getValue(), rowCount);
+    mapJoinBatchSerializer.reset();
   }
 
   private void collectPartitionedVectorShuffleBatch(VectorizedRowBatch batch,
@@ -456,7 +525,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         WriteValueBytes valueBytes = out.requestWriteValueBytes(vectorShuffleBatchKey, partition);
         int valueLength = 0;
         if (valueBytes != null &&
-            (commonPrefixReady || valueBytes.maxValueBytes > MIN_VALUE_BYTES_THRESHOLD)) {
+            (commonPrefixReady || valueBytes.maxValueBytes > MIN_VALUE_BYTES_FOR_BATCH)) {
           try {
             if (!commonPrefixReady) {
               // Keep this local: repeating flags, nullability, and metadata can change with
@@ -487,11 +556,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   private void initializeVectorShuffleOutputScratch(VectorizedRowBatch batch) throws HiveException {
     assert vectorShuffleBatchSerializer == null;
-    assert vectorShuffleNumUnorderedPartitions >= 1;
+    assert numUnorderedPartitionsOut >= 1;
 
     vectorShuffleBatchSerializer = new VectorShuffleBatchSerializer();
-    if (vectorShuffleNumUnorderedPartitions == 1) {
-      vectorShuffleSerializeBuffer = new byte[SERIALIZE_BUFFER_SIZE];
+    if (numUnorderedPartitionsOut == 1) {
+      vectorShuffleSerializeBuffer = new byte[SERIALIZE_BUFFER_SIZE_FOR_BATCH];
       vectorShuffleBatchValue = new BytesWritable();
     }
 
@@ -520,17 +589,16 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       vectorShuffleRowKeySerializeRow.init(reduceSinkKeyTypeInfos, reduceSinkKeyColumnMap);
     }
 
-    if (vectorShuffleNumUnorderedPartitions > 1) {
+    if (numUnorderedPartitionsOut > 1) {
       vectorShufflePartitionerType = out.getPartitionerType();
-
-      vectorShufflePartitionCounts = new int[vectorShuffleNumUnorderedPartitions];
-      vectorShufflePartitionOffsets = new int[vectorShuffleNumUnorderedPartitions + 1];
-      vectorShufflePartitionPositions = new int[vectorShuffleNumUnorderedPartitions];
+      vectorShufflePartitionCounts = new int[numUnorderedPartitionsOut];
+      vectorShufflePartitionOffsets = new int[numUnorderedPartitionsOut + 1];
+      vectorShufflePartitionPositions = new int[numUnorderedPartitionsOut];
     }
 
     vectorShuffleRowPartitions = new int[VectorizedRowBatch.DEFAULT_SIZE];
     vectorShufflePartitionRowIndices = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    if (vectorShuffleNumUnorderedPartitions > 1) {
+    if (numUnorderedPartitionsOut > 1) {
       if (vectorShufflePartitionerType == 0) {
         batchKeyHashCodes = new int[VectorizedRowBatch.DEFAULT_SIZE];
       } else {
@@ -546,20 +614,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShuffleBatchValue.setDirect(vectorShuffleSerializeBuffer, 0, length);
   }
 
-  private void serializeVectorShuffleBatch(VectorizedRowBatch batch, int[] rowIndices,
-      int rowOffset, int rowCount) {
-    int length = vectorShuffleBatchSerializer.serialize(batch, vectorShuffleBatchColumnMap,
-        rowIndices, rowOffset, rowCount, vectorShuffleSerializeBuffer, 0);
-    valueBytesWritable.set(vectorShuffleSerializeBuffer, 0, length);
-  }
-
   private void growVectorShuffleSerializeBuffer() throws HiveException {
-    if (vectorShuffleSerializeBuffer.length > Integer.MAX_VALUE - SERIALIZE_BUFFER_SIZE) {
+    if (vectorShuffleSerializeBuffer.length > Integer.MAX_VALUE - SERIALIZE_BUFFER_SIZE_FOR_BATCH) {
       throw new HiveException("Vector shuffle serialize buffer size overflow: "
-          + vectorShuffleSerializeBuffer.length + " + " + SERIALIZE_BUFFER_SIZE);
+          + vectorShuffleSerializeBuffer.length + " + " + SERIALIZE_BUFFER_SIZE_FOR_BATCH);
     }
-    vectorShuffleSerializeBuffer = new byte[vectorShuffleSerializeBuffer.length
-        + SERIALIZE_BUFFER_SIZE];
+    vectorShuffleSerializeBuffer = new byte[vectorShuffleSerializeBuffer.length + SERIALIZE_BUFFER_SIZE_FOR_BATCH];
   }
 
   private void collectVectorShuffleRows(VectorizedRowBatch batch, int[] rowIndices, int rowOffset,
@@ -649,7 +709,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
           LOG.debug("{}: records written - {}", this, numRows);
         }
       }
-      out.writeWithPartition(keyWritable, valueWritable, partition);
+      if (numUnorderedPartitionsOut == 1) {
+        out.writeForSinglePartition(keyWritable, valueWritable, 1);
+      } else {
+        out.writeWithPartition(keyWritable, valueWritable, partition);
+      }
     }
   }
 
@@ -731,7 +795,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       if (firstIndex == TopNHash.FORWARD) {
         doCollect(keyWritable, valueWritable);
       } else {
-        Preconditions.checkState(firstIndex >= 0);
+        assert firstIndex >= 0;
         reducerHash.storeValue(firstIndex, keyWritable.hashCode(), valueWritable, false);
       }
     } else {
@@ -757,7 +821,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       //     " valueWritable " + valueBytesWritable.getLength() +
       //     VectorizedBatchUtil.displayBytes(valueBytesWritable.getBytes(), 0, valueBytesWritable.getLength()));
 
-      out.collect(keyWritable, valueWritable);
+      if (numUnorderedPartitionsOut == 1) {
+        out.writeForSinglePartition(keyWritable, valueWritable, 1);
+      } else {
+        out.collect(keyWritable, valueWritable);
+      }
     }
   }
 
@@ -771,11 +839,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
   }
 
-  private void doCollectBatch(HiveKey keyWritable, BytesWritable valueWritable, int partition,
-                              long logicalRecordCount) throws IOException {
+  private void doCollectBatch(HiveKey keyWritable, BytesWritable valueWritable,
+                              int logicalRecordCount) throws IOException {
     if (null != out) {
       recordCollectedBatch(logicalRecordCount);
-      out.writeWithPartition(keyWritable, valueWritable, partition);
+      out.writeForSinglePartition(keyWritable, valueWritable, logicalRecordCount);
     }
   }
 
@@ -787,6 +855,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     super.closeOp(abort);
     out = null;
     reducerHash = null;
+    mapJoinBatchSerializer = null;
     LOG.info("{}::: records written - {}", this, numRows);
     this.runTimeNumRows = numRows;
   }
@@ -826,6 +895,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   @Override
   public void setOutputCollector(OutputCollector _out) {
     this.out = (TezProcessor.TezKVOutputCollector) _out;
+    numUnorderedPartitionsOut = out.getNumUnorderedPartitions();
   }
 
   @Override
