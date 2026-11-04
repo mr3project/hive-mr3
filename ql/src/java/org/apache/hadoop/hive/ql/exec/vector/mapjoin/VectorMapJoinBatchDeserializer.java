@@ -54,7 +54,7 @@ public final class VectorMapJoinBatchDeserializer {
     bytes = value.getBytesRaw();
     position = value.getOffset();
     final int length = value.getLength();
-    if (length < VectorMapJoinBatch.HEADER_BYTES || length > VectorMapJoinBatch.MAX_BYTES
+    if (length < VectorMapJoinBatch.HEADER_BYTES
         || position < 0 || position > bytes.length - length) {
       throw new IOException("Invalid map-join batch slice");
     }

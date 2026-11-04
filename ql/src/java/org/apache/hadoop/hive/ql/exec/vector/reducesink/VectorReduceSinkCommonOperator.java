@@ -446,21 +446,10 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
     for (int logical = 0; logical < batch.size; logical++) {
       final int batchIndex = batch.selectedInUse ? batch.selected[logical] : logical;
-      if (mapJoinBatchSerializer.append(batch, batchIndex)) {
-        continue;
-      }
-      if (mapJoinBatchSerializer.getRowCount() > 0) {
+      if (mapJoinBatchSerializer.getRowCount() == VectorMapJoinBatch.MAX_ROWS) {
         flushMapJoinBatch();
-        if (mapJoinBatchSerializer.append(batch, batchIndex)) {
-          continue;
-        }
       }
-
-      // A row larger than an empty frame's byte limit keeps the ordinary record encoding.
-      // Initialize only the row serializer: compact vector-shuffle scratch is not needed here.
-      initializeVectorShuffleRowKeyScratch();
-      doCollectRowWithPartition(keyWritable, serializeVectorShuffleRow(batch, batchIndex, tag), 0);
-      mapJoinBatchSerializer.reset();
+      mapJoinBatchSerializer.append(batch, batchIndex);
     }
     flushMapJoinBatch();
     return true;
@@ -590,7 +579,14 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShuffleBatchKey = new HiveKey(ReduceRecordSource.VECTOR_BATCH_KEY_BYTES, 0);
     vectorShuffleBatchKey.setDistKeyLength(ReduceRecordSource.VECTOR_BATCH_KEY_BYTES.length);
 
-    initializeVectorShuffleRowKeyScratch();
+    if (!isEmptyKey) {
+      vectorShuffleRowKeySerializeWrite = BinarySortableSerializeWrite.with(
+          conf.getKeySerializeInfo().getProperties(), reduceSinkKeyColumnMap.length);
+      vectorShuffleRowKeyOutput = new Output();
+      vectorShuffleRowKeySerializeWrite.set(vectorShuffleRowKeyOutput);
+      vectorShuffleRowKeySerializeRow = new VectorSerializeRow<>(vectorShuffleRowKeySerializeWrite);
+      vectorShuffleRowKeySerializeRow.init(reduceSinkKeyTypeInfos, reduceSinkKeyColumnMap);
+    }
 
     if (vectorShuffleNumUnorderedPartitions > 1) {
       vectorShufflePartitionerType = out.getPartitionerType();
@@ -608,17 +604,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       } else {
         batchValueHashCodes = new int[VectorizedRowBatch.DEFAULT_SIZE];
       }
-    }
-  }
-
-  private void initializeVectorShuffleRowKeyScratch() throws HiveException {
-    if (!isEmptyKey && vectorShuffleRowKeySerializeRow == null) {
-      vectorShuffleRowKeySerializeWrite = BinarySortableSerializeWrite.with(
-          conf.getKeySerializeInfo().getProperties(), reduceSinkKeyColumnMap.length);
-      vectorShuffleRowKeyOutput = new Output();
-      vectorShuffleRowKeySerializeWrite.set(vectorShuffleRowKeyOutput);
-      vectorShuffleRowKeySerializeRow = new VectorSerializeRow<>(vectorShuffleRowKeySerializeWrite);
-      vectorShuffleRowKeySerializeRow.init(reduceSinkKeyTypeInfos, reduceSinkKeyColumnMap);
     }
   }
 

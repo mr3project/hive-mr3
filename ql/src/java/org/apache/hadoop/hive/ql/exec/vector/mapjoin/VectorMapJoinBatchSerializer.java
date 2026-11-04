@@ -33,9 +33,9 @@ import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinarySerializeWrite;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
 
-/** Builds bounded join-entry frames directly from evaluated vector columns. */
+/** Builds map-join entry frames directly from evaluated vector columns. */
 public final class VectorMapJoinBatchSerializer {
-  private static final int INITIAL_BYTES = 64 * 1024;
+  private static final int INITIAL_BYTES = 100 * 1024;
   private final HashTableKeyType keyType;
   private final int numericKeyWidth;
   private final int entryHeaderBytes;
@@ -45,7 +45,7 @@ public final class VectorMapJoinBatchSerializer {
   private final LazyBinarySerializeWrite valueWriter;
   private final VectorSerializeRow<LazyBinarySerializeWrite> valueRow;
   private final BytesWritable value = new BytesWritable();
-  private Output output = new Output(INITIAL_BYTES);
+  private final Output output = new Output(INITIAL_BYTES);
   private int rowCount;
 
   public VectorMapJoinBatchSerializer(HashTableKeyType keyType, TypeInfo[] keyTypes,
@@ -80,14 +80,10 @@ public final class VectorMapJoinBatchSerializer {
 
   /**
    * Append one physical row.
-   * False leaves previously appended entries intact.
-   * Flush them and retry the row in a fresh frame, or use an ordinary record if it is still too large.
-   * A variable-width row can transiently exceed the byte limit before its length is known.
+   * The caller must flush a full frame before appending.
    */
-  public boolean append(VectorizedRowBatch batch, int physicalRow) throws IOException {
-    if (rowCount == VectorMapJoinBatch.MAX_ROWS) {
-      return false;
-    }
+  public void append(VectorizedRowBatch batch, int physicalRow) throws IOException {
+    assert rowCount < VectorMapJoinBatch.MAX_ROWS;
     final int entryStart = output.getLength();
     output.reserve(entryHeaderBytes);
     final int keyStart = output.getLength();
@@ -124,10 +120,6 @@ public final class VectorMapJoinBatchSerializer {
       valueRow.serializeWrite(batch, physicalRow);
     }
     final int valueLength = output.getLength() - valueStart;
-    if (output.getLength() > VectorMapJoinBatch.MAX_BYTES) {
-      output.setWritePosition(entryStart);
-      return false;
-    }
     if (numericKeyWidth > 0) {
       output.writeByte(entryStart, (byte) (keyLength == -1 ? 0 : 1));
     } else {
@@ -135,7 +127,6 @@ public final class VectorMapJoinBatchSerializer {
     }
     output.writeInt(entryStart + entryHeaderBytes - Integer.BYTES, valueLength);
     rowCount++;
-    return true;
   }
 
   private long normalize(long key) {
@@ -163,13 +154,8 @@ public final class VectorMapJoinBatchSerializer {
   }
 
   public void reset() {
-    // Do not retain a huge scratch array after an oversized row takes the legacy path.
-    if (output.getData().length > 2 * VectorMapJoinBatch.MAX_BYTES) {
-      output = new Output(INITIAL_BYTES);
-    } else {
-      output.reset();
-    }
-    // Release the wrapper's borrowed reference before reusing/replacing the scratch array.
+    output.reset();
+    // Release the wrapper's borrowed reference before reusing the scratch array.
     value.setDirect(output.getData(), 0, 0);
     rowCount = 0;
     output.appendInt(0);

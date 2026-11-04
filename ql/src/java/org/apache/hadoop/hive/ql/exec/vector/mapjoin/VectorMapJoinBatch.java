@@ -53,8 +53,9 @@ import org.apache.hadoop.io.BytesWritable;
  * STRING includes CHAR, VARCHAR and BINARY.
  * MULTI_KEY retains embedded NULL markers and may encode one column.</p>
  *
- * <p>Frames are bounded by {@link #MAX_ROWS} and {@link #MAX_BYTES}.
- * Loaders also accept ordinary records for singleton input batches and oversized rows.
+ * <p>Frames contain at most {@link #MAX_ROWS} entries.
+ * The serializer grows and reuses its backing buffer.
+ * Loaders also accept ordinary records for singleton input batches.
  * FAST loaders insert native keys directly.
  * General loaders restore BinarySortable keys.</p>
  */
@@ -63,7 +64,6 @@ public final class VectorMapJoinBatch {
   // Keep this distinct from ReduceRecordSource.VECTOR_BATCH_KEY_BYTES (0x02).
   public static final byte[] KEY_BYTES = { 0x03 };
   public static final int MAX_ROWS = VectorizedRowBatch.DEFAULT_SIZE;
-  public static final int MAX_BYTES = 1024 * 1024;
   static final int HEADER_BYTES = Integer.BYTES;
   static final int NUMERIC_ENTRY_HEADER_BYTES = 1 + Integer.BYTES;
   static final int BYTES_ENTRY_HEADER_BYTES = 2 * Integer.BYTES;
