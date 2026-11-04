@@ -189,6 +189,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       throws InterruptedException, IOException, HiveException, SerDeException {
     LOG.info("Starting draining thread {}", partitionId);
     long totalProcessedEntries = 0;
+    BytesWritable value = new BytesWritable();
     while (true) {
       HashTableElementBatch batch = this.loadBatchQueues[partitionId].take();
       if (batch == DONE_SENTINEL) {
@@ -198,7 +199,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       for (int i = 0; i < batch.getSize(); i++) {
         try {
           VectorMapJoinBatchEntry h = batch.getBatch(i);
-          BytesWritable value = new BytesWritable(h.valueBytes, h.valueOffset, h.valueLength);
+          value.setDirect(h.valueBytes, h.valueOffset, h.valueLength);
           if (!h.nativeKey) {
             tableContainer.putRow(h.hashCode,
                 new BytesWritable(h.keyBytes, h.keyOffset, h.keyLength), value);
