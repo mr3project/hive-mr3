@@ -165,7 +165,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
 
   private void submitQueueDrainThreads(VectorMapJoinFastTableContainer vectorMapJoinFastTableContainer,
       boolean nativeLongKey)
-      throws InterruptedException, IOException, SerDeException {
+      throws InterruptedException {
     for (int partitionId = 0; partitionId < numLoadThreads; partitionId++) {
       int finalPartitionId = partitionId;
       this.loadTasks.add(this.loadExecService.submit(() -> {
@@ -209,8 +209,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
             tableContainer.putRowNative(h.hashCode,
                 h.keyBytes, h.keyOffset, h.keyLength, h.isNull, value);
           }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
           throw new HiveException("Exception in draining thread put row", e);
         }
       }
@@ -277,6 +276,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
 
       try {
         KeyValueReaderEdge kvReader = (KeyValueReaderEdge) input.getReader();
+
         HashTableKeyType keyType = ((VectorMapJoinDesc) desc.getVectorDesc()).getHashTableKeyType();
         boolean nativeLongKey = keyType != HashTableKeyType.STRING && keyType != HashTableKeyType.MULTI_KEY;
         VectorMapJoinBatchDeserializer batchReader = new VectorMapJoinBatchDeserializer(keyType);
@@ -323,9 +323,9 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
             }
           } else {
             queueEntry(new VectorMapJoinBatchEntry(tableContainer.getHashCode(currentKey),
-                false, false, 0, currentKey.getBytesRaw(), currentKey.getOffset(),
-                currentKey.getLength(), currentValue.getBytesRaw(), currentValue.getOffset(),
-                currentValue.getLength()));
+                false, false, 0,
+                currentKey.getBytesRaw(), currentKey.getOffset(), currentKey.getLength(),
+                currentValue.getBytesRaw(), currentValue.getOffset(), currentValue.getLength()));
           }
           receivedEntries += logicalRows;
           checkLoadProgress(tableContainer, inputName, receivedEntries, logicalRows,
@@ -389,6 +389,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
     if ((numEntries % interruptCheckInterval < logicalRows) && Thread.interrupted()) {
       throw new InterruptedException("Hash table loading interrupted");
     }
+
     if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() < logicalRows)) {
       final long estMemUsage = tableContainer.getEstimatedMemorySize();
       if (estMemUsage > effectiveThreshold) {
@@ -402,6 +403,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
   }
 
   private static class HashTableElementBatch {
+
     private static final int BATCH_SIZE = VectorizedRowBatch.DEFAULT_SIZE;
     private final VectorMapJoinBatchEntry[] batch;
     private int currentIndex;

@@ -38,7 +38,9 @@ import org.apache.hadoop.io.BytesWritable;
 
 /** Builds map-join entry frames directly from evaluated vector columns. */
 public final class VectorMapJoinBatchSerializer {
+
   private static final int INITIAL_BYTES = 1024 * 1024;
+
   private final HashTableKeyType keyType;
   private final int numericKeyWidth;
   private final int entryHeaderBytes;
@@ -55,11 +57,13 @@ public final class VectorMapJoinBatchSerializer {
       int[] keyColumnMap, Properties keyProperties, TypeInfo[] valueTypes, int[] valueColumnMap)
       throws HiveException {
     numericKeyWidth = VectorMapJoinBatch.numericWidth(keyType);
-    entryHeaderBytes = numericKeyWidth > 0
-        ? VectorMapJoinBatch.NUMERIC_ENTRY_HEADER_BYTES : VectorMapJoinBatch.BYTES_ENTRY_HEADER_BYTES;
+    entryHeaderBytes = numericKeyWidth > 0 ?
+        VectorMapJoinBatch.NUMERIC_ENTRY_HEADER_BYTES : VectorMapJoinBatch.BYTES_ENTRY_HEADER_BYTES;
+
     assert keyTypes.length == keyColumnMap.length;
     assert valueTypes.length == valueColumnMap.length;
     assert keyType == HashTableKeyType.MULTI_KEY || keyColumnMap.length == 1;
+
     this.keyType = keyType;
     this.keyColumnMap = keyColumnMap.clone();
     if (keyType == HashTableKeyType.MULTI_KEY && keyColumnMap.length > 0) {
@@ -90,6 +94,7 @@ public final class VectorMapJoinBatchSerializer {
     final int entryStart = output.getLength();
     output.reserve(entryHeaderBytes);
     final int keyStart = output.getLength();
+
     int keyLength;
     if (keyType == HashTableKeyType.MULTI_KEY) {
       if (keyRow != null) {
@@ -117,6 +122,7 @@ public final class VectorMapJoinBatchSerializer {
         }
       }
     }
+
     final int valueStart = output.getLength();
     if (valueRow != null) {
       valueWriter.setAppend(output);
@@ -128,6 +134,7 @@ public final class VectorMapJoinBatchSerializer {
     } else {
       writeInt(entryStart, keyLength);
     }
+
     writeInt(entryStart + entryHeaderBytes - Integer.BYTES, valueLength);
     rowCount++;
   }
@@ -150,7 +157,6 @@ public final class VectorMapJoinBatchSerializer {
 
   /** Borrowed until reset/append; the current single-partition writer consumes it synchronously. */
   public BytesWritable getValue() {
-    assert rowCount > 0;
     writeInt(0, rowCount);
     value.setDirect(output.getData(), 0, output.getLength());
     return value;
@@ -158,7 +164,7 @@ public final class VectorMapJoinBatchSerializer {
 
   public void reset() {
     output.reset();
-    // Release the wrapper's borrowed reference before reusing the scratch array.
+    // release the wrapper's borrowed reference before reusing the scratch array
     value.setDirect(output.getData(), 0, 0);
     rowCount = 0;
     output.reserve(VectorMapJoinBatch.HEADER_BYTES);

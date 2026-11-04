@@ -34,7 +34,6 @@ import org.apache.hadoop.io.BytesWritable;
  * Endpoints derive the key family from their schemas and the multikey-only setting.
  * No hashes are transmitted.
  *
- * <pre>
  * Record key:   [0x03]
  * Record value: [rowCount:i32][entry 0] ... [entry rowCount-1]
  *
@@ -44,23 +43,23 @@ import org.apache.hadoop.io.BytesWritable;
  * STRING:       [keyLength:i32][valueLength:i32][raw key bytes][value bytes]
  * STRING NULL:  [-1:i32]       [valueLength:i32]               [value bytes]
  * MULTI_KEY:    [keyLength:i32][valueLength:i32][BinarySortable key][value bytes]
- * </pre>
  *
- * <p>Numeric width W is 1 for BOOLEAN/BYTE, 2 for SHORT, 4 for INT/DATE, and 8 for LONG.
+ * Numeric width W is 1 for BOOLEAN/BYTE, 2 for SHORT, 4 for INT/DATE, and 8 for LONG.
  * Numeric keys use their declared signed width.
  * BOOLEAN values are normalized to 0/1.
  * Producers write flag 1 for non-NULL.
  * Readers accept any nonzero flag.
  * STRING includes CHAR, VARCHAR and BINARY.
- * MULTI_KEY retains embedded NULL markers and may encode one column.</p>
+ * MULTI_KEY retains embedded NULL markers and may encode one column.
  *
  * <p>Frames contain at most {@link VectorizedRowBatch#DEFAULT_SIZE} entries.
  * The serializer grows and reuses its backing buffer.
  * Loaders also accept ordinary records for singleton input batches.
  * FAST loaders insert native keys directly.
- * General loaders restore BinarySortable keys.</p>
+ * General loaders restore BinarySortable keys.
  */
 public final class VectorMapJoinBatch {
+
   // Ordinary BinarySortable keys start with a NULL/non-NULL marker, not 0x03.
   // Keep this distinct from ReduceRecordSource.VECTOR_BATCH_KEY_BYTES (0x02).
   public static final byte[] KEY_BYTES = { 0x03 };

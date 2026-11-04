@@ -27,6 +27,7 @@ import org.apache.hadoop.io.BytesWritable;
 
 /** Restores ordinary BinarySortable keys for map-join containers that load serialized records. */
 public final class VectorMapJoinBatchKeyReader {
+
   private final HashTableKeyType keyType;
   private final BinarySortableSerializeWrite keyWriter;
   private final Output output;
@@ -34,8 +35,8 @@ public final class VectorMapJoinBatchKeyReader {
 
   public VectorMapJoinBatchKeyReader(HashTableKeyType keyType, Properties keyProperties) {
     this.keyType = keyType;
-    keyWriter = keyType == HashTableKeyType.MULTI_KEY
-        ? null : BinarySortableSerializeWrite.with(keyProperties, 1);
+    keyWriter = keyType == HashTableKeyType.MULTI_KEY ? null
+      : BinarySortableSerializeWrite.with(keyProperties, 1);
     output = keyWriter == null ? null : new Output();
   }
 

@@ -22,6 +22,7 @@ package org.apache.hadoop.hive.ql.exec.vector.mapjoin;
  * Backing arrays remain shared and must stay immutable until insertion completes.
  */
 public final class VectorMapJoinBatchEntry {
+
   public final long hashCode;
   public final boolean nativeKey;
   public final boolean isNull;

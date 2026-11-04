@@ -32,6 +32,7 @@ import org.apache.hive.common.util.HashCodeUtil;
  * Getter state lasts until next().
  */
 public final class VectorMapJoinBatchDeserializer {
+
   private final HashTableKeyType keyType;
   private final int numericKeyWidth;
   private final int entryHeaderBytes;
@@ -49,8 +50,8 @@ public final class VectorMapJoinBatchDeserializer {
 
   public VectorMapJoinBatchDeserializer(HashTableKeyType keyType) {
     numericKeyWidth = VectorMapJoinBatch.numericWidth(keyType);
-    entryHeaderBytes = numericKeyWidth > 0
-        ? VectorMapJoinBatch.NUMERIC_ENTRY_HEADER_BYTES : VectorMapJoinBatch.BYTES_ENTRY_HEADER_BYTES;
+    entryHeaderBytes = numericKeyWidth > 0 ?
+        VectorMapJoinBatch.NUMERIC_ENTRY_HEADER_BYTES : VectorMapJoinBatch.BYTES_ENTRY_HEADER_BYTES;
     this.keyType = keyType;
   }
 
@@ -58,14 +59,16 @@ public final class VectorMapJoinBatchDeserializer {
     bytes = value.getBytesRaw();
     position = value.getOffset();
     final int length = value.getLength();
-    if (length < VectorMapJoinBatch.HEADER_BYTES
-        || position < 0 || position > bytes.length - length) {
+    if (length < VectorMapJoinBatch.HEADER_BYTES ||
+        position < 0 ||
+        position > bytes.length - length) {
       throw new IOException("Invalid map-join batch slice");
     }
     limit = position + length;
     rowCount = readInt();
-    if (rowCount < 1 || rowCount > VectorizedRowBatch.DEFAULT_SIZE
-        || rowCount > (limit - position) / entryHeaderBytes) {
+    if (rowCount < 1 ||
+        rowCount > VectorizedRowBatch.DEFAULT_SIZE ||
+        rowCount > (limit - position) / entryHeaderBytes) {
       throw new IOException("Invalid map-join batch row count " + rowCount);
     }
     remaining = rowCount;
@@ -89,13 +92,11 @@ public final class VectorMapJoinBatchDeserializer {
       isNull = keyLength == -1;
     }
     valueLength = readInt();
-    if (keyLength < -1 || valueLength < 0
-        || (isNull && keyType == HashTableKeyType.MULTI_KEY)) {
+    if (keyLength < -1 || valueLength < 0 || (isNull && keyType == HashTableKeyType.MULTI_KEY)) {
       throw new IOException("Invalid map-join batch entry lengths or NULL key");
     }
     final int payloadKeyLength = isNull ? 0 : keyLength;
-    if (payloadKeyLength > limit - position
-        || valueLength > limit - position - payloadKeyLength) {
+    if (payloadKeyLength > limit - position || valueLength > limit - position - payloadKeyLength) {
       throw new IOException("Truncated map-join batch entry");
     }
     keyOffset = position;
@@ -131,8 +132,10 @@ public final class VectorMapJoinBatchDeserializer {
    * The descriptor retains backing arrays and primitive values independently of reader reuse.
    */
   public VectorMapJoinBatchEntry createEntry() {
-    return new VectorMapJoinBatchEntry(getHashCode(), true, isNull, longKey,
-        bytes, keyOffset, isNull ? 0 : keyLength, bytes, valueOffset, valueLength);
+    return new VectorMapJoinBatchEntry(getHashCode(),
+        true, isNull, longKey,
+        bytes, keyOffset, isNull ? 0 : keyLength,
+        bytes, valueOffset, valueLength);
   }
 
   public int getRowCount() { return rowCount; }
