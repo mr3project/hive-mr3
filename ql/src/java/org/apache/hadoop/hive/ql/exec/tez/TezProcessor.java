@@ -474,6 +474,11 @@ public class TezProcessor extends AbstractLogicalIOProcessor {
       writer.write(key, value);
     }
 
+    public void writeForSinglePartition(BytesWritable key, BytesWritable value, int numLogicalRecords)
+        throws IOException {
+      writer.writeForSinglePartition(key, value, numLogicalRecords);
+    }
+
     public void writeWithPartition(BytesWritable key, BytesWritable value, int partition)
         throws IOException {
       writer.writeWithPartition(key, value, partition);

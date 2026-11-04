@@ -136,6 +136,13 @@ public class VectorMapJoinFastStringHashMapContainer extends VectorMapJoinFastHa
   }
 
   @Override
+  public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
+      boolean isNull, BytesWritable currentValue) throws HiveException, IOException {
+    vectorMapJoinFastStringHashMaps[(int) ((numThreads - 1) & hashCode)]
+        .putRowNative(hashCode, keyBytes, keyOffset, keyLength, isNull, currentValue);
+  }
+
+  @Override
   public long getHashCode(BytesWritable currentKey) throws HiveException, IOException {
     byte[] keyBytes = currentKey.getBytesRaw();
     int keyOffset = currentKey.getOffset();

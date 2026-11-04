@@ -41,6 +41,13 @@ public class VectorMapJoinFastStringHashSet extends VectorMapJoinFastBytesHashSe
     stringCommon.adaptPutRow(this, currentKey, currentValue, hashCode);   // glad
   }
 
+  public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
+      boolean isNull, BytesWritable currentValue) {
+    if (!isNull) {
+      add(keyBytes, keyOffset, keyLength, currentValue, hashCode);
+    }
+  }
+
   public VectorMapJoinFastStringHashSet(
       boolean isFullOuter,
       int initialCapacity, float loadFactor, int writeBuffersSize, long estimatedKeyCount, TableDesc tableDesc) {
