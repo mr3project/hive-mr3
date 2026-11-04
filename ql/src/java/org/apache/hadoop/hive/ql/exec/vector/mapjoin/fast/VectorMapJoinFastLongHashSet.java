@@ -56,6 +56,12 @@ public class VectorMapJoinFastLongHashSet
     adaptPutRow(hashCode, currentKey, currentValue);  // glad
   }
 
+  public void putRowNative(long hashCode, long key, boolean isNull, BytesWritable currentValue) {
+    if (!isNull) {
+      add(hashCode, key, currentValue);
+    }
+  }
+
   @Override
   public boolean containsLongKey(long currentKey) {
     return containsKey(currentKey);

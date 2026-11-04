@@ -152,6 +152,14 @@ public class VectorMapJoinFastLongHashMap
     }
   }
 
+  public void putRowNative(long hashCode, long key, boolean isNull, BytesWritable currentValue) {
+    if (!isNull) {
+      add(hashCode, key, currentValue);
+    } else if (isFullOuter) {
+      addFullOuterNullKeyValue(currentValue);
+    }
+  }
+
   @Override
   public boolean containsLongKey(long currentKey) {
     return containsKey(currentKey);

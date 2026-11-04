@@ -181,6 +181,16 @@ public class VectorMapJoinFastTableContainer implements VectorMapJoinTableContai
     INSTANCE.putRow(hashCode, currentKey, currentValue);
   }
 
+  public void putRowNative(long hashCode, long key, boolean isNull, BytesWritable currentValue)
+      throws HiveException, IOException {
+    INSTANCE.putRowNative(hashCode, key, isNull, currentValue);
+  }
+
+  public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
+      boolean isNull, BytesWritable currentValue) throws HiveException, IOException {
+    INSTANCE.putRowNative(hashCode, keyBytes, keyOffset, keyLength, isNull, currentValue);
+  }
+
   @Override
   public void seal() {
     // Do nothing

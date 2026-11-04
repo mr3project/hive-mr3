@@ -195,6 +195,12 @@ public class VectorReduceSinkObjectHashOperator extends VectorReduceSinkCommonOp
   }
 
   @Override
+  protected boolean isMapJoinBatchEligible() {
+    // This expression is evaluated per row in the ordinary path after bucket extraction.
+    return bucketExpr == null;
+  }
+
+  @Override
   public void process(Object row, int tag) throws HiveException {
 
     try {
