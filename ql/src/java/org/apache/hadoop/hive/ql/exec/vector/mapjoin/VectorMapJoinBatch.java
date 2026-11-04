@@ -28,8 +28,10 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
 
 /**
- * Frames for single-partition map-join inputs. Integers are big endian; endpoints derive
- * the key family from their schemas and the multikey-only setting. No hashes are transmitted.
+ * Frames for single-partition map-join inputs.
+ * Integers are big endian.
+ * Endpoints derive the key family from their schemas and the multikey-only setting.
+ * No hashes are transmitted.
  *
  * <pre>
  * Record key:   [0x03]
@@ -44,13 +46,17 @@ import org.apache.hadoop.io.BytesWritable;
  * </pre>
  *
  * <p>Numeric width W is 1 for BOOLEAN/BYTE, 2 for SHORT, 4 for INT/DATE, and 8 for LONG.
- * Keys use their declared signed width; BOOLEAN values are normalized to 0/1. Producers
- * write flag 1 for non-NULL; readers accept any nonzero flag. STRING includes CHAR,
- * VARCHAR and BINARY. MULTI_KEY retains embedded NULL markers and may encode one column.</p>
+ * Numeric keys use their declared signed width.
+ * BOOLEAN values are normalized to 0/1.
+ * Producers write flag 1 for non-NULL.
+ * Readers accept any nonzero flag.
+ * STRING includes CHAR, VARCHAR and BINARY.
+ * MULTI_KEY retains embedded NULL markers and may encode one column.</p>
  *
- * <p>Frames are bounded by {@link #MAX_ROWS} and {@link #MAX_BYTES}. Loaders accept frames
- * mixed with ordinary records, including singleton input batches and oversized rows.
- * FAST loaders insert native keys directly; general loaders restore BinarySortable keys.</p>
+ * <p>Frames are bounded by {@link #MAX_ROWS} and {@link #MAX_BYTES}.
+ * Loaders also accept ordinary records for singleton input batches and oversized rows.
+ * FAST loaders insert native keys directly.
+ * General loaders restore BinarySortable keys.</p>
  */
 public final class VectorMapJoinBatch {
   // Ordinary BinarySortable keys start with a NULL/non-NULL marker, not 0x03.
