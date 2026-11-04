@@ -119,6 +119,8 @@ public class ReduceSinkDesc extends AbstractOperatorDesc {
   private boolean forwarding; // Whether this RS can forward records directly instead of shuffling/sorting
   // Whether the downstream consumer can read serialized vector shuffle batches.
   private boolean vectorShuffleBatchEnabled = true;
+  // Whether this output supplies a map-join small-table input.
+  private boolean mapJoinOutput;
 
   public static enum ReducerTraits {
     UNSET(0), // unset
@@ -201,6 +203,7 @@ public class ReduceSinkDesc extends AbstractOperatorDesc {
     desc.setHasOrderBy(hasOrderBy);
     desc.outputName = outputName;
     desc.vectorShuffleBatchEnabled = vectorShuffleBatchEnabled;
+    desc.mapJoinOutput = mapJoinOutput;
     return desc;
   }
 
@@ -543,6 +546,14 @@ public class ReduceSinkDesc extends AbstractOperatorDesc {
 
   public boolean isVectorShuffleBatchEnabled() {
     return vectorShuffleBatchEnabled;
+  }
+
+  public void setMapJoinOutput(boolean mapJoinOutput) {
+    this.mapJoinOutput = mapJoinOutput;
+  }
+
+  public boolean isMapJoinOutput() {
+    return mapJoinOutput;
   }
 
   @Explain(displayName = "auto parallelism", explainLevels = { Level.EXTENDED })

@@ -227,12 +227,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
         checkAbortCondition();
       }
 
-      // set output collector for any reduce sink operators in the pipeline.
-      List<Operator<?>> children = new ArrayList<>();
-      children.add(reducer);
-      children.addAll(dummyOps);
       createOutputMap();
-      OperatorUtils.setChildrenCollector(children, outMap);
 
       checkAbortCondition();
       reducer.setReporter(reporter);
@@ -303,6 +298,13 @@ public class ReduceRecordProcessor extends RecordProcessor {
           ((TezKVOutputCollector) outMap.get(outputEntry.getKey())).initialize();
         }
       }
+    }
+
+    checkAbortCondition();
+    // Set output collectors after their writers have been initialized.
+    OperatorUtils.setChildrenCollector(reducer, outMap);
+    for (ReduceWork work : tagToReducerMap.values()) {
+      OperatorUtils.setChildrenCollector(work.getDummyOps(), outMap);
     }
 
     // run the operator pipeline

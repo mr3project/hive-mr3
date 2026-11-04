@@ -54,6 +54,7 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.gen.DecimalColDivideDec
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinAntiJoinLongOperator;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinAntiJoinMultiKeyOperator;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinAntiJoinStringOperator;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatch;
 import org.apache.hadoop.hive.ql.exec.vector.reducesink.*;
 import org.apache.hadoop.hive.ql.exec.vector.udf.VectorUDFArgDesc;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
@@ -3489,48 +3490,9 @@ public class Vectorizer implements PhysicalPlanResolver {
       isInnerBigOnly = true;
     }
 
-    // By default, we can always use the multi-key class.
-    hashTableKeyType = HashTableKeyType.MULTI_KEY;
-
-    if (!HiveConf.getBoolVar(hiveConf,
-        HiveConf.ConfVars.HIVE_VECTORIZATION_MAPJOIN_NATIVE_MULTIKEY_ONLY_ENABLED)) {
-
-      // Look for single column optimization.
-      byte posBigTable = (byte) desc.getPosBigTable();
-      Map<Byte, List<ExprNodeDesc>> keyExprs = desc.getKeys();
-      List<ExprNodeDesc> bigTableKeyExprs = keyExprs.get(posBigTable);
-      if (bigTableKeyExprs.size() == 1) {
-        TypeInfo typeInfo = bigTableKeyExprs.get(0).getTypeInfo();
-        LOG.info("Vectorizer vectorizeOperator map join typeName " + typeInfo.getTypeName());
-        switch (((PrimitiveTypeInfo) typeInfo).getPrimitiveCategory()) {
-        case BOOLEAN:
-          hashTableKeyType = HashTableKeyType.BOOLEAN;
-          break;
-        case BYTE:
-          hashTableKeyType = HashTableKeyType.BYTE;
-          break;
-        case SHORT:
-          hashTableKeyType = HashTableKeyType.SHORT;
-          break;
-        case INT:
-          hashTableKeyType = HashTableKeyType.INT;
-          break;
-        case DATE:
-          hashTableKeyType = HashTableKeyType.DATE;
-          break;
-        case LONG:
-          hashTableKeyType = HashTableKeyType.LONG;
-          break;
-        case STRING:
-        case CHAR:
-        case VARCHAR:
-        case BINARY:
-          hashTableKeyType = HashTableKeyType.STRING;
-        default:
-          // Stay with multi-key.
-        }
-      }
-    }
+    hashTableKeyType = VectorMapJoinBatch.getKeyType(
+        desc.getKeys().get((byte) desc.getPosBigTable()), HiveConf.getBoolVar(hiveConf,
+            HiveConf.ConfVars.HIVE_VECTORIZATION_MAPJOIN_NATIVE_MULTIKEY_ONLY_ENABLED));
 
     switch (joinType) {
     case JoinDesc.INNER_JOIN:

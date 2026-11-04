@@ -73,6 +73,14 @@ public class VectorMapJoinFastMultiKeyHashSetContainer
   }
 
   @Override
+  public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
+      boolean isNull, BytesWritable currentValue) throws HiveException, IOException {
+    assert !isNull : "Multi-key nulls must remain encoded in the key bytes";
+    vectorMapJoinFastMultiKeyHashSets[(int) ((numThreads - 1) & hashCode)]
+        .add(keyBytes, keyOffset, keyLength, currentValue, hashCode);
+  }
+
+  @Override
   public long getEstimatedMemorySize() {
     long estimatedMemorySize = 0;
     for (int i = 0; i < numThreads; ++i) {

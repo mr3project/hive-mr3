@@ -234,21 +234,26 @@ public class OperatorUtils {
     }
   }
 
-  public static void setChildrenCollector(List<Operator<? extends OperatorDesc>> childOperators,
-                                          Map<String, OutputCollector<? extends BytesWritable, BytesWritable>> outMap) {
+  public static void setChildrenCollector(Operator<?> op,
+      Map<String, OutputCollector<? extends BytesWritable, BytesWritable>> outMap) {
+    if (op.getIsReduceSink()) {
+      String outputName = op.getReduceOutputName();
+      if (outMap.containsKey(outputName)) {
+        LOG.info("Setting output collector: " + op + " --> " + outputName);
+        op.setOutputCollector(outMap.get(outputName));
+      }
+    } else {
+      setChildrenCollector(op.getChildOperators(), outMap);
+    }
+  }
+
+  public static void setChildrenCollector(List<? extends Operator<?>> childOperators,
+      Map<String, OutputCollector<? extends BytesWritable, BytesWritable>> outMap) {
     if (childOperators == null) {
       return;
     }
-    for (Operator<? extends OperatorDesc> op : childOperators) {
-      if (op.getIsReduceSink()) {
-        String outputName = op.getReduceOutputName();
-        if (outMap.containsKey(outputName)) {
-          LOG.info("Setting output collector: " + op + " --> " + outputName);
-          op.setOutputCollector(outMap.get(outputName));
-        }
-      } else {
-        setChildrenCollector(op.getChildOperators(), outMap);
-      }
+    for (Operator<?> op : childOperators) {
+      setChildrenCollector(op, outMap);
     }
   }
 
