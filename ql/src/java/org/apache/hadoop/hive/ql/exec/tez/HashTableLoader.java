@@ -100,6 +100,9 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
 
     Map<Integer, String> parentToInput = desc.getParentToInput();
     Map<Integer, Long> parentKeyCounts = desc.getParentKeyCounts();
+    HashTableKeyType batchKeyType = VectorMapJoinBatch.getKeyType(
+        desc.getKeys().get((byte) desc.getPosBigTable()), HiveConf.getBoolVar(hconf,
+            HiveConf.ConfVars.HIVE_VECTORIZATION_MAPJOIN_NATIVE_MULTIKEY_ONLY_ENABLED));
 
     boolean isCrossProduct = false;
     List<ExprNodeDesc> joinExprs = desc.getKeys().values().iterator().next();
@@ -260,11 +263,9 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
                 tableContainer.getClass().getSimpleName(), pos, estKeyCount, keyCount);
 
         tableContainer.setSerde(keyCtx, valCtx);
-        HashTableKeyType batchKeyType = desc.getVectorMapJoinBatchKeyType(pos);
-        VectorMapJoinBatchDeserializer batchReader = batchKeyType == null
-            ? null : new VectorMapJoinBatchDeserializer(batchKeyType);
-        VectorMapJoinBatchKeyReader batchKeyReader = batchKeyType == null
-            ? null : new VectorMapJoinBatchKeyReader(batchKeyType, desc.getKeyTblDesc().getProperties());
+        VectorMapJoinBatchDeserializer batchReader = new VectorMapJoinBatchDeserializer(batchKeyType);
+        VectorMapJoinBatchKeyReader batchKeyReader =
+            new VectorMapJoinBatchKeyReader(batchKeyType, desc.getKeyTblDesc().getProperties());
         BytesWritable batchValue = new BytesWritable();
         long startTime = System.currentTimeMillis();
         while (kvReader.next()) {
@@ -272,7 +273,6 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
           BytesWritable currentValue = kvReader.getCurrentValue();
           boolean isBatch = VectorMapJoinBatch.isBatchKey(currentKey);
           if (isBatch) {
-            assert batchReader != null;
             batchReader.set(currentValue);
           }
           do {

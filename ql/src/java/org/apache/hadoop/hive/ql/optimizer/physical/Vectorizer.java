@@ -54,6 +54,7 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.gen.DecimalColDivideDec
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinAntiJoinLongOperator;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinAntiJoinMultiKeyOperator;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinAntiJoinStringOperator;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatch;
 import org.apache.hadoop.hive.ql.exec.vector.reducesink.*;
 import org.apache.hadoop.hive.ql.exec.vector.udf.VectorUDFArgDesc;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
@@ -1075,7 +1076,6 @@ public class Vectorizer implements PhysicalPlanResolver {
             logMergeJoinWorkExplainVectorization(mergeJoinWork);
           }
         }
-        configureVectorMapJoinBatchOutputs(work);
       } else if (currTask instanceof FetchTask) {
         LOG.info("Vectorizing Fetch not supported");
       } else {
@@ -2480,75 +2480,6 @@ public class Vectorizer implements PhysicalPlanResolver {
     }
   }
 
-  /** Mark map-join inputs after their producers have been vectorized. */
-  private void configureVectorMapJoinBatchOutputs(TezWork tezWork) {
-    Map<String, BaseWork> workMap = tezWork.getWorkMap();
-    for (BaseWork work : workMap.values()) {
-      for (Operator<?> operator : work.getAllOperators()) {
-        if (operator.getConf() instanceof ReduceSinkDesc) {
-          ((ReduceSinkDesc) operator.getConf()).setVectorMapJoinBatchKeyType(null);
-        }
-        if (operator instanceof MapJoinOperator) {
-          ((MapJoinOperator) operator).getConf().clearVectorMapJoinBatchInputs();
-        }
-      }
-    }
-
-    for (BaseWork source : workMap.values()) {
-      for (Operator<?> sink : source.getAllOperators()) {
-        if (!(sink instanceof VectorReduceSinkCommonOperator)) {
-          continue;
-        }
-        ReduceSinkDesc sinkDesc = (ReduceSinkDesc) sink.getConf();
-        if (!sinkDesc.getSkipTag() || sinkDesc.isVectorShuffleBatchEnabled()) {
-          continue;
-        }
-        BaseWork destination = workMap.get(sinkDesc.getOutputName());
-        if (destination == null) {
-          continue;
-        }
-        HashTableKeyType keyType = getMapJoinBatchKeyType(sinkDesc.getKeyCols());
-        for (Operator<?> operator : destination.getAllOperators()) {
-          if (!(operator instanceof MapJoinOperator)) {
-            continue;
-          }
-          MapJoinDesc desc = ((MapJoinOperator) operator).getConf();
-          for (Entry<Integer, String> input : desc.getParentToInput().entrySet()) {
-            if (input.getKey() != desc.getPosBigTable() && source.getName().equals(input.getValue())) {
-              sinkDesc.setVectorMapJoinBatchKeyType(keyType);
-              desc.setVectorMapJoinBatchInput(input.getKey(), keyType);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  private HashTableKeyType getMapJoinBatchKeyType(List<ExprNodeDesc> keys) {
-    if (HiveConf.getBoolVar(hiveConf,
-        HiveConf.ConfVars.HIVE_VECTORIZATION_MAPJOIN_NATIVE_MULTIKEY_ONLY_ENABLED)
-        || keys.size() != 1) {
-      return HashTableKeyType.MULTI_KEY;
-    }
-    TypeInfo typeInfo = keys.get(0).getTypeInfo();
-    if (typeInfo.getCategory() != Category.PRIMITIVE) {
-      return HashTableKeyType.MULTI_KEY;
-    }
-    switch (((PrimitiveTypeInfo) typeInfo).getPrimitiveCategory()) {
-    case BOOLEAN: return HashTableKeyType.BOOLEAN;
-    case BYTE: return HashTableKeyType.BYTE;
-    case SHORT: return HashTableKeyType.SHORT;
-    case INT: return HashTableKeyType.INT;
-    case DATE: return HashTableKeyType.DATE;
-    case LONG: return HashTableKeyType.LONG;
-    case STRING:
-    case CHAR:
-    case VARCHAR:
-    case BINARY: return HashTableKeyType.STRING;
-    default: return HashTableKeyType.MULTI_KEY;
-    }
-  }
-
   private void addCustomUDFs(HiveConf hiveConf) {
     if (hiveConf == null) {
       return;
@@ -3559,7 +3490,9 @@ public class Vectorizer implements PhysicalPlanResolver {
       isInnerBigOnly = true;
     }
 
-    hashTableKeyType = getMapJoinBatchKeyType(desc.getKeys().get((byte) desc.getPosBigTable()));
+    hashTableKeyType = VectorMapJoinBatch.getKeyType(
+        desc.getKeys().get((byte) desc.getPosBigTable()), HiveConf.getBoolVar(hiveConf,
+            HiveConf.ConfVars.HIVE_VECTORIZATION_MAPJOIN_NATIVE_MULTIKEY_ONLY_ENABLED));
 
     switch (joinType) {
     case JoinDesc.INNER_JOIN:

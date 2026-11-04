@@ -17,13 +17,19 @@
  */
 package org.apache.hadoop.hive.ql.exec.vector.mapjoin;
 
+import java.util.List;
+
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
+import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKeyType;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
+import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
 
 /**
  * Wire contract for single-partition map-join inputs. All integers are big endian.
- * A frame starts with an int32 row count. The input plan supplies the key type;
+ * A frame starts with an int32 row count. Each endpoint derives the key type from its schema;
  * frames carry neither a version nor a key encoding ID. Numeric entries contain a
  * one-byte key flag (0 for NULL, any nonzero value for non-NULL), an int32 value length,
  * optional fixed-width key bytes, and existing LazyBinary value bytes. Producers write
@@ -44,8 +50,8 @@ import org.apache.hadoop.io.BytesWritable;
  * supplied to the existing long insertion API. General loaders reconstruct ordinary
  * BinarySortable keys and use their containers' existing hashing and insertion paths.</p>
  *
- * <p>Native vector reduce sinks connected to map-join small-table inputs are marked by
- * the planner. Producers require one unordered output partition, no key tag, and no TopN
+ * <p>Reduce sinks are marked as map-join outputs when small-table edges are connected.
+ * Native vector producers require one unordered output partition, no key tag, and no TopN
  * retention or deferred per-row bucket-number expression. After key/value expressions,
  * active rows are appended in logical order, respecting selection, repetition and NULLs.
  * Full frames are sent through the normal synchronous writer before reusing scratch
@@ -77,6 +83,30 @@ public final class VectorMapJoinBatch {
   public static boolean isBatchKey(BytesWritable key) {
     return key.getLength() == KEY_BYTES.length
         && key.getBytesRaw()[key.getOffset()] == KEY_BYTES[0];
+  }
+
+  /** Shared wire encoding and native table family selection from the declared join keys. */
+  public static HashTableKeyType getKeyType(List<ExprNodeDesc> keys, boolean multiKeyOnly) {
+    if (multiKeyOnly || keys.size() != 1) {
+      return HashTableKeyType.MULTI_KEY;
+    }
+    TypeInfo typeInfo = keys.get(0).getTypeInfo();
+    if (typeInfo.getCategory() != Category.PRIMITIVE) {
+      return HashTableKeyType.MULTI_KEY;
+    }
+    switch (((PrimitiveTypeInfo) typeInfo).getPrimitiveCategory()) {
+    case BOOLEAN: return HashTableKeyType.BOOLEAN;
+    case BYTE: return HashTableKeyType.BYTE;
+    case SHORT: return HashTableKeyType.SHORT;
+    case INT: return HashTableKeyType.INT;
+    case DATE: return HashTableKeyType.DATE;
+    case LONG: return HashTableKeyType.LONG;
+    case STRING:
+    case CHAR:
+    case VARCHAR:
+    case BINARY: return HashTableKeyType.STRING;
+    default: return HashTableKeyType.MULTI_KEY;
+    }
   }
 
   static int numericWidth(HashTableKeyType keyType) {

@@ -264,11 +264,9 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
 
       try {
         KeyValueReaderEdge kvReader = (KeyValueReaderEdge) input.getReader();
-        boolean batchInput = desc.getVectorMapJoinBatchKeyType(pos) != null;
         HashTableKeyType keyType = ((VectorMapJoinDesc) desc.getVectorDesc()).getHashTableKeyType();
         boolean nativeLongKey = keyType != HashTableKeyType.STRING && keyType != HashTableKeyType.MULTI_KEY;
-        VectorMapJoinBatchDeserializer batchReader = batchInput
-            ? new VectorMapJoinBatchDeserializer(keyType) : null;
+        VectorMapJoinBatchDeserializer batchReader = new VectorMapJoinBatchDeserializer(keyType);
 
         Long keyCountObj = parentKeyCounts.get(pos);
         long estKeyCount = (keyCountObj == null) ? -1 : keyCountObj;
@@ -305,9 +303,6 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
 
           boolean isBatch = VectorMapJoinBatch.isBatchKey(currentKey);
           if (isBatch) {
-            if (!batchInput) {
-              throw new IOException("Unexpected map-join batch for input " + inputName);
-            }
             batchReader.set(currentValue);
           }
           do {

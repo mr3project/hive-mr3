@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.TerminalOperator;
 import org.apache.hadoop.hive.ql.exec.TopNHash;
@@ -453,7 +454,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
    */
   private boolean tryCollectMapJoinBatch(VectorizedRowBatch batch, int tag)
       throws HiveException, IOException {
-    if (conf.getVectorMapJoinBatchKeyType() == null || reducerHash != null || out == null
+    if (!conf.isMapJoinOutput() || reducerHash != null || out == null
         || !isMapJoinBatchEligible() || out.getNumUnorderedPartitions() != 1
         || (tag != -1 && !reduceSkipTag)) {
       return false;
@@ -467,7 +468,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
     if (mapJoinBatchSerializer == null) {
       mapJoinBatchSerializer = new VectorMapJoinBatchSerializer(
-          conf.getVectorMapJoinBatchKeyType(),
+          VectorMapJoinBatch.getKeyType(conf.getKeyCols(), HiveConf.getBoolVar(getConfiguration(),
+              HiveConf.ConfVars.HIVE_VECTORIZATION_MAPJOIN_NATIVE_MULTIKEY_ONLY_ENABLED)),
           isEmptyKey ? new TypeInfo[0] : reduceSinkKeyTypeInfos,
           isEmptyKey ? new int[0] : reduceSinkKeyColumnMap,
           conf.getKeySerializeInfo().getProperties(),
@@ -938,7 +940,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     out = null;
     reducerHash = null;
     mapJoinBatchSerializer = null;
-    if (!abort && conf.getVectorMapJoinBatchKeyType() != null) {
+    if (!abort && conf.isMapJoinOutput()) {
       LOG.info("Map-join batch frames: {}, oversized ordinary rows: {}",
           mapJoinBatchFrames, mapJoinOversizedRows);
     }

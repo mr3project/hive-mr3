@@ -37,7 +37,6 @@ import org.apache.hadoop.hive.ql.exec.persistence.MapJoinObjectSerDeContext;
 import org.apache.hadoop.hive.ql.plan.Explain.Level;
 import org.apache.hadoop.hive.ql.plan.Explain.Vectorization;
 import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableImplementationType;
-import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKeyType;
 import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.VectorMapJoinVariation;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
 import org.apache.hadoop.hive.serde2.SerDeException;
@@ -69,8 +68,6 @@ public class MapJoinDesc extends JoinDesc implements Serializable {
   private Map<Integer, String> parentToInput = new HashMap<Integer, String>();
   private Map<Integer, Long> parentKeyCounts = new HashMap<Integer, Long>();
   private Map<Integer, Long> parentDataSizes = new HashMap<Integer, Long>();
-  // Wire key encodings for inputs that may contain map-join entry batches.
-  private Map<Integer, HashTableKeyType> vectorMapJoinBatchInputs = new LinkedHashMap<>();
 
   // table alias (small) --> input file name (big) --> target file names (small)
   private Map<String, Map<String, List<String>>> aliasBucketFileNameMapping;
@@ -113,7 +110,6 @@ public class MapJoinDesc extends JoinDesc implements Serializable {
     this.parentToInput = clone.parentToInput;
     this.parentKeyCounts = clone.parentKeyCounts;
     this.parentDataSizes = clone.parentDataSizes;
-    this.vectorMapJoinBatchInputs = new LinkedHashMap<>(clone.vectorMapJoinBatchInputs);
     this.isBucketMapJoin = clone.isBucketMapJoin;
     this.isHybridHashJoin = clone.isHybridHashJoin;
     this.cacheKey = clone.cacheKey;
@@ -159,18 +155,6 @@ public class MapJoinDesc extends JoinDesc implements Serializable {
 
   public void setParentToInput(Map<Integer, String> parentToInput) {
     this.parentToInput = parentToInput;
-  }
-
-  public HashTableKeyType getVectorMapJoinBatchKeyType(int pos) {
-    return vectorMapJoinBatchInputs.get(pos);
-  }
-
-  public void setVectorMapJoinBatchInput(int pos, HashTableKeyType keyType) {
-    vectorMapJoinBatchInputs.put(pos, keyType);
-  }
-
-  public void clearVectorMapJoinBatchInputs() {
-    vectorMapJoinBatchInputs.clear();
   }
 
   public Map<Integer, Long> getParentKeyCounts() {
