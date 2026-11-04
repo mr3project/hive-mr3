@@ -325,7 +325,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
             if (isBatch) {
               h = batchReader.createEntry();
             } else {
-              h = new VectorMapJoinBatchEntry(tableContainer.getHashCode(currentKey),
+              h = new VectorMapJoinBatchEntry(tableContainer.getHashCode(currentKey), false, false, 0,
                   currentKey.getBytesRaw(), currentKey.getOffset(), currentKey.getLength(),
                   currentValue.getBytesRaw(), currentValue.getOffset(), currentValue.getLength());
             }

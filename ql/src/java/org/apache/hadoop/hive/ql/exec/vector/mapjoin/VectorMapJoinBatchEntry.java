@@ -31,13 +31,7 @@ public final class VectorMapJoinBatchEntry {
   public final byte[] valueBytes;
   public final int valueOffset, valueLength;
 
-  public VectorMapJoinBatchEntry(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
-      byte[] valueBytes, int valueOffset, int valueLength) {
-    this(hashCode, false, false, 0, keyBytes, keyOffset, keyLength,
-        valueBytes, valueOffset, valueLength);
-  }
-
-  VectorMapJoinBatchEntry(long hashCode, boolean nativeKey, boolean isNull, long longKey,
+  public VectorMapJoinBatchEntry(long hashCode, boolean nativeKey, boolean isNull, long longKey,
       byte[] keyBytes, int keyOffset, int keyLength,
       byte[] valueBytes, int valueOffset, int valueLength) {
     this.hashCode = hashCode;
