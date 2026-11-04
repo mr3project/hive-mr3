@@ -272,40 +272,24 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
           BytesWritable currentKey = kvReader.getCurrentKey();
           BytesWritable currentValue = kvReader.getCurrentValue();
           boolean isBatch = VectorMapJoinBatch.isBatchKey(currentKey);
+          int logicalRows = 1;
           if (isBatch) {
             batchReader.set(currentValue);
-          }
-          do {
-            if (isBatch) {
-              if (!batchReader.next()) {
-                break;
-              }
+            logicalRows = batchReader.getRowCount();
+            int row = 0;
+            while (batchReader.next()) {
               batchValue.setDirect(batchReader.getBytes(), batchReader.getValueOffset(),
                   batchReader.getValueLength());
               tableContainer.putRow(batchKeyReader.getKey(batchReader), batchValue);
-            } else {
-              tableContainer.putRow(currentKey, currentValue);
+              checkLoadProgress(tableContainer, inputName, numEntries + ++row,
+                  interruptCheckInterval, doMemCheck, memoryMonitorInfo, effectiveThreshold);
             }
-            numEntries++;
-            if ((numEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
-              throw new InterruptedException("Hash table loading interrupted");
-            }
-            if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
-              final long estMemUsage = tableContainer.getEstimatedMemorySize();
-              if (estMemUsage > effectiveThreshold) {
-                String msg = "Hash table loading exceeded memory limits for input: " + inputName +
-                  " numEntries: " + numEntries + " estimatedMemoryUsage: " + estMemUsage +
-                  " effectiveThreshold: " + effectiveThreshold + " memoryMonitorInfo: " + memoryMonitorInfo;
-                LOG.error(msg);
-                throw new MapJoinMemoryExhaustionError(msg);
-              } else {
-                if (LOG.isDebugEnabled()) { LOG.debug(
-                    "Checking hash table loader memory usage for input: {} numEntries: {} "
-                        + "estimatedMemoryUsage: {} effectiveThreshold: {}",
-                    inputName, numEntries, estMemUsage, effectiveThreshold); }
-              }
-            }
-          } while (isBatch);
+          } else {
+            tableContainer.putRow(currentKey, currentValue);
+            checkLoadProgress(tableContainer, inputName, numEntries + 1,
+                interruptCheckInterval, doMemCheck, memoryMonitorInfo, effectiveThreshold);
+          }
+          numEntries += logicalRows;
         }
         long delta = System.currentTimeMillis() - startTime;
         htLoadCounter.increment(delta);
@@ -321,6 +305,28 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
         }
       } catch (Exception e) {
         throw new HiveException(e);
+      }
+    }
+  }
+
+  private static void checkLoadProgress(MapJoinTableContainer tableContainer, String inputName,
+      long numEntries, long interruptCheckInterval, boolean doMemCheck,
+      MemoryMonitorInfo memoryMonitorInfo, long effectiveThreshold) throws InterruptedException {
+    if ((numEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
+      throw new InterruptedException("Hash table loading interrupted");
+    }
+    if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
+      final long estMemUsage = tableContainer.getEstimatedMemorySize();
+      if (estMemUsage > effectiveThreshold) {
+        String msg = "Hash table loading exceeded memory limits for input: " + inputName +
+            " numEntries: " + numEntries + " estimatedMemoryUsage: " + estMemUsage +
+            " effectiveThreshold: " + effectiveThreshold + " memoryMonitorInfo: " + memoryMonitorInfo;
+        LOG.error(msg);
+        throw new MapJoinMemoryExhaustionError(msg);
+      } else if (LOG.isDebugEnabled()) {
+        LOG.debug("Checking hash table loader memory usage for input: {} numEntries: {} "
+            + "estimatedMemoryUsage: {} effectiveThreshold: {}",
+            inputName, numEntries, estMemUsage, effectiveThreshold);
       }
     }
   }

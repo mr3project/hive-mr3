@@ -312,49 +312,26 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
           // currentKey, currentValue: backing byte[] arrays of BytesWritable are immutable.
           BytesWritable currentKey = kvReader.getCurrentKey();
           BytesWritable currentValue = kvReader.getCurrentValue();
-
           boolean isBatch = VectorMapJoinBatch.isBatchKey(currentKey);
+          int logicalRows = 1;
           if (isBatch) {
             batchReader.set(currentValue);
+            logicalRows = batchReader.getRowCount();
+            int row = 0;
+            while (batchReader.next()) {
+              queueEntry(batchReader.createEntry());
+              checkLoadProgress(tableContainer, inputName, receivedEntries + ++row,
+                  interruptCheckInterval, doMemCheck, memoryMonitorInfo, effectiveThreshold);
+            }
+          } else {
+            queueEntry(new VectorMapJoinBatchEntry(tableContainer.getHashCode(currentKey),
+                false, false, 0, currentKey.getBytesRaw(), currentKey.getOffset(),
+                currentKey.getLength(), currentValue.getBytesRaw(), currentValue.getOffset(),
+                currentValue.getLength()));
+            checkLoadProgress(tableContainer, inputName, receivedEntries + 1,
+                interruptCheckInterval, doMemCheck, memoryMonitorInfo, effectiveThreshold);
           }
-          do {
-            if (isBatch && !batchReader.next()) {
-              break;
-            }
-            VectorMapJoinBatchEntry h;
-            if (isBatch) {
-              h = batchReader.createEntry();
-            } else {
-              h = new VectorMapJoinBatchEntry(tableContainer.getHashCode(currentKey), false, false, 0,
-                  currentKey.getBytesRaw(), currentKey.getOffset(), currentKey.getLength(),
-                  currentValue.getBytesRaw(), currentValue.getOffset(), currentValue.getLength());
-            }
-
-            int partitionId = (int) ((numLoadThreads - 1) & h.hashCode);
-            if (elementBatches[partitionId].addElement(h)) {
-              loadBatchQueues[partitionId].add(elementBatches[partitionId]);
-              elementBatches[partitionId] = batchPool.take();
-            }
-            receivedEntries++;
-            if ((receivedEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
-              throw new InterruptedException("Hash table loading interrupted");
-            }
-            if (doMemCheck && (receivedEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
-              final long estMemUsage = tableContainer.getEstimatedMemorySize();
-              if (estMemUsage > effectiveThreshold) {
-                String msg = "Hash table loading exceeded memory limits for input: " + inputName +
-                    " numEntries: " + receivedEntries + " estimatedMemoryUsage: " + estMemUsage +
-                    " effectiveThreshold: " + effectiveThreshold + " memoryMonitorInfo: " + memoryMonitorInfo;
-                LOG.error(msg);
-                throw new MapJoinMemoryExhaustionError(msg);
-              } else {
-                if (LOG.isDebugEnabled()) { LOG.debug(
-                    "Checking hash table loader memory usage for input: {} numEntries: {} "
-                        + "estimatedMemoryUsage: {} effectiveThreshold: {}",
-                    inputName, receivedEntries, estMemUsage, effectiveThreshold); }
-              }
-            }
-          } while (isBatch);
+          receivedEntries += logicalRows;
         }
 
         LOG.info("Finished loading the queue for input: {} waiting {} minutes for TPool shutdown", inputName, 2);
@@ -395,6 +372,36 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
         if (loadExecService != null && !loadExecService.isTerminated()) {
           loadExecService.shutdownNow();
         }
+      }
+    }
+  }
+
+  private void queueEntry(VectorMapJoinBatchEntry entry) {
+    int partitionId = (int) ((numLoadThreads - 1) & entry.hashCode);
+    if (elementBatches[partitionId].addElement(entry)) {
+      loadBatchQueues[partitionId].add(elementBatches[partitionId]);
+      elementBatches[partitionId] = batchPool.take();
+    }
+  }
+
+  private static void checkLoadProgress(VectorMapJoinFastTableContainer tableContainer, String inputName,
+      long numEntries, long interruptCheckInterval, boolean doMemCheck,
+      MemoryMonitorInfo memoryMonitorInfo, long effectiveThreshold) throws InterruptedException {
+    if ((numEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
+      throw new InterruptedException("Hash table loading interrupted");
+    }
+    if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
+      final long estMemUsage = tableContainer.getEstimatedMemorySize();
+      if (estMemUsage > effectiveThreshold) {
+        String msg = "Hash table loading exceeded memory limits for input: " + inputName +
+            " numEntries: " + numEntries + " estimatedMemoryUsage: " + estMemUsage +
+            " effectiveThreshold: " + effectiveThreshold + " memoryMonitorInfo: " + memoryMonitorInfo;
+        LOG.error(msg);
+        throw new MapJoinMemoryExhaustionError(msg);
+      } else if (LOG.isDebugEnabled()) {
+        LOG.debug("Checking hash table loader memory usage for input: {} numEntries: {} "
+            + "estimatedMemoryUsage: {} effectiveThreshold: {}",
+            inputName, numEntries, estMemUsage, effectiveThreshold);
       }
     }
   }
