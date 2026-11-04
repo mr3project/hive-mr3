@@ -276,20 +276,17 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
           if (isBatch) {
             batchReader.set(currentValue);
             logicalRows = batchReader.getRowCount();
-            int row = 0;
             while (batchReader.next()) {
               batchValue.setDirect(batchReader.getBytes(), batchReader.getValueOffset(),
                   batchReader.getValueLength());
               tableContainer.putRow(batchKeyReader.getKey(batchReader), batchValue);
-              checkLoadProgress(tableContainer, inputName, numEntries + ++row,
-                  interruptCheckInterval, doMemCheck, memoryMonitorInfo, effectiveThreshold);
             }
           } else {
             tableContainer.putRow(currentKey, currentValue);
-            checkLoadProgress(tableContainer, inputName, numEntries + 1,
-                interruptCheckInterval, doMemCheck, memoryMonitorInfo, effectiveThreshold);
           }
           numEntries += logicalRows;
+          checkLoadProgress(tableContainer, inputName, numEntries, logicalRows,
+              interruptCheckInterval, doMemCheck, memoryMonitorInfo, effectiveThreshold);
         }
         long delta = System.currentTimeMillis() - startTime;
         htLoadCounter.increment(delta);
@@ -310,12 +307,13 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
   }
 
   private static void checkLoadProgress(MapJoinTableContainer tableContainer, String inputName,
-      long numEntries, long interruptCheckInterval, boolean doMemCheck,
+      long numEntries, int logicalRows, long interruptCheckInterval, boolean doMemCheck,
       MemoryMonitorInfo memoryMonitorInfo, long effectiveThreshold) throws InterruptedException {
-    if ((numEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
+    // A frame can cross a check interval without ending exactly on its boundary.
+    if ((numEntries % interruptCheckInterval < logicalRows) && Thread.interrupted()) {
       throw new InterruptedException("Hash table loading interrupted");
     }
-    if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
+    if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() < logicalRows)) {
       final long estMemUsage = tableContainer.getEstimatedMemorySize();
       if (estMemUsage > effectiveThreshold) {
         String msg = "Hash table loading exceeded memory limits for input: " + inputName +
@@ -323,10 +321,6 @@ public class HashTableLoader implements org.apache.hadoop.hive.ql.exec.HashTable
             " effectiveThreshold: " + effectiveThreshold + " memoryMonitorInfo: " + memoryMonitorInfo;
         LOG.error(msg);
         throw new MapJoinMemoryExhaustionError(msg);
-      } else if (LOG.isDebugEnabled()) {
-        LOG.debug("Checking hash table loader memory usage for input: {} numEntries: {} "
-            + "estimatedMemoryUsage: {} effectiveThreshold: {}",
-            inputName, numEntries, estMemUsage, effectiveThreshold);
       }
     }
   }

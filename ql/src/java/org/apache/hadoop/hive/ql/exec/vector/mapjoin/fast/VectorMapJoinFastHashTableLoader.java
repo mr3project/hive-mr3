@@ -317,21 +317,18 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
           if (isBatch) {
             batchReader.set(currentValue);
             logicalRows = batchReader.getRowCount();
-            int row = 0;
             while (batchReader.next()) {
               queueEntry(batchReader.createEntry());
-              checkLoadProgress(tableContainer, inputName, receivedEntries + ++row,
-                  interruptCheckInterval, doMemCheck, memoryMonitorInfo, effectiveThreshold);
             }
           } else {
             queueEntry(new VectorMapJoinBatchEntry(tableContainer.getHashCode(currentKey),
                 false, false, 0, currentKey.getBytesRaw(), currentKey.getOffset(),
                 currentKey.getLength(), currentValue.getBytesRaw(), currentValue.getOffset(),
                 currentValue.getLength()));
-            checkLoadProgress(tableContainer, inputName, receivedEntries + 1,
-                interruptCheckInterval, doMemCheck, memoryMonitorInfo, effectiveThreshold);
           }
           receivedEntries += logicalRows;
+          checkLoadProgress(tableContainer, inputName, receivedEntries, logicalRows,
+              interruptCheckInterval, doMemCheck, memoryMonitorInfo, effectiveThreshold);
         }
 
         LOG.info("Finished loading the queue for input: {} waiting {} minutes for TPool shutdown", inputName, 2);
@@ -385,12 +382,13 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
   }
 
   private static void checkLoadProgress(VectorMapJoinFastTableContainer tableContainer, String inputName,
-      long numEntries, long interruptCheckInterval, boolean doMemCheck,
+      long numEntries, int logicalRows, long interruptCheckInterval, boolean doMemCheck,
       MemoryMonitorInfo memoryMonitorInfo, long effectiveThreshold) throws InterruptedException {
-    if ((numEntries % interruptCheckInterval == 0) && Thread.interrupted()) {
+    // A frame can cross a check interval without ending exactly on its boundary.
+    if ((numEntries % interruptCheckInterval < logicalRows) && Thread.interrupted()) {
       throw new InterruptedException("Hash table loading interrupted");
     }
-    if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() == 0)) {
+    if (doMemCheck && (numEntries % memoryMonitorInfo.getMemoryCheckInterval() < logicalRows)) {
       final long estMemUsage = tableContainer.getEstimatedMemorySize();
       if (estMemUsage > effectiveThreshold) {
         String msg = "Hash table loading exceeded memory limits for input: " + inputName +
@@ -398,10 +396,6 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
             " effectiveThreshold: " + effectiveThreshold + " memoryMonitorInfo: " + memoryMonitorInfo;
         LOG.error(msg);
         throw new MapJoinMemoryExhaustionError(msg);
-      } else if (LOG.isDebugEnabled()) {
-        LOG.debug("Checking hash table loader memory usage for input: {} numEntries: {} "
-            + "estimatedMemoryUsage: {} effectiveThreshold: {}",
-            inputName, numEntries, estMemUsage, effectiveThreshold);
       }
     }
   }
