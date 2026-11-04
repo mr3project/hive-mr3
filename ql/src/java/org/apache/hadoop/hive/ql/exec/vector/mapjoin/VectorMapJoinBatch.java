@@ -28,44 +28,29 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
 
 /**
- * Wire contract for single-partition map-join inputs. All integers are big endian.
- * A frame starts with an int32 row count. Each endpoint derives the key type from its schema;
- * frames carry neither a version nor a key encoding ID. Numeric entries contain a
- * one-byte key flag (0 for NULL, any nonzero value for non-NULL), an int32 value length,
- * optional fixed-width key bytes, and existing LazyBinary value bytes. Producers write
- * 1 for non-NULL keys. Other entries contain int32 key and value lengths followed by
- * key bytes and LazyBinary value bytes. A key length of -1 denotes a STRING-family NULL
- * with no key bytes; multi-keys always retain BinarySortable bytes, including NULL
- * markers. Numeric keys use their declared signed width (booleans use canonical 0/1);
- * strings carry their exact logical bytes.
+ * Frames for single-partition map-join inputs. Integers are big endian; endpoints derive
+ * the key family from their schemas and the multikey-only setting. No hashes are transmitted.
  *
- * <p>Encoding follows the native FAST key-family selection, including the multikey-only
- * setting. The STRING family includes CHAR, VARCHAR and BINARY; MULTI_KEY may describe
- * a single column. Numeric
- * keys undergo the same narrowing/boolean normalization as ordinary serialization.
- * FAST receivers calculate numeric hashes from decoded keys, and byte-family hashes over
- * raw bytes for STRING and BinarySortable bytes for MULTI_KEY. Scalar NULL hashes are
- * zero. These hashes are computed once per entry at the receiver, not transmitted.
- * They are table hashes, not shuffle hashes; the signed int32 is sign-extended when
- * supplied to the existing long insertion API. General loaders reconstruct ordinary
- * BinarySortable keys and use their containers' existing hashing and insertion paths.</p>
+ * <pre>
+ * Record key:   [0x03]
+ * Record value: [rowCount:i32][entry 0] ... [entry rowCount-1]
  *
- * <p>Reduce sinks are marked as map-join outputs when small-table edges are connected.
- * Native vector producers require one unordered output partition, no key tag, and no TopN
- * retention or deferred per-row bucket-number expression. After key/value expressions,
- * active rows are appended in logical order, respecting selection, repetition and NULLs.
- * Full frames are sent through the normal synchronous writer before reusing scratch
- * storage. Singleton input batches and oversized rows retain ordinary record encoding.
- * The row limit uses DEFAULT_SIZE; the byte limit is independent of the shuffle writer's
- * current buffer. The single-partition writer does not offer direct value-buffer requests.</p>
+ * Entry layouts (value bytes are always LazyBinary):
+ * Numeric:      [1:u8][valueLength:i32][key:W bytes][value bytes]
+ * Numeric NULL: [0:u8][valueLength:i32]             [value bytes]
+ * STRING:       [keyLength:i32][valueLength:i32][raw key bytes][value bytes]
+ * STRING NULL:  [-1:i32]       [valueLength:i32]               [value bytes]
+ * MULTI_KEY:    [keyLength:i32][valueLength:i32][BinarySortable key][value bytes]
+ * </pre>
  *
- * <p>Loaders accept mixed ordinary records and frames. FAST entry descriptors retain
- * immutable Tez backing arrays and primitive offsets, and route using the computed hash
- * and the receiver's own loading-thread count. Native insertion reuses the existing table cores,
- * preserving duplicates, full-outer NULL handling and numeric min/max tracking. All table
- * kinds retain uniform LazyBinary values in this protocol. Each logical row contributes
- * to progress and memory checks. Initial sizing uses the planner's key estimate and
- * the runtime logical-record estimate without multiplying by frame size.</p>
+ * <p>Numeric width W is 1 for BOOLEAN/BYTE, 2 for SHORT, 4 for INT/DATE, and 8 for LONG.
+ * Keys use their declared signed width; BOOLEAN values are normalized to 0/1. Producers
+ * write flag 1 for non-NULL; readers accept any nonzero flag. STRING includes CHAR,
+ * VARCHAR and BINARY. MULTI_KEY retains embedded NULL markers and may encode one column.</p>
+ *
+ * <p>Frames are bounded by {@link #MAX_ROWS} and {@link #MAX_BYTES}. Loaders accept frames
+ * mixed with ordinary records, including singleton input batches and oversized rows.
+ * FAST loaders insert native keys directly; general loaders restore BinarySortable keys.</p>
  */
 public final class VectorMapJoinBatch {
   // Ordinary BinarySortable keys start with a NULL/non-NULL marker, not 0x03.
