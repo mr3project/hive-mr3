@@ -23,7 +23,10 @@ import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKeyType;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hive.common.util.HashCodeUtil;
 
-/** Parses immutable frame slices without copying keys or values. Getter state lasts until next(). */
+/**
+ * Parses immutable frame slices without copying keys or values.
+ * Getter state lasts until next().
+ */
 public final class VectorMapJoinBatchDeserializer {
   private final HashTableKeyType keyType;
   private final int numericKeyWidth;
@@ -122,6 +125,15 @@ public final class VectorMapJoinBatchDeserializer {
         | ((bytes[position + 2] & 0xff) << 8) | (bytes[position + 3] & 0xff);
     position += Integer.BYTES;
     return result;
+  }
+
+  /**
+   * Capture the current entry for asynchronous loading without copying its payload.
+   * The descriptor retains backing arrays and primitive values independently of reader reuse.
+   */
+  public VectorMapJoinBatchEntry createEntry() {
+    return new VectorMapJoinBatchEntry(getHashCode(), true, isNull, longKey,
+        bytes, keyOffset, isNull ? 0 : keyLength, bytes, valueOffset, valueLength);
   }
 
   public int getRowCount() { return rowCount; }

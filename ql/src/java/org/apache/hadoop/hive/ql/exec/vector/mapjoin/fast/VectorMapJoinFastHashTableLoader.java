@@ -40,6 +40,7 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatch;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatchDeserializer;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatchEntry;
 import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionError;
 import org.apache.hive.common.util.FixedSizedObjectPool;
 import org.apache.tez.common.counters.TaskCounter;
@@ -196,8 +197,17 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       LOG.debug("Draining thread {} batchSize {}", partitionId, batch.getSize());
       for (int i = 0; i < batch.getSize(); i++) {
         try {
-          HashTableElement h = batch.getBatch(i);
-          h.putRow(tableContainer, nativeLongKey);
+          VectorMapJoinBatchEntry h = batch.getBatch(i);
+          BytesWritable value = new BytesWritable(h.valueBytes, h.valueOffset, h.valueLength);
+          if (!h.nativeKey) {
+            tableContainer.putRow(h.hashCode,
+                new BytesWritable(h.keyBytes, h.keyOffset, h.keyLength), value);
+          } else if (nativeLongKey) {
+            tableContainer.putRowNative(h.hashCode, h.longKey, h.isNull, value);
+          } else {
+            tableContainer.putRowNative(h.hashCode,
+                h.keyBytes, h.keyOffset, h.keyLength, h.isNull, value);
+          }
         }
         catch (Exception e) {
           throw new HiveException("Exception in draining thread put row", e);
@@ -311,11 +321,11 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
             if (isBatch && !batchReader.next()) {
               break;
             }
-            HashTableElement h;
+            VectorMapJoinBatchEntry h;
             if (isBatch) {
-              h = new HashTableElement(batchReader);
+              h = batchReader.createEntry();
             } else {
-              h = new HashTableElement(tableContainer.getHashCode(currentKey),
+              h = new VectorMapJoinBatchEntry(tableContainer.getHashCode(currentKey),
                   currentKey.getBytesRaw(), currentKey.getOffset(), currentKey.getLength(),
                   currentValue.getBytesRaw(), currentValue.getOffset(), currentValue.getLength());
             }
@@ -389,78 +399,23 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
     }
   }
 
-  private static class HashTableElement {
-    private final long hashCode;
-    private final boolean nativeKey;
-    private final boolean isNull;
-    private final long longKey;
-    private final byte[] keyBytes;
-    private final int keyOffset, keyLength;
-    private final byte[] valueBytes;
-    private final int valueOffset, valueLength;
-
-    public HashTableElement(long hashCode,
-                            byte[] keyBytes, int keyOffset, int keyLength,
-                            byte[] valueBytes, int valueOffset, int valueLength) {
-      this.hashCode = hashCode;
-      this.nativeKey = false;
-      this.isNull = false;
-      this.longKey = 0;
-
-      this.keyBytes = keyBytes;
-      this.keyOffset = keyOffset;
-      this.keyLength = keyLength;
-
-      this.valueBytes = valueBytes;
-      this.valueOffset = valueOffset;
-      this.valueLength = valueLength;
-    }
-
-    public HashTableElement(VectorMapJoinBatchDeserializer reader) {
-      // Capture immutable backing storage and primitive offsets. The reader and its
-      // BytesWritable wrappers may be reused while this entry waits on a load queue.
-      this.hashCode = reader.getHashCode();
-      this.nativeKey = true;
-      this.isNull = reader.isNull();
-      this.longKey = reader.getLongKey();
-      this.keyBytes = reader.getBytes();
-      this.keyOffset = reader.getKeyOffset();
-      this.keyLength = reader.getKeyLength();
-      this.valueBytes = reader.getBytes();
-      this.valueOffset = reader.getValueOffset();
-      this.valueLength = reader.getValueLength();
-    }
-
-    public void putRow(VectorMapJoinFastTableContainer tableContainer, boolean nativeLongKey)
-        throws IOException, HiveException, SerDeException {
-      BytesWritable value = new BytesWritable(valueBytes, valueOffset, valueLength);
-      if (!nativeKey) {
-        tableContainer.putRow(hashCode, new BytesWritable(keyBytes, keyOffset, keyLength), value);
-      } else if (nativeLongKey) {
-        tableContainer.putRowNative(hashCode, longKey, isNull, value);
-      } else {
-        tableContainer.putRowNative(hashCode, keyBytes, keyOffset, keyLength, isNull, value);
-      }
-    }
-  }
-
   private static class HashTableElementBatch {
     private static final int BATCH_SIZE = VectorizedRowBatch.DEFAULT_SIZE;
-    private final HashTableElement[] batch;
+    private final VectorMapJoinBatchEntry[] batch;
     private int currentIndex;
 
     public HashTableElementBatch() {
-      this.batch = new HashTableElement[BATCH_SIZE];
+      this.batch = new VectorMapJoinBatchEntry[BATCH_SIZE];
       this.currentIndex = 0;
     }
 
-    public boolean addElement(HashTableElement h) {
+    public boolean addElement(VectorMapJoinBatchEntry h) {
       assert currentIndex < BATCH_SIZE;
       this.batch[this.currentIndex++] = h;
       return (this.currentIndex == BATCH_SIZE);
     }
 
-    public HashTableElement getBatch(int i) {
+    public VectorMapJoinBatchEntry getBatch(int i) {
       return this.batch[i];
     }
 
