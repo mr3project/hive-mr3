@@ -162,7 +162,8 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
     }
   }
 
-  private void submitQueueDrainThreads(VectorMapJoinFastTableContainer vectorMapJoinFastTableContainer)
+  private void submitQueueDrainThreads(VectorMapJoinFastTableContainer vectorMapJoinFastTableContainer,
+      boolean nativeLongKey)
       throws InterruptedException, IOException, SerDeException {
     for (int partitionId = 0; partitionId < numLoadThreads; partitionId++) {
       int finalPartitionId = partitionId;
@@ -172,7 +173,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
           org.apache.tez.runtime.library.common.shuffle.ShuffleUtils.restoreMdc(
               tezContext.getTezProcessorContext().getMdcContext());
           LOG.info("Partition id {} with Queue size {}", finalPartitionId, loadBatchQueues[finalPartitionId].size());
-          drainAndLoadForPartition(finalPartitionId, vectorMapJoinFastTableContainer);
+          drainAndLoadForPartition(finalPartitionId, vectorMapJoinFastTableContainer, nativeLongKey);
         } catch (IOException | InterruptedException | SerDeException | HiveException e) {
           throw new RuntimeException("Failed to start HT Load threads", e);
         } finally {
@@ -182,7 +183,8 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
     }
   }
 
-  private void drainAndLoadForPartition(int partitionId, VectorMapJoinFastTableContainer tableContainer)
+  private void drainAndLoadForPartition(int partitionId, VectorMapJoinFastTableContainer tableContainer,
+      boolean nativeLongKey)
       throws InterruptedException, IOException, HiveException, SerDeException {
     LOG.info("Starting draining thread {}", partitionId);
     long totalProcessedEntries = 0;
@@ -195,7 +197,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       for (int i = 0; i < batch.getSize(); i++) {
         try {
           HashTableElement h = batch.getBatch(i);
-          h.putRow(tableContainer);
+          h.putRow(tableContainer, nativeLongKey);
         }
         catch (Exception e) {
           throw new HiveException("Exception in draining thread put row", e);
@@ -292,7 +294,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
 
         tableContainer.setSerde(null, null); // No SerDes here.
         // Submit parallel loading Threads
-        submitQueueDrainThreads(tableContainer);
+        submitQueueDrainThreads(tableContainer, nativeLongKey);
 
         long receivedEntries = 0;
         long startTime = System.currentTimeMillis();
@@ -311,7 +313,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
             }
             HashTableElement h;
             if (isBatch) {
-              h = new HashTableElement(batchReader, nativeLongKey);
+              h = new HashTableElement(batchReader);
             } else {
               h = new HashTableElement(tableContainer.getHashCode(currentKey),
                   currentKey.getBytesRaw(), currentKey.getOffset(), currentKey.getLength(),
@@ -390,7 +392,6 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
   private static class HashTableElement {
     private final long hashCode;
     private final boolean nativeKey;
-    private final boolean nativeLongKey;
     private final boolean isNull;
     private final long longKey;
     private final byte[] keyBytes;
@@ -403,7 +404,6 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
                             byte[] valueBytes, int valueOffset, int valueLength) {
       this.hashCode = hashCode;
       this.nativeKey = false;
-      this.nativeLongKey = false;
       this.isNull = false;
       this.longKey = 0;
 
@@ -416,14 +416,13 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       this.valueLength = valueLength;
     }
 
-    public HashTableElement(VectorMapJoinBatchDeserializer reader, boolean nativeLongKey) {
+    public HashTableElement(VectorMapJoinBatchDeserializer reader) {
       // Capture immutable backing storage and primitive offsets. The reader and its
       // BytesWritable wrappers may be reused while this entry waits on a load queue.
       this.hashCode = reader.getHashCode();
       this.nativeKey = true;
-      this.nativeLongKey = nativeLongKey;
       this.isNull = reader.isNull();
-      this.longKey = nativeLongKey ? reader.getLongKey() : 0;
+      this.longKey = reader.getLongKey();
       this.keyBytes = reader.getBytes();
       this.keyOffset = reader.getKeyOffset();
       this.keyLength = reader.getKeyLength();
@@ -432,7 +431,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       this.valueLength = reader.getValueLength();
     }
 
-    public void putRow(VectorMapJoinFastTableContainer tableContainer)
+    public void putRow(VectorMapJoinFastTableContainer tableContainer, boolean nativeLongKey)
         throws IOException, HiveException, SerDeException {
       BytesWritable value = new BytesWritable(valueBytes, valueOffset, valueLength);
       if (!nativeKey) {
