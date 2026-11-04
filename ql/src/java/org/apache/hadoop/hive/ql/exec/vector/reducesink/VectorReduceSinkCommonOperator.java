@@ -139,6 +139,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   // Where to write our key and value pairs.
   private transient TezProcessor.TezKVOutputCollector out;
+  private transient int numOrderedPartitions;
   // This is true only for the current Tez-MR3 LogicalOutputEdge implementations:
   // OrderedPartitionedKVOutput, UnorderedPartitionedKVOutput, and UnorderedKVOutput.
   // All consume/copy value bytes synchronously before a writer call returns.
@@ -154,7 +155,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   protected transient long batchCounter;
 
   private transient boolean vectorShuffleBatchAllowed;
-  private transient int vectorShuffleNumUnorderedPartitions;
 
   private transient VectorMapJoinBatchSerializer mapJoinBatchSerializer;
   private transient HiveKey mapJoinBatchKey;
@@ -357,12 +357,15 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShufflePartitionPositions = null;
     vectorShuffleRowPartitions = null;
     vectorShufflePartitionRowIndices = null;
-    vectorShuffleNumUnorderedPartitions = -1;
+    numOrderedPartitions = Integer.MIN_VALUE;
     vectorShufflePartitionerType = -1;
   }
 
   protected boolean tryCollectVectorShuffleBatch(VectorizedRowBatch batch, int tag)
       throws HiveException, IOException {
+    if (numOrderedPartitions == Integer.MIN_VALUE && out != null) {
+      numOrderedPartitions = out.getNumUnorderedPartitions();
+    }
     if (tryCollectMapJoinBatch(batch, tag)) {
       return true;
     }
@@ -370,10 +373,9 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       return false;
     }
 
-    if (vectorShuffleNumUnorderedPartitions == -1) {  // if this is the first call
-      vectorShuffleNumUnorderedPartitions = out.getNumUnorderedPartitions();
-      if (vectorShuffleNumUnorderedPartitions < 1) {
-        vectorShuffleBatchAllowed = false;  // we never check vectorShuffleNumUnorderedPartitions again
+    if (vectorShuffleBatchSerializer == null) {
+      if (numOrderedPartitions < 1) {
+        vectorShuffleBatchAllowed = false;
         return false;
       }
       initializeVectorShuffleOutputScratch(batch);
@@ -386,7 +388,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       return true;
     }
 
-    if (vectorShuffleNumUnorderedPartitions == 1) {
+    if (numOrderedPartitions == 1) {
       // VectorizedRowBatch.size is the number of active logical rows. When
       // selectedInUse is true, selected[0..size) contains their physical indices.
       final int logicalRecordCount = batch.size;
@@ -406,7 +408,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       return true;
     }
 
-    collectPartitionedVectorShuffleBatch(batch, vectorShuffleNumUnorderedPartitions, tag);
+    collectPartitionedVectorShuffleBatch(batch, numOrderedPartitions, tag);
     return true;
   }
 
@@ -425,7 +427,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     if (reducerHash != null ||          // TopN processing is active
         !isMapJoinBatchEligible() ||    // VectorReduceSinkObjectHashOperator may return false
         // Map-join frames are available only for single-partition output.
-        out.getNumUnorderedPartitions() != 1) {
+        numOrderedPartitions != 1) {
       return false;
     }
     if (batch.size == 0) {
@@ -559,10 +561,10 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   private void initializeVectorShuffleOutputScratch(VectorizedRowBatch batch) throws HiveException {
     assert vectorShuffleBatchSerializer == null;
-    assert vectorShuffleNumUnorderedPartitions >= 1;
+    assert numOrderedPartitions >= 1;
 
     vectorShuffleBatchSerializer = new VectorShuffleBatchSerializer();
-    if (vectorShuffleNumUnorderedPartitions == 1) {
+    if (numOrderedPartitions == 1) {
       vectorShuffleSerializeBuffer = new byte[SERIALIZE_BUFFER_SIZE];
       vectorShuffleBatchValue = new BytesWritable();
     }
@@ -592,17 +594,17 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       vectorShuffleRowKeySerializeRow.init(reduceSinkKeyTypeInfos, reduceSinkKeyColumnMap);
     }
 
-    if (vectorShuffleNumUnorderedPartitions > 1) {
+    if (numOrderedPartitions > 1) {
       vectorShufflePartitionerType = out.getPartitionerType();
 
-      vectorShufflePartitionCounts = new int[vectorShuffleNumUnorderedPartitions];
-      vectorShufflePartitionOffsets = new int[vectorShuffleNumUnorderedPartitions + 1];
-      vectorShufflePartitionPositions = new int[vectorShuffleNumUnorderedPartitions];
+      vectorShufflePartitionCounts = new int[numOrderedPartitions];
+      vectorShufflePartitionOffsets = new int[numOrderedPartitions + 1];
+      vectorShufflePartitionPositions = new int[numOrderedPartitions];
     }
 
     vectorShuffleRowPartitions = new int[VectorizedRowBatch.DEFAULT_SIZE];
     vectorShufflePartitionRowIndices = new int[VectorizedRowBatch.DEFAULT_SIZE];
-    if (vectorShuffleNumUnorderedPartitions > 1) {
+    if (numOrderedPartitions > 1) {
       if (vectorShufflePartitionerType == 0) {
         batchKeyHashCodes = new int[VectorizedRowBatch.DEFAULT_SIZE];
       } else {
@@ -721,7 +723,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
           LOG.debug("{}: records written - {}", this, numRows);
         }
       }
-      if (out.getNumUnorderedPartitions() == 1) {
+      if (numOrderedPartitions == 1) {
         out.writeForSinglePartition(keyWritable, valueWritable, 1);
       } else {
         out.writeWithPartition(keyWritable, valueWritable, partition);
@@ -833,7 +835,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       //     " valueWritable " + valueBytesWritable.getLength() +
       //     VectorizedBatchUtil.displayBytes(valueBytesWritable.getBytes(), 0, valueBytesWritable.getLength()));
 
-      if (out.getNumUnorderedPartitions() == 1) {
+      if (numOrderedPartitions == 1) {
         out.writeForSinglePartition(keyWritable, valueWritable, 1);
       } else {
         out.collect(keyWritable, valueWritable);
