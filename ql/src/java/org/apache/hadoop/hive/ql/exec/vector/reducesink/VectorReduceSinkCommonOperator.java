@@ -37,8 +37,8 @@ import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContextRegion;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationOperator;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
-import org.apache.hadoop.hive.ql.exec.vector.mapjoin.fast.VectorMapJoinFastBatch;
-import org.apache.hadoop.hive.ql.exec.vector.mapjoin.fast.VectorMapJoinFastBatchSerializer;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatch;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatchSerializer;
 import org.apache.hadoop.hive.ql.io.HiveKey;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.BaseWork;
@@ -157,7 +157,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient boolean vectorShuffleBatchAllowed;
   private transient int vectorShuffleNumUnorderedPartitions;
 
-  private transient VectorMapJoinFastBatchSerializer mapJoinBatchSerializer;
+  private transient VectorMapJoinBatchSerializer mapJoinBatchSerializer;
   private transient HiveKey mapJoinBatchKey;
   private transient long mapJoinBatchFrames;
   private transient long mapJoinOversizedRows;
@@ -447,7 +447,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   }
 
   /**
-   * Map-join loaders receive native join entries and compute their table hashes. These frames
+   * Map-join loaders receive framed join entries and compute their own table hashes. These frames
    * use a separate protocol from compact vector shuffle and only target a single output partition.
    * All key/value expressions have been evaluated by the concrete operator before this call.
    */
@@ -466,15 +466,15 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
 
     if (mapJoinBatchSerializer == null) {
-      mapJoinBatchSerializer = new VectorMapJoinFastBatchSerializer(
+      mapJoinBatchSerializer = new VectorMapJoinBatchSerializer(
           conf.getVectorMapJoinBatchKeyType(),
           isEmptyKey ? new TypeInfo[0] : reduceSinkKeyTypeInfos,
           isEmptyKey ? new int[0] : reduceSinkKeyColumnMap,
           conf.getKeySerializeInfo().getProperties(),
           isEmptyValue ? new TypeInfo[0] : reduceSinkValueTypeInfos,
           isEmptyValue ? new int[0] : reduceSinkValueColumnMap);
-      mapJoinBatchKey = new HiveKey(VectorMapJoinFastBatch.KEY_BYTES, 0);
-      mapJoinBatchKey.setDistKeyLength(VectorMapJoinFastBatch.KEY_BYTES.length);
+      mapJoinBatchKey = new HiveKey(VectorMapJoinBatch.KEY_BYTES, 0);
+      mapJoinBatchKey.setDistKeyLength(VectorMapJoinBatch.KEY_BYTES.length);
     }
     assert mapJoinBatchSerializer.getRowCount() == 0;
     clearVectorShuffleRowKeyBatchCache();

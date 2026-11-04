@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hive.ql.exec.vector.mapjoin.fast;
+package org.apache.hadoop.hive.ql.exec.vector.mapjoin;
 
 import java.io.IOException;
 import java.util.Properties;
@@ -36,7 +36,7 @@ import org.apache.hadoop.io.BytesWritable;
 import com.google.common.base.Preconditions;
 
 /** Builds bounded join-entry frames directly from evaluated vector columns. */
-public final class VectorMapJoinFastBatchSerializer {
+public final class VectorMapJoinBatchSerializer {
   private static final int INITIAL_BYTES = 64 * 1024;
   private final HashTableKeyType keyType;
   private final int numericKeyWidth;
@@ -50,12 +50,12 @@ public final class VectorMapJoinFastBatchSerializer {
   private Output output = new Output(INITIAL_BYTES);
   private int rowCount;
 
-  public VectorMapJoinFastBatchSerializer(HashTableKeyType keyType, TypeInfo[] keyTypes,
+  public VectorMapJoinBatchSerializer(HashTableKeyType keyType, TypeInfo[] keyTypes,
       int[] keyColumnMap, Properties keyProperties, TypeInfo[] valueTypes, int[] valueColumnMap)
       throws HiveException {
-    numericKeyWidth = VectorMapJoinFastBatch.numericWidth(keyType);
+    numericKeyWidth = VectorMapJoinBatch.numericWidth(keyType);
     entryHeaderBytes = numericKeyWidth > 0
-        ? VectorMapJoinFastBatch.NUMERIC_ENTRY_HEADER_BYTES : VectorMapJoinFastBatch.BYTES_ENTRY_HEADER_BYTES;
+        ? VectorMapJoinBatch.NUMERIC_ENTRY_HEADER_BYTES : VectorMapJoinBatch.BYTES_ENTRY_HEADER_BYTES;
     Preconditions.checkArgument(keyTypes.length == keyColumnMap.length);
     Preconditions.checkArgument(valueTypes.length == valueColumnMap.length);
     Preconditions.checkArgument(keyType == HashTableKeyType.MULTI_KEY || keyColumnMap.length == 1);
@@ -86,7 +86,7 @@ public final class VectorMapJoinFastBatchSerializer {
    * A variable-width row can transiently exceed the byte limit before its length is known.
    */
   public boolean append(VectorizedRowBatch batch, int physicalRow) throws IOException {
-    if (rowCount == VectorMapJoinFastBatch.MAX_ROWS) {
+    if (rowCount == VectorMapJoinBatch.MAX_ROWS) {
       return false;
     }
     final int entryStart = output.getLength();
@@ -124,7 +124,7 @@ public final class VectorMapJoinFastBatchSerializer {
       valueRow.serializeWrite(batch, physicalRow);
     }
     final int valueLength = output.getLength() - valueStart;
-    if (output.getLength() > VectorMapJoinFastBatch.MAX_BYTES) {
+    if (output.getLength() > VectorMapJoinBatch.MAX_BYTES) {
       output.setWritePosition(entryStart);
       return false;
     }
@@ -164,7 +164,7 @@ public final class VectorMapJoinFastBatchSerializer {
 
   public void reset() {
     // Do not retain a huge scratch array after an oversized row takes the legacy path.
-    if (output.getData().length > 2 * VectorMapJoinFastBatch.MAX_BYTES) {
+    if (output.getData().length > 2 * VectorMapJoinBatch.MAX_BYTES) {
       output = new Output(INITIAL_BYTES);
     } else {
       output.reset();

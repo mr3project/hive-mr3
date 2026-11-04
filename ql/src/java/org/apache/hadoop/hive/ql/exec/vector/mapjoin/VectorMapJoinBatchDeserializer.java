@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hive.ql.exec.vector.mapjoin.fast;
+package org.apache.hadoop.hive.ql.exec.vector.mapjoin;
 
 import java.io.IOException;
 
@@ -24,7 +24,7 @@ import org.apache.hadoop.io.BytesWritable;
 import org.apache.hive.common.util.HashCodeUtil;
 
 /** Parses immutable frame slices without copying keys or values. Getter state lasts until next(). */
-public final class VectorMapJoinFastBatchDeserializer {
+public final class VectorMapJoinBatchDeserializer {
   private final HashTableKeyType keyType;
   private final int numericKeyWidth;
   private final int entryHeaderBytes;
@@ -33,7 +33,6 @@ public final class VectorMapJoinFastBatchDeserializer {
   private int limit;
   private int rowCount;
   private int remaining;
-  private int hash;
   private long longKey;
   private boolean isNull;
   private int keyOffset;
@@ -41,10 +40,10 @@ public final class VectorMapJoinFastBatchDeserializer {
   private int valueOffset;
   private int valueLength;
 
-  public VectorMapJoinFastBatchDeserializer(HashTableKeyType keyType) {
-    numericKeyWidth = VectorMapJoinFastBatch.numericWidth(keyType);
+  public VectorMapJoinBatchDeserializer(HashTableKeyType keyType) {
+    numericKeyWidth = VectorMapJoinBatch.numericWidth(keyType);
     entryHeaderBytes = numericKeyWidth > 0
-        ? VectorMapJoinFastBatch.NUMERIC_ENTRY_HEADER_BYTES : VectorMapJoinFastBatch.BYTES_ENTRY_HEADER_BYTES;
+        ? VectorMapJoinBatch.NUMERIC_ENTRY_HEADER_BYTES : VectorMapJoinBatch.BYTES_ENTRY_HEADER_BYTES;
     this.keyType = keyType;
   }
 
@@ -52,15 +51,15 @@ public final class VectorMapJoinFastBatchDeserializer {
     bytes = value.getBytesRaw();
     position = value.getOffset();
     final int length = value.getLength();
-    if (length < VectorMapJoinFastBatch.HEADER_BYTES || length > VectorMapJoinFastBatch.MAX_BYTES
+    if (length < VectorMapJoinBatch.HEADER_BYTES || length > VectorMapJoinBatch.MAX_BYTES
         || position < 0 || position > bytes.length - length) {
-      throw new IOException("Invalid FAST map-join batch slice");
+      throw new IOException("Invalid map-join batch slice");
     }
     limit = position + length;
     rowCount = readInt();
-    if (rowCount < 1 || rowCount > VectorMapJoinFastBatch.MAX_ROWS
+    if (rowCount < 1 || rowCount > VectorMapJoinBatch.MAX_ROWS
         || rowCount > (limit - position) / entryHeaderBytes) {
-      throw new IOException("Invalid FAST map-join batch row count " + rowCount);
+      throw new IOException("Invalid map-join batch row count " + rowCount);
     }
     remaining = rowCount;
   }
@@ -68,12 +67,12 @@ public final class VectorMapJoinFastBatchDeserializer {
   public boolean next() throws IOException {
     if (remaining == 0) {
       if (position != limit) {
-        throw new IOException("Trailing bytes in FAST map-join batch");
+        throw new IOException("Trailing bytes in map-join batch");
       }
       return false;
     }
     if (limit - position < entryHeaderBytes) {
-      throw new IOException("Truncated FAST map-join batch metadata");
+      throw new IOException("Truncated map-join batch metadata");
     }
     if (numericKeyWidth > 0) {
       isNull = bytes[position++] == 0;
@@ -85,12 +84,12 @@ public final class VectorMapJoinFastBatchDeserializer {
     valueLength = readInt();
     if (keyLength < -1 || valueLength < 0
         || (isNull && keyType == HashTableKeyType.MULTI_KEY)) {
-      throw new IOException("Invalid FAST map-join batch entry lengths or NULL key");
+      throw new IOException("Invalid map-join batch entry lengths or NULL key");
     }
     final int payloadKeyLength = isNull ? 0 : keyLength;
     if (payloadKeyLength > limit - position
         || valueLength > limit - position - payloadKeyLength) {
-      throw new IOException("Truncated FAST map-join batch entry");
+      throw new IOException("Truncated map-join batch entry");
     }
     keyOffset = position;
     longKey = 0;
@@ -109,21 +108,14 @@ public final class VectorMapJoinFastBatchDeserializer {
     position += valueLength;
     remaining--;
     if (remaining == 0 && position != limit) {
-      throw new IOException("Trailing bytes in FAST map-join batch");
-    }
-    if (isNull) {
-      hash = 0;
-    } else if (numericKeyWidth > 0) {
-      hash = HashCodeUtil.calculateLongHashCode(longKey);
-    } else {
-      hash = HashCodeUtil.murmurHash(bytes, keyOffset, keyLength);
+      throw new IOException("Trailing bytes in map-join batch");
     }
     return true;
   }
 
   private int readInt() throws IOException {
     if (limit - position < Integer.BYTES) {
-      throw new IOException("Truncated FAST map-join batch metadata");
+      throw new IOException("Truncated map-join batch metadata");
     }
     final int result = ((bytes[position] & 0xff) << 24)
         | ((bytes[position + 1] & 0xff) << 16)
@@ -133,7 +125,14 @@ public final class VectorMapJoinFastBatchDeserializer {
   }
 
   public int getRowCount() { return rowCount; }
-  public int getHashCode() { return hash; }
+  /** FAST table hash; general loaders hash the reconstructed serialized key instead. */
+  public int getHashCode() {
+    if (isNull) {
+      return 0;
+    }
+    return numericKeyWidth > 0 ? HashCodeUtil.calculateLongHashCode(longKey)
+        : HashCodeUtil.murmurHash(bytes, keyOffset, keyLength);
+  }
   public long getLongKey() { return longKey; }
   public boolean isNull() { return isNull; }
   public byte[] getBytes() { return bytes; }

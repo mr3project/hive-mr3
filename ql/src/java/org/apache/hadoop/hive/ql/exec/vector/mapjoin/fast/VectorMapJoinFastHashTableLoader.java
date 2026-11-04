@@ -38,6 +38,8 @@ import org.apache.hadoop.hive.ql.exec.MemoryMonitorInfo;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatch;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinBatchDeserializer;
 import org.apache.hadoop.hive.ql.exec.mapjoin.MapJoinMemoryExhaustionError;
 import org.apache.hive.common.util.FixedSizedObjectPool;
 import org.apache.tez.common.counters.TaskCounter;
@@ -262,11 +264,11 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
 
       try {
         KeyValueReaderEdge kvReader = (KeyValueReaderEdge) input.getReader();
-        boolean batchInput = desc.isVectorMapJoinBatchInput(pos);
+        boolean batchInput = desc.getVectorMapJoinBatchKeyType(pos) != null;
         HashTableKeyType keyType = ((VectorMapJoinDesc) desc.getVectorDesc()).getHashTableKeyType();
         boolean nativeLongKey = keyType != HashTableKeyType.STRING && keyType != HashTableKeyType.MULTI_KEY;
-        VectorMapJoinFastBatchDeserializer batchReader = batchInput
-            ? new VectorMapJoinFastBatchDeserializer(keyType) : null;
+        VectorMapJoinBatchDeserializer batchReader = batchInput
+            ? new VectorMapJoinBatchDeserializer(keyType) : null;
 
         Long keyCountObj = parentKeyCounts.get(pos);
         long estKeyCount = (keyCountObj == null) ? -1 : keyCountObj;
@@ -301,7 +303,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
           BytesWritable currentKey = kvReader.getCurrentKey();
           BytesWritable currentValue = kvReader.getCurrentValue();
 
-          boolean isBatch = VectorMapJoinFastBatch.isBatchKey(currentKey);
+          boolean isBatch = VectorMapJoinBatch.isBatchKey(currentKey);
           if (isBatch) {
             if (!batchInput) {
               throw new IOException("Unexpected map-join batch for input " + inputName);
@@ -419,7 +421,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
       this.valueLength = valueLength;
     }
 
-    public HashTableElement(VectorMapJoinFastBatchDeserializer reader, boolean nativeLongKey) {
+    public HashTableElement(VectorMapJoinBatchDeserializer reader, boolean nativeLongKey) {
       // Capture immutable backing storage and primitive offsets. The reader and its
       // BytesWritable wrappers may be reused while this entry waits on a load queue.
       this.hashCode = reader.getHashCode();

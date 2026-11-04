@@ -15,15 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hive.ql.exec.vector.mapjoin.fast;
+package org.apache.hadoop.hive.ql.exec.vector.mapjoin;
 
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKeyType;
 import org.apache.hadoop.io.BytesWritable;
 
 /**
- * Wire contract for single-partition FAST map-join inputs. All integers are big endian.
- * A frame starts with an int32 row count. The destination plan supplies the key type;
+ * Wire contract for single-partition map-join inputs. All integers are big endian.
+ * A frame starts with an int32 row count. The input plan supplies the key type;
  * frames carry neither a version nor a key encoding ID. Numeric entries contain a
  * one-byte key flag (0 for NULL, any nonzero value for non-NULL), an int32 value length,
  * optional fixed-width key bytes, and existing LazyBinary value bytes. Producers write
@@ -33,16 +33,18 @@ import org.apache.hadoop.io.BytesWritable;
  * markers. Numeric keys use their declared signed width (booleans use canonical 0/1);
  * strings carry their exact logical bytes.
  *
- * <p>The destination FAST table family determines the encoding. Its STRING family also
- * includes CHAR, VARCHAR and BINARY; MULTI_KEY may describe a single column. Numeric
+ * <p>Encoding follows the native FAST key-family selection, including the multikey-only
+ * setting. The STRING family includes CHAR, VARCHAR and BINARY; MULTI_KEY may describe
+ * a single column. Numeric
  * keys undergo the same narrowing/boolean normalization as ordinary serialization.
- * Receivers calculate numeric hashes from decoded keys, and byte-family hashes over
+ * FAST receivers calculate numeric hashes from decoded keys, and byte-family hashes over
  * raw bytes for STRING and BinarySortable bytes for MULTI_KEY. Scalar NULL hashes are
  * zero. These hashes are computed once per entry at the receiver, not transmitted.
  * They are table hashes, not shuffle hashes; the signed int32 is sign-extended when
- * supplied to the existing long insertion API.</p>
+ * supplied to the existing long insertion API. General loaders reconstruct ordinary
+ * BinarySortable keys and use their containers' existing hashing and insertion paths.</p>
  *
- * <p>Only native vector reduce sinks connected to compatible FAST loaders are marked by
+ * <p>Native vector reduce sinks connected to map-join small-table inputs are marked by
  * the planner. Producers require one unordered output partition, no key tag, and no TopN
  * retention or deferred per-row bucket-number expression. After key/value expressions,
  * active rows are appended in logical order, respecting selection, repetition and NULLs.
@@ -51,15 +53,15 @@ import org.apache.hadoop.io.BytesWritable;
  * The row limit uses DEFAULT_SIZE; the byte limit is independent of the shuffle writer's
  * current buffer. The single-partition writer does not offer direct value-buffer requests.</p>
  *
- * <p>Loaders accept mixed ordinary records and frames. Entry descriptors retain immutable
- * Tez backing arrays and primitive offsets, and route using the computed hash and the
- * receiver's own loading-thread count. Native insertion reuses the existing table cores,
+ * <p>Loaders accept mixed ordinary records and frames. FAST entry descriptors retain
+ * immutable Tez backing arrays and primitive offsets, and route using the computed hash
+ * and the receiver's own loading-thread count. Native insertion reuses the existing table cores,
  * preserving duplicates, full-outer NULL handling and numeric min/max tracking. All table
  * kinds retain uniform LazyBinary values in this protocol. Each logical row contributes
  * to progress and memory checks. Initial sizing uses the planner's key estimate and
  * the runtime logical-record estimate without multiplying by frame size.</p>
  */
-public final class VectorMapJoinFastBatch {
+public final class VectorMapJoinBatch {
   // Ordinary BinarySortable keys start with a NULL/non-NULL marker, not 0x03.
   // Keep this distinct from ReduceRecordSource.VECTOR_BATCH_KEY_BYTES (0x02).
   public static final byte[] KEY_BYTES = { 0x03 };
@@ -69,7 +71,7 @@ public final class VectorMapJoinFastBatch {
   static final int NUMERIC_ENTRY_HEADER_BYTES = 1 + Integer.BYTES;
   static final int BYTES_ENTRY_HEADER_BYTES = 2 * Integer.BYTES;
 
-  private VectorMapJoinFastBatch() {
+  private VectorMapJoinBatch() {
   }
 
   public static boolean isBatchKey(BytesWritable key) {
@@ -87,7 +89,7 @@ public final class VectorMapJoinFastBatch {
     case LONG: return Long.BYTES;
     case STRING:
     case MULTI_KEY: return 0;
-    default: throw new IllegalArgumentException("Unsupported FAST batch key type " + keyType);
+    default: throw new IllegalArgumentException("Unsupported map-join batch key type " + keyType);
     }
   }
 }

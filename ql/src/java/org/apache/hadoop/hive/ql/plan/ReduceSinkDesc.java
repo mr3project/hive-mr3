@@ -119,7 +119,7 @@ public class ReduceSinkDesc extends AbstractOperatorDesc {
   private boolean forwarding; // Whether this RS can forward records directly instead of shuffling/sorting
   // Whether the downstream consumer can read serialized vector shuffle batches.
   private boolean vectorShuffleBatchEnabled = true;
-  // Set only after the destination has been vectorized to a FAST map-join loader.
+  // Encoding for framed map-join small-table entries.
   private VectorMapJoinDesc.HashTableKeyType vectorMapJoinBatchKeyType;
 
   public static enum ReducerTraits {
