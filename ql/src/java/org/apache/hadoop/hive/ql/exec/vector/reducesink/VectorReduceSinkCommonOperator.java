@@ -158,8 +158,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   private transient VectorMapJoinBatchSerializer mapJoinBatchSerializer;
   private transient HiveKey mapJoinBatchKey;
-  private transient long mapJoinBatchFrames;
-  private transient long mapJoinOversizedRows;
 
   private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
   private transient byte[] vectorShuffleSerializeBuffer;
@@ -343,8 +341,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShuffleBatchAllowed = conf.isVectorShuffleBatchEnabled() && reducerHash == null;
     mapJoinBatchSerializer = null;
     mapJoinBatchKey = null;
-    mapJoinBatchFrames = 0;
-    mapJoinOversizedRows = 0;
 
     batchKeyHashCodes = null;
     batchValueHashCodes = null;
@@ -464,7 +460,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       // Initialize only the row serializer: compact vector-shuffle scratch is not needed here.
       initializeVectorShuffleRowKeyScratch();
       doCollectRowWithPartition(keyWritable, serializeVectorShuffleRow(batch, batchIndex, tag), 0);
-      mapJoinOversizedRows++;
       mapJoinBatchSerializer.reset();
     }
     flushMapJoinBatch();
@@ -482,7 +477,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
     // The synchronous Tez write consumes this borrowed frame before the serializer is reset.
     doCollectBatch(mapJoinBatchKey, mapJoinBatchSerializer.getValue(), rowCount);
-    mapJoinBatchFrames++;
     mapJoinBatchSerializer.reset();
   }
 
@@ -885,10 +879,6 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     out = null;
     reducerHash = null;
     mapJoinBatchSerializer = null;
-    if (!abort && conf.isMapJoinOutput()) {
-      LOG.info("Map-join batch frames: {}, oversized ordinary rows: {}",
-          mapJoinBatchFrames, mapJoinOversizedRows);
-    }
     LOG.info("{}::: records written - {}", this, numRows);
     this.runTimeNumRows = numRows;
   }
