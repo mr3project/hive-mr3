@@ -22,6 +22,7 @@ import static org.apache.tez.util.FastByteComparisons.theUnsafe;
 
 import java.io.IOException;
 
+import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKeyType;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hive.common.util.HashCodeUtil;
@@ -63,7 +64,7 @@ public final class VectorMapJoinBatchDeserializer {
     }
     limit = position + length;
     rowCount = readInt();
-    if (rowCount < 1 || rowCount > VectorMapJoinBatch.MAX_ROWS
+    if (rowCount < 1 || rowCount > VectorizedRowBatch.DEFAULT_SIZE
         || rowCount > (limit - position) / entryHeaderBytes) {
       throw new IOException("Invalid map-join batch row count " + rowCount);
     }

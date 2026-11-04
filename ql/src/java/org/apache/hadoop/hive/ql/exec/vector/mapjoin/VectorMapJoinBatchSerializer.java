@@ -86,7 +86,7 @@ public final class VectorMapJoinBatchSerializer {
    * The caller must flush a full frame before appending.
    */
   public void append(VectorizedRowBatch batch, int physicalRow) throws IOException {
-    assert rowCount < VectorMapJoinBatch.MAX_ROWS;
+    assert rowCount < VectorizedRowBatch.DEFAULT_SIZE;
     final int entryStart = output.getLength();
     output.reserve(entryHeaderBytes);
     final int keyStart = output.getLength();

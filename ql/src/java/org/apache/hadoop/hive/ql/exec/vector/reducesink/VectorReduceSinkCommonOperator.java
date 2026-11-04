@@ -441,14 +441,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       mapJoinBatchKey = new HiveKey(VectorMapJoinBatch.KEY_BYTES, 0);
       mapJoinBatchKey.setDistKeyLength(VectorMapJoinBatch.KEY_BYTES.length);
     }
+    assert batch.size <= VectorizedRowBatch.DEFAULT_SIZE;
     assert mapJoinBatchSerializer.getRowCount() == 0;
     clearVectorShuffleRowKeyBatchCache();
 
     for (int logical = 0; logical < batch.size; logical++) {
       final int batchIndex = batch.selectedInUse ? batch.selected[logical] : logical;
-      if (mapJoinBatchSerializer.getRowCount() == VectorMapJoinBatch.MAX_ROWS) {
-        flushMapJoinBatch();
-      }
       mapJoinBatchSerializer.append(batch, batchIndex);
     }
     flushMapJoinBatch();
