@@ -417,9 +417,15 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
    */
   private boolean tryCollectMapJoinBatch(VectorizedRowBatch batch, int tag)
       throws HiveException, IOException {
-    if (!conf.isMapJoinOutput() || reducerHash != null || out == null
-        || !isMapJoinBatchEligible() || out.getNumUnorderedPartitions() != 1
-        || (tag != -1 && !reduceSkipTag)) {
+    if (!conf.isMapJoinOutput()) {
+      return false;
+    }
+    assert out != null;
+    assert reduceSkipTag;
+    if (reducerHash != null ||          // TopN processing is active
+        !isMapJoinBatchEligible() ||    // VectorReduceSinkObjectHashOperator may return false
+        // Map-join frames are available only for single-partition output.
+        out.getNumUnorderedPartitions() != 1) {
       return false;
     }
     if (batch.size == 0) {
