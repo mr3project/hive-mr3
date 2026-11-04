@@ -33,6 +33,18 @@ public abstract class VectorMapJoinFastHashTableContainerBase implements VectorM
   public abstract void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException;
 
+  /** Inserts a normalized numeric key without deserializing a BinarySortable key. */
+  public void putRowNative(long hashCode, long key, boolean isNull, BytesWritable currentValue)
+      throws HiveException, IOException {
+    throw new UnsupportedOperationException("Numeric native keys are not supported by this table");
+  }
+
+  /** Inserts a raw string key or an unchanged BinarySortable multi-key byte slice. */
+  public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
+      boolean isNull, BytesWritable currentValue) throws HiveException, IOException {
+    throw new UnsupportedOperationException("Byte native keys are not supported by this table");
+  }
+
   public abstract long getHashCode(BytesWritable currentKey) throws HiveException, IOException;
 
   public abstract long getEstimatedMemorySize();
