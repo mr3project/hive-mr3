@@ -75,8 +75,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
 
   public static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 1;
-  private static final int SERIALIZE_BUFFER_SIZE = 100 * 1024;
-  private static final int MIN_VALUE_BYTES_THRESHOLD = 128;
+  private static final int SERIALIZE_BUFFER_SIZE_FOR_BATCH = 100 * 1024;  // only for single-partition output
+  private static final int MIN_VALUE_BYTES_FOR_BATCH = 128;
 
   /**
    * Information about our native vectorized reduce sink created by the Vectorizer class during
@@ -525,7 +525,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         WriteValueBytes valueBytes = out.requestWriteValueBytes(vectorShuffleBatchKey, partition);
         int valueLength = 0;
         if (valueBytes != null &&
-            (commonPrefixReady || valueBytes.maxValueBytes > MIN_VALUE_BYTES_THRESHOLD)) {
+            (commonPrefixReady || valueBytes.maxValueBytes > MIN_VALUE_BYTES_FOR_BATCH)) {
           try {
             if (!commonPrefixReady) {
               // Keep this local: repeating flags, nullability, and metadata can change with
@@ -560,7 +560,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
     vectorShuffleBatchSerializer = new VectorShuffleBatchSerializer();
     if (numUnorderedPartitionsOut == 1) {
-      vectorShuffleSerializeBuffer = new byte[SERIALIZE_BUFFER_SIZE];
+      vectorShuffleSerializeBuffer = new byte[SERIALIZE_BUFFER_SIZE_FOR_BATCH];
       vectorShuffleBatchValue = new BytesWritable();
     }
 
@@ -615,11 +615,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   }
 
   private void growVectorShuffleSerializeBuffer() throws HiveException {
-    if (vectorShuffleSerializeBuffer.length > Integer.MAX_VALUE - SERIALIZE_BUFFER_SIZE) {
+    if (vectorShuffleSerializeBuffer.length > Integer.MAX_VALUE - SERIALIZE_BUFFER_SIZE_FOR_BATCH) {
       throw new HiveException("Vector shuffle serialize buffer size overflow: "
-          + vectorShuffleSerializeBuffer.length + " + " + SERIALIZE_BUFFER_SIZE);
+          + vectorShuffleSerializeBuffer.length + " + " + SERIALIZE_BUFFER_SIZE_FOR_BATCH);
     }
-    vectorShuffleSerializeBuffer = new byte[vectorShuffleSerializeBuffer.length + SERIALIZE_BUFFER_SIZE];
+    vectorShuffleSerializeBuffer = new byte[vectorShuffleSerializeBuffer.length + SERIALIZE_BUFFER_SIZE_FOR_BATCH];
   }
 
   private void collectVectorShuffleRows(VectorizedRowBatch batch, int[] rowIndices, int rowOffset,

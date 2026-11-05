@@ -39,7 +39,7 @@ import org.apache.hadoop.io.BytesWritable;
 /** Builds map-join entry frames directly from evaluated vector columns. */
 public final class VectorMapJoinBatchSerializer {
 
-  private static final int INITIAL_BYTES = 1024 * 1024;
+  private static final int INITIAL_SERIALIZE_BUFFER_SIZE = 1024 * 1024;
 
   private final HashTableKeyType keyType;
   private final int numericKeyWidth;
@@ -50,7 +50,7 @@ public final class VectorMapJoinBatchSerializer {
   private final LazyBinarySerializeWrite valueWriter;
   private final VectorSerializeRow<LazyBinarySerializeWrite> valueRow;
   private final BytesWritable value = new BytesWritable();
-  private final Output output = new Output(INITIAL_BYTES);
+  private final Output output = new Output(INITIAL_SERIALIZE_BUFFER_SIZE);
   private int rowCount;
 
   public VectorMapJoinBatchSerializer(HashTableKeyType keyType, TypeInfo[] keyTypes,
