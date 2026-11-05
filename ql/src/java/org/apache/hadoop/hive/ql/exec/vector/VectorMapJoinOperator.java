@@ -230,23 +230,26 @@ public class VectorMapJoinOperator extends VectorMapJoinBaseOperator {
     for (VectorExpression ve : keyExpressions) {
       ve.evaluate(inBatch);
     }
-    keyWrapperBatch.evaluateBatch(inBatch);
-    keyValues = keyWrapperBatch.getVectorHashKeyWrappers();
+    try {
+      keyWrapperBatch.evaluateBatch(inBatch);
+      keyValues = keyWrapperBatch.getVectorHashKeyWrappers();
 
-    // This implementation of vectorized JOIN is delegating all the work
-    // to the row-mode implementation by hijacking the big table node evaluators
-    // and calling the row-mode join processOp for each row in the input batch.
-    // Since the JOIN operator is not fully vectorized anyway atm (due to the use
-    // of row-mode small-tables) this is a reasonable trade-off.
-    //
-    for(batchIndex=0; batchIndex < inBatch.size; ++batchIndex) {
-      super.process(row, tag);
+      // This implementation of vectorized JOIN is delegating all the work
+      // to the row-mode implementation by hijacking the big table node evaluators
+      // and calling the row-mode join processOp for each row in the input batch.
+      // Since the JOIN operator is not fully vectorized anyway atm (due to the use
+      // of row-mode small-tables) this is a reasonable trade-off.
+      //
+      for(batchIndex=0; batchIndex < inBatch.size; ++batchIndex) {
+        super.process(row, tag);
+      }
+    } finally {
+      if (vectorDesc.getInputByteReferencesAllowed()) {
+        keyWrapperBatch.clearByteReferences();
+      }
+      batchIndex = -1;
+      keyValues = null;
     }
-
-    // Set these two to invalid values so any attempt to use them
-    // outside the inner loop results in NPE/OutOfBounds errors
-    batchIndex = -1;
-    keyValues = null;
   }
 
   @Override

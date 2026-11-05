@@ -101,6 +101,7 @@ public class VectorMapJoinDesc extends AbstractVectorDesc  {
   private HashTableKeyType hashTableKeyType;
   private VectorMapJoinVariation vectorMapJoinVariation;
   private boolean minMaxEnabled;
+  private boolean inputByteReferencesAllowed;
 
   private VectorExpression[] allBigTableKeyExpressions;
   private VectorExpression[] allBigTableValueExpressions;
@@ -128,6 +129,7 @@ public class VectorMapJoinDesc extends AbstractVectorDesc  {
     clone.hashTableKeyType = this.hashTableKeyType;
     clone.vectorMapJoinVariation = this.vectorMapJoinVariation;
     clone.minMaxEnabled = this.minMaxEnabled;
+    clone.inputByteReferencesAllowed = this.inputByteReferencesAllowed;
     if (vectorMapJoinInfo != null) {
       throw new RuntimeException("Cloning VectorMapJoinInfo not supported");
     }
@@ -172,6 +174,14 @@ public class VectorMapJoinDesc extends AbstractVectorDesc  {
 
   public void setMinMaxEnabled(boolean minMaxEnabled) {
     this.minMaxEnabled = minMaxEnabled;
+  }
+
+  public boolean getInputByteReferencesAllowed() {
+    return inputByteReferencesAllowed;
+  }
+
+  public void setInputByteReferencesAllowed(boolean allowed) {
+    inputByteReferencesAllowed = allowed;
   }
 
   public VectorExpression[] getAllBigTableKeyExpressions() {

@@ -48,6 +48,18 @@ import org.apache.hadoop.hive.ql.exec.vector.VectorFileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.vector.VectorFilterOperator;
 import org.apache.hadoop.hive.ql.exec.vector.VectorGroupByOperator;
 import org.apache.hadoop.hive.ql.exec.vector.VectorLimitOperator;
+import org.apache.hadoop.hive.ql.exec.vector.VectorMapJoinOperator;
+import org.apache.hadoop.hive.ql.exec.vector.VectorizationOperator;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinCommonOperator;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinAntiJoinLongOperator;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinAntiJoinMultiKeyOperator;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinFullOuterMultiKeyOperator;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinInnerBigOnlyLongOperator;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinInnerBigOnlyMultiKeyOperator;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinInnerLongOperator;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinInnerMultiKeyOperator;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinLeftSemiLongOperator;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.VectorMapJoinOuterMultiKeyOperator;
 import org.apache.hadoop.hive.ql.exec.vector.VectorReduceSinkOperator;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSelectOperator;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.ConstantVectorExpression;
@@ -106,6 +118,7 @@ import org.apache.hadoop.hive.ql.exec.vector.reducesink.VectorReduceSinkStringOp
 import org.apache.hadoop.hive.ql.exec.vector.reducesink.VectorReduceSinkMultiKeyOperator;
 import org.apache.hadoop.hive.ql.exec.vector.reducesink.VectorReduceSinkObjectHashOperator;
 import org.apache.hadoop.hive.ql.plan.VectorGroupByDesc;
+import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -120,6 +133,16 @@ public final class VectorShuffleInputByteReferences implements PhysicalPlanResol
       VectorSelectOperator.class,
       VectorFilterOperator.class,
       VectorLimitOperator.class,
+      VectorMapJoinAntiJoinLongOperator.class,
+      VectorMapJoinAntiJoinMultiKeyOperator.class,
+      VectorMapJoinFullOuterMultiKeyOperator.class,
+      VectorMapJoinInnerBigOnlyLongOperator.class,
+      VectorMapJoinInnerBigOnlyMultiKeyOperator.class,
+      VectorMapJoinInnerLongOperator.class,
+      VectorMapJoinInnerMultiKeyOperator.class,
+      VectorMapJoinLeftSemiLongOperator.class,
+      VectorMapJoinOperator.class,
+      VectorMapJoinOuterMultiKeyOperator.class,
       VectorFileSinkOperator.class,
       VectorReduceSinkOperator.class,
       VectorAppMasterEventOperator.class,
@@ -270,6 +293,11 @@ public final class VectorShuffleInputByteReferences implements PhysicalPlanResol
       if (operator.getClass() == VectorGroupByOperator.class) {
         VectorGroupByDesc vectorDesc = (VectorGroupByDesc)
             ((VectorGroupByOperator) operator).getVectorDesc();
+        vectorDesc.setInputByteReferencesAllowed(true);
+      } else if (operator instanceof VectorMapJoinCommonOperator
+          || operator.getClass() == VectorMapJoinOperator.class) {
+        VectorMapJoinDesc vectorDesc = (VectorMapJoinDesc)
+            ((VectorizationOperator) operator).getVectorDesc();
         vectorDesc.setInputByteReferencesAllowed(true);
       }
     }

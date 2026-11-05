@@ -18,7 +18,6 @@
 package org.apache.hadoop.hive.ql.exec.vector;
 
 import java.io.IOException;
-import java.util.Arrays;
 
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.vector.reducesink.VectorReduceSinkCommonOperator;
@@ -224,33 +223,10 @@ public final class VectorShuffleBatchAccumulator {
     if (byteReferencesAllowed) {
       // Keep the original owners available even if an operator replaces a batch column.
       for (int i = 0; i < accumulatorColumns.length; i++) {
-        clearByteReferences(accumulatorColumns[i]);
+        VectorizedBatchUtil.clearByteReferences(accumulatorColumns[i]);
         if (batch.cols[i] != accumulatorColumns[i]) {
-          clearByteReferences(batch.cols[i]);
+          VectorizedBatchUtil.clearByteReferences(batch.cols[i]);
         }
-      }
-    }
-  }
-
-  private static void clearByteReferences(ColumnVector column) {
-    if (column instanceof BytesColumnVector) {
-      BytesColumnVector bytes = (BytesColumnVector) column;
-      Arrays.fill(bytes.vector, null);
-      Arrays.fill(bytes.start, 0);
-      Arrays.fill(bytes.length, 0);
-    } else if (column instanceof ListColumnVector) {
-      clearByteReferences(((ListColumnVector) column).child);
-    } else if (column instanceof MapColumnVector) {
-      MapColumnVector map = (MapColumnVector) column;
-      clearByteReferences(map.keys);
-      clearByteReferences(map.values);
-    } else if (column instanceof StructColumnVector) {
-      for (ColumnVector field : ((StructColumnVector) column).fields) {
-        clearByteReferences(field);
-      }
-    } else if (column instanceof UnionColumnVector) {
-      for (ColumnVector field : ((UnionColumnVector) column).fields) {
-        clearByteReferences(field);
       }
     }
   }

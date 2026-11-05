@@ -77,6 +77,30 @@ import static java.util.stream.Collectors.toList;
 public class VectorizedBatchUtil {
   private static final Logger LOG = LoggerFactory.getLogger(VectorizedBatchUtil.class);
 
+  /** Release byte-array views, including inactive and nested entries, after consumption. */
+  public static void clearByteReferences(ColumnVector column) {
+    if (column instanceof BytesColumnVector) {
+      BytesColumnVector bytes = (BytesColumnVector) column;
+      Arrays.fill(bytes.vector, null);
+      Arrays.fill(bytes.start, 0);
+      Arrays.fill(bytes.length, 0);
+    } else if (column instanceof ListColumnVector) {
+      clearByteReferences(((ListColumnVector) column).child);
+    } else if (column instanceof MapColumnVector) {
+      MapColumnVector map = (MapColumnVector) column;
+      clearByteReferences(map.keys);
+      clearByteReferences(map.values);
+    } else if (column instanceof StructColumnVector) {
+      for (ColumnVector field : ((StructColumnVector) column).fields) {
+        clearByteReferences(field);
+      }
+    } else if (column instanceof UnionColumnVector) {
+      for (ColumnVector field : ((UnionColumnVector) column).fields) {
+        clearByteReferences(field);
+      }
+    }
+  }
+
   /**
    * Sets the IsNull value for ColumnVector at specified index
    * @param cv

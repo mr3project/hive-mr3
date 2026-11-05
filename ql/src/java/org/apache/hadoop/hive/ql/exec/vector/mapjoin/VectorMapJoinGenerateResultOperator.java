@@ -329,6 +329,22 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
       VectorMapJoinHashMapResult hashMapResult, int[] allMatches, int allMatchesIndex,
       int duplicateCount) throws HiveException, IOException {
 
+    try {
+      generateRepeatedOverflow(batch, hashMapResult, allMatches, allMatchesIndex, duplicateCount);
+    } finally {
+      if (vectorDesc.getInputByteReferencesAllowed()) {
+        // All results borrowing big-table bytes have been forwarded before this method returns.
+        // Also release downstream scratch views without touching pending copied overflow results.
+        for (ColumnVector column : overflowBatch.cols) {
+          VectorizedBatchUtil.clearByteReferences(column);
+        }
+      }
+    }
+  }
+
+  private void generateRepeatedOverflow(VectorizedRowBatch batch,
+      VectorMapJoinHashMapResult hashMapResult, int[] allMatches, int allMatchesIndex,
+      int duplicateCount) throws HiveException, IOException {
     // Kick out previous overflow batch results.
     if (overflowBatch.size > 0) {
       forwardOverflow();
