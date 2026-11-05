@@ -154,6 +154,15 @@ public class ReduceRecordSource implements RecordSource {
       VectorizedRowBatchCtx batchContext, long vectorizedVertexNum,
       int vectorizedTestingReducerBatchSize)
       throws Exception {
+    init(jconf, reducer, vectorized, keyTableDesc, valueTableDesc, reader, handleGroupKey, tag,
+        batchContext, vectorizedVertexNum, vectorizedTestingReducerBatchSize, false);
+  }
+
+  void init(JobConf jconf, Operator<?> reducer, boolean vectorized, TableDesc keyTableDesc,
+      TableDesc valueTableDesc, ReaderEdge reader, boolean handleGroupKey, byte tag,
+      VectorizedRowBatchCtx batchContext, long vectorizedVertexNum,
+      int vectorizedTestingReducerBatchSize, boolean shuffleInputByteReferencesAllowed)
+      throws Exception {
 
     this.vectorizedVertexNum = vectorizedVertexNum;
     if (vectorizedTestingReducerBatchSize > VectorizedRowBatch.DEFAULT_SIZE) {
@@ -223,7 +232,7 @@ public class ReduceRecordSource implements RecordSource {
         if (accumulateShuffleInput) {
           // Compact-only inputs need no row deserializers.
           shuffleAccumulator = new VectorShuffleBatchAccumulator(batchContext, reducer, batch,
-              totalColumns, tag, this::createRowDeserializers);
+              totalColumns, tag, this::createRowDeserializers, shuffleInputByteReferencesAllowed);
         } else {
           // Preserve eager setup on the legacy and ordered paths.
           VectorShuffleBatchAccumulator.RowDeserializers readers = createRowDeserializers();

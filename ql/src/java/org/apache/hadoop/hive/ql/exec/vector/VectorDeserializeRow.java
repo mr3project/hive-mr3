@@ -82,6 +82,7 @@ public final class VectorDeserializeRow<T extends DeserializeRead> {
 
   private static final long serialVersionUID = 1L;
   private static final Logger LOG = LoggerFactory.getLogger(VectorDeserializeRow.class);
+  private static final byte[] EMPTY_BYTES = new byte[0];
 
   private T deserializeRead;
 
@@ -1512,6 +1513,18 @@ public final class VectorDeserializeRow<T extends DeserializeRead> {
   public void setBytes(byte[] bytes, int offset, int length) {
     inputBytes = bytes;
     deserializeRead.set(bytes, offset, length);
+  }
+
+  /** Release the current source range and primitive views after the row has been copied. */
+  public void releaseInput() {
+    inputBytes = null;
+    deserializeRead.set(EMPTY_BYTES, 0, 0);
+    deserializeRead.currentBytes = null;
+    deserializeRead.currentBytesStart = 0;
+    deserializeRead.currentBytesLength = 0;
+    if (deserializeRead.currentTimestampWritable != null) {
+      deserializeRead.currentTimestampWritable.set(EMPTY_BYTES, 0);
+    }
   }
 
   /**

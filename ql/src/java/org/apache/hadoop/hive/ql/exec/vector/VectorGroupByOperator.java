@@ -1365,7 +1365,13 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
   public void process(Object row, int tag) throws HiveException {
     VectorizedRowBatch batch = (VectorizedRowBatch) row;
     if (batch.size > 0) {
-      processingMode.processBatch(batch);
+      try {
+        processingMode.processBatch(batch);
+      } finally {
+        if (vectorDesc.getInputByteReferencesAllowed()) {
+          keyWrappersBatch.clearByteReferences();
+        }
+      }
     }
   }
 

@@ -41,6 +41,7 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
   // Fixed-schema accumulation always uses batches created by the same VectorizedRowBatchCtx.
   private final int fixedAppendCapacity;
   private final int inputColumnCount;
+  private final boolean byteReferencesAllowed;
   private final VectorShuffleBatchHeader header = new VectorShuffleBatchHeader();
   private final byte[] accumulatorRepeatingBitmap;
   private final byte[] accumulatorMetadata;
@@ -53,8 +54,14 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
 
   /** Cache the fixed input schema's capacity and header sizes, excluding scratch columns. */
   public VectorShuffleBatchAccumulatingDeserializer(VectorizedRowBatch schema, int inputColumnCount) {
+    this(schema, inputColumnCount, false);
+  }
+
+  public VectorShuffleBatchAccumulatingDeserializer(VectorizedRowBatch schema, int inputColumnCount,
+      boolean byteReferencesAllowed) {
     assert inputColumnCount >= 0 && inputColumnCount <= schema.cols.length;
     this.inputColumnCount = inputColumnCount;
+    this.byteReferencesAllowed = byteReferencesAllowed;
     this.fixedAppendCapacity = calculateAppendCapacity(schema, inputColumnCount);
     this.accumulatorRepeatingBitmap =
         inputColumnCount <= Long.SIZE ? null : new byte[(inputColumnCount + 7) / 8];
@@ -649,7 +656,11 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
             repeating, bitmapOffset);
         if (index >= 0) {
           int length = readInt();
-          bytesColumn.setVal(index, buffer, position, length);
+          if (byteReferencesAllowed) {
+            bytesColumn.setRef(index, buffer, position, length);
+          } else {
+            bytesColumn.setVal(index, buffer, position, length);
+          }
           position += length;
         }
       }

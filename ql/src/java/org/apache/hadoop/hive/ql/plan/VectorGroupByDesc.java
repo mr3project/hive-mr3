@@ -66,6 +66,7 @@ public class VectorGroupByDesc extends AbstractVectorDesc  {
   private int[] projectedOutputColumns;
   private boolean isVectorizationComplexTypesEnabled;
   private boolean isVectorizationGroupByComplexTypesEnabled;
+  private boolean inputByteReferencesAllowed;
 
   public VectorGroupByDesc() {
     this.processingMode = ProcessingMode.NONE;
@@ -116,6 +117,14 @@ public class VectorGroupByDesc extends AbstractVectorDesc  {
 
   public boolean getIsVectorizationGroupByComplexTypesEnabled() {
     return isVectorizationGroupByComplexTypesEnabled;
+  }
+
+  public boolean getInputByteReferencesAllowed() {
+    return inputByteReferencesAllowed;
+  }
+
+  public void setInputByteReferencesAllowed(boolean inputByteReferencesAllowed) {
+    this.inputByteReferencesAllowed = inputByteReferencesAllowed;
   }
 
   /**

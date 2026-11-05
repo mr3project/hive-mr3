@@ -91,6 +91,16 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     return vectorHashKeyWrappers;
   }
 
+  /** Release input byte arrays retained by the reusable probe keys after batch processing. */
+  public void clearByteReferences() {
+    for (int i = 0; i < stringIndices.length; i++) {
+      int keyIndex = stringIndices[i];
+      for (VectorHashKeyWrapperBase keyWrapper : vectorHashKeyWrappers) {
+        keyWrapper.assignNullString(keyIndex, i);
+      }
+    }
+  }
+
   /**
    * Processes a batch:
    * <ul>

@@ -18,6 +18,7 @@
 package org.apache.hadoop.hive.ql.exec.vector;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.vector.reducesink.VectorReduceSinkCommonOperator;
@@ -36,6 +37,7 @@ public final class VectorShuffleBatchAccumulator {
   private final Operator<?> reducer;
   private final int inputColumnCount;
   private final byte tag;
+  private final boolean byteReferencesAllowed;
 
   /** Creates row-mode readers lazily when an ordinary shuffle record arrives. */
   @FunctionalInterface
@@ -67,6 +69,7 @@ public final class VectorShuffleBatchAccumulator {
   private final int BATCH_BYTES = VectorizedRowBatch.DEFAULT_BYTES;
 
   private VectorizedRowBatch batch;
+  private ColumnVector[] accumulatorColumns;
 
   private int[] accumulatorProjection;
   private int[] accumulatorSelection;
@@ -77,14 +80,22 @@ public final class VectorShuffleBatchAccumulator {
   public VectorShuffleBatchAccumulator(VectorizedRowBatchCtx batchContext, Operator<?> reducer,
       VectorizedRowBatch batch, int inputColumnCount, byte tag,
       RowDeserializerFactory rowDeserializerFactory) {
+    this(batchContext, reducer, batch, inputColumnCount, tag, rowDeserializerFactory, false);
+  }
+
+  public VectorShuffleBatchAccumulator(VectorizedRowBatchCtx batchContext, Operator<?> reducer,
+      VectorizedRowBatch batch, int inputColumnCount, byte tag,
+      RowDeserializerFactory rowDeserializerFactory, boolean byteReferencesAllowed) {
     this.batchContext = batchContext;
     this.reducer = reducer;
     this.inputColumnCount = inputColumnCount;
     this.tag = tag;
+    this.byteReferencesAllowed = byteReferencesAllowed;
 
     this.rowDeserializerFactory = rowDeserializerFactory;
 
-    this.decoder = new VectorShuffleBatchAccumulatingDeserializer(batch, inputColumnCount);
+    this.decoder = new VectorShuffleBatchAccumulatingDeserializer(
+        batch, inputColumnCount, byteReferencesAllowed);
     this.accumulatorRowLimit = decoder.getAppendCapacity();
     assert accumulatorRowLimit > 0;
 
@@ -92,6 +103,7 @@ public final class VectorShuffleBatchAccumulator {
     this.batchMetadata = new VectorShuffleBatchMetadata(batch.cols, batch.cols.length);
 
     this.batch = batch;
+    this.accumulatorColumns = byteReferencesAllowed ? batch.cols.clone() : null;
 
     this.accumulatorProjection = batch.projectedColumns;
     this.accumulatorSelection = batch.selected;
@@ -107,8 +119,14 @@ public final class VectorShuffleBatchAccumulator {
     try {
       processRecord(keyWritable, valueWritable, compact);
     } finally {
-      // the shuffle reader may reuse the incoming buffer as soon as this callback returns
+      // The reader may reuse the wrapper; borrowed backing arrays remain immutable.
       decoder.releaseHeader();
+      if (byteReferencesAllowed && !compact && rowDeserializers != null) {
+        rowDeserializers.key.releaseInput();
+        if (rowDeserializers.value != null) {
+          rowDeserializers.value.releaseInput();
+        }
+      }
     }
   }
 
@@ -179,22 +197,68 @@ public final class VectorShuffleBatchAccumulator {
     }
     assert batch.size == pendingRows;
     final boolean retained = reducer.batchNeedsClone();
-    reducer.process(batch, tag);
+    assert !byteReferencesAllowed || !retained;
+    try {
+      reducer.process(batch, tag);
+    } finally {
+      releaseByteReferences();
+    }
     // Never reset a batch retained by downstream code.
     // The counters must not depend on the returned batch.size.
     prepareAccumulator(retained);
   }
 
   public void discardPendingBatch() {
+    releaseByteReferences();
+    resetPendingBatch();
+  }
+
+  private void resetPendingBatch() {
     decoder.resetAccumulation();
     pendingRows = 0;
     pendingBytes = 0;
     pendingCompact = false;
   }
 
+  private void releaseByteReferences() {
+    if (byteReferencesAllowed) {
+      // Keep the original owners available even if an operator replaces a batch column.
+      for (int i = 0; i < accumulatorColumns.length; i++) {
+        clearByteReferences(accumulatorColumns[i]);
+        if (batch.cols[i] != accumulatorColumns[i]) {
+          clearByteReferences(batch.cols[i]);
+        }
+      }
+    }
+  }
+
+  private static void clearByteReferences(ColumnVector column) {
+    if (column instanceof BytesColumnVector) {
+      BytesColumnVector bytes = (BytesColumnVector) column;
+      Arrays.fill(bytes.vector, null);
+      Arrays.fill(bytes.start, 0);
+      Arrays.fill(bytes.length, 0);
+    } else if (column instanceof ListColumnVector) {
+      clearByteReferences(((ListColumnVector) column).child);
+    } else if (column instanceof MapColumnVector) {
+      MapColumnVector map = (MapColumnVector) column;
+      clearByteReferences(map.keys);
+      clearByteReferences(map.values);
+    } else if (column instanceof StructColumnVector) {
+      for (ColumnVector field : ((StructColumnVector) column).fields) {
+        clearByteReferences(field);
+      }
+    } else if (column instanceof UnionColumnVector) {
+      for (ColumnVector field : ((UnionColumnVector) column).fields) {
+        clearByteReferences(field);
+      }
+    }
+  }
+
   private void prepareAccumulator(boolean replace) {
     if (replace) {
       batch = batchContext.createVectorizedRowBatch();
+      accumulatorColumns = byteReferencesAllowed ? batch.cols.clone() : null;
       accumulatorProjection = batch.projectedColumns;
       accumulatorSelection = batch.selected;
     } else {
@@ -208,6 +272,6 @@ public final class VectorShuffleBatchAccumulator {
     for (int i = 0; i < batch.projectedColumns.length; i++) {
       batch.projectedColumns[i] = i;
     }
-    discardPendingBatch();
+    resetPendingBatch();
   }
 }

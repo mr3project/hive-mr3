@@ -2311,6 +2311,9 @@ public class Vectorizer implements PhysicalPlanResolver {
       vectorTaskColumnInfo.transferToBaseWork(reduceWork);
 
       reduceWork.setVectorMode(true);
+      reduceWork.setShuffleInputByteReferencesAllowed(
+          HiveConf.getBoolVar(hiveConf, ConfVars.HIVE_VECTORIZATION_REDUCE_SHUFFLE_INPUT_ACCUMULATE)
+              && VectorShuffleInputByteReferences.isAllowed(reduceWork.getReducer()));
 
       return;
     }
