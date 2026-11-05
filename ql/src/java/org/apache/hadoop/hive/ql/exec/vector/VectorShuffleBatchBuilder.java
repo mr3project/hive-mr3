@@ -1,0 +1,475 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.hadoop.hive.ql.exec.vector;
+
+import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.HAS_NULLS;
+import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.IS_DECIMAL_64;
+import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.IS_REPEATING;
+import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.putInt;
+
+import java.util.Arrays;
+
+import org.apache.hadoop.io.BytesWritable;
+
+/**
+ * Producer-side, per-partition compact shuffle accumulation. All pending values are packed owned
+ * bytes, never source vectors or copied execution batches. Schema plans and representation metadata
+ * are shared; callers flush every partition before installing a different representation.
+ */
+public final class VectorShuffleBatchBuilder {
+
+  /** Emission threshold; combined frames may be larger, up to the execution batch size. */
+  public static final int ACCUMULATION_ROW_LIMIT = 8;
+
+  private final int[] sourceColumnMap;
+  private final NodePlan[] plans;
+  private final PartitionBuffer[] partitions;
+  private final VectorShuffleBatchMetadata metadata;
+  private final int bitmapLength;
+  // Column count, zeroed repeating bitmap, and owned date/timestamp metadata snapshot.
+  private final byte[] headerTemplate;
+  private final byte[] candidateMetadata;
+  private byte[] fallback = new byte[0];
+  private final BytesWritable fallbackValue = new BytesWritable();
+
+  public VectorShuffleBatchBuilder(ColumnVector[] columns, int[] sourceColumnMap,
+      int partitionCount) {
+    assert ACCUMULATION_ROW_LIMIT > 0 && ACCUMULATION_ROW_LIMIT % Byte.SIZE == 0;
+    assert partitionCount > 1;
+    this.sourceColumnMap = sourceColumnMap.clone();
+    plans = new NodePlan[sourceColumnMap.length];
+    for (int i = 0; i < plans.length; i++) {
+      plans[i] = new NodePlan(columns[sourceColumnMap[i]]);
+    }
+    metadata = new VectorShuffleBatchMetadata(columns, this.sourceColumnMap);
+    bitmapLength = (plans.length + 7) / 8;
+    headerTemplate = new byte[Integer.BYTES + bitmapLength + metadata.getByteCount()];
+    putInt(headerTemplate, 0, plans.length);
+    candidateMetadata = new byte[metadata.getByteCount()];
+    metadata.write(columns, headerTemplate, Integer.BYTES + bitmapLength);
+    partitions = new PartitionBuffer[partitionCount];
+    for (int i = 0; i < partitionCount; i++) {
+      partitions[i] = new PartitionBuffer(plans);
+    }
+  }
+
+  /** Checks even unused nested nodes: their flags and metadata are part of the schema contract. */
+  public boolean isCompatible(ColumnVector[] columns) {
+    metadata.write(columns, candidateMetadata, 0);
+    if (!Arrays.equals(candidateMetadata, 0, candidateMetadata.length,
+        headerTemplate, Integer.BYTES + bitmapLength, headerTemplate.length)) {
+      return false;
+    }
+    for (int i = 0; i < plans.length; i++) {
+      if (!plans[i].matches(columns[sourceColumnMap[i]])) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  public void updateRepresentation(ColumnVector[] columns) {
+    for (PartitionBuffer partition : partitions) {
+      assert partition.rows == 0;
+    }
+    for (int i = 0; i < plans.length; i++) {
+      plans[i].update(columns[sourceColumnMap[i]]);
+    }
+    for (PartitionBuffer partition : partitions) {
+      for (NodeBuffer column : partition.columns) {
+        column.prepareRepresentation();
+      }
+    }
+    metadata.write(columns, headerTemplate, Integer.BYTES + bitmapLength);
+  }
+
+  public int getRowCount(int partition) {
+    return partitions[partition].rows;
+  }
+
+  /**
+   * Copies all active slice values before returning. A combined frame is emitted synchronously by
+   * the caller, so only a smaller-than-threshold tail remains pending between source batches.
+   */
+  public void append(int partition, VectorizedRowBatch source, int[] rowIndices,
+      int rowOffset, int rowCount) {
+    PartitionBuffer pending = partitions[partition];
+    assert rowCount > 0 && rowOffset >= 0;
+    assert rowIndices != null && rowOffset <= rowIndices.length - rowCount;
+    assert pending.rows < ACCUMULATION_ROW_LIMIT;
+    assert pending.rows <= VectorizedRowBatch.DEFAULT_SIZE - rowCount;
+    for (int column = 0; column < plans.length; column++) {
+      ColumnVector vector = source.cols[sourceColumnMap[column]];
+      NodeBuffer values = pending.columns[column];
+      for (int row = 0; row < rowCount; row++) {
+        values.append(vector, rowIndices[rowOffset + row]);
+      }
+    }
+    pending.rows += rowCount;
+  }
+
+  public int getFrameSize(int partition) {
+    PartitionBuffer pending = partitions[partition];
+    assert pending.rows > 0;
+    long size = (long) headerTemplate.length + Integer.BYTES + Byte.BYTES;
+    long savings = 0;
+    for (NodeBuffer column : pending.columns) {
+      assert column.rows == pending.rows;
+      size += column.ordinarySize();
+      savings += column.repeatingSavings();
+    }
+    // All beneficial scalar columns share one optional repeating-section length.
+    if (savings > Integer.BYTES) {
+      size -= savings - Integer.BYTES;
+    }
+    return Math.toIntExact(size);
+  }
+
+  /** Assembles an independently decodable frame without changing the pending partition. */
+  public int writeFrame(int partition, byte[] destination, int offset) {
+    PartitionBuffer pending = partitions[partition];
+    int size = getFrameSize(partition);
+    if (offset < 0 || size > destination.length - (long) offset) {
+      throw new ArrayIndexOutOfBoundsException("Compact shuffle frame does not fit: " + size);
+    }
+    System.arraycopy(headerTemplate, 0, destination, offset, headerTemplate.length);
+    long savings = 0;
+    for (NodeBuffer column : pending.columns) {
+      savings += column.repeatingSavings();
+    }
+    final boolean compress = savings > Integer.BYTES;
+    int position = offset + headerTemplate.length;
+    if (compress) {
+      int lengthOffset = position;
+      position += Integer.BYTES;
+      int repeatingStart = position;
+      for (int i = 0; i < pending.columns.length; i++) {
+        NodeBuffer column = pending.columns[i];
+        if (column.repeatingSavings() > 0) {
+          destination[offset + Integer.BYTES + (i >>> 3)] |= 1 << (i & 7);
+          position = column.writeRepeating(destination, position);
+        }
+      }
+      putInt(destination, lengthOffset, position - repeatingStart);
+    }
+    putInt(destination, position, pending.rows);
+    position += Integer.BYTES;
+    destination[position++] = 0; // accumulated complex columns never contain nested repetition
+    for (NodeBuffer column : pending.columns) {
+      if (!compress || column.repeatingSavings() == 0) {
+        position = column.writeOrdinary(destination, position);
+      }
+    }
+    assert position - offset == size;
+    return size;
+  }
+
+  /** The collector must consume this borrowed reusable slice synchronously. */
+  public BytesWritable getFallbackFrame(int partition) {
+    int size = getFrameSize(partition);
+    fallback = grow(fallback, size);
+    writeFrame(partition, fallback, 0);
+    fallbackValue.setDirect(fallback, 0, size);
+    return fallbackValue;
+  }
+
+  /** Called only after the corresponding writer operation succeeds. */
+  public void reset(int partition) {
+    partitions[partition].reset();
+  }
+
+  public void discard() {
+    for (PartitionBuffer partition : partitions) {
+      partition.reset();
+    }
+  }
+
+  private static byte[] grow(byte[] bytes, int required) {
+    if (required <= bytes.length) {
+      return bytes;
+    }
+    int capacity = (int) Math.min(Integer.MAX_VALUE,
+        Math.max((long) required, Math.max(16L, (long) bytes.length * 2)));
+    return Arrays.copyOf(bytes, capacity);
+  }
+
+  /** One shared descriptor per logical schema node, including duplicate mapped columns. */
+  private static final class NodePlan {
+    private final NodePlan[] children;
+    private Class<?> representation;
+    private int fixedWidth;
+    private int flags;
+    private boolean scalar;
+
+    private NodePlan(ColumnVector column) {
+      children = new NodePlan[childCount(column)];
+      for (int i = 0; i < children.length; i++) {
+        children[i] = new NodePlan(child(column, i));
+      }
+      update(column);
+    }
+
+    private boolean scalar() {
+      return scalar;
+    }
+
+    private boolean matches(ColumnVector column) {
+      if (representation != column.getClass()) {
+        return false;
+      }
+      assert children.length == childCount(column);
+      for (int i = 0; i < children.length; i++) {
+        if (!children[i].matches(child(column, i))) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    private void update(ColumnVector column) {
+      assert children.length == childCount(column);
+      representation = column.getClass();
+      fixedWidth = VectorShuffleBatchEncoding.fixedWidth(column);
+      flags = column instanceof Decimal64ColumnVector ? IS_DECIMAL_64 : 0;
+      // Empty structs/unions are complex too; scalar subclasses use the same encoding helpers.
+      scalar = !(column instanceof StructColumnVector || column instanceof UnionColumnVector
+          || column instanceof MultiValuedColumnVector);
+      for (int i = 0; i < children.length; i++) {
+        children[i].update(child(column, i));
+      }
+    }
+  }
+
+  private static int childCount(ColumnVector column) {
+    if (column instanceof ListColumnVector) {
+      return 1;
+    }
+    if (column instanceof MapColumnVector) {
+      return 2;
+    }
+    if (column instanceof StructColumnVector) {
+      return ((StructColumnVector) column).fields.length;
+    }
+    if (column instanceof UnionColumnVector) {
+      return ((UnionColumnVector) column).fields.length;
+    }
+    return 0;
+  }
+
+  private static ColumnVector child(ColumnVector column, int index) {
+    if (column instanceof ListColumnVector) {
+      return ((ListColumnVector) column).child;
+    }
+    if (column instanceof MapColumnVector) {
+      MapColumnVector map = (MapColumnVector) column;
+      return index == 0 ? map.keys : map.values;
+    }
+    return column instanceof StructColumnVector ? ((StructColumnVector) column).fields[index]
+        : ((UnionColumnVector) column).fields[index];
+  }
+
+  private static final class PartitionBuffer {
+    private int rows;
+    private final NodeBuffer[] columns;
+
+    private PartitionBuffer(NodePlan[] plans) {
+      columns = new NodeBuffer[plans.length];
+      for (int i = 0; i < plans.length; i++) {
+        columns[i] = new NodeBuffer(plans[i], true);
+      }
+    }
+
+    private void reset() {
+      rows = 0;
+      for (NodeBuffer column : columns) {
+        column.reset();
+      }
+    }
+  }
+
+  /** Packed ordinary payload and independent null mask for a schema node's active values. */
+  private static final class NodeBuffer {
+    private final NodePlan plan;
+    private final NodeBuffer[] children;
+    private final boolean topLevel;
+    private byte[] nulls = new byte[(ACCUMULATION_ROW_LIMIT + 7) / 8];
+    private byte[] payload;
+    private int rows;
+    private int nullCount;
+    private int length;
+    private boolean repeatingEligible = true;
+    private boolean representativeNull;
+    // The first value's bytes at payload[0..representativeLength) are already owned and remain
+    // stable while later ordinary values are appended, even if payload storage grows.
+    private int representativeLength;
+
+    private NodeBuffer(NodePlan plan, boolean topLevel) {
+      this.plan = plan;
+      this.topLevel = topLevel;
+      children = new NodeBuffer[plan.children.length];
+      for (int i = 0; i < children.length; i++) {
+        children[i] = new NodeBuffer(plan.children[i], false);
+      }
+      int width = plan.scalar() ? Math.max(0, plan.fixedWidth) : Integer.BYTES;
+      payload = new byte[Math.multiplyExact(ACCUMULATION_ROW_LIMIT, width)];
+    }
+
+    private void prepareRepresentation() {
+      assert rows == 0;
+      int width = plan.scalar() ? Math.max(0, plan.fixedWidth) : Integer.BYTES;
+      payload = grow(payload, Math.multiplyExact(ACCUMULATION_ROW_LIMIT, width));
+      for (NodeBuffer nested : children) {
+        nested.prepareRepresentation();
+      }
+    }
+
+    private void append(ColumnVector source, int index) {
+      // TODO: use source repetition metadata to accelerate scalar eligibility tracking.
+      index = source.isRepeating ? 0 : index;
+      int nextRows = Math.addExact(rows, 1);
+      nulls = grow(nulls, (int) ((nextRows + 7L) / 8));
+      final boolean isNull = !source.noNulls && source.isNull[index];
+      final int start = length;
+      if (isNull) {
+        nulls[rows >>> 3] |= 1 << (rows & 7);
+        nullCount++;
+      } else if (source instanceof StructColumnVector) {
+        for (int i = 0; i < children.length; i++) {
+          children[i].append(((StructColumnVector) source).fields[i], index);
+        }
+      } else if (source instanceof UnionColumnVector) {
+        UnionColumnVector union = (UnionColumnVector) source;
+        int tag = union.tags[index];
+        assert tag >= 0 && tag < children.length;
+        appendInt(tag);
+        children[tag].append(union.fields[tag], index);
+      } else if (source instanceof MultiValuedColumnVector) {
+        MultiValuedColumnVector collection = (MultiValuedColumnVector) source;
+        int count = Math.toIntExact(collection.lengths[index]);
+        int offset = Math.toIntExact(collection.offsets[index]);
+        assert count >= 0 && offset >= 0;
+        appendInt(count);
+        for (int i = 0; i < children.length; i++) {
+          ColumnVector values = child(source, i);
+          for (int element = 0; element < count; element++) {
+            children[i].append(values, Math.addExact(offset, element));
+          }
+        }
+      } else {
+        appendScalar(source, index);
+      }
+      if (topLevel && plan.scalar() && repeatingEligible) {
+        if (rows == 0) {
+          representativeNull = isNull;
+          representativeLength = length - start;
+        } else if (representativeNull != isNull || (!isNull &&
+            (representativeLength != length - start ||
+            !Arrays.equals(payload, 0, representativeLength, payload, start, length)))) {
+          repeatingEligible = false;
+        }
+      }
+      rows = nextRows;
+    }
+
+    private void appendInt(int value) {
+      payload = grow(payload, Math.addExact(length, Integer.BYTES));
+      putInt(payload, length, value);
+      length += Integer.BYTES;
+    }
+
+    private void appendScalar(ColumnVector source, int index) {
+      int width = VectorShuffleBatchEncoding.fixedWidth(source);
+      if (source instanceof BytesColumnVector) {
+        width = Math.addExact(Integer.BYTES, ((BytesColumnVector) source).length[index]);
+      }
+      payload = grow(payload, Math.addExact(length, Math.max(0, width)));
+      while (true) {
+        try {
+          length += VectorShuffleBatchEncoding.writeScalar(source, index, payload, length);
+          return;
+        } catch (ArrayIndexOutOfBoundsException ex) {
+          // Decimal.writeDirect has variable size and uses checked array accesses. All other
+          // scalar payloads have already reserved their exact size above.
+          if (!(source instanceof DecimalColumnVector)) {
+            throw ex;
+          }
+          payload = grow(payload, Math.addExact(payload.length, 1));
+        }
+      }
+    }
+
+    private long ordinarySize() {
+      long size = Byte.BYTES + (nullCount == 0 ? 0 : (rows + 7L) / 8) + length;
+      for (NodeBuffer nested : children) {
+        size += nested.ordinarySize();
+      }
+      return size;
+    }
+
+    private long repeatingSavings() {
+      if (!topLevel || !plan.scalar() || !repeatingEligible || rows <= 1) {
+        return 0;
+      }
+      long repeatingSize = Byte.BYTES + (representativeNull ? 1 : representativeLength);
+      return Math.max(0, ordinarySize() - repeatingSize);
+    }
+
+    private int writeRepeating(byte[] destination, int position) {
+      assert repeatingSavings() > 0;
+      destination[position++] = (byte) (plan.flags | IS_REPEATING |
+          (representativeNull ? HAS_NULLS : 0));
+      if (representativeNull) {
+        destination[position++] = 1;
+      } else {
+        System.arraycopy(payload, 0, destination, position, representativeLength);
+        position += representativeLength;
+      }
+      return position;
+    }
+
+    private int writeOrdinary(byte[] destination, int position) {
+      destination[position++] = (byte) (plan.flags | (nullCount > 0 ? HAS_NULLS : 0));
+      if (nullCount > 0) {
+        int bitmapBytes = (int) ((rows + 7L) / 8);
+        System.arraycopy(nulls, 0, destination, position, bitmapBytes);
+        position += bitmapBytes;
+      }
+      System.arraycopy(payload, 0, destination, position, length);
+      position += length;
+      // TODO: recursively compress repetition in accumulated complex columns.
+      // Source repetition was honored during append; every accumulated child is ordinary.
+      for (NodeBuffer nested : children) {
+        position = nested.writeOrdinary(destination, position);
+      }
+      return position;
+    }
+
+    private void reset() {
+      Arrays.fill(nulls, 0, (int) ((rows + 7L) / 8), (byte) 0);
+      rows = 0;
+      nullCount = 0;
+      length = 0;
+      repeatingEligible = true;
+      representativeNull = false;
+      representativeLength = 0;
+      for (NodeBuffer nested : children) {
+        nested.reset();
+      }
+    }
+  }
+}

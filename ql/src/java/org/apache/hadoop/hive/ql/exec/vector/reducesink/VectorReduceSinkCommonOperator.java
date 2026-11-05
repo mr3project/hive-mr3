@@ -31,6 +31,7 @@ import org.apache.hadoop.hive.ql.exec.TopNHash;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.exec.tez.ReduceRecordSource;
 import org.apache.hadoop.hive.ql.exec.tez.TezProcessor;
+import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchBuilder;
 import org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchSerializer;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
@@ -160,6 +161,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private transient HiveKey mapJoinBatchKey;
 
   private transient VectorShuffleBatchSerializer vectorShuffleBatchSerializer;
+  // Only multi-partition unordered output retains small slices across execution batches.
+  private transient VectorShuffleBatchBuilder vectorShuffleBatchBuilder;
   private transient byte[] vectorShuffleSerializeBuffer;
   private transient int[] vectorShuffleBatchColumnMap;
   private transient HiveKey vectorShuffleBatchKey;
@@ -345,6 +348,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     batchKeyHashCodes = null;
     batchValueHashCodes = null;
     vectorShuffleBatchSerializer = null;
+    vectorShuffleBatchBuilder = null;
     vectorShuffleSerializeBuffer = null;
     vectorShuffleBatchColumnMap = null;
     vectorShuffleBatchKey = null;
@@ -473,6 +477,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private void collectPartitionedVectorShuffleBatch(VectorizedRowBatch batch,
       int numUnorderedPartitions, int tag) throws HiveException, IOException {
     clearVectorShuffleRowKeyBatchCache();
+    assert vectorShuffleBatchBuilder != null;
+    if (!vectorShuffleBatchBuilder.isCompatible(batch.cols)) {
+      // Pending bytes must be emitted with their original representation metadata.
+      flushPendingVectorShuffleBatches();
+      vectorShuffleBatchBuilder.updateRepresentation(batch.cols);
+    }
 
     final int[] hashCodes;
     final int partitionerType = vectorShufflePartitionerType;
@@ -501,7 +511,12 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       vectorShufflePartitionOffsets[partition + 1] =
           vectorShufflePartitionOffsets[partition] + vectorShufflePartitionCounts[partition];
       vectorShufflePartitionPositions[partition] = vectorShufflePartitionOffsets[partition];
-      if (vectorShufflePartitionCounts[partition] > NUM_ROWS_THRESHOLD_FOR_BATCH) {
+      final int rowCount = vectorShufflePartitionCounts[partition];
+      final int pendingRows = vectorShuffleBatchBuilder.getRowCount(partition);
+      // Count only slices which will reach the direct serializer. Its owned prefix copy is
+      // needed whenever more than one direct slice may use it, even if other writes intervene.
+      if (rowCount >= VectorShuffleBatchBuilder.ACCUMULATION_ROW_LIMIT &&
+          (pendingRows == 0 || rowCount > VectorizedRowBatch.DEFAULT_SIZE - pendingRows)) {
         compactCandidateCount++;
       }
     }
@@ -518,9 +533,22 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       if (rowCount == 0) {
         continue;
       }
-      if (rowCount <= NUM_ROWS_THRESHOLD_FOR_BATCH) {
-        collectVectorShuffleRows(batch, vectorShufflePartitionRowIndices,
-            vectorShufflePartitionOffsets[partition], rowCount, partition, tag);
+      int pendingRows = vectorShuffleBatchBuilder.getRowCount(partition);
+      if (pendingRows > 0 && rowCount > VectorizedRowBatch.DEFAULT_SIZE - pendingRows) {
+        // The receiver decodes a standalone frame as one execution batch. Keep that batch
+        // within DEFAULT_SIZE rather than creating an oversized combined frame.
+        flushPendingVectorShuffleBatch(partition);
+        pendingRows = 0;
+      }
+      if (pendingRows > 0 || rowCount < VectorShuffleBatchBuilder.ACCUMULATION_ROW_LIMIT) {
+        vectorShuffleBatchBuilder.append(partition, batch, vectorShufflePartitionRowIndices,
+            vectorShufflePartitionOffsets[partition], rowCount);
+        if (vectorShuffleBatchBuilder.getRowCount(partition) >=
+            VectorShuffleBatchBuilder.ACCUMULATION_ROW_LIMIT) {
+          // Emit the entire new slice with the pending rows (for example, 3 + 6 = 9),
+          // leaving no artificial remainder behind.
+          flushPendingVectorShuffleBatch(partition);
+        }
       } else {
         WriteValueBytes valueBytes = out.requestWriteValueBytes(vectorShuffleBatchKey, partition);
         int valueLength = 0;
@@ -552,6 +580,34 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         recordCollectedBatch(rowCount);
       }
     }
+  }
+
+  private void flushPendingVectorShuffleBatches() throws IOException {
+    for (int partition = 0; partition < numUnorderedPartitionsOut; partition++) {
+      flushPendingVectorShuffleBatch(partition);
+    }
+  }
+
+  private void flushPendingVectorShuffleBatch(int partition) throws IOException {
+    final int rowCount = vectorShuffleBatchBuilder.getRowCount(partition);
+    if (rowCount == 0) {
+      return;
+    }
+    final int frameSize = vectorShuffleBatchBuilder.getFrameSize(partition);
+    WriteValueBytes valueBytes = out.requestWriteValueBytes(vectorShuffleBatchKey, partition);
+    if (valueBytes != null && frameSize <= valueBytes.maxValueBytes) {
+      int length = vectorShuffleBatchBuilder.writeFrame(
+          partition, valueBytes.buffer, valueBytes.offsetToValueBytes);
+      assert length == frameSize;
+      out.completeWriteValueBytes(vectorShuffleBatchKey, length, partition);
+    } else {
+      // The request is a state-free peek. Abandon an insufficient region without writing
+      // into it, and synchronously submit the builder's reusable owned assembly buffer.
+      out.writeWithPartition(vectorShuffleBatchKey,
+          vectorShuffleBatchBuilder.getFallbackFrame(partition), partition);
+    }
+    recordCollectedBatch(rowCount);
+    vectorShuffleBatchBuilder.reset(partition);
   }
 
   private void initializeVectorShuffleOutputScratch(VectorizedRowBatch batch) throws HiveException {
@@ -590,6 +646,8 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     }
 
     if (numUnorderedPartitionsOut > 1) {
+      vectorShuffleBatchBuilder = new VectorShuffleBatchBuilder(
+          batch.cols, vectorShuffleBatchColumnMap, numUnorderedPartitionsOut);
       vectorShufflePartitionerType = out.getPartitionerType();
       vectorShufflePartitionCounts = new int[numUnorderedPartitionsOut];
       vectorShufflePartitionOffsets = new int[numUnorderedPartitionsOut + 1];
@@ -849,6 +907,17 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
 
   @Override
   protected void closeOp(boolean abort) throws HiveException {
+    if (vectorShuffleBatchBuilder != null) {
+      if (abort) {
+        vectorShuffleBatchBuilder.discard();
+      } else {
+        try {
+          flushPendingVectorShuffleBatches();
+        } catch (IOException e) {
+          throw new HiveException(e);
+        }
+      }
+    }
     if (!abort && reducerHash != null) {
       reducerHash.flush();
     }
@@ -856,6 +925,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     out = null;
     reducerHash = null;
     mapJoinBatchSerializer = null;
+    vectorShuffleBatchBuilder = null;
     LOG.info("{}::: records written - {}", this, numRows);
     this.runTimeNumRows = numRows;
   }

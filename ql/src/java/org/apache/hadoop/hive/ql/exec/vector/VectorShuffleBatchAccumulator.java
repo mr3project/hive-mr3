@@ -20,7 +20,6 @@ package org.apache.hadoop.hive.ql.exec.vector;
 import java.io.IOException;
 
 import org.apache.hadoop.hive.ql.exec.Operator;
-import org.apache.hadoop.hive.ql.exec.vector.reducesink.VectorReduceSinkCommonOperator;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableDeserializeRead;
 import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinaryDeserializeRead;
@@ -118,7 +117,7 @@ public final class VectorShuffleBatchAccumulator {
 
     final VectorShuffleBatchHeader header = compact ? decoder.readHeader(valueWritable) : null;
     final int incomingRows = compact ? header.getRowCount() : 1;
-    assert !compact || incomingRows > VectorReduceSinkCommonOperator.NUM_ROWS_THRESHOLD_FOR_BATCH;
+    assert !compact || incomingRows > 0;
 
     // use only the fixed header for the decision
     if (compact && (incomingRows >= accumulatorRowLimit || header.hasNestedRepeating())) {

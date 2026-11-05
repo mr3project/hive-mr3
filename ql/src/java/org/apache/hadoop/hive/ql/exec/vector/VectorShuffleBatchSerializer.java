@@ -17,13 +17,14 @@
  */
 package org.apache.hadoop.hive.ql.exec.vector;
 
+import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.HAS_NULLS;
+import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.IS_DECIMAL_64;
+import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.IS_REPEATING;
 import static org.apache.hadoop.hive.ql.exec.vector.reducesink.VectorReduceSinkCommonOperator.NUM_ROWS_THRESHOLD_FOR_BATCH;
 import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
 import static org.apache.tez.util.FastByteComparisons.theUnsafe;
 
 import java.util.Arrays;
-
-import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 
 /**
  * Serializes the active rows of selected columns from a {@link VectorizedRowBatch}.
@@ -43,10 +44,6 @@ import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
  * multiple compact partitions of the same input batch.</p>
  */
 public final class VectorShuffleBatchSerializer {
-
-  private static final int IS_REPEATING = 1;
-  private static final int HAS_NULLS = 2;
-  private static final int IS_DECIMAL_64 = 4;
 
   private byte[] buffer;
   private int position;
@@ -490,12 +487,12 @@ public final class VectorShuffleBatchSerializer {
   }
 
   private void writeInt(int value) {
-    theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position, value);
+    VectorShuffleBatchEncoding.putInt(buffer, position, value);
     position += Integer.BYTES;
   }
 
   private void writeLong(long value) {
-    theUnsafe.putLong(buffer, BYTE_ARRAY_BASE_OFFSET + position, value);
+    VectorShuffleBatchEncoding.putLong(buffer, position, value);
     position += Long.BYTES;
   }
 
@@ -516,51 +513,16 @@ public final class VectorShuffleBatchSerializer {
 
   private void writeValue(ColumnVector column, int[] indices, int rowOffset, int valueCount,
       boolean repeating, int nullBitmapOffset, int nonNullCount) {
-    if (column instanceof BytesColumnVector) {
-      BytesColumnVector bytes = (BytesColumnVector) column;
-      for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmapOffset, logical)) {
-          int index = physicalIndex(indices, rowOffset, logical, repeating);
-          int length = bytes.length[index];
-          if (length < 0) {
-            throw new IllegalArgumentException("Negative byte length: " + length);
-          }
-          // Copy first: arraycopy validates space for the payload and preceding length before unchecked putInt.
-          int valueOffset = position + Integer.BYTES;
-          System.arraycopy(bytes.vector[index], bytes.start[index], buffer, valueOffset, length);
-          theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position, length);
-          position = valueOffset + length;
-        }
+    if (column instanceof BytesColumnVector || column instanceof DecimalColumnVector ||
+        column instanceof TimestampColumnVector || column instanceof IntervalDayTimeColumnVector) {
+      int fixedWidth = VectorShuffleBatchEncoding.fixedWidth(column);
+      if (fixedWidth >= 0) {
+        ensureCapacity((long) nonNullCount * fixedWidth);
       }
-    } else if (column instanceof TimestampColumnVector) {
-      TimestampColumnVector timestamp = (TimestampColumnVector) column;
-      ensureCapacity((long) nonNullCount * (Long.BYTES + Integer.BYTES));   // once per timestamp column
       for (int logical = 0; logical < valueCount; logical++) {
         if (!isNull(nullBitmapOffset, logical)) {
-          int index = physicalIndex(indices, rowOffset, logical, repeating);
-          writeLong(timestamp.time[index]);
-          writeInt(timestamp.nanos[index]);
-        }
-      }
-    } else if (column instanceof IntervalDayTimeColumnVector) {
-      IntervalDayTimeColumnVector intervalColumn = (IntervalDayTimeColumnVector) column;
-      ensureCapacity((long) nonNullCount * (Long.BYTES + Integer.BYTES));   // once per interval day-time column
-      for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmapOffset, logical)) {
-          HiveIntervalDayTime interval =
-              intervalColumn.asScratchIntervalDayTime(
-                  physicalIndex(indices, rowOffset, logical, repeating));
-          writeLong(interval.getTotalSeconds());
-          writeInt(interval.getNanos());
-        }
-      }
-    } else if (column instanceof DecimalColumnVector) {
-      DecimalColumnVector decimal = (DecimalColumnVector) column;
-      for (int logical = 0; logical < valueCount; logical++) {
-        if (!isNull(nullBitmapOffset, logical)) {
-          position += decimal
-            .vector[physicalIndex(indices, rowOffset, logical, repeating)]
-            .writeDirect(buffer, position);
+          position += VectorShuffleBatchEncoding.writeScalar(column,
+              physicalIndex(indices, rowOffset, logical, repeating), buffer, position);
         }
       }
     } else if (column instanceof LongColumnVector) {
