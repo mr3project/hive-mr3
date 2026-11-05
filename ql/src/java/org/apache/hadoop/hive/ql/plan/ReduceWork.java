@@ -99,7 +99,6 @@ public class ReduceWork extends BaseWork {
   private ObjectInspector valueObjectInspector = null;
 
   private boolean reduceVectorizationEnabled;
-  private boolean shuffleInputByteReferencesAllowed;
   private String vectorReduceEngine;
 
   private String vectorReduceColumnSortOrder;
@@ -167,14 +166,6 @@ public class ReduceWork extends BaseWork {
 
   public void setReducer(final Operator<?> reducer) {
     this.reducer = reducer;
-  }
-
-  public boolean getShuffleInputByteReferencesAllowed() {
-    return shuffleInputByteReferencesAllowed;
-  }
-
-  public void setShuffleInputByteReferencesAllowed(boolean allowed) {
-    shuffleInputByteReferencesAllowed = allowed;
   }
 
   @Explain(displayName = "Needs Tagging", explainLevels = { Level.EXTENDED })

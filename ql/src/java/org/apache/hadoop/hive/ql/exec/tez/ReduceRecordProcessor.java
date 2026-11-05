@@ -283,7 +283,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
             : redWork.getTagToVectorizedRowBatchCtx().get(inputDescTag);
     sources[tag].init(jconf, redWork.getReducer(), vectorizedRecordSource, keyTableDesc, valueTableDesc, reader,
         tag == bigTablePosition, (byte) tag, batchContext, redWork.getVectorizedVertexNum(),
-        redWork.getVectorizedTestingReducerBatchSize(), redWork.getShuffleInputByteReferencesAllowed());
+        redWork.getVectorizedTestingReducerBatchSize());
     ois[tag] = sources[tag].getObjectInspector();
   }
 

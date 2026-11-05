@@ -170,6 +170,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
   // tracks overall access count in map agg buffer any given time.
   private long totalAccessCount;
   private boolean batchNeedsClone;
+  private transient boolean releaseInputByteReferences;
 
   /**
    * Interface for processing mode: global, hash, unsorted streaming, or group batch
@@ -1180,6 +1181,9 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
           break;
         }
       }
+      releaseInputByteReferences = HiveConf.getBoolVar(hconf,
+          HiveConf.ConfVars.HIVE_VECTORIZATION_REDUCE_SHUFFLE_INPUT_ACCUMULATE)
+          && !batchNeedsClone();
 
       keyWrappersBatch = VectorHashKeyWrapperBatch.compileKeyWrapperBatch(keyExpressions);
       aggregationBatchInfo = new VectorAggregationBufferBatch();
@@ -1368,7 +1372,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       try {
         processingMode.processBatch(batch);
       } finally {
-        if (vectorDesc.getInputByteReferencesAllowed()) {
+        if (releaseInputByteReferences) {
           keyWrappersBatch.clearByteReferences();
         }
       }
