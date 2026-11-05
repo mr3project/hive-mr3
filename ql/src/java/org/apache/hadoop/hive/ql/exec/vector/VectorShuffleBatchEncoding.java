@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.vector;
 import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
 import static org.apache.tez.util.FastByteComparisons.theUnsafe;
 
+import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 
 /** Scalar payload operations shared by direct and accumulated compact shuffle frames. */
@@ -28,6 +29,9 @@ final class VectorShuffleBatchEncoding {
   static final int IS_REPEATING = 1;
   static final int HAS_NULLS = 2;
   static final int IS_DECIMAL_64 = 4;
+  // writeDirect stores two big-endian ints followed by the decimal's unscaled integer bytes.
+  static final int MAX_DECIMAL_BYTES = 2 * Integer.BYTES +
+      HiveDecimal.SCRATCH_BUFFER_LEN_BIG_INTEGER_BYTES;
 
   private VectorShuffleBatchEncoding() {
   }
@@ -106,6 +110,32 @@ final class VectorShuffleBatchEncoding {
 
   static void putLong(byte[] buffer, int offset, long value) {
     theUnsafe.putLong(buffer, BYTE_ARRAY_BASE_OFFSET + offset, value);
+  }
+
+  // Callers read only owned, already encoded payloads with known sizes.
+  static int getInt(byte[] buffer, int offset) {
+    return theUnsafe.getInt(buffer, BYTE_ARRAY_BASE_OFFSET + offset);
+  }
+
+  static long getLong(byte[] buffer, int offset) {
+    return theUnsafe.getLong(buffer, BYTE_ARRAY_BASE_OFFSET + offset);
+  }
+
+  /** Length of the first complete non-null scalar in an owned ordinary payload. */
+  static int scalarLength(ColumnVector column, byte[] buffer) {
+    int width = fixedWidth(column);
+    if (width >= 0) {
+      return width;
+    }
+    if (column instanceof BytesColumnVector) {
+      return Math.addExact(Integer.BYTES, getInt(buffer, 0));
+    }
+    if (column instanceof DecimalColumnVector) {
+      int byteLength = ((buffer[4] & 0xff) << 24) | ((buffer[5] & 0xff) << 16)
+          | ((buffer[6] & 0xff) << 8) | (buffer[7] & 0xff);
+      return Math.addExact(2 * Integer.BYTES, byteLength);
+    }
+    throw new IllegalArgumentException("Unsupported vector shuffle scalar type " + column.getClass());
   }
 
   private static void ensureCapacity(byte[] buffer, int offset, long length) {

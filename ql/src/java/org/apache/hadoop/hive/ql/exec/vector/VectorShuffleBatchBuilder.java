@@ -20,11 +20,17 @@ package org.apache.hadoop.hive.ql.exec.vector;
 import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.HAS_NULLS;
 import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.IS_DECIMAL_64;
 import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.IS_REPEATING;
+import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.MAX_DECIMAL_BYTES;
+import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.getInt;
+import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.getLong;
 import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.putInt;
 import static org.apache.hadoop.hive.ql.exec.vector.VectorShuffleBatchEncoding.putLong;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
+import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 import org.apache.hadoop.io.BytesWritable;
 
 /**
@@ -39,6 +45,7 @@ public final class VectorShuffleBatchBuilder {
 
   private final int[] sourceColumnMap;
   private final NodePlan[] plans;
+  private final RepresentationCheck[] representationChecks;
   private final PartitionBuffer[] partitions;
   private final VectorShuffleBatchMetadata metadata;
   private final int bitmapLength;
@@ -59,9 +66,13 @@ public final class VectorShuffleBatchBuilder {
     assert partitionCount > 1;
     this.sourceColumnMap = sourceColumnMap.clone();
     plans = new NodePlan[sourceColumnMap.length];
+    List<RepresentationCheck> checks = new ArrayList<>();
     for (int i = 0; i < plans.length; i++) {
       plans[i] = new NodePlan(columns[sourceColumnMap[i]]);
+      collectRepresentationChecks(columns[sourceColumnMap[i]], sourceColumnMap[i],
+          new int[0], plans[i], checks);
     }
+    representationChecks = checks.toArray(new RepresentationCheck[0]);
     metadata = new VectorShuffleBatchMetadata(columns, this.sourceColumnMap);
     bitmapLength = (plans.length + 7) / 8;
     headerTemplate = new byte[Integer.BYTES + bitmapLength + metadata.getByteCount()];
@@ -72,15 +83,15 @@ public final class VectorShuffleBatchBuilder {
     repeatingColumns = new boolean[plans.length];
   }
 
-  /** Checks even unused nested nodes: their flags and metadata are part of the schema contract. */
+  /** Under the fixed schema, only decimal nodes can switch physical encoding. */
   public boolean isCompatible(ColumnVector[] columns) {
     metadata.write(columns, candidateMetadata, 0);
     if (!Arrays.equals(candidateMetadata, 0, candidateMetadata.length,
         headerTemplate, Integer.BYTES + bitmapLength, headerTemplate.length)) {
       return false;
     }
-    for (int i = 0; i < plans.length; i++) {
-      if (!plans[i].matches(columns[sourceColumnMap[i]])) {
+    for (RepresentationCheck check : representationChecks) {
+      if (!check.matches(columns)) {
         return false;
       }
     }
@@ -88,16 +99,20 @@ public final class VectorShuffleBatchBuilder {
   }
 
   public void updateRepresentation(ColumnVector[] columns) {
-    for (PartitionBuffer partition : partitions) {
-      assert partition == null || partition.rows == 0;
+    boolean physicalChange = false;
+    for (RepresentationCheck check : representationChecks) {
+      ColumnVector column = check.resolve(columns);
+      if (column.getClass() != check.plan.representation) {
+        check.plan.setRepresentation(column);
+        physicalChange = true;
+      }
     }
-    for (int i = 0; i < plans.length; i++) {
-      plans[i].update(columns[sourceColumnMap[i]]);
-    }
-    for (PartitionBuffer partition : partitions) {
-      if (partition != null) {
-        for (NodeBuffer column : partition.columns) {
-          column.prepareRepresentation();
+    if (physicalChange) {
+      for (PartitionBuffer partition : partitions) {
+        if (partition != null) {
+          for (NodeBuffer column : partition.columns) {
+            column.prepareRepresentation();
+          }
         }
       }
     }
@@ -145,7 +160,6 @@ public final class VectorShuffleBatchBuilder {
     long repeatedBytes = 0;
     for (int i = 0; i < pending.columns.length; i++) {
       NodeBuffer column = pending.columns[i];
-      assert column.rows == pending.rows;
       long ordinarySize = column.ordinarySize();
       long repeatingSize = Byte.BYTES +
           (column.representativeNull ? 1 : column.representativeLength);
@@ -234,6 +248,43 @@ public final class VectorShuffleBatchBuilder {
     return Arrays.copyOf(bytes, capacity);
   }
 
+  private static void collectRepresentationChecks(ColumnVector column, int sourceColumn,
+      int[] path, NodePlan plan, List<RepresentationCheck> checks) {
+    if (column instanceof DecimalColumnVector || column instanceof Decimal64ColumnVector) {
+      checks.add(new RepresentationCheck(sourceColumn, path, plan));
+    }
+    for (int i = 0; i < plan.children.length; i++) {
+      int[] childPath = Arrays.copyOf(path, path.length + 1);
+      childPath[path.length] = i;
+      collectRepresentationChecks(child(column, i), sourceColumn, childPath, plan.children[i], checks);
+    }
+  }
+
+  /** Owned schema path, resolved against the current batch rather than a retained vector. */
+  private static final class RepresentationCheck {
+    private final int sourceColumn;
+    private final int[] path;
+    private final NodePlan plan;
+
+    private RepresentationCheck(int sourceColumn, int[] path, NodePlan plan) {
+      this.sourceColumn = sourceColumn;
+      this.path = path;
+      this.plan = plan;
+    }
+
+    private boolean matches(ColumnVector[] columns) {
+      return resolve(columns).getClass() == plan.representation;
+    }
+
+    private ColumnVector resolve(ColumnVector[] columns) {
+      ColumnVector column = columns[sourceColumn];
+      for (int index : path) {
+        column = child(column, index);
+      }
+      return column;
+    }
+  }
+
   /** One shared descriptor per logical schema node, including duplicate mapped columns. */
   private static final class NodePlan {
     private final NodePlan[] children;
@@ -247,37 +298,20 @@ public final class VectorShuffleBatchBuilder {
       for (int i = 0; i < children.length; i++) {
         children[i] = new NodePlan(child(column, i));
       }
-      update(column);
+      setRepresentation(column);
     }
 
     private boolean scalar() {
       return scalar;
     }
 
-    private boolean matches(ColumnVector column) {
-      if (representation != column.getClass()) {
-        return false;
-      }
-      assert children.length == childCount(column);
-      for (int i = 0; i < children.length; i++) {
-        if (!children[i].matches(child(column, i))) {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    private void update(ColumnVector column) {
-      assert children.length == childCount(column);
+    private void setRepresentation(ColumnVector column) {
       representation = column.getClass();
       fixedWidth = VectorShuffleBatchEncoding.fixedWidth(column);
       flags = column instanceof Decimal64ColumnVector ? IS_DECIMAL_64 : 0;
       // Empty structs/unions are complex too; scalar subclasses use the same encoding helpers.
       scalar = !(column instanceof StructColumnVector || column instanceof UnionColumnVector
           || column instanceof MultiValuedColumnVector);
-      for (int i = 0; i < children.length; i++) {
-        children[i].update(child(column, i));
-      }
     }
   }
 
@@ -383,8 +417,13 @@ public final class VectorShuffleBatchBuilder {
         assert rows == nextRows;
         return;
       }
+      final int originalRows = rows;
+      final int originalLength = length;
       if (source.isRepeating) {
         appendRepeating(source, count);
+        if (topLevel && repeatingEligible) {
+          checkRepetition(source, originalRows, originalLength);
+        }
         assert rows == nextRows;
         return;
       }
@@ -392,13 +431,12 @@ public final class VectorShuffleBatchBuilder {
         payload = grow(payload, Math.toIntExact(length + (long) count * plan.fixedWidth));
       }
       final boolean hasNulls = !source.noNulls;
-      // Dispatch once per column slice. Long/date/decimal64 and double loops reserve their
-      // complete capacity above, so individual values need no encoding or growth checks.
+      // Dispatch once per column slice. Fixed-width loops reserve their complete capacity
+      // above; the decimal loop reserves its maximum encoded size once below.
       if (source instanceof LongColumnVector) {
         long[] values = ((LongColumnVector) source).vector;
         for (int i = 0; i < count; i++) {
           int index = indices == null ? offset + i : indices[offset + i];
-          int start = length;
           boolean isNull = hasNulls && source.isNull[index];
           if (isNull) {
             markNull();
@@ -406,13 +444,12 @@ public final class VectorShuffleBatchBuilder {
             putLong(payload, length, values[index]);
             length += Long.BYTES;
           }
-          finishScalar(isNull, start);
+          rows++;
         }
       } else if (source instanceof DoubleColumnVector) {
         double[] values = ((DoubleColumnVector) source).vector;
         for (int i = 0; i < count; i++) {
           int index = indices == null ? offset + i : indices[offset + i];
-          int start = length;
           boolean isNull = hasNulls && source.isNull[index];
           if (isNull) {
             markNull();
@@ -420,19 +457,17 @@ public final class VectorShuffleBatchBuilder {
             putLong(payload, length, Double.doubleToLongBits(values[index]));
             length += Double.BYTES;
           }
-          finishScalar(isNull, start);
+          rows++;
         }
       } else if (source instanceof BytesColumnVector) {
         BytesColumnVector values = (BytesColumnVector) source;
         for (int i = 0; i < count; i++) {
           int index = indices == null ? offset + i : indices[offset + i];
-          int start = length;
           boolean isNull = hasNulls && source.isNull[index];
           if (isNull) {
             markNull();
           } else {
             int size = values.length[index];
-            assert size >= 0;
             int end = Math.toIntExact(length + (long) Integer.BYTES + size);
             payload = grow(payload, end);
             System.arraycopy(values.vector[index], values.start[index],
@@ -440,20 +475,62 @@ public final class VectorShuffleBatchBuilder {
             putInt(payload, length, size);
             length = end;
           }
-          finishScalar(isNull, start);
+          rows++;
         }
-      } else {
+      } else if (source instanceof TimestampColumnVector) {
+        TimestampColumnVector values = (TimestampColumnVector) source;
         for (int i = 0; i < count; i++) {
           int index = indices == null ? offset + i : indices[offset + i];
-          int start = length;
-          boolean isNull = hasNulls && source.isNull[index];
-          if (isNull) {
+          if (hasNulls && source.isNull[index]) {
             markNull();
           } else {
-            appendScalar(source, index);
+            putLong(payload, length, values.time[index]);
+            putInt(payload, length + Long.BYTES, values.nanos[index]);
+            length += Long.BYTES + Integer.BYTES;
           }
-          finishScalar(isNull, start);
+          rows++;
         }
+      } else if (source instanceof IntervalDayTimeColumnVector) {
+        IntervalDayTimeColumnVector values = (IntervalDayTimeColumnVector) source;
+        for (int i = 0; i < count; i++) {
+          int index = indices == null ? offset + i : indices[offset + i];
+          if (hasNulls && source.isNull[index]) {
+            markNull();
+          } else {
+            HiveIntervalDayTime value = values.asScratchIntervalDayTime(index);
+            putLong(payload, length, value.getTotalSeconds());
+            putInt(payload, length + Long.BYTES, value.getNanos());
+            length += Long.BYTES + Integer.BYTES;
+          }
+          rows++;
+        }
+      } else if (source instanceof DecimalColumnVector) {
+        DecimalColumnVector values = (DecimalColumnVector) source;
+        // writeDirect's maximum size is bounded by its public scratch-buffer contract.
+        // Reserve once, rather than dispatching or retrying growth for individual decimals.
+        payload = grow(payload, Math.toIntExact(length + (long) count * MAX_DECIMAL_BYTES));
+        for (int i = 0; i < count; i++) {
+          int index = indices == null ? offset + i : indices[offset + i];
+          if (hasNulls && source.isNull[index]) {
+            markNull();
+          } else {
+            length += values.vector[index].writeDirect(payload, length);
+          }
+          rows++;
+        }
+      } else if (source instanceof VoidColumnVector) {
+        for (int i = 0; i < count; i++) {
+          int index = indices == null ? offset + i : indices[offset + i];
+          if (hasNulls && source.isNull[index]) {
+            markNull();
+          }
+          rows++;
+        }
+      } else {
+        throw new IllegalArgumentException("Unsupported vector shuffle scalar type " + source.getClass());
+      }
+      if (topLevel && repeatingEligible) {
+        checkRepetition(source, originalRows, originalLength);
       }
       assert rows == nextRows;
     }
@@ -467,7 +544,7 @@ public final class VectorShuffleBatchBuilder {
         }
         nullCount += count;
       } else {
-        appendScalar(source, 0);
+        appendRepresentative(source);
         int width = length - start;
         int end = Math.toIntExact(start + (long) count * width);
         payload = grow(payload, end);
@@ -479,14 +556,9 @@ public final class VectorShuffleBatchBuilder {
             copied += copies;
           }
         }
-        // Compare just the first encoded value; every value in this slice is identical.
-        finishScalar(false, start);
         length = end;
-        rows += count - 1;
-        return;
       }
-      finishScalar(true, start);
-      rows += count - 1;
+      rows += count;
     }
 
     private void markNull() {
@@ -494,18 +566,56 @@ public final class VectorShuffleBatchBuilder {
       nullCount++;
     }
 
-    private void finishScalar(boolean isNull, int start) {
-      if (topLevel && repeatingEligible) {
-        if (rows == 0) {
-          representativeNull = isNull;
-          representativeLength = length - start;
-        } else if (representativeNull != isNull || (!isNull &&
-            (representativeLength != length - start ||
-            !Arrays.equals(payload, 0, representativeLength, payload, start, length)))) {
-          repeatingEligible = false;
+    private void checkRepetition(ColumnVector source, int originalRows, int originalLength) {
+      if (originalRows == 0) {
+        representativeNull = nullCount > 0 && (nulls[0] & 1) != 0;
+        if (!representativeNull) {
+          representativeLength = VectorShuffleBatchEncoding.scalarLength(source, payload);
         }
       }
-      rows++;
+      if (representativeNull) {
+        repeatingEligible = nullCount == rows;
+        return;
+      }
+      if (nullCount != 0 || length != (long) rows * representativeLength) {
+        repeatingEligible = false;
+        return;
+      }
+      if (representativeLength == 0) {
+        return;
+      }
+      int first = originalRows == 0 ? representativeLength : originalLength;
+      // All values from a repeating source have the same encoding; compare just its first.
+      int end = source.isRepeating ? originalLength + representativeLength : length;
+      if (plan.fixedWidth == Long.BYTES) {
+        long representative = getLong(payload, 0);
+        for (int position = first; position < end; position += Long.BYTES) {
+          if (getLong(payload, position) != representative) {
+            repeatingEligible = false;
+            return;
+          }
+        }
+      } else if (plan.fixedWidth == Long.BYTES + Integer.BYTES) {
+        long representative = getLong(payload, 0);
+        int suffix = getInt(payload, Long.BYTES);
+        for (int position = first; position < end; position += plan.fixedWidth) {
+          if (getLong(payload, position) != representative ||
+              getInt(payload, position + Long.BYTES) != suffix) {
+            repeatingEligible = false;
+            return;
+          }
+        }
+      } else {
+        // Variable-length encodings include their own lengths. Matching complete representative
+        // blocks therefore also establishes the same value boundaries for every appended row.
+        for (int position = first; position < end; position += representativeLength) {
+          if (!Arrays.equals(payload, 0, representativeLength,
+              payload, position, position + representativeLength)) {
+            repeatingEligible = false;
+            return;
+          }
+        }
+      }
     }
 
     private void appendComplex(ColumnVector source, int index) {
@@ -545,25 +655,15 @@ public final class VectorShuffleBatchBuilder {
       length += Integer.BYTES;
     }
 
-    private void appendScalar(ColumnVector source, int index) {
+    private void appendRepresentative(ColumnVector source) {
       int width = plan.fixedWidth;
       if (source instanceof BytesColumnVector) {
-        width = Math.addExact(Integer.BYTES, ((BytesColumnVector) source).length[index]);
+        width = Math.addExact(Integer.BYTES, ((BytesColumnVector) source).length[0]);
+      } else if (source instanceof DecimalColumnVector) {
+        width = MAX_DECIMAL_BYTES;
       }
       payload = grow(payload, Math.addExact(length, Math.max(0, width)));
-      while (true) {
-        try {
-          length += VectorShuffleBatchEncoding.writeScalar(source, index, payload, length);
-          return;
-        } catch (ArrayIndexOutOfBoundsException ex) {
-          // Decimal.writeDirect has variable size and uses checked array accesses. All other
-          // scalar payloads have already reserved their exact size above.
-          if (!(source instanceof DecimalColumnVector)) {
-            throw ex;
-          }
-          payload = grow(payload, Math.addExact(payload.length, 1));
-        }
-      }
+      length += VectorShuffleBatchEncoding.writeScalar(source, 0, payload, length);
     }
 
     private long ordinarySize() {
