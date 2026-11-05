@@ -357,16 +357,11 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
     vectorShufflePartitionPositions = null;
     vectorShuffleRowPartitions = null;
     vectorShufflePartitionRowIndices = null;
-    numUnorderedPartitionsOut = -1;
     vectorShufflePartitionerType = -1;
   }
 
   protected boolean tryCollectVectorShuffleBatch(VectorizedRowBatch batch, int tag)
       throws HiveException, IOException {
-    if (numUnorderedPartitionsOut == -1 && out != null) {
-      numUnorderedPartitionsOut = out.getNumUnorderedPartitions();
-    }
-
     if (tryCollectMapJoinBatch(batch, tag)) {
       return true;
     }
@@ -900,6 +895,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   @Override
   public void setOutputCollector(OutputCollector _out) {
     this.out = (TezProcessor.TezKVOutputCollector) _out;
+    numUnorderedPartitionsOut = out.getNumUnorderedPartitions();
   }
 
   @Override
