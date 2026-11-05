@@ -116,6 +116,7 @@ import org.apache.hadoop.hive.ql.optimizer.physical.PhysicalContext;
 import org.apache.hadoop.hive.ql.optimizer.physical.SerializeFilter;
 import org.apache.hadoop.hive.ql.optimizer.physical.StageIDsRearranger;
 import org.apache.hadoop.hive.ql.optimizer.physical.Vectorizer;
+import org.apache.hadoop.hive.ql.optimizer.physical.VectorShuffleInputByteReferences;
 import org.apache.hadoop.hive.ql.optimizer.stats.annotation.AnnotateWithStatistics;
 import org.apache.hadoop.hive.ql.optimizer.UnionDistinctMerger;
 import org.apache.hadoop.hive.ql.plan.AggregationDesc;
@@ -851,6 +852,7 @@ public class TezCompiler extends TaskCompiler {
     //  the backend. If you have a physical optimization that changes
     //  table scans or filters, you have to invoke it before this one.
     physicalCtx = new SerializeFilter().resolve(physicalCtx);
+    physicalCtx = new VectorShuffleInputByteReferences().resolve(physicalCtx);
 
     if (physicalCtx.getContext().getExplainAnalyze() != null) {
       new AnnotateRunTimeStatsOptimizer().resolve(physicalCtx);

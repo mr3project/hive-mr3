@@ -45,6 +45,12 @@ public class MergeJoinWork extends BaseWork {
     super();
   }
 
+  @Explain(displayName = "Accumulated vector shuffle bytes",
+      explainLevels = { Level.DEFAULT, Level.EXTENDED })
+  public String getShuffleInputByteHandling() {
+    return "3 (not applicable): merge-join vertex is not vectorized";
+  }
+
   @Override
   public void replaceRoots(Map<Operator<?>, Operator<?>> replacementMap) {
     getMainWork().replaceRoots(replacementMap);

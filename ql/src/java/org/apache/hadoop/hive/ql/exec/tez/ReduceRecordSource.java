@@ -154,6 +154,15 @@ public class ReduceRecordSource implements RecordSource {
       VectorizedRowBatchCtx batchContext, long vectorizedVertexNum,
       int vectorizedTestingReducerBatchSize)
       throws Exception {
+    init(jconf, reducer, vectorized, keyTableDesc, valueTableDesc, reader, handleGroupKey, tag,
+        batchContext, vectorizedVertexNum, vectorizedTestingReducerBatchSize, false);
+  }
+
+  void init(JobConf jconf, Operator<?> reducer, boolean vectorized, TableDesc keyTableDesc,
+      TableDesc valueTableDesc, ReaderEdge reader, boolean handleGroupKey, byte tag,
+      VectorizedRowBatchCtx batchContext, long vectorizedVertexNum,
+      int vectorizedTestingReducerBatchSize, boolean byteReferencesAllowed)
+      throws Exception {
 
     this.vectorizedVertexNum = vectorizedVertexNum;
     if (vectorizedTestingReducerBatchSize > VectorizedRowBatch.DEFAULT_SIZE) {
@@ -220,7 +229,11 @@ public class ReduceRecordSource implements RecordSource {
         // accumulate only for unordered vector input
         accumulateShuffleInput = isKeyValueReader && HiveConf.getBoolVar(jconf,
             HiveConf.ConfVars.HIVE_VECTORIZATION_REDUCE_SHUFFLE_INPUT_ACCUMULATE);
-        if (!accumulateShuffleInput) {
+        if (accumulateShuffleInput) {
+          // Compact-only inputs need no row deserializers.
+          shuffleAccumulator = new VectorShuffleBatchAccumulator(batchContext, reducer, batch,
+              totalColumns, tag, this::createRowDeserializers, byteReferencesAllowed);
+        } else {
           // Preserve eager setup on the legacy and ordered paths.
           VectorShuffleBatchAccumulator.RowDeserializers readers = createRowDeserializers();
           keyBinarySortableDeserializeToRow = readers.key;
@@ -531,9 +544,6 @@ public class ReduceRecordSource implements RecordSource {
 
   private boolean pushRecordVectorFromKeyValueUnordered() {
     try {
-      if (accumulateShuffleInput && shuffleAccumulator == null) {
-        initializeShuffleAccumulator();
-      }
       if (!keyValueReader.next()) {
         if (accumulateShuffleInput) {
           shuffleAccumulator.flushPendingBatch();
@@ -619,17 +629,8 @@ public class ReduceRecordSource implements RecordSource {
     }
   }
 
-  private void initializeShuffleAccumulator() {
-    // Input processing starts after operators have initialized their ownership requirements.
-    final int totalColumns = firstValueColumnOffset
-        + valueStructInspectors.getAllStructFieldRefs().size();
-    shuffleAccumulator = new VectorShuffleBatchAccumulator(batchContext, reducer, batch,
-        totalColumns, tag, this::createRowDeserializers, !reducer.batchNeedsClone());
-  }
-
   private void consumeAllUnorderedAccumulated(RecordProgress progress)
       throws HiveException, InterruptedException {
-    initializeShuffleAccumulator();
     try {
       keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
         shuffleAccumulator.process(keyWritable, valueWritable, isVectorBatchKey(keyWritable));

@@ -99,6 +99,9 @@ public class ReduceWork extends BaseWork {
   private ObjectInspector valueObjectInspector = null;
 
   private boolean reduceVectorizationEnabled;
+  // 1: borrow with cleanup, 2: copy, 3: no accumulated vectorized shuffle input.
+  private int shuffleInputByteDecision = 3;
+  private String shuffleInputByteDecisionReason = "no accumulated vectorized shuffle input";
   private String vectorReduceEngine;
 
   private String vectorReduceColumnSortOrder;
@@ -166,6 +169,30 @@ public class ReduceWork extends BaseWork {
 
   public void setReducer(final Operator<?> reducer) {
     this.reducer = reducer;
+  }
+
+  public void setShuffleInputByteDecision(int decision, String reason) {
+    shuffleInputByteDecision = decision;
+    shuffleInputByteDecisionReason = reason;
+  }
+
+  @Explain(displayName = "Accumulated vector shuffle byte decision",
+      explainLevels = { Level.DEFAULT, Level.EXTENDED })
+  public int getShuffleInputByteDecision() {
+    return shuffleInputByteDecision;
+  }
+
+  @Explain(displayName = "Accumulated vector shuffle byte handling",
+      explainLevels = { Level.DEFAULT, Level.EXTENDED })
+  public String getShuffleInputByteHandling() {
+    return shuffleInputByteDecision == 1 ? "use setRef()"
+        : shuffleInputByteDecision == 2 ? "use setVal()" : "not applicable";
+  }
+
+  @Explain(displayName = "Accumulated vector shuffle byte reason",
+      explainLevels = { Level.DEFAULT, Level.EXTENDED })
+  public String getShuffleInputByteDecisionReason() {
+    return shuffleInputByteDecisionReason;
   }
 
   @Explain(displayName = "Needs Tagging", explainLevels = { Level.EXTENDED })
