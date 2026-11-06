@@ -22,55 +22,110 @@ import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase.Ha
 
 public class VectorHashKeyWrapperFactory {
 
-  public static VectorHashKeyWrapperBase allocate(HashContext ctx, int longValuesCount,
+  /** Wrapper implementation selected from the compiled key layout. */
+  public enum KeyWrapperType {
+    EMPTY,
+    SINGLE_LONG,
+    TWO_LONG,
+    THREE_LONG,
+    SINGLE_STRING,
+    TWO_STRING,
+    THREE_STRING,
+    SINGLE_LONG_SINGLE_STRING,
+    SINGLE_LONG_TWO_STRING,
+    TWO_LONG_SINGLE_STRING,
+    GENERAL_LONG_STRING,
+    GENERAL
+  }
+
+  public static KeyWrapperType classify(int longValuesCount,
       int doubleValuesCount, int byteValuesCount, int decimalValuesCount, int timestampValuesCount,
-      int intervalDayTimeValuesCount, int keyCount) {
+      int intervalDayTimeValuesCount) {
 
     final int nonLongBytesCount =
         doubleValuesCount + decimalValuesCount +
         timestampValuesCount + intervalDayTimeValuesCount;
 
-    /*
-     * Add more special cases as desired.
-     * FUTURE: Consider writing a init time "classifier" that returns an enum so we don't have to
-     * FUTURE: analyze these counts over and over...
-     */
     if (nonLongBytesCount == 0) {
       if (byteValuesCount == 0) {
         if (longValuesCount == 1) {
-          return new VectorHashKeyWrapperSingleLong();
+          return KeyWrapperType.SINGLE_LONG;
         } else if (longValuesCount == 2) {
-          return new VectorHashKeyWrapperTwoLong();
+          return KeyWrapperType.TWO_LONG;
         } else if (longValuesCount == 3) {
-          return new VectorHashKeyWrapperThreeLong();
+          return KeyWrapperType.THREE_LONG;
         } else if (longValuesCount == 0) {
-          return VectorHashKeyWrapperEmpty.EMPTY_KEY_WRAPPER;
+          return KeyWrapperType.EMPTY;
         }
       } else if (byteValuesCount == 1) {
         if (longValuesCount == 0) {
-          return new VectorHashKeyWrapperSingleString(ctx);
+          return KeyWrapperType.SINGLE_STRING;
         } else if (longValuesCount == 1) {
-          return new VectorHashKeyWrapperSingleLongSingleString(ctx);
+          return KeyWrapperType.SINGLE_LONG_SINGLE_STRING;
         } else if (longValuesCount == 2) {
-          return new VectorHashKeyWrapperTwoLongSingleString(ctx);
+          return KeyWrapperType.TWO_LONG_SINGLE_STRING;
         }
       } else if (byteValuesCount == 2) {
         if (longValuesCount == 0) {
-          return new VectorHashKeyWrapperTwoString(ctx);
+          return KeyWrapperType.TWO_STRING;
         } else if (longValuesCount == 1) {
-          return new VectorHashKeyWrapperSingleLongTwoString(ctx);
+          return KeyWrapperType.SINGLE_LONG_TWO_STRING;
         }
       } else if (byteValuesCount == 3) {
         if (longValuesCount == 0) {
-          return new VectorHashKeyWrapperThreeString(ctx);
+          return KeyWrapperType.THREE_STRING;
         }
       }
-      return new VectorHashKeyWrapperGeneralLongString(ctx, longValuesCount, byteValuesCount, keyCount);
+      return KeyWrapperType.GENERAL_LONG_STRING;
     }
 
-    // Fall through to use the general wrapper.
-    return new VectorHashKeyWrapperGeneral(ctx, longValuesCount, doubleValuesCount, byteValuesCount,
-        decimalValuesCount, timestampValuesCount, intervalDayTimeValuesCount,
-        keyCount);
+    return KeyWrapperType.GENERAL;
+  }
+
+  public static VectorHashKeyWrapperBase allocate(HashContext ctx, int longValuesCount,
+      int doubleValuesCount, int byteValuesCount, int decimalValuesCount, int timestampValuesCount,
+      int intervalDayTimeValuesCount, int keyCount) {
+    return allocate(classify(longValuesCount, doubleValuesCount, byteValuesCount, decimalValuesCount,
+        timestampValuesCount, intervalDayTimeValuesCount), ctx, longValuesCount, doubleValuesCount,
+        byteValuesCount, decimalValuesCount, timestampValuesCount, intervalDayTimeValuesCount, keyCount);
+  }
+
+  static VectorHashKeyWrapperBase allocate(KeyWrapperType keyWrapperType, HashContext ctx,
+      int longValuesCount, int doubleValuesCount, int byteValuesCount, int decimalValuesCount,
+      int timestampValuesCount, int intervalDayTimeValuesCount, int keyCount) {
+    switch (keyWrapperType) {
+    case EMPTY:
+      assert false : "Allocated directly by VectorHashKeyWrapperBatch.allocateKeyWrappers()";
+      return VectorHashKeyWrapperEmpty.EMPTY_KEY_WRAPPER;
+    case SINGLE_LONG:
+      assert false : "Allocated directly by VectorHashKeyWrapperBatch.allocateKeyWrappers()";
+      return new VectorHashKeyWrapperSingleLong();
+    case TWO_LONG:
+      assert false : "Allocated directly by VectorHashKeyWrapperBatch.allocateKeyWrappers()";
+      return new VectorHashKeyWrapperTwoLong();
+    case THREE_LONG:
+      assert false : "Allocated directly by VectorHashKeyWrapperBatch.allocateKeyWrappers()";
+      return new VectorHashKeyWrapperThreeLong();
+    case SINGLE_STRING:
+      return new VectorHashKeyWrapperSingleString(ctx);
+    case TWO_STRING:
+      return new VectorHashKeyWrapperTwoString(ctx);
+    case THREE_STRING:
+      assert false : "Allocated directly by VectorHashKeyWrapperBatch.allocateKeyWrappers()";
+      return new VectorHashKeyWrapperThreeString(ctx);
+    case SINGLE_LONG_SINGLE_STRING:
+      return new VectorHashKeyWrapperSingleLongSingleString(ctx);
+    case SINGLE_LONG_TWO_STRING:
+      return new VectorHashKeyWrapperSingleLongTwoString(ctx);
+    case TWO_LONG_SINGLE_STRING:
+      return new VectorHashKeyWrapperTwoLongSingleString(ctx);
+    case GENERAL_LONG_STRING:
+      assert false : "Allocated directly by VectorHashKeyWrapperBatch.allocateKeyWrappers()";
+      return new VectorHashKeyWrapperGeneralLongString(ctx, longValuesCount, byteValuesCount, keyCount);
+    case GENERAL:
+    default:
+      return new VectorHashKeyWrapperGeneral(ctx, longValuesCount, doubleValuesCount,
+          byteValuesCount, decimalValuesCount, timestampValuesCount, intervalDayTimeValuesCount, keyCount);
+    }
   }
 }

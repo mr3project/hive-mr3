@@ -38,7 +38,7 @@ import com.google.common.base.Preconditions;
  * {@link VectorHashKeyWrapperGeneral}; it avoids carrying fields for key types
  * that are not used by such wrappers.
  */
-public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperBase {
+public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperBase {
 
   private static final int[] EMPTY_INT_ARRAY = new int[0];
   private static final long[] EMPTY_LONG_ARRAY = new long[0];
