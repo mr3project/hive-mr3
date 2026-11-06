@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.wrapper;
 
+import java.util.Arrays;
 import java.util.Comparator;
 
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
@@ -35,6 +36,7 @@ import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorColumnSetInfo;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperFactory.KeyWrapperType;
 
 /**
  * Class for handling vectorized hash map key wrappers. It evaluates the key columns in a
@@ -66,6 +68,8 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
    */
   private VectorHashKeyWrapperBase[] vectorHashKeyWrappers;
 
+  private KeyWrapperType keyWrapperType;
+
   /**
    * The fixed size of the key wrappers.
    */
@@ -91,6 +95,11 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     return vectorHashKeyWrappers;
   }
 
+  /** Returns the wrapper implementation selected for this compiled batch. */
+  public KeyWrapperType getKeyWrapperType() {
+    return keyWrapperType;
+  }
+
   /**
    * Processes a batch:
    * <ul>
@@ -108,9 +117,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
       return;
     }
 
-    for(int i=0;i<batch.size;++i) {
-      vectorHashKeyWrappers[i].clearIsNull();
-    }
+    clearIsNull(batch.size);
 
     int keyIndex;
     int columnIndex;
@@ -161,26 +168,19 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
 
       evaluateIntervalDayTimeColumnVector(batch, columnVector, keyIndex, i);
     }
-    for(int i=0;i<batch.size;++i) {
-      vectorHashKeyWrappers[i].setHashKey();
-    }
+    setHashKeys(batch.size);
   }
 
   public void evaluateBatchGroupingSets(VectorizedRowBatch batch,
       boolean[] groupingSetsOverrideIsNulls) throws HiveException {
 
-    for(int i=0;i<batch.size;++i) {
-      vectorHashKeyWrappers[i].clearIsNull();
-    }
+    clearIsNull(batch.size);
     int keyIndex;
     int columnIndex;
     for(int i = 0; i< longIndices.length; ++i) {
       keyIndex = longIndices[i];
       if (groupingSetsOverrideIsNulls[keyIndex]) {
-        final int batchSize = batch.size;
-        for(int r = 0; r < batchSize; ++r) {
-          vectorHashKeyWrappers[r].assignNullLong(keyIndex, i);
-        }
+        assignLongNullsRepeating(keyIndex, i, batch.size);
         continue;
       }
       columnIndex = keyExpressions[keyIndex].getOutputColumnNum();
@@ -207,10 +207,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     for(int i=0;i<stringIndices.length; ++i) {
       keyIndex = stringIndices[i];
       if (groupingSetsOverrideIsNulls[keyIndex]) {
-        final int batchSize = batch.size;
-        for(int r = 0; r < batchSize; ++r) {
-          vectorHashKeyWrappers[r].assignNullString(keyIndex, i);
-        }
+        assignNullStrings(keyIndex, i, batch.size);
         continue;
       }
       columnIndex = keyExpressions[keyIndex].getOutputColumnNum();
@@ -264,8 +261,96 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
       evaluateIntervalDayTimeColumnVector(batch, columnVector, keyIndex, i);
     }
 
-    for(int i=0;i<batch.size;++i) {
+    setHashKeys(batch.size);
+  }
+
+  private void clearIsNull(int size) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.clearIsNull(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case SINGLE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.clearIsNull(
+          (VectorHashKeyWrapperSingleLong[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case TWO_LONG:
+      VectorHashKeyWrapperBatchSpecializations.clearIsNull(
+          (VectorHashKeyWrapperTwoLong[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case THREE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.clearIsNull(
+          (VectorHashKeyWrapperThreeLong[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case THREE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.clearIsNull(
+          (VectorHashKeyWrapperThreeString[]) vectorHashKeyWrappers,
+          size);
+      return;
+    default:
+      break;
+    }
+    for (int i = 0; i < size; ++i) {
+      vectorHashKeyWrappers[i].clearIsNull();
+    }
+  }
+
+  private void setHashKeys(int size) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.setHashKeys(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case SINGLE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.setHashKeys(
+          (VectorHashKeyWrapperSingleLong[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case TWO_LONG:
+      VectorHashKeyWrapperBatchSpecializations.setHashKeys(
+          (VectorHashKeyWrapperTwoLong[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case THREE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.setHashKeys(
+          (VectorHashKeyWrapperThreeLong[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case THREE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.setHashKeys(
+          (VectorHashKeyWrapperThreeString[]) vectorHashKeyWrappers,
+          size);
+      return;
+    default:
+      break;
+    }
+    for (int i = 0; i < size; ++i) {
       vectorHashKeyWrappers[i].setHashKey();
+    }
+  }
+
+  private void assignNullStrings(int keyIndex, int index, int size) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignNullStrings(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          keyIndex, index, size);
+      return;
+    case THREE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignNullStrings(
+          (VectorHashKeyWrapperThreeString[]) vectorHashKeyWrappers,
+          keyIndex, index, size);
+      return;
+    default:
+      break;
+    }
+    for (int i = 0; i < size; ++i) {
+      vectorHashKeyWrappers[i].assignNullString(keyIndex, index);
     }
   }
 
@@ -275,7 +360,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
       if (columnVector.noNulls || !columnVector.isNull[0]) {
         assignLongNoNullsRepeating(index, batch.size, columnVector);
       } else {
-        assignLongNullsRepeating(keyIndex, index, batch.size, columnVector);
+        assignLongNullsRepeating(keyIndex, index, batch.size);
       }
     } else if (columnVector.noNulls) {
       if (batch.selectedInUse) {
@@ -413,6 +498,21 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
    */
   private void assignStringNullsNoRepeatingSelection(int keyIndex, int index, int size,
       BytesColumnVector columnVector, int[] selected) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignStringNullsNoRepeatingSelection(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          keyIndex, index, size, columnVector, selected);
+      return;
+    case THREE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignStringNullsNoRepeatingSelection(
+          (VectorHashKeyWrapperThreeString[]) vectorHashKeyWrappers,
+          keyIndex, index, size, columnVector, selected);
+      return;
+    default:
+      break;
+    }
+
     for(int i=0; i<size; ++i) {
       int row = selected[i];
       if (columnVector.isNull[row]) {
@@ -431,19 +531,12 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
    * Helper method to assign values from a vector column into the key wrapper.
    * Optimized for double type, possible nulls, repeat values.
    */
-  private void assignStringNullsRepeating(int keyIndex, int index, int size, BytesColumnVector columnVector) {
+  private void assignStringNullsRepeating(int keyIndex, int index, int size,
+      BytesColumnVector columnVector) {
     if (columnVector.isNull[0]) {
-      for(int i = 0; i < size; ++i) {
-        vectorHashKeyWrappers[i].assignNullString(keyIndex, index);
-      }
+      assignNullStrings(keyIndex, index, size);
     } else {
-      for(int i = 0; i < size; ++i) {
-        vectorHashKeyWrappers[i].assignString(
-            index,
-            columnVector.vector[0],
-            columnVector.start[0],
-            columnVector.length[0]);
-      }
+      assignStringNoNullsRepeating(index, size, columnVector);
     }
   }
 
@@ -453,6 +546,21 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
    */
   private void assignStringNullsNoRepeatingNoSelection(int keyIndex, int index, int size,
       BytesColumnVector columnVector) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignStringNullsNoRepeatingNoSelection(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          keyIndex, index, size, columnVector);
+      return;
+    case THREE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignStringNullsNoRepeatingNoSelection(
+          (VectorHashKeyWrapperThreeString[]) vectorHashKeyWrappers,
+          keyIndex, index, size, columnVector);
+      return;
+    default:
+      break;
+    }
+
     for(int i=0; i<size; ++i) {
       if (columnVector.isNull[i]) {
         vectorHashKeyWrappers[i].assignNullString(keyIndex, index);
@@ -472,6 +580,21 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
    */
   private void assignStringNoNullsRepeating(int index, int size,
       BytesColumnVector columnVector) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignStringNoNullsRepeating(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          index, size, columnVector);
+      return;
+    case THREE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignStringNoNullsRepeating(
+          (VectorHashKeyWrapperThreeString[]) vectorHashKeyWrappers,
+          index, size, columnVector);
+      return;
+    default:
+      break;
+    }
+
     for(int i = 0; i < size; ++i) {
       vectorHashKeyWrappers[i].assignString(
           index,
@@ -487,6 +610,21 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
    */
   private void assignStringNoNullsNoRepeatingSelection(int index, int size,
       BytesColumnVector columnVector, int[] selected) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignStringNoNullsNoRepeatingSelection(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          index, size, columnVector, selected);
+      return;
+    case THREE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignStringNoNullsNoRepeatingSelection(
+          (VectorHashKeyWrapperThreeString[]) vectorHashKeyWrappers,
+          index, size, columnVector, selected);
+      return;
+    default:
+      break;
+    }
+
     for(int i=0; i<size; ++i) {
       int row = selected[i];
       vectorHashKeyWrappers[i].assignString(
@@ -503,6 +641,21 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
    */
   private void assignStringNoNullsNoRepeatingNoSelection(int index, int size,
       BytesColumnVector columnVector) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignStringNoNullsNoRepeatingNoSelection(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          index, size, columnVector);
+      return;
+    case THREE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignStringNoNullsNoRepeatingNoSelection(
+          (VectorHashKeyWrapperThreeString[]) vectorHashKeyWrappers,
+          index, size, columnVector);
+      return;
+    default:
+      break;
+    }
+
     for(int i=0; i<size; ++i) {
       vectorHashKeyWrappers[i].assignString(
           index,
@@ -592,6 +745,31 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
    */
   private void assignLongNullsNoRepeatingSelection(int keyIndex, int index, int size,
       LongColumnVector columnVector, int[] selected) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNullsNoRepeatingSelection(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          keyIndex, index, size, columnVector, selected);
+      return;
+    case SINGLE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNullsNoRepeatingSelection(
+          (VectorHashKeyWrapperSingleLong[]) vectorHashKeyWrappers,
+          keyIndex, index, size, columnVector, selected);
+      return;
+    case TWO_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNullsNoRepeatingSelection(
+          (VectorHashKeyWrapperTwoLong[]) vectorHashKeyWrappers,
+          keyIndex, index, size, columnVector, selected);
+      return;
+    case THREE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNullsNoRepeatingSelection(
+          (VectorHashKeyWrapperThreeLong[]) vectorHashKeyWrappers,
+          keyIndex, index, size, columnVector, selected);
+      return;
+    default:
+      break;
+    }
+
     for(int i = 0; i < size; ++i) {
       int row = selected[i];
       if (!columnVector.isNull[row]) {
@@ -606,8 +784,32 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
    * Helper method to assign values from a vector column into the key wrapper.
    * Optimized for double type, repeating nulls.
    */
-  private void assignLongNullsRepeating(int keyIndex, int index, int size,
-      LongColumnVector columnVector) {
+  private void assignLongNullsRepeating(int keyIndex, int index, int size) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNullsRepeating(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          keyIndex, index, size);
+      return;
+    case SINGLE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNullsRepeating(
+          (VectorHashKeyWrapperSingleLong[]) vectorHashKeyWrappers,
+          keyIndex, index, size);
+      return;
+    case TWO_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNullsRepeating(
+          (VectorHashKeyWrapperTwoLong[]) vectorHashKeyWrappers,
+          keyIndex, index, size);
+      return;
+    case THREE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNullsRepeating(
+          (VectorHashKeyWrapperThreeLong[]) vectorHashKeyWrappers,
+          keyIndex, index, size);
+      return;
+    default:
+      break;
+    }
+
     for(int r = 0; r < size; ++r) {
       vectorHashKeyWrappers[r].assignNullLong(keyIndex, index);
     }
@@ -619,6 +821,31 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
    */
   private void assignLongNullsNoRepeatingNoSelection(int keyIndex, int index, int size,
       LongColumnVector columnVector) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNullsNoRepeatingNoSelection(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          keyIndex, index, size, columnVector);
+      return;
+    case SINGLE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNullsNoRepeatingNoSelection(
+          (VectorHashKeyWrapperSingleLong[]) vectorHashKeyWrappers,
+          keyIndex, index, size, columnVector);
+      return;
+    case TWO_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNullsNoRepeatingNoSelection(
+          (VectorHashKeyWrapperTwoLong[]) vectorHashKeyWrappers,
+          keyIndex, index, size, columnVector);
+      return;
+    case THREE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNullsNoRepeatingNoSelection(
+          (VectorHashKeyWrapperThreeLong[]) vectorHashKeyWrappers,
+          keyIndex, index, size, columnVector);
+      return;
+    default:
+      break;
+    }
+
     for(int r = 0; r < size; ++r) {
       if (!columnVector.isNull[r]) {
         vectorHashKeyWrappers[r].assignLong(index, columnVector.vector[r]);
@@ -633,6 +860,31 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
    * Optimized for double type, no nulls, repeat values, no selection vector.
    */
   private void assignLongNoNullsRepeating(int index, int size, LongColumnVector columnVector) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsRepeating(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          index, size, columnVector);
+      return;
+    case SINGLE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsRepeating(
+          (VectorHashKeyWrapperSingleLong[]) vectorHashKeyWrappers,
+          index, size, columnVector);
+      return;
+    case TWO_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsRepeating(
+          (VectorHashKeyWrapperTwoLong[]) vectorHashKeyWrappers,
+          index, size, columnVector);
+      return;
+    case THREE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsRepeating(
+          (VectorHashKeyWrapperThreeLong[]) vectorHashKeyWrappers,
+          index, size, columnVector);
+      return;
+    default:
+      break;
+    }
+
     for(int r = 0; r < size; ++r) {
       vectorHashKeyWrappers[r].assignLong(index, columnVector.vector[0]);
     }
@@ -644,6 +896,31 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
    */
   private void assignLongNoNullsNoRepeatingSelection(int index, int size,
       LongColumnVector columnVector, int[] selected) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsNoRepeatingSelection(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          index, size, columnVector, selected);
+      return;
+    case SINGLE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsNoRepeatingSelection(
+          (VectorHashKeyWrapperSingleLong[]) vectorHashKeyWrappers,
+          index, size, columnVector, selected);
+      return;
+    case TWO_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsNoRepeatingSelection(
+          (VectorHashKeyWrapperTwoLong[]) vectorHashKeyWrappers,
+          index, size, columnVector, selected);
+      return;
+    case THREE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsNoRepeatingSelection(
+          (VectorHashKeyWrapperThreeLong[]) vectorHashKeyWrappers,
+          index, size, columnVector, selected);
+      return;
+    default:
+      break;
+    }
+
     for(int r = 0; r < size; ++r) {
       vectorHashKeyWrappers[r].assignLong(index, columnVector.vector[selected[r]]);
     }
@@ -655,6 +932,31 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
    */
   private void assignLongNoNullsNoRepeatingNoSelection(int index, int size,
       LongColumnVector columnVector) {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsNoRepeatingNoSelection(
+          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          index, size, columnVector);
+      return;
+    case SINGLE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsNoRepeatingNoSelection(
+          (VectorHashKeyWrapperSingleLong[]) vectorHashKeyWrappers,
+          index, size, columnVector);
+      return;
+    case TWO_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsNoRepeatingNoSelection(
+          (VectorHashKeyWrapperTwoLong[]) vectorHashKeyWrappers,
+          index, size, columnVector);
+      return;
+    case THREE_LONG:
+      VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsNoRepeatingNoSelection(
+          (VectorHashKeyWrapperThreeLong[]) vectorHashKeyWrappers,
+          index, size, columnVector);
+      return;
+    default:
+      break;
+    }
+
     for(int r = 0; r < size; ++r) {
       vectorHashKeyWrappers[r].assignLong(index, columnVector.vector[r]);
     }
@@ -914,12 +1216,14 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     }
     compiledKeyWrapperBatch.finishAdding();
 
-    compiledKeyWrapperBatch.vectorHashKeyWrappers =
-        new VectorHashKeyWrapperBase[VectorizedRowBatch.DEFAULT_SIZE];
-    for(int i=0;i<VectorizedRowBatch.DEFAULT_SIZE; ++i) {
-      compiledKeyWrapperBatch.vectorHashKeyWrappers[i] =
-          compiledKeyWrapperBatch.allocateKeyWrapper();
-    }
+    compiledKeyWrapperBatch.keyWrapperType = VectorHashKeyWrapperFactory.classify(
+        compiledKeyWrapperBatch.longIndices.length,
+        compiledKeyWrapperBatch.doubleIndices.length,
+        compiledKeyWrapperBatch.stringIndices.length,
+        compiledKeyWrapperBatch.decimalIndices.length,
+        compiledKeyWrapperBatch.timestampIndices.length,
+        compiledKeyWrapperBatch.intervalDayTimeIndices.length);
+    compiledKeyWrapperBatch.allocateKeyWrappers();
 
     JavaDataModel model = JavaDataModel.get();
 
@@ -945,8 +1249,69 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     return compiledKeyWrapperBatch;
   }
 
+  private void allocateKeyWrappers() {
+    switch (keyWrapperType) {
+    case GENERAL_LONG_STRING: {
+      VectorHashKeyWrapperGeneralLongString[] wrappers =
+          new VectorHashKeyWrapperGeneralLongString[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperGeneralLongString(
+            hashCtx, longIndices.length, stringIndices.length, keyCount);
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
+    case SINGLE_LONG: {
+      VectorHashKeyWrapperSingleLong[] wrappers =
+          new VectorHashKeyWrapperSingleLong[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperSingleLong();
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
+    case TWO_LONG: {
+      VectorHashKeyWrapperTwoLong[] wrappers =
+          new VectorHashKeyWrapperTwoLong[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperTwoLong();
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
+    case THREE_LONG: {
+      VectorHashKeyWrapperThreeLong[] wrappers =
+          new VectorHashKeyWrapperThreeLong[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperThreeLong();
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
+    case THREE_STRING: {
+      VectorHashKeyWrapperThreeString[] wrappers =
+          new VectorHashKeyWrapperThreeString[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperThreeString(hashCtx);
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
+    case EMPTY:
+      vectorHashKeyWrappers = new VectorHashKeyWrapperBase[VectorizedRowBatch.DEFAULT_SIZE];
+      Arrays.fill(vectorHashKeyWrappers, VectorHashKeyWrapperEmpty.EMPTY_KEY_WRAPPER);
+      break;
+    default:
+      vectorHashKeyWrappers = new VectorHashKeyWrapperBase[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < vectorHashKeyWrappers.length; ++i) {
+        vectorHashKeyWrappers[i] = allocateKeyWrapper();
+      }
+      break;
+    }
+  }
+
   public VectorHashKeyWrapperBase allocateKeyWrapper() {
-    return VectorHashKeyWrapperFactory.allocate(hashCtx,
+    return VectorHashKeyWrapperFactory.allocate(keyWrapperType, hashCtx,
         longIndices.length,
         doubleIndices.length,
         stringIndices.length,

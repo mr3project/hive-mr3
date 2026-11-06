@@ -22,7 +22,7 @@ import org.apache.hadoop.hive.ql.exec.KeyWrapper;
 import org.apache.hadoop.hive.ql.exec.vector.VectorColumnSetInfo;
 import org.apache.hive.common.util.HashCodeUtil;
 
-public class VectorHashKeyWrapperSingleLong extends VectorHashKeyWrapperSingleBase {
+public final class VectorHashKeyWrapperSingleLong extends VectorHashKeyWrapperSingleBase {
 
   private long longValue0;
 
