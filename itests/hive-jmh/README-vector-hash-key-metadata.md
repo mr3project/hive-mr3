@@ -24,10 +24,11 @@ Use the same benchmark source in two builds:
 1. Baseline: separate `byteStarts[]` and `byteLengths[]` arrays.
 2. Candidate: one interleaved `int[]` holding `[start, length, ...]`.
 
-This change adds the benchmark only. It does not implement the candidate layout.
-Apply that production change separately; keep hashing, assertions, null behavior,
-and byte comparison unchanged when comparing the layouts. There is deliberately
-no runtime layout switch or benchmark-only wrapper implementation.
+This branch now implements the candidate layout in the production wrapper.
+Commit `d48a6be3bb` provides the two-array baseline, including the JAR packaging
+fix. The benchmark source is unchanged between the baseline and candidate.
+Hashing, assertions, null behavior, and byte comparison are preserved. There is
+deliberately no runtime layout switch or benchmark-only wrapper implementation.
 
 ## What is timed
 
@@ -125,6 +126,17 @@ mvn -f itests/hive-jmh/pom.xml -Pperf -DskipTests package
 After changing the production wrapper in `ql`, use the reactor build again so
 the benchmark does not accidentally use an older installed `hive-exec` JAR.
 
+After the reactor build has installed matching dependencies, the focused
+correctness tests can be run separately without executing JMH:
+
+```sh
+mvn -pl ql -Dtest=TestVectorHashKeyWrapperGeneralLongString,TestVectorHashKeyWrapperBatch test
+```
+
+The wrapper tests check null/empty transitions, nonzero input starts, reused and
+resized copy targets, independent copied bytes, matching-hash unequal keys, and
+hash agreement with the incremental byte-stream reference implementation.
+
 ### DNS provider error when starting a fork
 
 If Java 21 reports:
@@ -160,7 +172,8 @@ mkdir -p work/vector-key-metadata
 cp itests/hive-jmh/target/benchmarks.jar work/vector-key-metadata/baseline.jar
 ```
 
-Apply the candidate metadata layout, run the same reactor build, and save it:
+Use the current branch's interleaved metadata implementation, run the same
+reactor build, and save it:
 
 ```sh
 mvn -Pitests,perf -pl itests/hive-jmh -am -DskipTests install

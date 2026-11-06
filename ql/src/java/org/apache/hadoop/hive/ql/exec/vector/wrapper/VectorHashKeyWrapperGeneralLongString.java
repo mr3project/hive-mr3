@@ -46,8 +46,8 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
   private long[] longValues;
 
   private byte[][] byteValues;
-  private int[] byteStarts;
-  private int[] byteLengths;
+  // Each string has adjacent start and length entries at 2 * index and 2 * index + 1.
+  private int[] byteStartLengths;
 
   private HashContext hashCtx;
 
@@ -66,12 +66,10 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
     longValues = longValuesCount > 0 ? new long[longValuesCount] : EMPTY_LONG_ARRAY;
     if (byteValuesCount > 0) {
       byteValues = new byte[byteValuesCount][];
-      byteStarts = new int[byteValuesCount];
-      byteLengths = new int[byteValuesCount];
+      byteStartLengths = new int[byteValuesCount * 2];
     } else {
       byteValues = EMPTY_BYTES_ARRAY;
-      byteStarts = EMPTY_INT_ARRAY;
-      byteLengths = EMPTY_INT_ARRAY;
+      byteStartLengths = EMPTY_INT_ARRAY;
     }
     isNull = new boolean[keyCount];
   }
@@ -93,30 +91,34 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
        * Hashing the string is potentially expensive so it is better to branch.
        * Additionally not looking at values for nulls allows us not to reset the values.
        */
-      if (byteLengths[i] == -1) {
+      int length = byteStartLengths[(i << 1) + 1];
+      if (length == -1) {
         continue;
       }
       hasNonNull = true;
-      if (byteLengths[i] > 0) {
+      if (length > 0) {
         // Keep the last nonempty string for addAndEnd; empty strings contribute no bytes.
         if (pendingIndex != -1) {
           if (bytesHash == null) {
             bytesHash = HashContext.getBytesHash(hashCtx);
             bytesHash.start(hash);
           }
-          bytesHash.add(
-              byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex]);
+          int metadataIndex = pendingIndex << 1;
+          bytesHash.add(byteValues[pendingIndex],
+              byteStartLengths[metadataIndex], byteStartLengths[metadataIndex + 1]);
         }
         pendingIndex = i;
       }
     }
     if (bytesHash != null) {
-      hash = bytesHash.addAndEnd(
-          byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex]);
+      int metadataIndex = pendingIndex << 1;
+      hash = bytesHash.addAndEnd(byteValues[pendingIndex],
+          byteStartLengths[metadataIndex], byteStartLengths[metadataIndex + 1]);
     } else if (pendingIndex != -1) {
       // A single nonempty slice can be hashed without initializing incremental state.
-      hash = Murmur3.IncrementalHash32.hash32(
-          byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex], hash);
+      int metadataIndex = pendingIndex << 1;
+      hash = Murmur3.IncrementalHash32.hash32(byteValues[pendingIndex],
+          byteStartLengths[metadataIndex], byteStartLengths[metadataIndex + 1], hash);
     } else if (hasNonNull) {
       // Non-null empty strings still finalize the seeded XXHash32 value.
       bytesHash = HashContext.getBytesHash(hashCtx);
@@ -149,14 +151,16 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
     // By the time we enter here the byteValues length and isNull must have already been compared.
     for (int i = 0; i < byteValues.length; ++i) {
       // The byte comparison is potentially expensive so it is better to branch on null.
-      if (byteLengths[i] != -1) {
+      int metadataIndex = i << 1;
+      int length = byteStartLengths[metadataIndex + 1];
+      if (length != -1) {
         if (!StringExpr.equal(
             byteValues[i],
-            byteStarts[i],
-            byteLengths[i],
+            byteStartLengths[metadataIndex],
+            length,
             keyThat.byteValues[i],
-            keyThat.byteStarts[i],
-            keyThat.byteLengths[i])) {
+            keyThat.byteStartLengths[metadataIndex],
+            keyThat.byteStartLengths[metadataIndex + 1])) {
           return false;
         }
       }
@@ -172,21 +176,23 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
     clone.longValues = (longValues.length > 0) ? longValues.clone() : EMPTY_LONG_ARRAY;
     clone.isNull = isNull.clone();
 
-    if (byteLengths.length > 0) {
+    if (byteValues.length > 0) {
       clone.byteValues = new byte[byteValues.length][];
-      clone.byteStarts = new int[byteValues.length];
-      clone.byteLengths = byteLengths.clone();
+      clone.byteStartLengths = new int[byteStartLengths.length];
       for (int i = 0; i < byteValues.length; ++i) {
+        int metadataIndex = i << 1;
+        int start = byteStartLengths[metadataIndex];
+        int length = byteStartLengths[metadataIndex + 1];
+        // Copied bytes start at zero; the new metadata array already has zero starts.
+        clone.byteStartLengths[metadataIndex + 1] = length;
         // Avoid allocation/copy of nulls, because it is potentially expensive; branch instead.
-        if (byteLengths[i] != -1) {
-          clone.byteValues[i] = Arrays.copyOfRange(byteValues[i],
-              byteStarts[i], byteStarts[i] + byteLengths[i]);
+        if (length != -1) {
+          clone.byteValues[i] = Arrays.copyOfRange(byteValues[i], start, start + length);
         }
       }
     } else {
       clone.byteValues = EMPTY_BYTES_ARRAY;
-      clone.byteStarts = EMPTY_INT_ARRAY;
-      clone.byteLengths = EMPTY_INT_ARRAY;
+      clone.byteStartLengths = EMPTY_INT_ARRAY;
     }
 
     clone.hashcode = hashcode;
@@ -225,42 +231,31 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
     clone.longValues = copyInPlaceOrAllocate(longValues, clone.longValues);
     clone.isNull = copyInPlaceOrAllocate(isNull, clone.isNull);
 
-    if (byteLengths.length > 0) {
-      if (clone.byteLengths == null || clone.byteValues.length != byteValues.length) {
-        // byteValues and byteStarts are always the same length.
+    if (byteValues.length > 0) {
+      if (clone.byteStartLengths == null || clone.byteValues.length != byteValues.length) {
         clone.byteValues = new byte[byteValues.length][];
-        clone.byteStarts = new int[byteValues.length];
-        clone.byteLengths = byteLengths.clone();
-        for (int i = 0; i < byteValues.length; ++i) {
-          // Avoid allocation/copy of nulls, because it is potentially expensive; branch instead.
-          if (byteLengths[i] != -1) {
-            clone.byteValues[i] = Arrays.copyOfRange(byteValues[i],
-                byteStarts[i], byteStarts[i] + byteLengths[i]);
+        clone.byteStartLengths = new int[byteStartLengths.length];
+      }
+      for (int i = 0; i < byteValues.length; ++i) {
+        int metadataIndex = i << 1;
+        int start = byteStartLengths[metadataIndex];
+        int length = byteStartLengths[metadataIndex + 1];
+        clone.byteStartLengths[metadataIndex] = 0;
+        clone.byteStartLengths[metadataIndex + 1] = length;
+        // Avoid allocation/copy of nulls, because it is potentially expensive; branch instead.
+        if (length != -1) {
+          if (clone.byteValues[i] != null && clone.byteValues[i].length >= length) {
+            System.arraycopy(byteValues[i], start, clone.byteValues[i], 0, length);
           } else {
-            clone.byteValues[i] = null;
+            clone.byteValues[i] = Arrays.copyOfRange(byteValues[i], start, start + length);
           }
-        }
-      } else {
-        System.arraycopy(byteLengths, 0, clone.byteLengths, 0, byteValues.length);
-        Arrays.fill(clone.byteStarts, 0);
-        for (int i = 0; i < byteValues.length; ++i) {
-          // Avoid allocation/copy of nulls, because it is potentially expensive; branch instead.
-          if (byteLengths[i] != -1) {
-            if (clone.byteValues[i] != null && clone.byteValues[i].length >= byteLengths[i]) {
-              System.arraycopy(byteValues[i], byteStarts[i], clone.byteValues[i], 0, byteLengths[i]);
-            } else {
-              clone.byteValues[i] = Arrays.copyOfRange(byteValues[i],
-                  byteStarts[i], byteStarts[i] + byteLengths[i]);
-            }
-          } else {
-            clone.byteValues[i] = null;
-          }
+        } else {
+          clone.byteValues[i] = null;
         }
       }
     } else {
       clone.byteValues = EMPTY_BYTES_ARRAY;
-      clone.byteStarts = EMPTY_INT_ARRAY;
-      clone.byteLengths = EMPTY_INT_ARRAY;
+      clone.byteStartLengths = EMPTY_INT_ARRAY;
     }
 
     clone.hashcode = hashcode;
@@ -290,17 +285,19 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
   public void assignString(int index, byte[] bytes, int start, int length) {
     assert (bytes != null);
     byteValues[index] = bytes;
-    byteStarts[index] = start;
-    byteLengths[index] = length;
+    int metadataIndex = index << 1;
+    byteStartLengths[metadataIndex] = start;
+    byteStartLengths[metadataIndex + 1] = length;
   }
 
   @Override
   public void assignNullString(int keyIndex, int index) {
     isNull[keyIndex] = true;
     byteValues[index] = null;
-    byteStarts[index] = 0;
+    int metadataIndex = index << 1;
+    byteStartLengths[metadataIndex] = 0;
     // We need some value that indicates NULL.
-    byteLengths[index] = -1;
+    byteStartLengths[metadataIndex + 1] = -1;
   }
 
   /*
@@ -362,7 +359,7 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
         if (isNull[keyIndex]) {
           sb.append("null");
         } else {
-          sb.append(byteLengths[i]);
+          sb.append(byteStartLengths[(i << 1) + 1]);
         }
       }
     }
@@ -386,7 +383,14 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
         sb.append(", ");
       }
       sb.append("byte lengths ");
-      sb.append(Arrays.toString(byteLengths));
+      sb.append('[');
+      for (int i = 0; i < byteValues.length; ++i) {
+        if (i > 0) {
+          sb.append(", ");
+        }
+        sb.append(byteStartLengths[(i << 1) + 1]);
+      }
+      sb.append(']');
     }
 
     if (isFirst) {
@@ -412,20 +416,20 @@ public class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWrapperB
 
   @Override
   public int getByteStart(int i) {
-    return byteStarts[i];
+    return byteStartLengths[i << 1];
   }
 
   @Override
   public int getByteLength(int i) {
-    return byteLengths[i];
+    return byteStartLengths[(i << 1) + 1];
   }
 
   @Override
   public int getVariableSize() {
     int variableSize = 0;
     JavaDataModel model = JavaDataModel.get();
-    for (int i = 0; i < byteLengths.length; ++i) {
-      variableSize += model.lengthForByteArrayOfSize(byteLengths[i]);
+    for (int i = 1; i < byteStartLengths.length; i += 2) {
+      variableSize += model.lengthForByteArrayOfSize(byteStartLengths[i]);
     }
     return variableSize;
   }
