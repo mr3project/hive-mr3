@@ -110,7 +110,7 @@ public class Murmur3 {
    * @return - hashcode
    */
   public static int hash32(byte[] data) {
-    return hash32(data, 0, data.length, DEFAULT_SEED);
+    return IncrementalHash32.hash32(data, 0, data.length, DEFAULT_SEED);
   }
 
   /**
@@ -121,7 +121,7 @@ public class Murmur3 {
    * @return - hashcode
    */
   public static int hash32(byte[] data, int length) {
-    return hash32(data, 0, length, DEFAULT_SEED);
+    return IncrementalHash32.hash32(data, 0, length, DEFAULT_SEED);
   }
 
   /**
@@ -133,7 +133,7 @@ public class Murmur3 {
    * @return - hashcode
    */
   public static int hash32(byte[] data, int length, int seed) {
-    return hash32(data, 0, length, seed);
+    return IncrementalHash32.hash32(data, 0, length, seed);
   }
 
   /**
