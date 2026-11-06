@@ -23,6 +23,8 @@ import org.apache.hive.common.util.Murmur3.IncrementalHash32;
 
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
+import net.jpountz.xxhash.XXHash32;
+import net.jpountz.xxhash.XXHashFactory;
 
 import org.junit.Test;
 
@@ -33,64 +35,128 @@ import java.util.Arrays;
 import java.util.Random;
 
 /**
- * Tests for Murmur3 variants.
+ * Tests for XXHash32 and the unchanged Murmur3 64-bit and 128-bit variants.
  */
 public class TestMurmur3 {
 
   @Test
-  public void testHashCodesM3_32_string() {
+  public void testHashCodesXX_32_string() {
     String key = "test";
     int seed = 123;
-    HashFunction hf = Hashing.murmur3_32(seed);
-    int hc1 = hf.hashBytes(key.getBytes(StandardCharsets.UTF_8)).asInt();
+    XXHash32 hf = XXHashFactory.safeInstance().hash32();
+    byte[] bytes = key.getBytes(StandardCharsets.UTF_8);
+    int hc1 = hf.hash(bytes, 0, bytes.length, seed);
     int hc2 = Murmur3.hash32(key.getBytes(StandardCharsets.UTF_8), key.getBytes().length, seed);
     assertEquals(hc1, hc2);
 
     key = "testkey";
-    hc1 = hf.hashBytes(key.getBytes(StandardCharsets.UTF_8)).asInt();
+    bytes = key.getBytes(StandardCharsets.UTF_8);
+    hc1 = hf.hash(bytes, 0, bytes.length, seed);
     hc2 = Murmur3.hash32(key.getBytes(StandardCharsets.UTF_8), key.getBytes().length, seed);
     assertEquals(hc1, hc2);
   }
 
   @Test
-  public void testHashCodesM3_32_ints() {
+  public void testHashCodesXX_32_ints() {
     int seed = 123;
     Random rand = new Random(seed);
-    HashFunction hf = Hashing.murmur3_32(seed);
+    XXHash32 hf = XXHashFactory.safeInstance().hash32();
     for (int i = 0; i < 1000; i++) {
       int val = rand.nextInt();
       byte[] data = ByteBuffer.allocate(4).putInt(val).array();
-      int hc1 = hf.hashBytes(data).asInt();
+      int hc1 = hf.hash(data, 0, data.length, seed);
       int hc2 = Murmur3.hash32(data, data.length, seed);
       assertEquals(hc1, hc2);
     }
   }
 
   @Test
-  public void testHashCodesM3_32_longs() {
+  public void testHashCodesXX_32_longs() {
     int seed = 123;
     Random rand = new Random(seed);
-    HashFunction hf = Hashing.murmur3_32(seed);
+    XXHash32 hf = XXHashFactory.safeInstance().hash32();
     for (int i = 0; i < 1000; i++) {
       long val = rand.nextLong();
       byte[] data = ByteBuffer.allocate(8).putLong(val).array();
-      int hc1 = hf.hashBytes(data).asInt();
+      int hc1 = hf.hash(data, 0, data.length, seed);
       int hc2 = Murmur3.hash32(data, data.length, seed);
       assertEquals(hc1, hc2);
     }
   }
 
   @Test
-  public void testHashCodesM3_32_double() {
+  public void testHashCodesXX_32_double() {
     int seed = 123;
     Random rand = new Random(seed);
-    HashFunction hf = Hashing.murmur3_32(seed);
+    XXHash32 hf = XXHashFactory.safeInstance().hash32();
     for (int i = 0; i < 1000; i++) {
       double val = rand.nextDouble();
       byte[] data = ByteBuffer.allocate(8).putDouble(val).array();
-      int hc1 = hf.hashBytes(data).asInt();
+      int hc1 = hf.hash(data, 0, data.length, seed);
       int hc2 = Murmur3.hash32(data, data.length, seed);
       assertEquals(hc1, hc2);
+    }
+  }
+
+  @Test
+  public void testXXHash32SlicesAndIncremental() {
+    XXHash32 reference = XXHashFactory.safeInstance().hash32();
+    Random random = new Random(123);
+    int[] seeds = {0, 1, -1, 123, Murmur3.DEFAULT_SEED, Integer.MIN_VALUE, Integer.MAX_VALUE};
+    int[] offsets = {0, 1, 7};
+    for (int seed : seeds) {
+      for (int length = 0; length <= 257; length++) {
+        for (int offset : offsets) {
+          byte[] data = new byte[offset + length + 9];
+          random.nextBytes(data);
+          int expected = reference.hash(data, offset, length, seed);
+          assertEquals(expected, Murmur3.hash32(data, offset, length, seed));
+          assertEquals(expected, Murmur3.xxHash32(data, offset, length, seed));
+          IncrementalHash32 incremental = new IncrementalHash32();
+          incremental.start(seed);
+          int first = length / 2;
+          incremental.add(data, offset, first);
+          incremental.add(data, offset + first, length - first);
+          assertEquals(expected, incremental.end());
+          if (length > 0) {
+            incremental.start(seed);
+            incremental.add(data, offset, first);
+            assertEquals(expected, incremental.addAndEnd(data, offset + first, length - first));
+          }
+        }
+        byte[] data = new byte[length];
+        random.nextBytes(data);
+        int expected = reference.hash(data, 0, length, seed);
+        assertEquals(expected, Murmur3.hash32(data, length, seed));
+        assertEquals(reference.hash(data, 0, length, Murmur3.DEFAULT_SEED), Murmur3.hash32(data));
+        assertEquals(Murmur3.hash32(data), Murmur3.hash32(data, length));
+      }
+    }
+    for (int length : new int[] {511, 512, 513, 1023, 1024, 1025, 4096, 4097}) {
+      byte[] data = new byte[length + 7];
+      random.nextBytes(data);
+      for (int seed : seeds) {
+        assertEquals(reference.hash(data, 7, length, seed), Murmur3.hash32(data, 7, length, seed));
+      }
+    }
+  }
+
+  @Test
+  public void testXXHash32SeededPrimitives() {
+    XXHash32 reference = XXHashFactory.safeInstance().hash32();
+    int[] seeds = {0, 1, -1, 123, Murmur3.DEFAULT_SEED, Integer.MIN_VALUE, Integer.MAX_VALUE};
+    long[] edgeValues = {0, 1, -1, Long.MIN_VALUE, Long.MAX_VALUE, 0x0123456789abcdefL};
+    Random random = new Random(123);
+    ByteBuffer buffer = ByteBuffer.allocate(16);
+    for (int seed : seeds) {
+      for (int i = 0; i < 1000; i++) {
+        long first = i < edgeValues.length ? edgeValues[i] : random.nextLong();
+        long second = i < edgeValues.length ? edgeValues[edgeValues.length - 1 - i] : random.nextLong();
+        buffer.putLong(0, first);
+        buffer.putLong(8, second);
+        assertEquals(reference.hash(buffer.array(), 0, 8, seed), Murmur3.hash32(first, seed));
+        assertEquals(reference.hash(buffer.array(), 0, 16, seed), Murmur3.hash32(first, second, seed));
+      }
     }
   }
 

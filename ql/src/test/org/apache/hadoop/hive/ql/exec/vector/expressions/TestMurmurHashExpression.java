@@ -296,7 +296,7 @@ public class TestMurmurHashExpression {
     Assert.assertFalse(vrb.cols[2].isRepeating);
 
     for (int i = 0; i < SIZE; i++) {
-      Assert.assertEquals(-452676736, ((LongColumnVector) vrb.cols[2]).vector[i]);
+      Assert.assertEquals(964412384, ((LongColumnVector) vrb.cols[2]).vector[i]);
     }
   }
 
@@ -316,7 +316,7 @@ public class TestMurmurHashExpression {
     Assert.assertFalse(vrb.cols[2].isRepeating);
 
     for (int i = 0; i < SIZE; i++) {
-      Assert.assertEquals(1533409056, ((LongColumnVector) vrb.cols[2]).vector[i]);
+      Assert.assertEquals(253052096, ((LongColumnVector) vrb.cols[2]).vector[i]);
     }
   }
 
@@ -338,7 +338,7 @@ public class TestMurmurHashExpression {
     Assert.assertFalse(vrb.cols[2].isRepeating);
 
     for (int i = 0; i < SIZE; i++) {
-      Assert.assertEquals(1622654365, ((LongColumnVector) vrb.cols[2]).vector[i]);
+      Assert.assertEquals(-1742172185, ((LongColumnVector) vrb.cols[2]).vector[i]);
     }
   }
 
@@ -360,7 +360,7 @@ public class TestMurmurHashExpression {
     Assert.assertFalse(vrb.cols[2].isRepeating);
 
     for (int i = 0; i < SIZE; i++) {
-      Assert.assertEquals(1622654365, ((LongColumnVector) vrb.cols[2]).vector[i]);
+      Assert.assertEquals(-1742172185, ((LongColumnVector) vrb.cols[2]).vector[i]);
     }
   }
 }

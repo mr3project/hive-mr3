@@ -24,8 +24,9 @@ import java.lang.reflect.Field;
 /**
  * Murmur3 is successor to Murmur2 fast non-crytographic hash algorithms.
  *
- * Murmur3 32 and 128 bit variants.
- * 32-bit Java port of https://code.google.com/p/smhasher/source/browse/trunk/MurmurHash3.cpp#94
+ * The 32-bit entry points use XXHash32; the 64-bit and 128-bit entry points use Murmur3.
+ * The hash32 method names are retained for source and binary compatibility, but their
+ * results are not compatible with the former Murmur3 32-bit implementation.
  * 128-bit Java port of https://code.google.com/p/smhasher/source/browse/trunk/MurmurHash3.cpp#255
  *
  * This is a public domain code with no copyrights.
@@ -51,14 +52,6 @@ public class Murmur3 {
   // from 64-bit linear congruential generator
   public static final long NULL_HASHCODE = 2862933555777941757L;
 
-  // Constants for 32 bit variant
-  private static final int C1_32 = 0xcc9e2d51;
-  private static final int C2_32 = 0x1b873593;
-  private static final int R1_32 = 15;
-  private static final int R2_32 = 13;
-  private static final int M_32 = 5;
-  private static final int N_32 = 0xe6546b64;
-
   // Constants for 128 bit variant
   private static final long C1 = 0x87c37b91114253d5L;
   private static final long C2 = 0x4cf5ad432745937fL;
@@ -80,36 +73,38 @@ public class Murmur3 {
   }
 
   /**
-   * Murmur3 32-bit variant.
+   * XXHash32 of the big-endian bytes of the supplied long, without allocating a buffer.
    */
   public static int hash32(long l0, int seed) {
-    int hash = seed;
+    int hash = seed + IncrementalHash32.PRIME5 + Long.BYTES;
     final long r0 = Long.reverseBytes(l0);
 
     hash = mix32((int) r0, hash);
     hash = mix32((int) (r0 >>> 32), hash);
 
-    return fmix32(Long.BYTES, hash);
+    return fmix32(0, hash);
   }
 
   /**
-   * Murmur3 32-bit variant.
+   * XXHash32 of the big-endian bytes of the supplied longs, without allocating a buffer.
    */
   public static int hash32(long l0, long l1, int seed) {
-    int hash = seed;
     final long r0 = Long.reverseBytes(l0);
     final long r1 = Long.reverseBytes(l1);
 
-    hash = mix32((int) r0, hash);
-    hash = mix32((int) (r0 >>> 32), hash);
-    hash = mix32((int) (r1), hash);
-    hash = mix32((int) (r1 >>> 32), hash);
+    int v1 = IncrementalHash32.round(seed + IncrementalHash32.PRIME1 + IncrementalHash32.PRIME2,
+        (int) r0);
+    int v2 = IncrementalHash32.round(seed + IncrementalHash32.PRIME2, (int) (r0 >>> 32));
+    int v3 = IncrementalHash32.round(seed, (int) r1);
+    int v4 = IncrementalHash32.round(seed - IncrementalHash32.PRIME1, (int) (r1 >>> 32));
+    int hash = Integer.rotateLeft(v1, 1) + Integer.rotateLeft(v2, 7)
+        + Integer.rotateLeft(v3, 12) + Integer.rotateLeft(v4, 18);
 
     return fmix32(Long.BYTES * 2, hash);
   }
 
   /**
-   * Murmur3 32-bit variant.
+   * XXHash32.
    *
    * @param data - input byte array
    * @return - hashcode
@@ -119,7 +114,7 @@ public class Murmur3 {
   }
 
   /**
-   * Murmur3 32-bit variant.
+   * XXHash32.
    *
    * @param data - input byte array
    * @param length - length of array
@@ -130,11 +125,11 @@ public class Murmur3 {
   }
 
   /**
-   * Murmur3 32-bit variant.
+   * XXHash32.
    *
    * @param data   - input byte array
    * @param length - length of array
-   * @param seed   - seed. (default 0)
+   * @param seed   - seed
    * @return - hashcode
    */
   public static int hash32(byte[] data, int length, int seed) {
@@ -142,61 +137,31 @@ public class Murmur3 {
   }
 
   /**
-   * Murmur3 32-bit variant.
+   * XXHash32. This changes the results of the former Murmur3 32-bit implementation.
    *
    * @param data   - input byte array
    * @param offset - offset of data
    * @param length - length of array
-   * @param seed   - seed. (default 0)
+   * @param seed   - seed
    * @return - hashcode
    */
-  @SuppressFBWarnings(value = {"SF_SWITCH_FALLTHROUGH", "SF_SWITCH_NO_DEFAULT"}, justification = "Expected")
   public static int hash32(byte[] data, int offset, int length, int seed) {
-    int hash = seed;
-    final int nblocks = length >> 2;
-
-    // body
-    // The native byte order is assumed to be little-endian.
-    for (int i = 0; i < nblocks; i++) {
-      int k = unsafe.getInt(data, BASE_OFFSET + offset + (i << 2));
-      hash = mix32(k, hash);
-    }
-
-    // tail
-    int idx = nblocks << 2;
-    int k1 = 0;
-    switch (length - idx) {
-      case 3:
-        k1 ^= data[offset + idx + 2] << 16;
-      case 2:
-        k1 ^= data[offset + idx + 1] << 8;
-      case 1:
-        k1 ^= data[offset + idx];
-
-        // mix functions
-        k1 *= C1_32;
-        k1 = Integer.rotateLeft(k1, R1_32);
-        k1 *= C2_32;
-        hash ^= k1;
-    }
-
-    return fmix32(length, hash);
+    return IncrementalHash32.hash32(data, offset, length, seed);
   }
 
+  // XXHash32 four-byte tail round. The input length must already be included in hash.
   private static int mix32(int k, int hash) {
-    k *= C1_32;
-    k = Integer.rotateLeft(k, R1_32);
-    k *= C2_32;
-    hash ^= k;
-    return Integer.rotateLeft(hash, R2_32) * M_32 + N_32;
+    hash += k * IncrementalHash32.PRIME3;
+    return Integer.rotateLeft(hash, 17) * IncrementalHash32.PRIME4;
   }
 
+  // XXHash32 avalanche. Pass zero if the length was already added before tail processing.
   private static int fmix32(int length, int hash) {
-    hash ^= length;
-    hash ^= (hash >>> 16);
-    hash *= 0x85ebca6b;
+    hash += length;
+    hash ^= (hash >>> 15);
+    hash *= IncrementalHash32.PRIME2;
     hash ^= (hash >>> 13);
-    hash *= 0xc2b2ae35;
+    hash *= IncrementalHash32.PRIME3;
     hash ^= (hash >>> 16);
 
     return hash;
@@ -464,7 +429,7 @@ public class Murmur3 {
 
   /**
    * Computes XXHash32 directly from one contiguous byte slice without incremental state.
-   * Unlike {@link #hash32(byte[], int, int, int)}, this uses the XXHash32 algorithm.
+   * Equivalent to {@link #hash32(byte[], int, int, int)}.
    */
   public static int xxHash32(byte[] data, int offset, int length, int seed) {
     return IncrementalHash32.hash32(data, offset, length, seed);
@@ -510,9 +475,7 @@ public class Murmur3 {
       final int wordLimit = end - 4;
       while (currentOffset <= wordLimit) {
         int k1 = unsafe.getInt(data, BASE_OFFSET + currentOffset);
-        h32 += k1 * PRIME3;
-        h32 = Integer.rotateLeft(h32, 17);
-        h32 *= PRIME4;
+        h32 = mix32(k1, h32);
         currentOffset += 4;
       }
 
@@ -523,12 +486,7 @@ public class Murmur3 {
         currentOffset++;
       }
 
-      h32 ^= h32 >>> 15;
-      h32 *= PRIME2;
-      h32 ^= h32 >>> 13;
-      h32 *= PRIME3;
-      h32 ^= h32 >>> 16;
-      return h32;
+      return fmix32(0, h32);
     }
 
     // State variables
@@ -688,9 +646,7 @@ public class Murmur3 {
       // Process 4-byte chunks.
       while (idx + 4 <= length) {
         int k1 = unsafe.getInt(data, BASE_OFFSET + offset + idx);
-        h32 += k1 * PRIME3;
-        h32 = Integer.rotateLeft(h32, 17);
-        h32 *= PRIME4;
+        h32 = mix32(k1, h32);
         idx += 4;
       }
 
@@ -703,13 +659,7 @@ public class Murmur3 {
       }
 
       // Final mixing (avalanche effect)
-      h32 ^= h32 >>> 15;
-      h32 *= PRIME2;
-      h32 ^= h32 >>> 13;
-      h32 *= PRIME3;
-      h32 ^= h32 >>> 16;
-
-      return h32;
+      return fmix32(0, h32);
     }
   }
 }
