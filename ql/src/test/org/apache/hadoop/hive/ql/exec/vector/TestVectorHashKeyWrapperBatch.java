@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneral;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneralLongString;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperLongStringRowView;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLong;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLongSingleString;
@@ -752,27 +753,27 @@ public class TestVectorHashKeyWrapperBatch {
   public void testVectorHashKeyWrapperGeneralLongStringLongs() throws HiveException {
     assertSpecializedWrapperSelectedInUse(new TypeInfo[] {TypeInfoFactory.longTypeInfo,
         TypeInfoFactory.longTypeInfo, TypeInfoFactory.longTypeInfo, TypeInfoFactory.longTypeInfo},
-        VectorHashKeyWrapperGeneralLongString.class, 4, 0);
+        VectorHashKeyWrapperLongStringRowView.class, 4, 0);
   }
 
   @Test
   public void testVectorHashKeyWrapperGeneralLongStringStrings() throws HiveException {
     assertSpecializedWrapperSelectedInUse(new TypeInfo[] {TypeInfoFactory.stringTypeInfo,
         TypeInfoFactory.stringTypeInfo, TypeInfoFactory.stringTypeInfo, TypeInfoFactory.stringTypeInfo},
-        VectorHashKeyWrapperGeneralLongString.class, 0, 4);
+        VectorHashKeyWrapperLongStringRowView.class, 0, 4);
   }
 
   @Test
   public void testVectorHashKeyWrapperGeneralLongStringMixedPermutations() throws HiveException {
     assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.longTypeInfo,
         TypeInfoFactory.stringTypeInfo, TypeInfoFactory.stringTypeInfo},
-        VectorHashKeyWrapperGeneralLongString.class, 2, 2);
+        VectorHashKeyWrapperLongStringRowView.class, VectorHashKeyWrapperGeneralLongString.class, 2, 2);
     assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.longTypeInfo, TypeInfoFactory.stringTypeInfo,
         TypeInfoFactory.longTypeInfo, TypeInfoFactory.stringTypeInfo},
-        VectorHashKeyWrapperGeneralLongString.class, 2, 2);
+        VectorHashKeyWrapperLongStringRowView.class, VectorHashKeyWrapperGeneralLongString.class, 2, 2);
     assertMixedLongStringWrapper(new TypeInfo[] {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.longTypeInfo,
         TypeInfoFactory.stringTypeInfo, TypeInfoFactory.longTypeInfo},
-        VectorHashKeyWrapperGeneralLongString.class, 2, 2);
+        VectorHashKeyWrapperLongStringRowView.class, VectorHashKeyWrapperGeneralLongString.class, 2, 2);
   }
 
   @Test
@@ -863,6 +864,13 @@ public class TestVectorHashKeyWrapperBatch {
   private void assertMixedLongStringWrapper(TypeInfo[] typeInfos,
       Class<? extends VectorHashKeyWrapperBase> expectedWrapperClass, int longCount, int stringCount)
       throws HiveException {
+    assertMixedLongStringWrapper(typeInfos, expectedWrapperClass, expectedWrapperClass, longCount, stringCount);
+  }
+
+  private void assertMixedLongStringWrapper(TypeInfo[] typeInfos,
+      Class<? extends VectorHashKeyWrapperBase> expectedWrapperClass,
+      Class<? extends VectorHashKeyWrapperBase> expectedCopyClass, int longCount, int stringCount)
+      throws HiveException {
     VectorHashKeyWrapperBatch vhkwb = VectorHashKeyWrapperBatch.compileKeyWrapperBatch(
         identityExpressions(typeInfos.length), typeInfos);
     VectorizedRowBatch batch = createMixedLongStringBatch(typeInfos, false);
@@ -887,8 +895,10 @@ public class TestVectorHashKeyWrapperBatch {
     assertFalse(wrappers[0].equals(wrappers[3]));
 
     VectorHashKeyWrapperBase copy = (VectorHashKeyWrapperBase) wrappers[0].copyKey();
-    assertTrue(expectedWrapperClass.isInstance(copy));
+    // Batch row views copy into owned wrappers so retained keys survive batch reuse.
+    assertTrue(expectedCopyClass.isInstance(copy));
     assertEquals(wrappers[0], copy);
+    assertEquals(copy, wrappers[0]);
     assertEquals(wrappers[0].hashCode(), copy.hashCode());
     assertMixedLongStringWrapperConsistentWithGeneral(copy, vhkwb, longCount, stringCount);
 
@@ -902,6 +912,8 @@ public class TestVectorHashKeyWrapperBatch {
 
     wrappers[1].copyKey(copy);
     assertEquals(wrappers[1], copy);
+    assertEquals(copy, wrappers[1]);
+    assertEquals(wrappers[1].hashCode(), copy.hashCode());
     assertMixedLongStringWrapperConsistentWithGeneral(copy, vhkwb, longCount, stringCount);
   }
 
@@ -1209,9 +1221,7 @@ public class TestVectorHashKeyWrapperBatch {
     }
     generalWrapper.setHashKey();
 
-    if (!(longWrapper instanceof VectorHashKeyWrapperGeneralLongString)) {
-      assertEquals(generalWrapper.hashCode(), longWrapper.hashCode());
-    }
+    assertWrapperHashConsistentWithGeneral(longWrapper, generalWrapper);
     for (int i = 0; i < longCount; i++) {
       assertEquals(generalWrapper.isNull(i), longWrapper.isNull(i));
       assertEquals(generalWrapper.getLongValue(i), longWrapper.getLongValue(i));
@@ -1235,9 +1245,7 @@ public class TestVectorHashKeyWrapperBatch {
     }
     generalWrapper.setHashKey();
 
-    if (!(stringWrapper instanceof VectorHashKeyWrapperGeneralLongString)) {
-      assertEquals(generalWrapper.hashCode(), stringWrapper.hashCode());
-    }
+    assertWrapperHashConsistentWithGeneral(stringWrapper, generalWrapper);
     for (int i = 0; i < stringCount; i++) {
       assertEquals(generalWrapper.isNull(i), stringWrapper.isNull(i));
       assertEquals(generalWrapper.getByteStart(i), stringWrapper.getByteStart(i));
@@ -1253,6 +1261,20 @@ public class TestVectorHashKeyWrapperBatch {
     assertEquals(generalWrapper.stringifyKeys(vhkwb), stringWrapper.stringifyKeys(vhkwb));
     assertEquals(generalWrapper.toString(), stringWrapper.toString());
     assertEquals(generalWrapper.getVariableSize(), stringWrapper.getVariableSize());
+  }
+
+  private void assertWrapperHashConsistentWithGeneral(
+      VectorHashKeyWrapperBase wrapper, VectorHashKeyWrapperGeneral generalWrapper) {
+    if (wrapper instanceof VectorHashKeyWrapperGeneralLongString ||
+        wrapper instanceof VectorHashKeyWrapperLongStringRowView) {
+      // Long/string wrappers use a different hash seed from the fully general wrapper.
+      // Recompute an owned copy's hash to verify the batch storage's hash calculation.
+      VectorHashKeyWrapperBase copy = (VectorHashKeyWrapperBase) wrapper.copyKey();
+      copy.setHashKey();
+      assertEquals(copy.hashCode(), wrapper.hashCode());
+    } else {
+      assertEquals(generalWrapper.hashCode(), wrapper.hashCode());
+    }
   }
 
 }

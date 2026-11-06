@@ -70,6 +70,8 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
 
   private KeyWrapperType keyWrapperType;
 
+  private VectorHashKeyWrapperLongStringBatchStorage longStringStorage;
+
   /**
    * The fixed size of the key wrappers.
    */
@@ -95,7 +97,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     return vectorHashKeyWrappers;
   }
 
-  /** Returns the wrapper implementation selected for this compiled batch. */
+  /** Returns the key layout selected for this compiled batch. */
   public KeyWrapperType getKeyWrapperType() {
     return keyWrapperType;
   }
@@ -268,7 +270,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.clearIsNull(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           size);
       return;
     case SINGLE_LONG:
@@ -303,7 +305,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.setHashKeys(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           size);
       return;
     case SINGLE_LONG:
@@ -338,7 +340,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.assignNullStrings(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           keyIndex, index, size);
       return;
     case THREE_STRING:
@@ -501,7 +503,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.assignStringNullsNoRepeatingSelection(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           keyIndex, index, size, columnVector, selected);
       return;
     case THREE_STRING:
@@ -549,7 +551,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.assignStringNullsNoRepeatingNoSelection(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           keyIndex, index, size, columnVector);
       return;
     case THREE_STRING:
@@ -583,7 +585,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.assignStringNoNullsRepeating(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           index, size, columnVector);
       return;
     case THREE_STRING:
@@ -613,7 +615,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.assignStringNoNullsNoRepeatingSelection(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           index, size, columnVector, selected);
       return;
     case THREE_STRING:
@@ -644,7 +646,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.assignStringNoNullsNoRepeatingNoSelection(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           index, size, columnVector);
       return;
     case THREE_STRING:
@@ -748,7 +750,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.assignLongNullsNoRepeatingSelection(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           keyIndex, index, size, columnVector, selected);
       return;
     case SINGLE_LONG:
@@ -788,7 +790,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.assignLongNullsRepeating(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           keyIndex, index, size);
       return;
     case SINGLE_LONG:
@@ -824,7 +826,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.assignLongNullsNoRepeatingNoSelection(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           keyIndex, index, size, columnVector);
       return;
     case SINGLE_LONG:
@@ -863,7 +865,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsRepeating(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           index, size, columnVector);
       return;
     case SINGLE_LONG:
@@ -899,7 +901,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsNoRepeatingSelection(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           index, size, columnVector, selected);
       return;
     case SINGLE_LONG:
@@ -935,7 +937,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING:
       VectorHashKeyWrapperBatchSpecializations.assignLongNoNullsNoRepeatingNoSelection(
-          (VectorHashKeyWrapperGeneralLongString[]) vectorHashKeyWrappers,
+          longStringStorage,
           index, size, columnVector);
       return;
     case SINGLE_LONG:
@@ -1252,13 +1254,9 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
   private void allocateKeyWrappers() {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING: {
-      VectorHashKeyWrapperGeneralLongString[] wrappers =
-          new VectorHashKeyWrapperGeneralLongString[VectorizedRowBatch.DEFAULT_SIZE];
-      for (int i = 0; i < wrappers.length; ++i) {
-        wrappers[i] = new VectorHashKeyWrapperGeneralLongString(
-            hashCtx, longIndices.length, stringIndices.length, keyCount);
-      }
-      vectorHashKeyWrappers = wrappers;
+      longStringStorage = new VectorHashKeyWrapperLongStringBatchStorage(
+          hashCtx, VectorizedRowBatch.DEFAULT_SIZE, longIndices.length, stringIndices.length);
+      vectorHashKeyWrappers = longStringStorage.rowViews;
       break;
     }
     case SINGLE_LONG: {
