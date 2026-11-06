@@ -475,7 +475,9 @@ public class Murmur3 {
       final int wordLimit = end - 4;
       while (currentOffset <= wordLimit) {
         int k1 = unsafe.getInt(data, BASE_OFFSET + currentOffset);
-        h32 = mix32(k1, h32);
+        h32 += k1 * PRIME3;
+        h32 = Integer.rotateLeft(h32, 17);
+        h32 *= PRIME4;
         currentOffset += 4;
       }
 
@@ -486,7 +488,12 @@ public class Murmur3 {
         currentOffset++;
       }
 
-      return fmix32(0, h32);
+      h32 ^= h32 >>> 15;
+      h32 *= PRIME2;
+      h32 ^= h32 >>> 13;
+      h32 *= PRIME3;
+      h32 ^= h32 >>> 16;
+      return h32;
     }
 
     // State variables
@@ -646,7 +653,9 @@ public class Murmur3 {
       // Process 4-byte chunks.
       while (idx + 4 <= length) {
         int k1 = unsafe.getInt(data, BASE_OFFSET + offset + idx);
-        h32 = mix32(k1, h32);
+        h32 += k1 * PRIME3;
+        h32 = Integer.rotateLeft(h32, 17);
+        h32 *= PRIME4;
         idx += 4;
       }
 
@@ -659,7 +668,13 @@ public class Murmur3 {
       }
 
       // Final mixing (avalanche effect)
-      return fmix32(0, h32);
+      h32 ^= h32 >>> 15;
+      h32 *= PRIME2;
+      h32 ^= h32 >>> 13;
+      h32 *= PRIME3;
+      h32 ^= h32 >>> 16;
+
+      return h32;
     }
   }
 }
