@@ -46,7 +46,8 @@ import org.openjdk.jmh.annotations.Warmup;
 public class Hash32Bench {
   @State(Scope.Thread)
   public static class Bytes {
-    @Param({"0", "1", "4", "8", "15", "16", "32", "64", "256", "1024", "4096"})
+    @Param({"0", "1", "4", "8", "9", "15", "16", "17", "18", "19", "20", "21", "22", "23",
+        "24", "25", "26", "27", "28", "29", "30", "31", "32", "64", "256", "1024", "4096"})
     public int length;
     public byte[][] data;
     public int cursor;

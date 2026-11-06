@@ -427,14 +427,6 @@ public class Murmur3 {
     return h;
   }
 
-  /**
-   * Computes XXHash32 directly from one contiguous byte slice without incremental state.
-   * Equivalent to {@link #hash32(byte[], int, int, int)}.
-   */
-  public static int xxHash32(byte[] data, int offset, int length, int seed) {
-    return IncrementalHash32.hash32(data, offset, length, seed);
-  }
-
   public static class IncrementalHash32 {
     // XXHash constants
     private static final int PRIME1 = 0x9E3779B1; // 2654435761U

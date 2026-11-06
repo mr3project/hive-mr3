@@ -111,7 +111,6 @@ public class TestMurmur3 {
           random.nextBytes(data);
           int expected = reference.hash(data, offset, length, seed);
           assertEquals(expected, Murmur3.hash32(data, offset, length, seed));
-          assertEquals(expected, Murmur3.xxHash32(data, offset, length, seed));
           IncrementalHash32 incremental = new IncrementalHash32();
           incremental.start(seed);
           int first = length / 2;
