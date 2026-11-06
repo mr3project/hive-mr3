@@ -28,7 +28,7 @@ import org.apache.hive.common.util.Murmur3;
 
 import com.google.common.base.Preconditions;
 
-public class VectorHashKeyWrapperThreeString extends VectorHashKeyWrapperBase {
+public final class VectorHashKeyWrapperThreeString extends VectorHashKeyWrapperBase {
 
   private byte[] bytes0;
   private int start0;
