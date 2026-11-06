@@ -142,7 +142,38 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
           byteValues.length == keyThat.byteValues.length &&
           (0 == byteValues.length || bytesEquals(keyThat));
     }
+    if (that instanceof VectorHashKeyWrapperLongStringRowView) {
+      VectorHashKeyWrapperLongStringRowView keyThat = (VectorHashKeyWrapperLongStringRowView) that;
+      return equalsRow(keyThat.owner, keyThat.row);
+    }
     return false;
+  }
+
+  boolean equalsRow(VectorHashKeyWrapperLongStringBatchStorage owner, int row) {
+    if (hashcode != owner.rowViews[row].hashcode ||
+        longValues.length != owner.longCount ||
+        isNull.length != owner.keyCount ||
+        byteValues.length != owner.stringCount) {
+      return false;
+    }
+    for (int i = 0, offset = row; i < longValues.length; ++i, offset += owner.capacity) {
+      if (longValues[i] != owner.longValues[offset]) {
+        return false;
+      }
+    }
+    for (int i = 0, offset = row; i < isNull.length; ++i, offset += owner.capacity) {
+      if (isNull[i] != owner.isNull[offset]) {
+        return false;
+      }
+    }
+    for (int i = 0, offset = row; i < byteValues.length; ++i, offset += owner.capacity) {
+      if (byteLengths[i] != -1 && !StringExpr.equal(
+          byteValues[i], byteStarts[i], byteLengths[i],
+          owner.byteValues[offset], owner.byteStarts[offset], owner.byteLengths[offset])) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private boolean bytesEquals(VectorHashKeyWrapperGeneralLongString keyThat) {
@@ -162,6 +193,59 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
       }
     }
     return true;
+  }
+
+  static VectorHashKeyWrapperGeneralLongString fromRow(
+      VectorHashKeyWrapperLongStringBatchStorage owner, int row) {
+    VectorHashKeyWrapperGeneralLongString copy = new VectorHashKeyWrapperGeneralLongString();
+    copy.copyFromRow(owner, row);
+    return copy;
+  }
+
+  void copyFromRow(VectorHashKeyWrapperLongStringBatchStorage owner, int row) {
+    hashCtx = owner.hashCtx;
+    keyCount = owner.keyCount;
+    if (owner.longCount == 0) {
+      longValues = EMPTY_LONG_ARRAY;
+    } else if (longValues == null || longValues.length != owner.longCount) {
+      longValues = new long[owner.longCount];
+    }
+    for (int i = 0, offset = row; i < owner.longCount; ++i, offset += owner.capacity) {
+      longValues[i] = owner.longValues[offset];
+    }
+    if (isNull == null || isNull.length != owner.keyCount) {
+      isNull = new boolean[owner.keyCount];
+    }
+    for (int i = 0, offset = row; i < owner.keyCount; ++i, offset += owner.capacity) {
+      isNull[i] = owner.isNull[offset];
+    }
+    if (owner.stringCount == 0) {
+      byteValues = EMPTY_BYTES_ARRAY;
+      byteStarts = EMPTY_INT_ARRAY;
+      byteLengths = EMPTY_INT_ARRAY;
+    } else {
+      if (byteValues == null || byteValues.length != owner.stringCount) {
+        byteValues = new byte[owner.stringCount][];
+        byteStarts = new int[owner.stringCount];
+        byteLengths = new int[owner.stringCount];
+      }
+      for (int i = 0, offset = row; i < owner.stringCount; ++i, offset += owner.capacity) {
+        final int length = owner.byteLengths[offset];
+        byteStarts[i] = 0;
+        byteLengths[i] = length;
+        if (length == -1) {
+          byteValues[i] = null;
+        } else if (byteValues[i] != null && byteValues[i].length >= length) {
+          System.arraycopy(owner.byteValues[offset], owner.byteStarts[offset],
+              byteValues[i], 0, length);
+        } else {
+          byteValues[i] = Arrays.copyOfRange(owner.byteValues[offset], owner.byteStarts[offset],
+              owner.byteStarts[offset] + length);
+        }
+      }
+    }
+    hashcode = owner.rowViews[row].hashcode;
+    // assert equalsRow(owner, row);
   }
 
   @Override
