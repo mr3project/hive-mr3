@@ -26,7 +26,7 @@ import org.apache.hadoop.hive.ql.exec.vector.VectorColumnSetInfo;
 import org.apache.hadoop.hive.serde2.io.DateWritableV2;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 
-public class VectorHashKeyWrapperThreeLong extends VectorHashKeyWrapperBase {
+public final class VectorHashKeyWrapperThreeLong extends VectorHashKeyWrapperBase {
 
   private long longValue0;
   private long longValue1;
