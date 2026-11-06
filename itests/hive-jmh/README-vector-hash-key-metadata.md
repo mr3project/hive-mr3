@@ -125,6 +125,32 @@ mvn -f itests/hive-jmh/pom.xml -Pperf -DskipTests package
 After changing the production wrapper in `ql`, use the reactor build again so
 the benchmark does not accidentally use an older installed `hive-exec` JAR.
 
+### DNS provider error when starting a fork
+
+If Java 21 reports:
+
+```text
+java.net.spi.InetAddressResolverProvider: Provider org.xbill.DNS.spi.DnsjavaInetAddressResolverProvider not found
+```
+
+rebuild the shaded JAR with the updated `perf` profile. Hadoop 3.4.1 depends on
+dnsjava 3.6.1, whose DNS provider class is stored under `META-INF/versions/18/`.
+The shaded JAR must declare `Multi-Release: true` in its manifest for Java to
+load that class. The `ManifestResourceTransformer` now adds this entry.
+
+From the repository root, with matching Hive artifacts already installed:
+
+```sh
+mvn -f itests/hive-jmh/pom.xml -Pperf -DskipTests clean package
+```
+
+Replace any previously saved `baseline.jar` and `candidate.jar` with JARs rebuilt
+from their respective production layouts using this packaging fix. Apply the
+same POM change to both builds. An old saved JAR will still have the error even
+after rebuilding `target/benchmarks.jar`. Keep the multi-release classes and
+their service registration together; removing only the class would leave a
+broken provider registration.
+
 ## Save the two builds
 
 After building the baseline, from the repository root:
