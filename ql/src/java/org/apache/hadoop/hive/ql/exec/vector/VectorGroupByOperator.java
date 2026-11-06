@@ -53,8 +53,7 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriterF
 import org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates.VectorAggregateExpression;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
-import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneral;
-import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneralLongString;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperFactory.KeyWrapperType;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.GroupByDesc;
@@ -467,9 +466,9 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       computeMemoryLimits();
       LOG.debug("using hash aggregation processing mode");
 
-      VectorHashKeyWrapperBase firstKeyWrapper = keyWrappersBatch.getVectorHashKeyWrappers()[0];
-      if (firstKeyWrapper instanceof VectorHashKeyWrapperGeneral ||
-          firstKeyWrapper instanceof VectorHashKeyWrapperGeneralLongString) {
+      KeyWrapperType keyWrapperType = keyWrappersBatch.getKeyWrapperType();
+      if (keyWrapperType == KeyWrapperType.GENERAL ||
+          keyWrapperType == KeyWrapperType.GENERAL_LONG_STRING) {
         reusableKeyWrapperBuffer = new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
       }
     }
