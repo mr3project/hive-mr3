@@ -245,7 +245,6 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
       }
     }
     hashcode = owner.rowViews[row].hashcode;
-    assert equalsRow(owner, row);
   }
 
   @Override

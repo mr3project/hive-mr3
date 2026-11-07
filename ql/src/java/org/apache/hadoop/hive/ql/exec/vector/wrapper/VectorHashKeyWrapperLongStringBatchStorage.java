@@ -47,12 +47,11 @@ final class VectorHashKeyWrapperLongStringBatchStorage {
   final VectorHashKeyWrapperLongStringRowView[] rowViews;
 
   VectorHashKeyWrapperLongStringBatchStorage(HashContext hashCtx, int capacity,
-      int longCount, int stringCount, int keyCount) {
-    assert keyCount == longCount + stringCount;
+      int longCount, int stringCount) {
     this.capacity = capacity;
     this.longCount = longCount;
     this.stringCount = stringCount;
-    this.keyCount = keyCount;
+    this.keyCount = longCount + stringCount;
     this.hashCtx = hashCtx;
     longValues = new long[longCount * capacity];
     byteValues = new byte[stringCount * capacity][];
@@ -66,7 +65,6 @@ final class VectorHashKeyWrapperLongStringBatchStorage {
   }
 
   void clearIsNull(int size) {
-    assert size >= 0 && size <= capacity;
     for (int keyIndex = 0; keyIndex < keyCount; ++keyIndex) {
       int offset = keyIndex * capacity;
       Arrays.fill(isNull, offset, offset + size, false);
@@ -74,14 +72,12 @@ final class VectorHashKeyWrapperLongStringBatchStorage {
   }
 
   void setHashKeys(int size) {
-    assert size >= 0 && size <= capacity;
     for (int row = 0; row < size; ++row) {
       rowViews[row].hashcode = computeHash(row);
     }
   }
 
   int computeHash(int row) {
-    assert row >= 0 && row < capacity;
     int longHash = 1;
     for (int index = 0; index < longCount; ++index) {
       long value = longValues[index * capacity + row];

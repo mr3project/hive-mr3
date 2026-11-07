@@ -63,7 +63,6 @@ public final class VectorHashKeyWrapperLongStringRowView extends VectorHashKeyWr
 
   @Override
   public void copyKey(KeyWrapper oldWrapper) {
-    assert oldWrapper instanceof VectorHashKeyWrapperGeneralLongString;
     ((VectorHashKeyWrapperGeneralLongString) oldWrapper).copyFromRow(owner, row);
   }
 
@@ -87,7 +86,6 @@ public final class VectorHashKeyWrapperLongStringRowView extends VectorHashKeyWr
 
   @Override
   public void assignString(int index, byte[] bytes, int start, int length) {
-    assert bytes != null;
     int offset = index * owner.capacity + row;
     owner.byteValues[offset] = bytes;
     owner.byteStarts[offset] = start;

@@ -1255,7 +1255,7 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     switch (keyWrapperType) {
     case GENERAL_LONG_STRING: {
       longStringStorage = new VectorHashKeyWrapperLongStringBatchStorage(
-          hashCtx, VectorizedRowBatch.DEFAULT_SIZE, longIndices.length, stringIndices.length, keyCount);
+          hashCtx, VectorizedRowBatch.DEFAULT_SIZE, longIndices.length, stringIndices.length);
       vectorHashKeyWrappers = longStringStorage.rowViews;
       break;
     }
