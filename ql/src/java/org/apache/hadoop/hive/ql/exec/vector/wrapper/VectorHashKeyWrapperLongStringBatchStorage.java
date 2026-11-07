@@ -44,6 +44,10 @@ final class VectorHashKeyWrapperLongStringBatchStorage {
   // Nulls use logical key indices; the value arrays use type-specific indices.
   final boolean[] isNull;
 
+  // Per-row seed accumulators reused across batches and grouping-set passes.
+  private final int[] longHashes;
+  private final int[] nullHashes;
+
   final VectorHashKeyWrapperLongStringRowView[] rowViews;
 
   VectorHashKeyWrapperLongStringBatchStorage(HashContext hashCtx, int capacity,
@@ -58,6 +62,8 @@ final class VectorHashKeyWrapperLongStringBatchStorage {
     byteStarts = new int[stringCount * capacity];
     byteLengths = new int[stringCount * capacity];
     isNull = new boolean[keyCount * capacity];
+    longHashes = new int[capacity];
+    nullHashes = new int[capacity];
     rowViews = new VectorHashKeyWrapperLongStringRowView[capacity];
     for (int row = 0; row < capacity; ++row) {
       rowViews[row] = new VectorHashKeyWrapperLongStringRowView(this, row);
@@ -72,8 +78,23 @@ final class VectorHashKeyWrapperLongStringBatchStorage {
   }
 
   void setHashKeys(int size) {
+    Arrays.fill(longHashes, 0, size, 1);
+    Arrays.fill(nullHashes, 0, size, 1);
+    for (int index = 0; index < longCount; ++index) {
+      int offset = index * capacity;
+      for (int row = 0; row < size; ++row) {
+        long value = longValues[offset + row];
+        longHashes[row] = 31 * longHashes[row] + (int) (value ^ (value >>> 32));
+      }
+    }
+    for (int keyIndex = 0; keyIndex < keyCount; ++keyIndex) {
+      int offset = keyIndex * capacity;
+      for (int row = 0; row < size; ++row) {
+        nullHashes[row] = 31 * nullHashes[row] + (isNull[offset + row] ? 1231 : 1237);
+      }
+    }
     for (int row = 0; row < size; ++row) {
-      rowViews[row].hashcode = computeHash(row);
+      rowViews[row].hashcode = computeStringHash(row, longHashes[row] ^ nullHashes[row]);
     }
   }
 
@@ -87,8 +108,10 @@ final class VectorHashKeyWrapperLongStringBatchStorage {
     for (int keyIndex = 0; keyIndex < keyCount; ++keyIndex) {
       nullHash = 31 * nullHash + (isNull[keyIndex * capacity + row] ? 1231 : 1237);
     }
-    int hash = longHash ^ nullHash;
+    return computeStringHash(row, longHash ^ nullHash);
+  }
 
+  private int computeStringHash(int row, int hash) {
     Murmur3.IncrementalHash32 bytesHash = null;
     byte[] pendingBytes = null;
     int pendingStart = 0;
