@@ -146,7 +146,36 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
       VectorHashKeyWrapperLongStringRowView keyThat = (VectorHashKeyWrapperLongStringRowView) that;
       return equalsRow(keyThat.owner, keyThat.row, keyThat.hashcode);
     }
+    if (that instanceof VectorHashKeyWrapperLongStringProbe) {
+      return equalsProbe((VectorHashKeyWrapperLongStringProbe) that);
+    }
     return false;
+  }
+
+  boolean equalsProbe(VectorHashKeyWrapperLongStringProbe probe) {
+    if (hashcode != probe.hashcode ||
+        longValues.length != probe.columnSetInfo.longIndices.length ||
+        isNull.length != probe.columnSetInfo.keyCount ||
+        byteValues.length != probe.columnSetInfo.stringIndices.length) {
+      return false;
+    }
+    for (int i = 0; i < longValues.length; ++i) {
+      if (longValues[i] != probe.getLongValue(i)) {
+        return false;
+      }
+    }
+    for (int keyIndex = 0; keyIndex < isNull.length; ++keyIndex) {
+      if (isNull[keyIndex] != probe.isNull(keyIndex)) {
+        return false;
+      }
+    }
+    for (int i = 0; i < byteValues.length; ++i) {
+      if (byteLengths[i] != -1 &&
+          !probe.equalBytes(i, byteValues[i], byteStarts[i], byteLengths[i])) {
+        return false;
+      }
+    }
+    return true;
   }
 
   boolean equalsRow(VectorHashKeyWrapperLongStringBatchStorage owner, int row, int probeHash) {
@@ -245,6 +274,34 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
       }
     }
     hashcode = owner.rowViews[row].hashcode;
+  }
+
+  void copyFromProbe(VectorHashKeyWrapperLongStringProbe probe) {
+    assert longValues.length == probe.columnSetInfo.longIndices.length;
+    assert byteValues.length == probe.columnSetInfo.stringIndices.length;
+    assert isNull.length == probe.columnSetInfo.keyCount;
+    hashCtx = probe.hashCtx;
+    for (int i = 0; i < longValues.length; ++i) {
+      longValues[i] = probe.getLongValue(i);
+    }
+    for (int keyIndex = 0; keyIndex < isNull.length; ++keyIndex) {
+      isNull[keyIndex] = probe.isNull(keyIndex);
+    }
+    for (int i = 0; i < byteValues.length; ++i) {
+      final int length = probe.getByteLength(i);
+      byteStarts[i] = 0;
+      byteLengths[i] = length;
+      if (length == -1) {
+        byteValues[i] = null;
+      } else if (byteValues[i] != null && byteValues[i].length >= length) {
+        System.arraycopy(probe.getBytes(i), probe.getByteStart(i), byteValues[i], 0, length);
+      } else {
+        byteValues[i] = Arrays.copyOfRange(probe.getBytes(i), probe.getByteStart(i),
+            probe.getByteStart(i) + length);
+      }
+    }
+    hashcode = probe.hashcode;
+    assert equals(probe);
   }
 
   @Override

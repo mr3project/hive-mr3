@@ -102,6 +102,12 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     return keyWrapperType;
   }
 
+  /** Creates a reusable input-column probe for hash aggregation. */
+  public VectorHashKeyWrapperLongStringProbe createLongStringProbe() {
+    assert keyWrapperType == KeyWrapperType.GENERAL_LONG_STRING;
+    return new VectorHashKeyWrapperLongStringProbe(this, keyExpressions, hashCtx);
+  }
+
   /**
    * Processes a batch:
    * <ul>

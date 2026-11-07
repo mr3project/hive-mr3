@@ -54,6 +54,7 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates.VectorAggreg
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperFactory.KeyWrapperType;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperLongStringProbe;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.GroupByDesc;
@@ -337,6 +338,8 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     private Queue<VectorAggregationBufferRow> reusableAggregationBufferRows =
         new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
 
+    private VectorHashKeyWrapperLongStringProbe longStringProbe;
+
     /**
      * Total per hashtable entry fixed memory (does not depend on key/agg values).
      */
@@ -467,6 +470,9 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       LOG.debug("using hash aggregation processing mode");
 
       KeyWrapperType keyWrapperType = keyWrappersBatch.getKeyWrapperType();
+      if (keyWrapperType == KeyWrapperType.GENERAL_LONG_STRING) {
+        longStringProbe = keyWrappersBatch.createLongStringProbe();
+      }
       if (keyWrapperType == KeyWrapperType.GENERAL ||
           keyWrapperType == KeyWrapperType.GENERAL_LONG_STRING) {
         reusableKeyWrapperBuffer = new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
@@ -490,9 +496,10 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         }
       }
 
-      // First we traverse the batch to evaluate and prepare the KeyWrappers
-      // After this the KeyWrappers are properly set and hash code is computed
-      if (!groupingSetsPresent) {
+      // Long/string hash aggregation reads the input columns at each lookup.
+      if (longStringProbe != null) {
+        longStringProbe.bind(batch, currentGroupingSetsOverrideIsNulls);
+      } else if (!groupingSetsPresent) {
         keyWrappersBatch.evaluateBatch(batch);
       } else {
         keyWrappersBatch.evaluateBatchGroupingSets(batch, currentGroupingSetsOverrideIsNulls);
@@ -504,13 +511,20 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       // sample each batch (and each grouping set) before any entries can be flushed
       peakEntries = Math.max(peakEntries, numEntriesHashTable);
 
+      // Sample key sizes while the bound input still contains the grouping keys.
+      int keyVariableSize = 0;
+      if (numEntriesSinceCheck >= checkInterval || sumBatchSize == 0) {
+        keyVariableSize = longStringProbe == null ? keyWrappersBatch.getVariableSize(batch.size) :
+            longStringProbe.getVariableSize(batch.size);
+      }
+
       // Finally, evaluate the aggregators
       processAggregators(batch);
 
       //Flush if memory limits were reached
       // We keep flushing until the memory is under threshold
       int preFlushEntriesCount = numEntriesHashTable;
-      while (shouldFlush(batch)) {
+      while (shouldFlush(batch, keyVariableSize)) {
         flush(false);
 
         if(gcCanary.get() == null) {
@@ -529,7 +543,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
       if (sumBatchSize == 0 && 0 != batch.size) {
         // Sample the first batch processed for variable sizes.
-        updateAvgVariableSize(batch);
+        updateAvgVariableSize(batch, keyVariableSize);
       }
 
       sumBatchSize += batch.size;
@@ -581,7 +595,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
     /**
      * Locates the aggregation buffer sets to use for each key in the current batch.
-     * The keyWrappersBatch must have evaluated the current batch first.
+     * The input-column probe must be bound or the batch key wrappers evaluated first.
      */
     private void prepareBatchAggregationBufferSets(VectorizedRowBatch batch) throws HiveException {
       // The aggregation batch vector needs to know when we start a new batch
@@ -600,15 +614,21 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       // note - the row mapping is not relevant when aggregationBatchInfo::getDistinctBufferSetCount() == 1
 
       for (int i=0; i < n; ++i) {
-        VectorHashKeyWrapperBase kw = keyWrappers[i];
+        VectorHashKeyWrapperBase kw;
+        if (longStringProbe != null) {
+          longStringProbe.selectRow(i);
+          kw = longStringProbe;
+        } else {
+          kw = keyWrappers[i];
+        }
         VectorAggregationBufferRow aggregationBuffer = mapKeysAggregationBuffers.get(kw);
         if (null == aggregationBuffer) {
           // the probe failed, we must allocate a set of aggregation buffers
           // and push the (keywrapper,buffers) pair into the hash.
-          // is very important to clone the keywrapper, the one we have from our
-          // keyWrappersBatch is going to be reset/reused on next batch.
+          // Copy before insertion: the probe changes rows and batch wrappers are reused.
           aggregationBuffer = allocateAggregationBuffer();
           KeyWrapper copyKeyWrapper = cloneKeyWrapper(kw);
+          assert copyKeyWrapper != longStringProbe;
           mapKeysAggregationBuffers.put(copyKeyWrapper, aggregationBuffer);
           numEntriesHashTable++;
           numEntriesSinceCheck++;
@@ -750,7 +770,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
      * Returns true if the memory threshold for the hash table was reached.
      * WARN: Frequent flushing can reduce Op throughput
      */
-    private boolean shouldFlush(VectorizedRowBatch batch) {
+    private boolean shouldFlush(VectorizedRowBatch batch, int keyVariableSize) {
       if (batch.size == 0) {
         return false;
       }
@@ -758,7 +778,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       // since the last time we checked the average variable size
       if (numEntriesSinceCheck >= this.checkInterval) {
         // Were going to update the average variable row size by sampling the current batch
-        updateAvgVariableSize(batch);
+        updateAvgVariableSize(batch, keyVariableSize);
         numEntriesSinceCheck = 0;
       }
       long currMemUsed = numEntriesHashTable * (fixedHashEntrySize + avgVariableSize);
@@ -779,8 +799,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
      * The average is only updates by probing the batch that added the entry in the hash table
      * that caused the check threshold to be reached.
      */
-    private void updateAvgVariableSize(VectorizedRowBatch batch) {
-      int keyVariableSize = keyWrappersBatch.getVariableSize(batch.size);
+    private void updateAvgVariableSize(VectorizedRowBatch batch, int keyVariableSize) {
       int aggVariableSize = aggregationBatchInfo.getVariableSize(batch.size);
 
       // This assumes the distribution of variable size keys/aggregates in the input
