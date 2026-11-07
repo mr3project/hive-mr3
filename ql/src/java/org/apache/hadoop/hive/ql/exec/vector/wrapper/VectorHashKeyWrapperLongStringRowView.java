@@ -51,7 +51,7 @@ public final class VectorHashKeyWrapperLongStringRowView extends VectorHashKeyWr
       return owner.equalRows(row, keyThat.owner, keyThat.row);
     }
     if (that instanceof VectorHashKeyWrapperGeneralLongString) {
-      return ((VectorHashKeyWrapperGeneralLongString) that).equalsRow(owner, row);
+      return ((VectorHashKeyWrapperGeneralLongString) that).equalsRow(owner, row, hashcode);
     }
     return false;
   }

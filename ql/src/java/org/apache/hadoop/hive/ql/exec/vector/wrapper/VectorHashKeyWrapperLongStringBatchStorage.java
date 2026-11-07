@@ -90,32 +90,34 @@ final class VectorHashKeyWrapperLongStringBatchStorage {
     int hash = longHash ^ nullHash;
 
     Murmur3.IncrementalHash32 bytesHash = null;
-    int pendingOffset = -1;
+    byte[] pendingBytes = null;
+    int pendingStart = 0;
+    int pendingLength = 0;
     boolean hasNonNull = false;
     for (int index = 0; index < stringCount; ++index) {
       int offset = index * capacity + row;
-      if (byteLengths[offset] == -1) {
+      int length = byteLengths[offset];
+      if (length == -1) {
         continue;
       }
       hasNonNull = true;
-      if (byteLengths[offset] > 0) {
-        if (pendingOffset != -1) {
+      if (length > 0) {
+        if (pendingLength > 0) {
           if (bytesHash == null) {
             bytesHash = HashContext.getBytesHash(hashCtx);
             bytesHash.start(hash);
           }
-          bytesHash.add(
-              byteValues[pendingOffset], byteStarts[pendingOffset], byteLengths[pendingOffset]);
+          bytesHash.add(pendingBytes, pendingStart, pendingLength);
         }
-        pendingOffset = offset;
+        pendingBytes = byteValues[offset];
+        pendingStart = byteStarts[offset];
+        pendingLength = length;
       }
     }
     if (bytesHash != null) {
-      hash = bytesHash.addAndEnd(
-          byteValues[pendingOffset], byteStarts[pendingOffset], byteLengths[pendingOffset]);
-    } else if (pendingOffset != -1) {
-      hash = Murmur3.IncrementalHash32.hash32(
-          byteValues[pendingOffset], byteStarts[pendingOffset], byteLengths[pendingOffset], hash);
+      hash = bytesHash.addAndEnd(pendingBytes, pendingStart, pendingLength);
+    } else if (pendingLength > 0) {
+      hash = Murmur3.IncrementalHash32.hash32(pendingBytes, pendingStart, pendingLength, hash);
     } else if (hasNonNull) {
       bytesHash = HashContext.getBytesHash(hashCtx);
       bytesHash.start(hash);

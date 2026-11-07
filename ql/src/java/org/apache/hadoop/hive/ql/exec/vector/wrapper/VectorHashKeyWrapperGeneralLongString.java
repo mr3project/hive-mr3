@@ -144,13 +144,13 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
     }
     if (that instanceof VectorHashKeyWrapperLongStringRowView) {
       VectorHashKeyWrapperLongStringRowView keyThat = (VectorHashKeyWrapperLongStringRowView) that;
-      return equalsRow(keyThat.owner, keyThat.row);
+      return equalsRow(keyThat.owner, keyThat.row, keyThat.hashcode);
     }
     return false;
   }
 
-  boolean equalsRow(VectorHashKeyWrapperLongStringBatchStorage owner, int row) {
-    if (hashcode != owner.rowViews[row].hashcode ||
+  boolean equalsRow(VectorHashKeyWrapperLongStringBatchStorage owner, int row, int probeHash) {
+    if (hashcode != probeHash ||
         longValues.length != owner.longCount ||
         isNull.length != owner.keyCount ||
         byteValues.length != owner.stringCount) {
