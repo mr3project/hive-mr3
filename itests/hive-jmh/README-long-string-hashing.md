@@ -39,6 +39,21 @@ In the provided managed environment, first source
 `-Drat.excludesFile=/workspace/.onboarding/rat-excludes.txt -Ddevelocity.scan=false`
 to the Maven command. Its Maven wrapper prepares the required MR3/Tez artifacts.
 
+The shaded JAR declares `Multi-Release: true` so JDK 21 can load versioned
+dependency classes, including dnsjava's `InetAddressResolverProvider`. If an
+older benchmark JAR fails with
+`Provider org.xbill.DNS.spi.DnsjavaInetAddressResolverProvider not found`, rebuild
+it with the updated POM. You can inspect the resulting manifest without running
+JMH:
+
+```sh
+unzip -p itests/hive-jmh/target/benchmarks.jar META-INF/MANIFEST.MF
+jar tf itests/hive-jmh/target/benchmarks.jar | rg 'DnsjavaInetAddressResolverProvider'
+```
+
+The manifest should contain `Multi-Release: true`, and the class should appear
+under `META-INF/versions/18/`.
+
 ## Initial comparison
 
 ```sh
