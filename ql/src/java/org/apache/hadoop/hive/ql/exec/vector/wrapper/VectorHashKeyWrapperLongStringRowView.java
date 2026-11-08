@@ -99,7 +99,7 @@ public final class VectorHashKeyWrapperLongStringRowView extends VectorHashKeyWr
     owner.isNull[keyIndex * owner.capacity + row] = true;
     int offset = index * owner.capacity + row;
     owner.byteValues[offset] = null;
-    owner.byteStarts[offset] = 0;
+    // owner.byteStarts[offset] = 0;    // optional: null strings are skipped before their offsets are read
     owner.byteLengths[offset] = -1;
   }
 
