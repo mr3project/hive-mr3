@@ -215,8 +215,15 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
       }
 
       if (smallTableValueVectorDeserializeRow != null) {
-        doSmallTableValueDeserializeRow(batch, batchIndex,
-            byteSegmentRef, hashMapResult);
+        if (i == 0 || smallTableValueVectorCopy == null) {
+          doSmallTableValueDeserializeRow(batch, batchIndex,
+              byteSegmentRef, hashMapResult);
+        } else {
+          // Only copy the decoded small table value columns.  Byte references are safe:
+          // they refer to immutable hash table bytes or storage owned by this batch.
+          smallTableValueVectorCopy.copyByReference(
+              batch, allMatches[allMatchesIndex], batch, batchIndex);
+        }
       }
 
       // Use the big table row as output.

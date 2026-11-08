@@ -249,6 +249,10 @@ private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
   // in a vectorized row batch.
   protected transient VectorDeserializeRow<LazyBinaryDeserializeRead> smallTableValueVectorDeserializeRow;
 
+  // Copies decoded small table values between rows of the same batch.  Null for schemas
+  // containing types that VectorCopyRow does not support.
+  protected transient VectorCopyRow smallTableValueVectorCopy;
+
   // This a 2nd batch with the same "column schema" as the big table batch that can be used to
   // build join output results in.  If we can create some join output results in the big table
   // batch, we will for better efficiency (i.e. avoiding copying).  Otherwise, we will use the
@@ -570,14 +574,7 @@ private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
       initializeFullOuterObjects();
     }
 
-    if (smallTableValueMapping.getCount() > 0) {
-      smallTableValueVectorDeserializeRow =
-          new VectorDeserializeRow<LazyBinaryDeserializeRead>(
-              new LazyBinaryDeserializeRead(
-                  smallTableValueMapping.getTypeInfos(),
-                  /* useExternalBuffer */ true));
-      smallTableValueVectorDeserializeRow.init(smallTableValueMapping.getOutputColumns());
-    }
+    initializeSmallTableValueDeserializeRow();
 
     if (bigTableRetainColumnMap.length > 0) {
       bigTableRetainedVectorCopy = new VectorCopyRow();
@@ -617,6 +614,41 @@ private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
         i++;
       }
     }
+  }
+
+  protected void initializeSmallTableValueDeserializeRow() throws HiveException {
+    smallTableValueVectorDeserializeRow = null;
+    smallTableValueVectorCopy = null;
+    if (smallTableValueMapping.getCount() == 0) {
+      return;
+    }
+
+    TypeInfo[] typeInfos = smallTableValueMapping.getTypeInfos();
+    int[] outputColumns = smallTableValueMapping.getOutputColumns();
+    smallTableValueVectorDeserializeRow =
+        new VectorDeserializeRow<LazyBinaryDeserializeRead>(
+            new LazyBinaryDeserializeRead(typeInfos, /* useExternalBuffer */ true));
+    smallTableValueVectorDeserializeRow.init(outputColumns);
+
+    // The deserializer also supports complex values, but VectorCopyRow only supports
+    // these primitive vector types.  Keep per-row deserialization for other schemas.
+    for (TypeInfo typeInfo : typeInfos) {
+      switch (VectorizationContext.getColumnVectorTypeFromTypeInfo(typeInfo)) {
+      case LONG:
+      case DOUBLE:
+      case BYTES:
+      case DECIMAL:
+      case TIMESTAMP:
+      case INTERVAL_DAY_TIME:
+        break;
+      default:
+        return;
+      }
+    }
+
+    smallTableValueVectorCopy = new VectorCopyRow();
+    // Mapping input columns are serialized field indices, not batch column numbers.
+    smallTableValueVectorCopy.init(outputColumns, typeInfos);
   }
 
   @Override
