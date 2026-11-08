@@ -382,7 +382,7 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
   public void assignNullString(int keyIndex, int index) {
     isNull[keyIndex] = true;
     byteValues[index] = null;
-    byteStarts[index] = 0;
+    // byteStarts[index] = 0;    // optional: null strings are skipped before their offsets are read
     // We need some value that indicates NULL.
     byteLengths[index] = -1;
   }
