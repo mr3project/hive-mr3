@@ -36,16 +36,12 @@ import org.apache.hadoop.hive.ql.util.JavaDataModel;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 
-import com.google.common.base.Preconditions;
-
 /**
  * A hash map key wrapper for vectorized processing.
  * It stores the key values as primitives in arrays for each supported primitive type.
- * This works in conjunction with
- * {@link VectorHashKeyWrapperBatch}
- * to hash vectorized processing units (batches).
+ * This works in conjunction with VectorHashKeyWrapperBatch to hash vectorized processing units (batches).
  */
-public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
+public final class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
 
   private static final int[] EMPTY_INT_ARRAY = new int[0];
   private static final long[] EMPTY_LONG_ARRAY = new long[0];
@@ -74,10 +70,9 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
 
   private int keyCount;
 
-  // NOTE: The null array is indexed by keyIndex, which is not available internally.  The mapping
-  //       from a long, double, etc index to key index is kept once in the separate
-  //       VectorColumnSetInfo object.
-  protected boolean[] isNull;
+  // NOTE. The null array is indexed by keyIndex, which is not available internally.
+  // The mapping from a long, double, etc index to key index is kept once in the separate VectorColumnSetInfo object.
+  private boolean[] isNull;
 
   public VectorHashKeyWrapperGeneral(HashContext ctx, int longValuesCount, int doubleValuesCount,
           int byteValuesCount, int decimalValuesCount, int timestampValuesCount,
@@ -136,8 +131,10 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
       hash ^= intervalDayTimeValues[i].hashCode();
     }
 
-    // This code, with branches and all, is not executed if there are no string keys
+    // This code, with branches and all, is not executed if there are no string keys.
     Murmur3.IncrementalHash32 bytesHash = null;
+    int pendingIndex = -1;
+    boolean hasNonNull = false;
     for (int i = 0; i < byteValues.length; ++i) {
       /*
        *  Hashing the string is potentially expensive so is better to branch.
@@ -146,13 +143,30 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
       if (byteLengths[i] == -1) {
         continue;
       }
-      if (bytesHash == null) {
-        bytesHash = HashContext.getBytesHash(hashCtx);
-        bytesHash.start(hash);
+      hasNonNull = true;
+      if (byteLengths[i] > 0) {
+        // Keep the last nonempty string for addAndEnd; empty strings contribute no bytes.
+        if (pendingIndex != -1) {
+          if (bytesHash == null) {
+            bytesHash = HashContext.getBytesHash(hashCtx);
+            bytesHash.start(hash);
+          }
+          bytesHash.add(
+              byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex]);
+        }
+        pendingIndex = i;
       }
-      bytesHash.add(byteValues[i], byteStarts[i], byteLengths[i]);
     }
     if (bytesHash != null) {
+      hash = bytesHash.addAndEnd(
+          byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex]);
+    } else if (pendingIndex != -1) {
+      hash = Murmur3.IncrementalHash32.hash32(
+          byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex], hash);
+    } else if (hasNonNull) {
+      // Non-null empty strings still finalize the seeded XXHash32 value.
+      bytesHash = HashContext.getBytesHash(hashCtx);
+      bytesHash.start(hash);
       hash = bytesHash.end();
     }
     this.hashcode = hash;
@@ -178,7 +192,64 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
           byteValues.length == keyThat.byteValues.length &&
           (0 == byteValues.length || bytesEquals(keyThat));
     }
+    if (that instanceof VectorHashKeyWrapperGeneralRowView) {
+      VectorHashKeyWrapperGeneralRowView keyThat = (VectorHashKeyWrapperGeneralRowView) that;
+      return equalsRow(keyThat.owner, keyThat.row);
+    }
     return false;
+  }
+
+  boolean equalsRow(VectorHashKeyWrapperGeneralBatchStorage owner, int row) {
+    if (hashcode != owner.rowViews[row].hashcode ||
+        longValues.length != owner.longCount ||
+        doubleValues.length != owner.doubleCount ||
+        byteValues.length != owner.stringCount ||
+        decimalValues.length != owner.decimalCount ||
+        timestampValues.length != owner.timestampCount ||
+        intervalDayTimeValues.length != owner.intervalDayTimeCount ||
+        isNull.length != owner.keyCount) {
+      return false;
+    }
+    for (int i = 0, offset = row; i < longValues.length; ++i, offset += owner.capacity) {
+      if (longValues[i] != owner.longValues[offset]) {
+        return false;
+      }
+    }
+    for (int i = 0, offset = row; i < doubleValues.length; ++i, offset += owner.capacity) {
+      // Match Arrays.equals(double[], double[]): canonical NaNs, distinct signed zeroes.
+      if (Double.doubleToLongBits(doubleValues[i]) !=
+          Double.doubleToLongBits(owner.doubleValues[offset])) {
+        return false;
+      }
+    }
+    for (int i = 0, offset = row; i < isNull.length; ++i, offset += owner.capacity) {
+      if (isNull[i] != owner.isNull[offset]) {
+        return false;
+      }
+    }
+    for (int i = 0, offset = row; i < decimalValues.length; ++i, offset += owner.capacity) {
+      if (!decimalValues[i].equals(owner.decimalValues[offset])) {
+        return false;
+      }
+    }
+    for (int i = 0, offset = row; i < timestampValues.length; ++i, offset += owner.capacity) {
+      if (!timestampValues[i].equals(owner.timestampValues[offset])) {
+        return false;
+      }
+    }
+    for (int i = 0, offset = row; i < intervalDayTimeValues.length; ++i, offset += owner.capacity) {
+      if (!intervalDayTimeValues[i].equals(owner.intervalDayTimeValues[offset])) {
+        return false;
+      }
+    }
+    for (int i = 0, offset = row; i < byteValues.length; ++i, offset += owner.capacity) {
+      if (byteLengths[i] != -1 && !StringExpr.equal(
+          byteValues[i], byteStarts[i], byteLengths[i],
+          owner.byteValues[offset], owner.byteStarts[offset], owner.byteLengths[offset])) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private boolean bytesEquals(VectorHashKeyWrapperGeneral keyThat) {
@@ -198,6 +269,102 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
       }
     }
     return true;
+  }
+
+  static VectorHashKeyWrapperGeneral fromRow(VectorHashKeyWrapperGeneralBatchStorage owner, int row) {
+    VectorHashKeyWrapperGeneral copy = new VectorHashKeyWrapperGeneral();
+    copy.copyFromRow(owner, row);
+    return copy;
+  }
+
+  void copyFromRow(VectorHashKeyWrapperGeneralBatchStorage owner, int row) {
+    hashCtx = owner.hashCtx;
+    keyCount = owner.keyCount;
+    if (owner.longCount == 0) {
+      longValues = EMPTY_LONG_ARRAY;
+    } else if (longValues == null || longValues.length != owner.longCount) {
+      longValues = new long[owner.longCount];
+    }
+    for (int i = 0, offset = row; i < owner.longCount; ++i, offset += owner.capacity) {
+      longValues[i] = owner.longValues[offset];
+    }
+    if (owner.doubleCount == 0) {
+      doubleValues = EMPTY_DOUBLE_ARRAY;
+    } else if (doubleValues == null || doubleValues.length != owner.doubleCount) {
+      doubleValues = new double[owner.doubleCount];
+    }
+    for (int i = 0, offset = row; i < owner.doubleCount; ++i, offset += owner.capacity) {
+      doubleValues[i] = owner.doubleValues[offset];
+    }
+    if (isNull == null || isNull.length != owner.keyCount) {
+      isNull = new boolean[owner.keyCount];
+    }
+    for (int i = 0, offset = row; i < owner.keyCount; ++i, offset += owner.capacity) {
+      isNull[i] = owner.isNull[offset];
+    }
+    if (owner.stringCount == 0) {
+      byteValues = EMPTY_BYTES_ARRAY;
+      byteStarts = EMPTY_INT_ARRAY;
+      byteLengths = EMPTY_INT_ARRAY;
+    } else {
+      if (byteValues == null || byteValues.length != owner.stringCount) {
+        byteValues = new byte[owner.stringCount][];
+        byteStarts = new int[owner.stringCount];
+        byteLengths = new int[owner.stringCount];
+      }
+      for (int i = 0, offset = row; i < owner.stringCount; ++i, offset += owner.capacity) {
+        final int length = owner.byteLengths[offset];
+        byteStarts[i] = 0;
+        byteLengths[i] = length;
+        if (length == -1) {
+          byteValues[i] = null;
+        } else if (byteValues[i] != null && byteValues[i].length >= length) {
+          System.arraycopy(owner.byteValues[offset], owner.byteStarts[offset], byteValues[i], 0, length);
+        } else {
+          byteValues[i] = Arrays.copyOfRange(owner.byteValues[offset], owner.byteStarts[offset],
+              owner.byteStarts[offset] + length);
+        }
+      }
+    }
+    if (owner.decimalCount == 0) {
+      decimalValues = EMPTY_DECIMAL_ARRAY;
+    } else if (decimalValues == null || decimalValues.length != owner.decimalCount) {
+      decimalValues = new HiveDecimalWritable[owner.decimalCount];
+    }
+    for (int i = 0, offset = row; i < owner.decimalCount; ++i, offset += owner.capacity) {
+      if (decimalValues[i] == null) {
+        decimalValues[i] = new HiveDecimalWritable(owner.decimalValues[offset]);
+      } else {
+        decimalValues[i].set(owner.decimalValues[offset]);
+      }
+    }
+    if (owner.timestampCount == 0) {
+      timestampValues = EMPTY_TIMESTAMP_ARRAY;
+    } else if (timestampValues == null || timestampValues.length != owner.timestampCount) {
+      timestampValues = new Timestamp[owner.timestampCount];
+    }
+    for (int i = 0, offset = row; i < owner.timestampCount; ++i, offset += owner.capacity) {
+      if (timestampValues[i] == null) {
+        timestampValues[i] = (Timestamp) owner.timestampValues[offset].clone();
+      } else {
+        timestampValues[i].setTime(owner.timestampValues[offset].getTime());
+        timestampValues[i].setNanos(owner.timestampValues[offset].getNanos());
+      }
+    }
+    if (owner.intervalDayTimeCount == 0) {
+      intervalDayTimeValues = EMPTY_INTERVAL_DAY_TIME_ARRAY;
+    } else if (intervalDayTimeValues == null || intervalDayTimeValues.length != owner.intervalDayTimeCount) {
+      intervalDayTimeValues = new HiveIntervalDayTime[owner.intervalDayTimeCount];
+    }
+    for (int i = 0, offset = row; i < owner.intervalDayTimeCount; ++i, offset += owner.capacity) {
+      if (intervalDayTimeValues[i] == null) {
+        intervalDayTimeValues[i] = (HiveIntervalDayTime) owner.intervalDayTimeValues[offset].clone();
+      } else {
+        intervalDayTimeValues[i].set(owner.intervalDayTimeValues[offset]);
+      }
+    }
+    hashcode = owner.rowViews[row].hashcode;
+    // assert equalsRow(owner, row);
   }
 
   @Override
@@ -344,6 +511,8 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
           if (byteLengths[i] != -1) {
             clone.byteValues[i] = Arrays.copyOfRange(byteValues[i],
                 byteStarts[i], byteStarts[i] + byteLengths[i]);
+          } else {
+            clone.byteValues[i] = null;
           }
         }
       } else {
@@ -353,12 +522,14 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
           // avoid allocation/copy of nulls, because it potentially expensive.
           // branch instead.
           if (byteLengths[i] != -1) {
-            if (clone.byteValues[i] != null && clone.byteValues[i].length >= byteValues[i].length) {
+            if (clone.byteValues[i] != null && clone.byteValues[i].length >= byteLengths[i]) {
               System.arraycopy(byteValues[i], byteStarts[i], clone.byteValues[i], 0, byteLengths[i]);
             } else {
               clone.byteValues[i] = Arrays.copyOfRange(byteValues[i],
                   byteStarts[i], byteStarts[i] + byteLengths[i]);
             }
+          } else {
+            clone.byteValues[i] = null;
           }
         }
       }
@@ -430,7 +601,7 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
   public void assignNullString(int keyIndex, int index) {
     isNull[keyIndex] = true;
     byteValues[index] = null;
-    byteStarts[index] = 0;
+    // byteStarts[index] = 0;    // optional: null strings are skipped before their offsets are read
     // We need some value that indicates NULL.
     byteLengths[index] = -1;
   }
