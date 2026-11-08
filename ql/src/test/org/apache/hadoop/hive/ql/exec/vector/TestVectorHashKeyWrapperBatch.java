@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneral;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneralLongString;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperLongStringRowView;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleString;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLong;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLongSingleString;
@@ -860,6 +861,15 @@ public class TestVectorHashKeyWrapperBatch {
         VectorHashKeyWrapperTwoLongSingleString.class, 2, 1);
   }
 
+  private void assertBatchWrapperClass(VectorHashKeyWrapperBase wrapper,
+      Class<? extends VectorHashKeyWrapperBase> expectedRetainedClass) {
+    if (expectedRetainedClass == VectorHashKeyWrapperGeneralLongString.class) {
+      assertTrue(wrapper instanceof VectorHashKeyWrapperLongStringRowView);
+    } else {
+      assertTrue(expectedRetainedClass.isInstance(wrapper));
+    }
+  }
+
   private void assertMixedLongStringWrapper(TypeInfo[] typeInfos,
       Class<? extends VectorHashKeyWrapperBase> expectedWrapperClass, int longCount, int stringCount)
       throws HiveException {
@@ -878,7 +888,7 @@ public class TestVectorHashKeyWrapperBatch {
     vhkwb.evaluateBatch(batch);
     VectorHashKeyWrapperBase[] wrappers = vhkwb.getVectorHashKeyWrappers();
     for (int i = 0; i < batch.size; i++) {
-      assertTrue(expectedWrapperClass.isInstance(wrappers[i]));
+      assertBatchWrapperClass(wrappers[i], expectedWrapperClass);
       assertMixedLongStringWrapperConsistentWithGeneral(wrappers[i], vhkwb, longCount, stringCount);
     }
     assertEquals(wrappers[0], wrappers[2]);
@@ -941,7 +951,7 @@ public class TestVectorHashKeyWrapperBatch {
     vhkwb.evaluateBatch(batch);
     VectorHashKeyWrapperBase[] wrappers = vhkwb.getVectorHashKeyWrappers();
     for (int i = 0; i < batch.size; i++) {
-      assertTrue(expectedWrapperClass.isInstance(wrappers[i]));
+      assertBatchWrapperClass(wrappers[i], expectedWrapperClass);
       assertMixedLongStringWrapperConsistentWithGeneral(wrappers[i], vhkwb, longCount, stringCount);
       for (int keyIndex = 0; keyIndex < typeInfos.length; keyIndex++) {
         assertEquals(isNull[i][keyIndex], wrappers[i].isNull(keyIndex));
@@ -979,9 +989,9 @@ public class TestVectorHashKeyWrapperBatch {
 
     vhkwb.evaluateBatch(batch);
     VectorHashKeyWrapperBase[] wrappers = vhkwb.getVectorHashKeyWrappers();
-    assertTrue(expectedWrapperClass.isInstance(wrappers[0]));
-    assertTrue(expectedWrapperClass.isInstance(wrappers[1]));
-    assertTrue(expectedWrapperClass.isInstance(wrappers[2]));
+    assertBatchWrapperClass(wrappers[0], expectedWrapperClass);
+    assertBatchWrapperClass(wrappers[1], expectedWrapperClass);
+    assertBatchWrapperClass(wrappers[2], expectedWrapperClass);
     assertEquals(wrappers[0], wrappers[2]);
     assertEquals(wrappers[0].hashCode(), wrappers[2].hashCode());
     assertFalse(wrappers[0].equals(wrappers[1]));
@@ -1004,7 +1014,7 @@ public class TestVectorHashKeyWrapperBatch {
 
       vhkwb.evaluateBatchGroupingSets(batch, groupingSetsOverrideIsNulls);
       VectorHashKeyWrapperBase wrapper = vhkwb.getVectorHashKeyWrappers()[0];
-      assertTrue(expectedWrapperClass.isInstance(wrapper));
+      assertBatchWrapperClass(wrapper, expectedWrapperClass);
       for (int keyIndex = 0; keyIndex < typeInfos.length; keyIndex++) {
         assertEquals(groupingSetsOverrideIsNulls[keyIndex], wrapper.isNull(keyIndex));
       }
@@ -1026,7 +1036,7 @@ public class TestVectorHashKeyWrapperBatch {
 
     vhkwb.evaluateBatch(batch);
     VectorHashKeyWrapperBase wrapper = vhkwb.getVectorHashKeyWrappers()[0];
-    assertTrue(expectedWrapperClass.isInstance(wrapper));
+    assertBatchWrapperClass(wrapper, expectedWrapperClass);
     for (int keyIndex = 0; keyIndex < typeInfos.length; keyIndex++) {
       assertTrue(wrapper.isNull(keyIndex));
     }
@@ -1040,7 +1050,7 @@ public class TestVectorHashKeyWrapperBatch {
 
     vhkwb.evaluateBatch(batch);
     wrapper = vhkwb.getVectorHashKeyWrappers()[0];
-    assertTrue(expectedWrapperClass.isInstance(wrapper));
+    assertBatchWrapperClass(wrapper, expectedWrapperClass);
     for (int keyIndex = 0; keyIndex < typeInfos.length; keyIndex++) {
       assertFalse(wrapper.isNull(keyIndex));
     }
@@ -1209,7 +1219,8 @@ public class TestVectorHashKeyWrapperBatch {
     }
     generalWrapper.setHashKey();
 
-    if (!(longWrapper instanceof VectorHashKeyWrapperGeneralLongString)) {
+    if (!(longWrapper instanceof VectorHashKeyWrapperGeneralLongString) &&
+        !(longWrapper instanceof VectorHashKeyWrapperLongStringRowView)) {
       assertEquals(generalWrapper.hashCode(), longWrapper.hashCode());
     }
     for (int i = 0; i < longCount; i++) {
@@ -1235,7 +1246,8 @@ public class TestVectorHashKeyWrapperBatch {
     }
     generalWrapper.setHashKey();
 
-    if (!(stringWrapper instanceof VectorHashKeyWrapperGeneralLongString)) {
+    if (!(stringWrapper instanceof VectorHashKeyWrapperGeneralLongString) &&
+        !(stringWrapper instanceof VectorHashKeyWrapperLongStringRowView)) {
       assertEquals(generalWrapper.hashCode(), stringWrapper.hashCode());
     }
     for (int i = 0; i < stringCount; i++) {
