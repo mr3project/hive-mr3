@@ -23,6 +23,7 @@ import java.util.Arrays;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.StringExpr;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase.HashContext;
 import org.apache.hive.common.util.Murmur3;
+import org.slf4j.Logger;
 
 /**
  * Column-major values shared by the fixed row views of one reusable batch.
@@ -46,6 +47,25 @@ final class VectorHashKeyWrapperLongStringBatchStorage {
 
   final VectorHashKeyWrapperLongStringRowView[] rowViews;
 
+  // Operator execution owns these counters, independently of GENERAL and other wrapper roles.
+  final long allocationCalls = 1;
+  long clearIsNullCalls;
+  long assignLongBulkCopyCalls;
+  long assignLongRepeatingCalls;
+  long assignLongOtherCalls;
+  long assignStringBulkCopyCalls;
+  long assignStringRepeatingCalls;
+  long assignStringOtherCalls;
+  long computeHashCalls;
+  long equalRowsCalls;
+  long equalsRowCalls;
+  long cloneCalls;
+  long copyKeyCalls;
+  long clearRowIsNullCalls;
+  long setNullCalls;
+  long getVariableSizeCalls;
+  private boolean methodCallCountsLogged;
+
   VectorHashKeyWrapperLongStringBatchStorage(HashContext hashCtx, int capacity,
       int longCount, int stringCount, int keyCount) {
     assert keyCount == longCount + stringCount;
@@ -65,7 +85,25 @@ final class VectorHashKeyWrapperLongStringBatchStorage {
     }
   }
 
+  /**
+   * Positional format (calls, not rows): allocation, batch null clearing, long bulk copy/repeating/
+   * other assignment, string bulk copy/repeating/other assignment - row hashing, row-view equality,
+   * retained-key equality, row-view clone, copy into a retained key, row null clearing, setNull,
+   * variable-size lookup. Repeating string assignment includes assignNullStrings.
+   */
+  void logMethodCallCounts(Logger log) {
+    if (!methodCallCountsLogged) {
+      log.error("yyyyy {} {} {} {} {} {} {} {} - {} {} {} {} {} {} {} {}",
+          allocationCalls, clearIsNullCalls, assignLongBulkCopyCalls, assignLongRepeatingCalls,
+          assignLongOtherCalls, assignStringBulkCopyCalls, assignStringRepeatingCalls,
+          assignStringOtherCalls, computeHashCalls, equalRowsCalls, equalsRowCalls, cloneCalls,
+          copyKeyCalls, clearRowIsNullCalls, setNullCalls, getVariableSizeCalls);
+      methodCallCountsLogged = true;
+    }
+  }
+
   void clearIsNull(int size) {
+    ++clearIsNullCalls;
     assert size >= 0 && size <= capacity;
     for (int keyIndex = 0; keyIndex < keyCount; ++keyIndex) {
       int offset = keyIndex * capacity;
@@ -81,6 +119,7 @@ final class VectorHashKeyWrapperLongStringBatchStorage {
   }
 
   int computeHash(int row) {
+    ++computeHashCalls;
     assert row >= 0 && row < capacity;
     int longHash = 1;
     for (int index = 0; index < longCount; ++index) {
@@ -129,6 +168,7 @@ final class VectorHashKeyWrapperLongStringBatchStorage {
   }
 
   boolean equalRows(int row, VectorHashKeyWrapperLongStringBatchStorage other, int otherRow) {
+    ++equalRowsCalls;
     if (rowViews[row].hashcode != other.rowViews[otherRow].hashcode ||
         longCount != other.longCount || stringCount != other.stringCount ||
         keyCount != other.keyCount) {

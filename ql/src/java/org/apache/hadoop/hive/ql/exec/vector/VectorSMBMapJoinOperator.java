@@ -307,7 +307,7 @@ public class VectorSMBMapJoinOperator extends SMBMapJoinOperator
       }
     } finally {
       if (keyWrapperBatch != null) {
-        keyWrapperBatch.logGeneralMethodCallCounts(LOG);
+        keyWrapperBatch.logMethodCallCounts(LOG);
       }
     }
   }

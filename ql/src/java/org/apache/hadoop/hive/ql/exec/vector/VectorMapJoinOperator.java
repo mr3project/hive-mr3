@@ -255,7 +255,7 @@ public class VectorMapJoinOperator extends VectorMapJoinBaseOperator {
       super.closeOp(aborted);
     } finally {
       if (keyWrapperBatch != null) {
-        keyWrapperBatch.logGeneralMethodCallCounts(LOG);
+        keyWrapperBatch.logMethodCallCounts(LOG);
       }
     }
   }

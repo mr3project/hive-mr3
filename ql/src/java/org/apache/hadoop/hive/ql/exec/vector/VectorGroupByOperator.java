@@ -1443,7 +1443,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       }
     } finally {
       if (keyWrappersBatch != null) {
-        keyWrappersBatch.logGeneralMethodCallCounts(LOG);
+        keyWrappersBatch.logMethodCallCounts(LOG);
       }
     }
   }

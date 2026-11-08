@@ -78,16 +78,16 @@ public class TestVectorHashKeyWrapperGeneralBatchStorage {
     wrappers.evaluateBatchGroupingSets(batch(true, false, false), allNull);
 
     Logger log = mock(Logger.class);
-    wrappers.logGeneralMethodCallCounts(log);
-    wrappers.logGeneralMethodCallCounts(log);
+    wrappers.logMethodCallCounts(log);
+    wrappers.logMethodCallCounts(log);
     // Nine batches of three rows; assignments are counted per column, not per row.
     verify(log).error("xxxxx {} {} {} {} {} {} {} {} - {} {} {} {} {} {} {} {}",
         1L, 9L, 18L, 18L, 18L, 9L, 9L, 9L, 27L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
 
-    // A second role starts fresh. Non-GENERAL roles do not emit a summary.
-    compile().logGeneralMethodCallCounts(log);
+    // A second role starts fresh. Non-profiled roles do not emit a summary.
+    compile().logMethodCallCounts(log);
     VectorHashKeyWrapperBatch.compileKeyWrapperBatch(new VectorExpression[0])
-        .logGeneralMethodCallCounts(log);
+        .logMethodCallCounts(log);
     verify(log).error("xxxxx {} {} {} {} {} {} {} {} - {} {} {} {} {} {} {} {}",
         1L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
     verifyNoMoreInteractions(log);
@@ -112,7 +112,7 @@ public class TestVectorHashKeyWrapperGeneralBatchStorage {
     // copyFromRow's existing invariant also invokes equalsRow when assertions are enabled.
     long equalityCalls = VectorHashKeyWrapperGeneral.class.desiredAssertionStatus() ? 4L : 2L;
     Logger log = mock(Logger.class);
-    wrappers.logGeneralMethodCallCounts(log);
+    wrappers.logMethodCallCounts(log);
     verify(log).error("xxxxx {} {} {} {} {} {} {} {} - {} {} {} {} {} {} {} {}",
         1L, 1L, 2L, 2L, 2L, 1L, 1L, 1L, 4L, 1L, equalityCalls, 1L, 1L, 1L, 1L, 1L);
     verifyNoMoreInteractions(log);

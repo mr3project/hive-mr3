@@ -105,10 +105,13 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     return keyWrapperType;
   }
 
-  /** Emits this GENERAL wrapper role's method counts once, after operator close processing. */
-  public void logGeneralMethodCallCounts(Logger log) {
+  /** Emits this GENERAL or GENERAL_LONG_STRING role's method counts once after operator close. */
+  public void logMethodCallCounts(Logger log) {
     if (generalStorage != null) {
       generalStorage.logMethodCallCounts(log);
+    }
+    if (longStringStorage != null) {
+      longStringStorage.logMethodCallCounts(log);
     }
   }
 

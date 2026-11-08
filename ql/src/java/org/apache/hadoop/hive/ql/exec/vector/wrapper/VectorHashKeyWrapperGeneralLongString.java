@@ -150,6 +150,7 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
   }
 
   boolean equalsRow(VectorHashKeyWrapperLongStringBatchStorage owner, int row) {
+    ++owner.equalsRowCalls;
     if (hashcode != owner.rowViews[row].hashcode ||
         longValues.length != owner.longCount ||
         isNull.length != owner.keyCount ||

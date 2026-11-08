@@ -249,10 +249,10 @@ public class VectorTopNKeyOperator extends Operator<TopNKeyDesc> implements Vect
       super.closeOp(abort);
     } finally {
       if (keyWrappersBatch != null) {
-        keyWrappersBatch.logGeneralMethodCallCounts(LOG);
+        keyWrappersBatch.logMethodCallCounts(LOG);
       }
       if (partitionKeyWrapperBatch != null) {
-        partitionKeyWrapperBatch.logGeneralMethodCallCounts(LOG);
+        partitionKeyWrapperBatch.logMethodCallCounts(LOG);
       }
     }
   }
