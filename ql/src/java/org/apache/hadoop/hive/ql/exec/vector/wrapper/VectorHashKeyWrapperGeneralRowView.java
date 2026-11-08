@@ -64,11 +64,13 @@ public final class VectorHashKeyWrapperGeneralRowView extends VectorHashKeyWrapp
 
   @Override
   protected Object clone() {
+    ++owner.cloneCalls;
     return VectorHashKeyWrapperGeneral.fromRow(owner, row);
   }
 
   @Override
   public void copyKey(KeyWrapper oldWrapper) {
+    ++owner.copyKeyCalls;
     assert oldWrapper instanceof VectorHashKeyWrapperGeneral;
     ((VectorHashKeyWrapperGeneral) oldWrapper).copyFromRow(owner, row);
   }
@@ -215,6 +217,7 @@ public final class VectorHashKeyWrapperGeneralRowView extends VectorHashKeyWrapp
 
   @Override
   public void clearIsNull() {
+    ++owner.clearRowIsNullCalls;
     for (int i = 0; i < owner.keyCount; ++i) {
       owner.isNull[i * owner.capacity + row] = false;
     }
@@ -222,6 +225,7 @@ public final class VectorHashKeyWrapperGeneralRowView extends VectorHashKeyWrapp
 
   @Override
   public void setNull() {
+    ++owner.setNullCalls;
     for (int i = 0; i < owner.keyCount; ++i) {
       owner.isNull[i * owner.capacity + row] = true;
     }
@@ -229,6 +233,7 @@ public final class VectorHashKeyWrapperGeneralRowView extends VectorHashKeyWrapp
 
   @Override
   public int getVariableSize() {
+    ++owner.getVariableSizeCalls;
     int variableSize = 0;
     JavaDataModel model = JavaDataModel.get();
     for (int i = 0; i < owner.stringCount; ++i) {

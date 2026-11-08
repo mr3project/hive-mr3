@@ -1425,19 +1425,25 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
   @Override
   public void closeOp(boolean aborted) throws HiveException {
-    processingMode.close(aborted);
-    if (!aborted && outputBatch.size > 0) {
-      flushOutput();
-    }
+    try {
+      processingMode.close(aborted);
+      if (!aborted && outputBatch.size > 0) {
+        flushOutput();
+      }
 
-    if (vectorDesc.getProcessingMode() == VectorGroupByDesc.ProcessingMode.HASH) {
-      LOG.debug("Final peakEntries {} = {}", getOperatorId(), peakEntries);
-      if (!aborted && peakEntriesCache != null && peakEntriesHintAtStart == null &&
-          peakEntries > INITIAL_HASH_MAP_ENTRY_THRESHOLD) {
-        peakEntriesCache.retrieve(getPeakEntriesCacheKey(), () -> {
-          LOG.info("Set peakEntries for {}: {}", getOperatorId(), peakEntries);
-          return Integer.valueOf(peakEntries);
-        });
+      if (vectorDesc.getProcessingMode() == VectorGroupByDesc.ProcessingMode.HASH) {
+        LOG.debug("Final peakEntries {} = {}", getOperatorId(), peakEntries);
+        if (!aborted && peakEntriesCache != null && peakEntriesHintAtStart == null &&
+            peakEntries > INITIAL_HASH_MAP_ENTRY_THRESHOLD) {
+          peakEntriesCache.retrieve(getPeakEntriesCacheKey(), () -> {
+            LOG.info("Set peakEntries for {}: {}", getOperatorId(), peakEntries);
+            return Integer.valueOf(peakEntries);
+          });
+        }
+      }
+    } finally {
+      if (keyWrappersBatch != null) {
+        keyWrappersBatch.logGeneralMethodCallCounts(LOG);
       }
     }
   }

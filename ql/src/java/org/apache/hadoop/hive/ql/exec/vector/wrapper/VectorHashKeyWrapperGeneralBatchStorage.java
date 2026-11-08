@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.StringExpr;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase.HashContext;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.apache.hive.common.util.Murmur3;
+import org.slf4j.Logger;
 
 /**
  * Column-major values shared by the fixed row views of one reusable batch.
@@ -58,6 +59,26 @@ final class VectorHashKeyWrapperGeneralBatchStorage {
   final boolean[] isNull;
 
   final VectorHashKeyWrapperGeneralRowView[] rowViews;
+
+  // Counts belong to this operator's wrapper role, including operations on retained keys
+  // that read from this storage. Operator execution owns these counters; no atomics are needed.
+  final long allocationCalls = 1;
+  long clearIsNullCalls;
+  long assignLongCalls;
+  long assignDoubleCalls;
+  long assignStringCalls;
+  long assignDecimalCalls;
+  long assignTimestampCalls;
+  long assignIntervalDayTimeCalls;
+  long computeHashCalls;
+  long equalRowsCalls;
+  long equalsRowCalls;
+  long cloneCalls;
+  long copyKeyCalls;
+  long clearRowIsNullCalls;
+  long setNullCalls;
+  long getVariableSizeCalls;
+  private boolean methodCallCountsLogged;
 
   VectorHashKeyWrapperGeneralBatchStorage(HashContext hashCtx, int capacity,
       int longCount, int doubleCount, int stringCount, int decimalCount,
@@ -97,7 +118,24 @@ final class VectorHashKeyWrapperGeneralBatchStorage {
     }
   }
 
+  /**
+   * Positional format (calls, not rows): allocation, batch null clearing, long/double/string/
+   * decimal/timestamp/interval assignment - row hashing, row-view equality, retained-key equality,
+   * row-view clone, copy into a retained key, row null clearing, setNull, variable-size lookup.
+   */
+  void logMethodCallCounts(Logger log) {
+    if (!methodCallCountsLogged) {
+      log.error("xxxxx {} {} {} {} {} {} {} {} - {} {} {} {} {} {} {} {}",
+          allocationCalls, clearIsNullCalls, assignLongCalls, assignDoubleCalls,
+          assignStringCalls, assignDecimalCalls, assignTimestampCalls, assignIntervalDayTimeCalls,
+          computeHashCalls, equalRowsCalls, equalsRowCalls, cloneCalls, copyKeyCalls,
+          clearRowIsNullCalls, setNullCalls, getVariableSizeCalls);
+      methodCallCountsLogged = true;
+    }
+  }
+
   void clearIsNull(int size) {
+    ++clearIsNullCalls;
     assert size >= 0 && size <= capacity;
     for (int keyIndex = 0; keyIndex < keyCount; ++keyIndex) {
       int offset = keyIndex * capacity;
@@ -113,6 +151,7 @@ final class VectorHashKeyWrapperGeneralBatchStorage {
   }
 
   int computeHash(int row) {
+    ++computeHashCalls;
     assert row >= 0 && row < capacity;
     int longHash = 1;
     for (int index = 0; index < longCount; ++index) {
@@ -175,6 +214,7 @@ final class VectorHashKeyWrapperGeneralBatchStorage {
   }
 
   boolean equalRows(int row, VectorHashKeyWrapperGeneralBatchStorage other, int otherRow) {
+    ++equalRowsCalls;
     if (rowViews[row].hashcode != other.rowViews[otherRow].hashcode ||
         longCount != other.longCount || doubleCount != other.doubleCount ||
         stringCount != other.stringCount || decimalCount != other.decimalCount ||

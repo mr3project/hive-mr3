@@ -205,6 +205,7 @@ public class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase {
   }
 
   boolean equalsRow(VectorHashKeyWrapperGeneralBatchStorage owner, int row) {
+    ++owner.equalsRowCalls;
     if (hashcode != owner.rowViews[row].hashcode ||
         longValues.length != owner.longCount ||
         doubleValues.length != owner.doubleCount ||

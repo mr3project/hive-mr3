@@ -35,6 +35,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignLongNullsNoRepeatingSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size, LongColumnVector columnVector, int[] selected) {
+    ++storage.assignLongCalls;
     final int offset = index * storage.capacity;
     final long[] values = storage.longValues;
     final long[] sourceValues = columnVector.vector;
@@ -109,6 +110,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignLongNullsRepeating(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size) {
+    ++storage.assignLongCalls;
     final int offset = index * storage.capacity;
     final int nullOffset = keyIndex * storage.capacity;
     Arrays.fill(storage.longValues, offset, offset + size, 0);
@@ -146,6 +148,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignLongNullsNoRepeatingNoSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size, LongColumnVector columnVector) {
+    ++storage.assignLongCalls;
     final int offset = index * storage.capacity;
     final long[] values = storage.longValues;
     final long[] sourceValues = columnVector.vector;
@@ -217,6 +220,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignLongNoNullsRepeating(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, LongColumnVector columnVector) {
+    ++storage.assignLongCalls;
     final int offset = index * storage.capacity;
     Arrays.fill(storage.longValues, offset, offset + size, columnVector.vector[0]);
   }
@@ -250,6 +254,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignLongNoNullsNoRepeatingSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, LongColumnVector columnVector, int[] selected) {
+    ++storage.assignLongCalls;
     final int offset = index * storage.capacity;
     final long[] values = storage.longValues;
     final long[] sourceValues = columnVector.vector;
@@ -293,6 +298,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignLongNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, LongColumnVector columnVector) {
+    ++storage.assignLongCalls;
     final int offset = index * storage.capacity;
     System.arraycopy(columnVector.vector, 0, storage.longValues, offset, size);
   }
@@ -326,6 +332,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignStringNullsNoRepeatingSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size, BytesColumnVector columnVector, int[] selected) {
+    ++storage.assignStringCalls;
     final int offset = index * storage.capacity;
     final byte[][] values = storage.byteValues;
     final int[] starts = storage.byteStarts;
@@ -398,6 +405,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignStringNullsNoRepeatingNoSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size, BytesColumnVector columnVector) {
+    ++storage.assignStringCalls;
     final int offset = index * storage.capacity;
     final byte[][] values = storage.byteValues;
     final int[] starts = storage.byteStarts;
@@ -469,6 +477,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignStringNoNullsRepeating(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, BytesColumnVector columnVector) {
+    ++storage.assignStringCalls;
     final int offset = index * storage.capacity;
     Arrays.fill(storage.byteValues, offset, offset + size, columnVector.vector[0]);
     Arrays.fill(storage.byteStarts, offset, offset + size, columnVector.start[0]);
@@ -496,6 +505,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignStringNoNullsNoRepeatingSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, BytesColumnVector columnVector, int[] selected) {
+    ++storage.assignStringCalls;
     final int offset = index * storage.capacity;
     final byte[][] values = storage.byteValues;
     final int[] starts = storage.byteStarts;
@@ -544,6 +554,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignStringNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, BytesColumnVector columnVector) {
+    ++storage.assignStringCalls;
     final int offset = index * storage.capacity;
     System.arraycopy(columnVector.vector, 0, storage.byteValues, offset, size);
     System.arraycopy(columnVector.start, 0, storage.byteStarts, offset, size);
@@ -635,6 +646,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignNullStrings(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size) {
+    ++storage.assignStringCalls;
     final int offset = index * storage.capacity;
     final int nullOffset = keyIndex * storage.capacity;
     Arrays.fill(storage.byteValues, offset, offset + size, null);
@@ -662,6 +674,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignDoubleNullsNoRepeatingSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size, DoubleColumnVector columnVector, int[] selected) {
+    ++storage.assignDoubleCalls;
     final int offset = index * storage.capacity;
     final double[] values = storage.doubleValues;
     final double[] sourceValues = columnVector.vector;
@@ -681,6 +694,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignDoubleNullsRepeating(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size) {
+    ++storage.assignDoubleCalls;
     final int offset = index * storage.capacity;
     final int nullOffset = keyIndex * storage.capacity;
     Arrays.fill(storage.doubleValues, offset, offset + size, 0);
@@ -689,6 +703,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignDoubleNullsNoRepeatingNoSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size, DoubleColumnVector columnVector) {
+    ++storage.assignDoubleCalls;
     final int offset = index * storage.capacity;
     final double[] values = storage.doubleValues;
     final double[] sourceValues = columnVector.vector;
@@ -708,12 +723,14 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignDoubleNoNullsRepeating(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, DoubleColumnVector columnVector) {
+    ++storage.assignDoubleCalls;
     final int offset = index * storage.capacity;
     Arrays.fill(storage.doubleValues, offset, offset + size, columnVector.vector[0]);
   }
 
   static void assignDoubleNoNullsNoRepeatingSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, DoubleColumnVector columnVector, int[] selected) {
+    ++storage.assignDoubleCalls;
     final int offset = index * storage.capacity;
     final double[] values = storage.doubleValues;
     final double[] sourceValues = columnVector.vector;
@@ -725,12 +742,14 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignDoubleNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, DoubleColumnVector columnVector) {
+    ++storage.assignDoubleCalls;
     final int offset = index * storage.capacity;
     System.arraycopy(columnVector.vector, 0, storage.doubleValues, offset, size);
   }
 
   static void assignDecimalNullsNoRepeatingSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size, DecimalColumnVector columnVector, int[] selected) {
+    ++storage.assignDecimalCalls;
     final int offset = index * storage.capacity;
     final int nullOffset = keyIndex * storage.capacity;
     for (int r = 0; r < size; ++r) {
@@ -746,6 +765,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignDecimalNullsNoRepeatingNoSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size, DecimalColumnVector columnVector) {
+    ++storage.assignDecimalCalls;
     final int offset = index * storage.capacity;
     final int nullOffset = keyIndex * storage.capacity;
     for (int r = 0; r < size; ++r) {
@@ -760,6 +780,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignDecimalNoNullsRepeating(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, DecimalColumnVector columnVector) {
+    ++storage.assignDecimalCalls;
     final int offset = index * storage.capacity;
     for (int r = 0; r < size; ++r) {
       storage.decimalValues[offset + r].set(columnVector.vector[0]);
@@ -768,6 +789,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignDecimalNoNullsNoRepeatingSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, DecimalColumnVector columnVector, int[] selected) {
+    ++storage.assignDecimalCalls;
     final int offset = index * storage.capacity;
     for (int r = 0; r < size; ++r) {
       final int sourceRow = selected[r];
@@ -777,6 +799,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignDecimalNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, DecimalColumnVector columnVector) {
+    ++storage.assignDecimalCalls;
     final int offset = index * storage.capacity;
     for (int r = 0; r < size; ++r) {
       storage.decimalValues[offset + r].set(columnVector.vector[r]);
@@ -785,6 +808,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignDecimalNullsRepeating(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size) {
+    ++storage.assignDecimalCalls;
     final int offset = index * storage.capacity;
     final int nullOffset = keyIndex * storage.capacity;
     Arrays.fill(storage.isNull, nullOffset, nullOffset + size, true);
@@ -795,6 +819,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignTimestampNullsNoRepeatingSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size, TimestampColumnVector columnVector, int[] selected) {
+    ++storage.assignTimestampCalls;
     final int offset = index * storage.capacity;
     final int nullOffset = keyIndex * storage.capacity;
     for (int r = 0; r < size; ++r) {
@@ -810,6 +835,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignTimestampNullsNoRepeatingNoSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size, TimestampColumnVector columnVector) {
+    ++storage.assignTimestampCalls;
     final int offset = index * storage.capacity;
     final int nullOffset = keyIndex * storage.capacity;
     for (int r = 0; r < size; ++r) {
@@ -824,6 +850,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignTimestampNoNullsRepeating(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, TimestampColumnVector columnVector) {
+    ++storage.assignTimestampCalls;
     final int offset = index * storage.capacity;
     for (int r = 0; r < size; ++r) {
       columnVector.timestampUpdate(storage.timestampValues[offset + r], 0);
@@ -832,6 +859,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignTimestampNoNullsNoRepeatingSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, TimestampColumnVector columnVector, int[] selected) {
+    ++storage.assignTimestampCalls;
     final int offset = index * storage.capacity;
     for (int r = 0; r < size; ++r) {
       final int sourceRow = selected[r];
@@ -841,6 +869,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignTimestampNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, TimestampColumnVector columnVector) {
+    ++storage.assignTimestampCalls;
     final int offset = index * storage.capacity;
     for (int r = 0; r < size; ++r) {
       columnVector.timestampUpdate(storage.timestampValues[offset + r], r);
@@ -849,6 +878,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignTimestampNullsRepeating(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size) {
+    ++storage.assignTimestampCalls;
     final int offset = index * storage.capacity;
     final int nullOffset = keyIndex * storage.capacity;
     Arrays.fill(storage.isNull, nullOffset, nullOffset + size, true);
@@ -859,6 +889,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignIntervalDayTimeNullsNoRepeatingSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size, IntervalDayTimeColumnVector columnVector, int[] selected) {
+    ++storage.assignIntervalDayTimeCalls;
     final int offset = index * storage.capacity;
     final int nullOffset = keyIndex * storage.capacity;
     for (int r = 0; r < size; ++r) {
@@ -874,6 +905,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignIntervalDayTimeNullsNoRepeatingNoSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size, IntervalDayTimeColumnVector columnVector) {
+    ++storage.assignIntervalDayTimeCalls;
     final int offset = index * storage.capacity;
     final int nullOffset = keyIndex * storage.capacity;
     for (int r = 0; r < size; ++r) {
@@ -888,6 +920,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignIntervalDayTimeNoNullsRepeating(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, IntervalDayTimeColumnVector columnVector) {
+    ++storage.assignIntervalDayTimeCalls;
     final int offset = index * storage.capacity;
     for (int r = 0; r < size; ++r) {
       storage.intervalDayTimeValues[offset + r].set(columnVector.asScratchIntervalDayTime(0));
@@ -896,6 +929,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignIntervalDayTimeNoNullsNoRepeatingSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, IntervalDayTimeColumnVector columnVector, int[] selected) {
+    ++storage.assignIntervalDayTimeCalls;
     final int offset = index * storage.capacity;
     for (int r = 0; r < size; ++r) {
       final int sourceRow = selected[r];
@@ -905,6 +939,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignIntervalDayTimeNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, IntervalDayTimeColumnVector columnVector) {
+    ++storage.assignIntervalDayTimeCalls;
     final int offset = index * storage.capacity;
     for (int r = 0; r < size; ++r) {
       storage.intervalDayTimeValues[offset + r].set(columnVector.asScratchIntervalDayTime(r));
@@ -913,6 +948,7 @@ final class VectorHashKeyWrapperBatchSpecializations {
 
   static void assignIntervalDayTimeNullsRepeating(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size) {
+    ++storage.assignIntervalDayTimeCalls;
     final int offset = index * storage.capacity;
     final int nullOffset = keyIndex * storage.capacity;
     Arrays.fill(storage.isNull, nullOffset, nullOffset + size, true);

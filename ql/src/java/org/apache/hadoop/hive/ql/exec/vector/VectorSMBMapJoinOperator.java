@@ -300,9 +300,15 @@ public class VectorSMBMapJoinOperator extends SMBMapJoinOperator
 
   @Override
   public void closeOp(boolean aborted) throws HiveException {
-    super.closeOp(aborted);
-    if (!aborted && 0 < outputBatch.size) {
-      flushOutput();
+    try {
+      super.closeOp(aborted);
+      if (!aborted && 0 < outputBatch.size) {
+        flushOutput();
+      }
+    } finally {
+      if (keyWrapperBatch != null) {
+        keyWrapperBatch.logGeneralMethodCallCounts(LOG);
+      }
     }
   }
 

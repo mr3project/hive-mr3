@@ -23,6 +23,9 @@ import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
@@ -48,6 +51,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hive.common.util.Murmur3;
 import org.junit.Test;
+import org.slf4j.Logger;
 
 public class TestVectorHashKeyWrapperGeneralBatchStorage {
 
@@ -58,6 +62,61 @@ public class TestVectorHashKeyWrapperGeneralBatchStorage {
       TypeInfoFactory.longTypeInfo, TypeInfoFactory.intervalDayTimeTypeInfo,
       TypeInfoFactory.stringTypeInfo, TypeInfoFactory.longTypeInfo,
       TypeInfoFactory.doubleTypeInfo};
+
+  @Test
+  public void testGroupedMethodCallSummaryAndRoleIsolation() throws HiveException {
+    VectorHashKeyWrapperBatch wrappers = compile();
+    for (boolean selected : new boolean[] {false, true}) {
+      for (boolean repeating : new boolean[] {false, true}) {
+        for (boolean nullable : new boolean[] {false, true}) {
+          wrappers.evaluateBatch(batch(selected, repeating, nullable));
+        }
+      }
+    }
+    boolean[] allNull = new boolean[TYPES.length];
+    Arrays.fill(allNull, true);
+    wrappers.evaluateBatchGroupingSets(batch(true, false, false), allNull);
+
+    Logger log = mock(Logger.class);
+    wrappers.logGeneralMethodCallCounts(log);
+    wrappers.logGeneralMethodCallCounts(log);
+    // Nine batches of three rows; assignments are counted per column, not per row.
+    verify(log).error("xxxxx {} {} {} {} {} {} {} {} - {} {} {} {} {} {} {} {}",
+        1L, 9L, 18L, 18L, 18L, 9L, 9L, 9L, 27L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+
+    // A second role starts fresh. Non-GENERAL roles do not emit a summary.
+    compile().logGeneralMethodCallCounts(log);
+    VectorHashKeyWrapperBatch.compileKeyWrapperBatch(new VectorExpression[0])
+        .logGeneralMethodCallCounts(log);
+    verify(log).error("xxxxx {} {} {} {} {} {} {} {} - {} {} {} {} {} {} {} {}",
+        1L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
+    verifyNoMoreInteractions(log);
+  }
+
+  @Test
+  public void testRowMethodCallSummary() throws HiveException {
+    VectorHashKeyWrapperBatch wrappers = compile();
+    wrappers.evaluateBatch(batch(false, false, false));
+    VectorHashKeyWrapperGeneralRowView view =
+        (VectorHashKeyWrapperGeneralRowView) wrappers.getVectorHashKeyWrappers()[0];
+    VectorHashKeyWrapperGeneral retained = (VectorHashKeyWrapperGeneral) view.copyKey();
+    assertTrue(view.equals(view));
+    assertTrue(retained.equals(view));
+    assertTrue(view.equals(retained));
+    view.copyKey(retained);
+    view.setHashKey();
+    view.clearIsNull();
+    view.setNull();
+    view.getVariableSize();
+
+    // copyFromRow's existing invariant also invokes equalsRow when assertions are enabled.
+    long equalityCalls = VectorHashKeyWrapperGeneral.class.desiredAssertionStatus() ? 4L : 2L;
+    Logger log = mock(Logger.class);
+    wrappers.logGeneralMethodCallCounts(log);
+    verify(log).error("xxxxx {} {} {} {} {} {} {} {} - {} {} {} {} {} {} {} {}",
+        1L, 1L, 2L, 2L, 2L, 1L, 1L, 1L, 4L, 1L, equalityCalls, 1L, 1L, 1L, 1L, 1L);
+    verifyNoMoreInteractions(log);
+  }
 
   @Test
   public void testAllTypesWithSelectionRepeatingAndNulls() throws HiveException {

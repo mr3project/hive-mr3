@@ -251,7 +251,13 @@ public class VectorMapJoinOperator extends VectorMapJoinBaseOperator {
 
   @Override
   public void closeOp(boolean aborted) throws HiveException {
-    super.closeOp(aborted);
+    try {
+      super.closeOp(aborted);
+    } finally {
+      if (keyWrapperBatch != null) {
+        keyWrapperBatch.logGeneralMethodCallCounts(LOG);
+      }
+    }
   }
 
   @Override

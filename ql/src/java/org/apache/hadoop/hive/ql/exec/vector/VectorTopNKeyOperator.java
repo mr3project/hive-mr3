@@ -231,21 +231,30 @@ public class VectorTopNKeyOperator extends Operator<TopNKeyDesc> implements Vect
 
   @Override
   protected void closeOp(boolean abort) throws HiveException {
-//    LOG.info("Closing TopNKeyFilter: {}.", topNKeyFilter);
-    if (topNKeyFilters.size() == 1) {
-      TopNKeyFilter filter = topNKeyFilters.values().iterator().next();
-      LOG.info("Closing TopNKeyFilter: {}", filter);
-      filter.clear();
-    } else {
-      LOG.info("Closing {} TopNKeyFilters", topNKeyFilters.size());
-      for (TopNKeyFilter each : topNKeyFilters.values()) {
-        LOG.debug("Closing TopNKeyFilter: {}", each);
-        each.clear();
+    try {
+      // LOG.info("Closing TopNKeyFilter: {}.", topNKeyFilter);
+      if (topNKeyFilters.size() == 1) {
+        TopNKeyFilter filter = topNKeyFilters.values().iterator().next();
+        LOG.info("Closing TopNKeyFilter: {}", filter);
+        filter.clear();
+      } else {
+        LOG.info("Closing {} TopNKeyFilters", topNKeyFilters.size());
+        for (TopNKeyFilter each : topNKeyFilters.values()) {
+          LOG.debug("Closing TopNKeyFilter: {}", each);
+          each.clear();
+        }
+      }
+      topNKeyFilters.clear();
+      disabledPartitions.clear();
+      super.closeOp(abort);
+    } finally {
+      if (keyWrappersBatch != null) {
+        keyWrappersBatch.logGeneralMethodCallCounts(LOG);
+      }
+      if (partitionKeyWrapperBatch != null) {
+        partitionKeyWrapperBatch.logGeneralMethodCallCounts(LOG);
       }
     }
-    topNKeyFilters.clear();
-    disabledPartitions.clear();
-    super.closeOp(abort);
   }
 
   // Because a TopNKeyOperator works like a FilterOperator with top n key condition, its properties

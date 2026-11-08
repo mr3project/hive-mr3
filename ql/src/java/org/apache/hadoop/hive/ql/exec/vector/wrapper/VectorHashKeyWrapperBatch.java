@@ -37,6 +37,7 @@ import org.apache.hadoop.hive.ql.exec.vector.VectorColumnSetInfo;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperFactory.KeyWrapperType;
+import org.slf4j.Logger;
 
 /**
  * Class for handling vectorized hash map key wrappers. It evaluates the key columns in a
@@ -102,6 +103,13 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
   /** Returns the key layout selected for this compiled batch. */
   public KeyWrapperType getKeyWrapperType() {
     return keyWrapperType;
+  }
+
+  /** Emits this GENERAL wrapper role's method counts once, after operator close processing. */
+  public void logGeneralMethodCallCounts(Logger log) {
+    if (generalStorage != null) {
+      generalStorage.logMethodCallCounts(log);
+    }
   }
 
   /**
