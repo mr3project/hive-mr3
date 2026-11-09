@@ -288,7 +288,6 @@ public class TestOperatorInitialization {
   }
 
   private void initializeBatch(List<? extends Operator<?>> roots) throws HiveException {
-    boolean initialized = false;
     try {
       for (Operator<?> root : roots) {
         root.initializeDeferringAsyncWaits(conf, null);
@@ -296,13 +295,11 @@ public class TestOperatorInitialization {
       for (Operator<?> root : roots) {
         root.completeDeferredInitialization();
       }
-      initialized = true;
-    } finally {
-      if (!initialized) {
-        for (Operator<?> root : roots) {
-          root.cancelDeferredInitialization();
-        }
+    } catch (Throwable e) {
+      for (Operator<?> root : roots) {
+        root.cancelDeferredInitialization();
       }
+      throw e;
     }
   }
 

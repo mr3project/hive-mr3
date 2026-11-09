@@ -221,24 +221,14 @@ public class ReduceRecordProcessor extends RecordProcessor {
       // Initialization isn't finished until all parents of all operators
       // are initialized. For broadcast joins that means initializing the
       // dummy parent operators as well.
-      boolean initialized = false;
-      try {
-        // Start every map join's load before waiting for any of them.
-        for (HashTableDummyOperator dummyOp : dummyOps) {
-          dummyOp.initializeDeferringAsyncWaits(jconf, null);
-          checkAbortCondition();
-        }
-        for (HashTableDummyOperator dummyOp : dummyOps) {
-          dummyOp.completeDeferredInitialization();
-          checkAbortCondition();
-        }
-        initialized = true;
-      } finally {
-        if (!initialized) {
-          for (HashTableDummyOperator dummyOp : dummyOps) {
-            dummyOp.cancelDeferredInitialization();
-          }
-        }
+      // Start every map join's load before waiting for any of them.
+      for (HashTableDummyOperator dummyOp : dummyOps) {
+        dummyOp.initializeDeferringAsyncWaits(jconf, null);
+        checkAbortCondition();
+      }
+      for (HashTableDummyOperator dummyOp : dummyOps) {
+        dummyOp.completeDeferredInitialization();
+        checkAbortCondition();
       }
 
       createOutputMap();
@@ -250,6 +240,9 @@ public class ReduceRecordProcessor extends RecordProcessor {
       processorContext.notifyPerVertexCacheLoaded();
     } catch (Throwable e) {
       super.setAborted(true);
+      for (HashTableDummyOperator dummyOp : dummyOps) {
+        dummyOp.cancelDeferredInitialization();
+      }
       if (e instanceof OutOfMemoryError) {
         // Don't create a new object if we are already out of memory
         throw (OutOfMemoryError) e;

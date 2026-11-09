@@ -22,10 +22,8 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -313,62 +311,26 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
    */
   public final void initializeDeferringAsyncWaits(Configuration hconf, ObjectInspector[] inputOIs)
       throws HiveException {
-    boolean success = false;
-    try {
-      initialize(hconf, inputOIs, true);
-      success = true;
-    } finally {
-      if (!success) {
-        cancelDeferredInitialization();
-      }
-    }
+    initialize(hconf, inputOIs, true);
   }
 
-  /**
-   * Waits on each pending operator's own futures and invokes its completion callback once.
-   * Completion order between operators is unspecified. Shared descendants and callbacks with
-   * no futures are included.
-   */
+  /** Completes pending initialization throughout this subtree, once per operator. */
   public final void completeDeferredInitialization() throws HiveException {
-    boolean success = false;
-    try {
-      completeDeferredInitialization(Collections.newSetFromMap(new IdentityHashMap<>()));
-      success = true;
-    } finally {
-      if (!success) {
-        cancelDeferredInitialization();
-      }
-    }
-  }
-
-  private void completeDeferredInitialization(Set<Operator<?>> visited) throws HiveException {
-    if (!visited.add(this)) {
-      return;
-    }
     if (deferredInitializationPending) {
       completeInitialization(asyncInitOperations);
       deferredInitializationPending = false;
     }
     for (Operator<?> child : childOperators) {
-      child.completeDeferredInitialization(visited);
+      child.completeDeferredInitialization();
     }
   }
 
-  /** Cancels outstanding deferred work throughout this subtree after either pass fails. */
+  /** Cancels outstanding work throughout this subtree after either pass fails. */
   public final void cancelDeferredInitialization() {
-    cancelDeferredInitialization(Collections.newSetFromMap(new IdentityHashMap<>()));
-  }
-
-  private void cancelDeferredInitialization(Set<Operator<?>> visited) {
-    if (!visited.add(this)) {
-      return;
-    }
-    if (deferredInitializationPending) {
-      cancelAsyncInitOps();
-      deferredInitializationPending = false;
-    }
+    cancelAsyncInitOps();
+    deferredInitializationPending = false;
     for (Operator<?> child : childOperators) {
-      child.cancelDeferredInitialization(visited);
+      child.cancelDeferredInitialization();
     }
   }
 

@@ -197,6 +197,7 @@ public class MapRecordProcessor extends RecordProcessor {
     }
     checkAbortCondition();
 
+    List<HashTableDummyOperator> dummyOps = mapWork.getDummyOps();
     try {
 
       CompilationOpContext runtimeCtx = new CompilationOpContext();
@@ -333,26 +334,15 @@ public class MapRecordProcessor extends RecordProcessor {
       // Initialization isn't finished until all parents of all operators
       // are initialized. For broadcast joins that means initializing the
       // dummy parent operators as well.
-      List<HashTableDummyOperator> dummyOps = mapWork.getDummyOps();
       jconf.set(Utilities.INPUT_NAME, mapWork.getName());
       if (dummyOps != null) {
-        boolean initialized = false;
-        try {
-          // Start every map join's load before waiting for any of them.
-          for (HashTableDummyOperator dummyOp : dummyOps) {
-            dummyOp.setExecContext(execContext);
-            dummyOp.initializeDeferringAsyncWaits(jconf, null);
-          }
-          for (HashTableDummyOperator dummyOp : dummyOps) {
-            dummyOp.completeDeferredInitialization();
-          }
-          initialized = true;
-        } finally {
-          if (!initialized) {
-            for (HashTableDummyOperator dummyOp : dummyOps) {
-              dummyOp.cancelDeferredInitialization();
-            }
-          }
+        // Start every map join's load before waiting for any of them.
+        for (HashTableDummyOperator dummyOp : dummyOps) {
+          dummyOp.setExecContext(execContext);
+          dummyOp.initializeDeferringAsyncWaits(jconf, null);
+        }
+        for (HashTableDummyOperator dummyOp : dummyOps) {
+          dummyOp.completeDeferredInitialization();
         }
       }
 
@@ -363,6 +353,11 @@ public class MapRecordProcessor extends RecordProcessor {
       processorContext.notifyPerVertexCacheLoaded();
     } catch (Throwable e) {
       setAborted(true);
+      if (dummyOps != null) {
+        for (HashTableDummyOperator dummyOp : dummyOps) {
+          dummyOp.cancelDeferredInitialization();
+        }
+      }
       if (e instanceof OutOfMemoryError) {
         // will this be true here?
         // Don't create a new object if we are already out of memory
