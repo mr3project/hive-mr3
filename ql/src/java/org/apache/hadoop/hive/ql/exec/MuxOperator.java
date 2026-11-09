@@ -230,7 +230,7 @@ public class MuxOperator extends Operator<MuxDesc> implements Serializable{
       return;
     }
     LOG.info("Initializing children of " + id + " " + getName());
-    childOperatorsArray[0].initialize(hconf, outputObjectInspectors, deferredInitializationPending);
+    childOperatorsArray[0].initialize(hconf, outputObjectInspectors);
     if (reporter != null) {
       childOperatorsArray[0].setReporter(reporter);
     }
