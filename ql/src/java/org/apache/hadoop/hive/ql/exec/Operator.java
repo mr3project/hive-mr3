@@ -99,7 +99,6 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
   private static final class InitializationContext {
     private final List<Operator<?>> started = new ArrayList<>();
-    private final List<Operator<?>> completionOrder = new ArrayList<>();
   }
 
   private String marker;
@@ -312,9 +311,10 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
   /**
    * Initializes a batch of roots and their descendants before waiting for asynchronous work.
-   * Synchronous initialization still runs on the calling thread, and completion callbacks retain
-   * the order in which ordinary initialization would have invoked them. On failure, asynchronous
-   * work started anywhere in the batch is cancelled. Roots use their existing input inspectors.
+   * Synchronous initialization and completion callbacks run on the calling thread. Each callback
+   * runs after its operator's own futures complete, with no ordering guarantee between operators.
+   * On failure, asynchronous work started anywhere in the batch is cancelled. Roots use their
+   * existing input inspectors.
    * A nested batch joins the current batch; only the outermost call waits for completion.
    */
   public static void initializeDeferringAsyncWaits(Configuration hconf,
@@ -340,7 +340,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
         INITIALIZATION_CONTEXT.remove();
       }
 
-      for (Operator<?> operator : context.completionOrder) {
+      for (Operator<?> operator : context.started) {
         operator.completeInitialization(operator.asyncInitOperations);
       }
       success = true;
@@ -439,8 +439,6 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
     if (initializationContext == null) {
       completeInitialization(asyncInitOperations);
-    } else {
-      initializationContext.completionOrder.add(this);
     }
   }
 

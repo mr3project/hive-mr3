@@ -19,6 +19,7 @@ package org.apache.hadoop.hive.ql.exec;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -83,7 +84,6 @@ public class TestOperatorInitialization {
           bothStarted.await(10, TimeUnit.SECONDS));
       assertFalse(initialized.isDone());
       releaseFirst.countDown();
-      assertTrue(first.completed.await(10, TimeUnit.SECONDS));
       assertFalse("Initialization must also wait for the second load", initialized.isDone());
       releaseSecond.countDown();
       initialized.get(10, TimeUnit.SECONDS);
@@ -92,7 +92,7 @@ public class TestOperatorInitialization {
       assertArrayEquals(new Object[] {"two"}, second.results);
       assertArrayEquals(new Object[0], dummyFirst.results);
       assertArrayEquals(new Object[0], dummySecond.results);
-      assertEquals(Arrays.asList("main", "first", "dummyFirst", "second", "dummySecond"), completions);
+      assertCompletions("main", "first", "dummyFirst", "second", "dummySecond");
       for (TestOperator op : Arrays.asList(main, dummyFirst, dummySecond, first, second)) {
         assertEquals(1, op.initializations);
         assertEquals(1, op.completeCalls);
@@ -121,11 +121,11 @@ public class TestOperatorInitialization {
       assertEquals(1, op.completeCalls);
     }
     assertArrayEquals(new Object[] {"shared result"}, shared.results);
-    assertEquals(Arrays.asList("first", "shared", "second"), completions);
+    assertCompletions("first", "shared", "second");
   }
 
   @Test
-  public void testDescendantsCompleteBeforeParents() throws Exception {
+  public void testEachOperatorCompletesWithItsOwnResults() throws Exception {
     TestOperator root = operator("root");
     TestOperator child = operator("child");
     TestOperator leaf = operator("leaf");
@@ -136,7 +136,7 @@ public class TestOperatorInitialization {
 
     Operator.initializeDeferringAsyncWaits(conf, singletonList(root));
 
-    assertEquals(Arrays.asList("leaf", "child", "root"), completions);
+    assertCompletions("leaf", "child", "root");
     assertArrayEquals(new Object[0], leaf.results);
     assertArrayEquals(new Object[] {"child result"}, child.results);
     assertArrayEquals(new Object[] {"root result"}, root.results);
@@ -156,7 +156,7 @@ public class TestOperatorInitialization {
 
     Operator.initializeDeferringAsyncWaits(conf, Arrays.asList(outer, last));
 
-    assertEquals(Arrays.asList("nested", "outer", "last"), completions);
+    assertCompletions("nested", "outer", "last");
     assertEquals(1, nested.completeCalls);
   }
 
@@ -167,7 +167,7 @@ public class TestOperatorInitialization {
 
     Operator.initializeDeferringAsyncWaits(conf, singletonList(first));
 
-    assertEquals(Arrays.asList("ordinary", "first"), completions);
+    assertCompletions("ordinary", "first");
     assertEquals(1, first.completeCalls);
   }
 
@@ -290,6 +290,11 @@ public class TestOperatorInitialization {
     assertArrayEquals(new Object[] {"ordinary result"}, ordinary.results);
   }
 
+  private void assertCompletions(String... expected) {
+    assertEquals(expected.length, completions.size());
+    assertEquals(new HashSet<>(Arrays.asList(expected)), new HashSet<>(completions));
+  }
+
   private TestOperator operator(String name) {
     return new TestOperator(context, name, completions);
   }
@@ -330,7 +335,6 @@ public class TestOperatorInitialization {
   private static final class TestOperator extends Operator<OperatorDesc> {
     private final String label;
     private final List<String> completions;
-    private final CountDownLatch completed = new CountDownLatch(1);
     private Supplier<Future<?>> operation;
     private InitializationAction initializationAction;
     private InitializationAction completionAction;
@@ -372,7 +376,6 @@ public class TestOperatorInitialization {
         completionAction.run();
       }
       completions.add(label);
-      completed.countDown();
     }
 
     @Override
