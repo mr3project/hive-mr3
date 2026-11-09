@@ -92,6 +92,16 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
   protected transient long runTimeNumRows = 0;
   private transient Configuration hconf;
   protected final transient Collection<Future<?>> asyncInitOperations = new HashSet<>();
+
+  // Initialization recurses through initializeChildren(), including overrides in subclasses.
+  // Keep the batch on the initializing thread so all those paths defer their waits together.
+  private static final ThreadLocal<InitializationContext> INITIALIZATION_CONTEXT = new ThreadLocal<>();
+
+  private static final class InitializationContext {
+    private final List<Operator<?>> started = new ArrayList<>();
+    private final List<Operator<?>> completionOrder = new ArrayList<>();
+  }
+
   private String marker;
 
   // It can be optimized later so that an operator operator (init/close) is performed
@@ -301,6 +311,49 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
   }
 
   /**
+   * Initializes a batch of roots and their descendants before waiting for asynchronous work.
+   * Synchronous initialization still runs on the calling thread, and completion callbacks retain
+   * the order in which ordinary initialization would have invoked them. On failure, asynchronous
+   * work started anywhere in the batch is cancelled. Roots use their existing input inspectors.
+   * A nested batch joins the current batch; only the outermost call waits for completion.
+   */
+  public static void initializeDeferringAsyncWaits(Configuration hconf,
+      Collection<? extends Operator<?>> roots) throws HiveException {
+    InitializationContext context = INITIALIZATION_CONTEXT.get();
+    if (context != null) {
+      for (Operator<?> root : roots) {
+        root.initialize(hconf, null);
+      }
+      return;
+    }
+
+    context = new InitializationContext();
+    boolean success = false;
+    try {
+      INITIALIZATION_CONTEXT.set(context);
+      try {
+        for (Operator<?> root : roots) {
+          root.initialize(hconf, null);
+        }
+      } finally {
+        // Completion callbacks must not enqueue more work in a batch that is being drained.
+        INITIALIZATION_CONTEXT.remove();
+      }
+
+      for (Operator<?> operator : context.completionOrder) {
+        operator.completeInitialization(operator.asyncInitOperations);
+      }
+      success = true;
+    } finally {
+      if (!success) {
+        for (Operator<?> operator : context.started) {
+          operator.cancelAsyncInitOps();
+        }
+      }
+    }
+  }
+
+  /**
    * Initializes operators only if all parents have been initialized. Calls
    * operator specific initializer which then initializes child ops.
    *
@@ -356,6 +409,11 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
     // derived classes can set this to different object if needed
     outputObjInspector = inputObjInspectors[0];
 
+    InitializationContext initializationContext = INITIALIZATION_CONTEXT.get();
+    if (initializationContext != null) {
+      // Include partially initialized operators in batch cleanup if initializeOp throws.
+      initializationContext.started.add(this);
+    }
     boolean isInitOk = false;
     try {
       initializeOp(hconf);
@@ -379,8 +437,11 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
     LOG.debug("Initialization Done - Reset: {}", this);
 
-    // let's wait on the async ops before continuing
-    completeInitialization(asyncInitOperations);
+    if (initializationContext == null) {
+      completeInitialization(asyncInitOperations);
+    } else {
+      initializationContext.completionOrder.add(this);
+    }
   }
 
   private void cancelAsyncInitOps() {

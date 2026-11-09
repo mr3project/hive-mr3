@@ -221,11 +221,10 @@ public class ReduceRecordProcessor extends RecordProcessor {
       // Initialization isn't finished until all parents of all operators
       // are initialized. For broadcast joins that means initializing the
       // dummy parent operators as well.
-      for (HashTableDummyOperator dummyOp : dummyOps) {
-        // TODO HIVE-14042. Propagating abort to dummyOps.
-        dummyOp.initialize(jconf, null);
-        checkAbortCondition();
-      }
+      // Start every map join's asynchronous load before waiting for any of them.
+      // TODO HIVE-14042. Propagating abort to dummyOps.
+      Operator.initializeDeferringAsyncWaits(jconf, dummyOps);
+      checkAbortCondition();
 
       createOutputMap();
 

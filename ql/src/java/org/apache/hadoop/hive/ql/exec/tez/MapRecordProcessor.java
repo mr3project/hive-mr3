@@ -338,9 +338,10 @@ public class MapRecordProcessor extends RecordProcessor {
       if (dummyOps != null) {
         for (Operator<? extends OperatorDesc> dummyOp : dummyOps){
           dummyOp.setExecContext(execContext);
-          // TODO HIVE-14042. Handling of dummyOps, and propagating abort information to them
-          dummyOp.initialize(jconf, null);
         }
+        // Start every map join's asynchronous load before waiting for any of them.
+        // TODO HIVE-14042. Handling of dummyOps, and propagating abort information to them
+        Operator.initializeDeferringAsyncWaits(jconf, dummyOps);
       }
 
       OperatorUtils.setChildrenCollector(mapOp.getChildOperators(), outMap);
