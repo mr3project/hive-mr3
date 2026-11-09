@@ -336,12 +336,24 @@ public class MapRecordProcessor extends RecordProcessor {
       List<HashTableDummyOperator> dummyOps = mapWork.getDummyOps();
       jconf.set(Utilities.INPUT_NAME, mapWork.getName());
       if (dummyOps != null) {
-        for (Operator<? extends OperatorDesc> dummyOp : dummyOps){
-          dummyOp.setExecContext(execContext);
+        boolean initialized = false;
+        try {
+          // Start every map join's load before waiting for any of them.
+          for (HashTableDummyOperator dummyOp : dummyOps) {
+            dummyOp.setExecContext(execContext);
+            dummyOp.initializeDeferringAsyncWaits(jconf, null);
+          }
+          for (HashTableDummyOperator dummyOp : dummyOps) {
+            dummyOp.completeDeferredInitialization();
+          }
+          initialized = true;
+        } finally {
+          if (!initialized) {
+            for (HashTableDummyOperator dummyOp : dummyOps) {
+              dummyOp.cancelDeferredInitialization();
+            }
+          }
         }
-        // Start every map join's asynchronous load before waiting for any of them.
-        // TODO HIVE-14042. Handling of dummyOps, and propagating abort information to them
-        Operator.initializeDeferringAsyncWaits(jconf, dummyOps);
       }
 
       OperatorUtils.setChildrenCollector(mapOp.getChildOperators(), outMap);

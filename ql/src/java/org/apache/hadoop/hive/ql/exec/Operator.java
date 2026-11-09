@@ -22,8 +22,10 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -93,13 +95,8 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
   private transient Configuration hconf;
   protected final transient Collection<Future<?>> asyncInitOperations = new HashSet<>();
 
-  // Initialization recurses through initializeChildren(), including overrides in subclasses.
-  // Keep the batch on the initializing thread so all those paths defer their waits together.
-  private static final ThreadLocal<InitializationContext> INITIALIZATION_CONTEXT = new ThreadLocal<>();
-
-  private static final class InitializationContext {
-    private final List<Operator<?>> started = new ArrayList<>();
-  }
+  // Also tracks callbacks with no futures, and prevents completing shared descendants twice.
+  protected transient boolean deferredInitializationPending;
 
   private String marker;
 
@@ -310,46 +307,68 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
   }
 
   /**
-   * Initializes a batch of roots and their descendants before waiting for asynchronous work.
-   * Synchronous initialization and completion callbacks run on the calling thread. Each callback
-   * runs after its operator's own futures complete, with no ordering guarantee between operators.
-   * On failure, asynchronous work started anywhere in the batch is cancelled. Roots use their
-   * existing input inspectors.
-   * A nested batch joins the current batch; only the outermost call waits for completion.
+   * Initializes this operator and its descendants without waiting for asynchronous work.
+   * Call completeDeferredInitialization() after starting every root in the batch. On failure,
+   * callers must cancel deferred initialization for all roots whose initialization was attempted.
    */
-  public static void initializeDeferringAsyncWaits(Configuration hconf,
-      Collection<? extends Operator<?>> roots) throws HiveException {
-    InitializationContext context = INITIALIZATION_CONTEXT.get();
-    if (context != null) {
-      for (Operator<?> root : roots) {
-        root.initialize(hconf, null);
-      }
-      return;
-    }
-
-    context = new InitializationContext();
+  public final void initializeDeferringAsyncWaits(Configuration hconf, ObjectInspector[] inputOIs)
+      throws HiveException {
     boolean success = false;
     try {
-      INITIALIZATION_CONTEXT.set(context);
-      try {
-        for (Operator<?> root : roots) {
-          root.initialize(hconf, null);
-        }
-      } finally {
-        // Completion callbacks must not enqueue more work in a batch that is being drained.
-        INITIALIZATION_CONTEXT.remove();
-      }
-
-      for (Operator<?> operator : context.started) {
-        operator.completeInitialization(operator.asyncInitOperations);
-      }
+      initialize(hconf, inputOIs, true);
       success = true;
     } finally {
       if (!success) {
-        for (Operator<?> operator : context.started) {
-          operator.cancelAsyncInitOps();
-        }
+        cancelDeferredInitialization();
       }
+    }
+  }
+
+  /**
+   * Waits on each pending operator's own futures and invokes its completion callback once.
+   * Completion order between operators is unspecified. Shared descendants and callbacks with
+   * no futures are included.
+   */
+  public final void completeDeferredInitialization() throws HiveException {
+    boolean success = false;
+    try {
+      completeDeferredInitialization(Collections.newSetFromMap(new IdentityHashMap<>()));
+      success = true;
+    } finally {
+      if (!success) {
+        cancelDeferredInitialization();
+      }
+    }
+  }
+
+  private void completeDeferredInitialization(Set<Operator<?>> visited) throws HiveException {
+    if (!visited.add(this)) {
+      return;
+    }
+    if (deferredInitializationPending) {
+      completeInitialization(asyncInitOperations);
+      deferredInitializationPending = false;
+    }
+    for (Operator<?> child : childOperators) {
+      child.completeDeferredInitialization(visited);
+    }
+  }
+
+  /** Cancels outstanding deferred work throughout this subtree after either pass fails. */
+  public final void cancelDeferredInitialization() {
+    cancelDeferredInitialization(Collections.newSetFromMap(new IdentityHashMap<>()));
+  }
+
+  private void cancelDeferredInitialization(Set<Operator<?>> visited) {
+    if (!visited.add(this)) {
+      return;
+    }
+    if (deferredInitializationPending) {
+      cancelAsyncInitOps();
+      deferredInitializationPending = false;
+    }
+    for (Operator<?> child : childOperators) {
+      child.cancelDeferredInitialization(visited);
     }
   }
 
@@ -363,9 +382,14 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
    *          ignored.
    * @throws HiveException
    */
-  @SuppressWarnings("unchecked")
   public final void initialize(Configuration hconf, ObjectInspector[] inputOIs)
       throws HiveException {
+    initialize(hconf, inputOIs, false);
+  }
+
+  @SuppressWarnings("unchecked")
+  protected final void initialize(Configuration hconf, ObjectInspector[] inputOIs,
+      boolean deferAsyncWaits) throws HiveException {
 
     this.done = false;
     this.runTimeNumRows = 0; // initializeOp can be overridden
@@ -409,11 +433,8 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
     // derived classes can set this to different object if needed
     outputObjInspector = inputObjInspectors[0];
 
-    InitializationContext initializationContext = INITIALIZATION_CONTEXT.get();
-    if (initializationContext != null) {
-      // Include partially initialized operators in batch cleanup if initializeOp throws.
-      initializationContext.started.add(this);
-    }
+    // Mark before initializeOp so failures also cancel partially started asynchronous work.
+    deferredInitializationPending = deferAsyncWaits;
     boolean isInitOk = false;
     try {
       initializeOp(hconf);
@@ -437,7 +458,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
     LOG.debug("Initialization Done - Reset: {}", this);
 
-    if (initializationContext == null) {
+    if (!deferAsyncWaits) {
       completeInitialization(asyncInitOperations);
     }
   }
@@ -560,7 +581,8 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
     LOG.debug("Initializing Children: {}", this);
 
     for (int i = 0; i < childOperatorsArray.length; i++) {
-      childOperatorsArray[i].initialize(hconf, outputObjInspector, childOperatorsTag[i]);
+      childOperatorsArray[i].initialize(hconf, outputObjInspector, childOperatorsTag[i],
+          deferredInitializationPending);
       if (reporter != null) {
         childOperatorsArray[i].setReporter(reporter);
       }
@@ -598,6 +620,11 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
    */
   protected void initialize(Configuration hconf, ObjectInspector inputOI,
       int parentId) throws HiveException {
+    initialize(hconf, inputOI, parentId, false);
+  }
+
+  protected final void initialize(Configuration hconf, ObjectInspector inputOI,
+      int parentId, boolean deferAsyncWaits) throws HiveException {
     LOG.debug("Initializing Child : {}", this);
     if (parentId >= inputObjInspectors.length) {
       // Determine the next power of 2 larger than the requested index
@@ -609,7 +636,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
     }
     inputObjInspectors[parentId] = inputOI;
     // call the actual operator initialization function
-    initialize(hconf, null);
+    initialize(hconf, null, deferAsyncWaits);
   }
 
   public ObjectInspector[] getInputObjInspectors() {

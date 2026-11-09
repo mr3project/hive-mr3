@@ -77,7 +77,7 @@ public class TestOperatorInitialization {
       assertEquals(0, second.initializations);
 
       Future<?> initialized = initializer.submit(() -> {
-        Operator.initializeDeferringAsyncWaits(conf, Arrays.asList(dummyFirst, dummySecond));
+        initializeBatch(Arrays.asList(dummyFirst, dummySecond));
         return null;
       });
       assertTrue("Both hash-table loads must start before either is released",
@@ -114,7 +114,7 @@ public class TestOperatorInitialization {
     connect(first, shared);
     connect(second, shared);
 
-    Operator.initializeDeferringAsyncWaits(conf, Arrays.asList(first, second, first));
+    initializeBatch(Arrays.asList(first, second, first));
 
     for (TestOperator op : Arrays.asList(first, second, shared)) {
       assertEquals(1, op.initializations);
@@ -134,7 +134,7 @@ public class TestOperatorInitialization {
     connect(root, child);
     connect(child, leaf);
 
-    Operator.initializeDeferringAsyncWaits(conf, singletonList(root));
+    initializeBatch(singletonList(root));
 
     assertCompletions("leaf", "child", "root");
     assertArrayEquals(new Object[0], leaf.results);
@@ -143,21 +143,26 @@ public class TestOperatorInitialization {
   }
 
   @Test
-  public void testNestedBatchWaitsOnlyAtOutermostCall() throws Exception {
-    TestOperator outer = operator("outer");
-    TestOperator nested = operator("nested");
-    TestOperator last = operator("last");
-    nested.operation = () -> CompletableFuture.completedFuture("nested result");
-    outer.initializationAction = () -> {
-      Operator.initializeDeferringAsyncWaits(conf, singletonList(nested));
-      assertEquals("Nested initialization must defer its completion", 0, nested.completeCalls);
-    };
-    last.initializationAction = () -> assertEquals(0, nested.completeCalls);
+  public void testSeparateRootsDeferCompletionUntilSecondPass() throws Exception {
+    TestOperator first = operator("first");
+    TestOperator second = operator("second");
+    first.operation = () -> CompletableFuture.completedFuture("first result");
 
-    Operator.initializeDeferringAsyncWaits(conf, Arrays.asList(outer, last));
+    first.initializeDeferringAsyncWaits(conf, null);
+    second.initializeDeferringAsyncWaits(conf, null);
+    assertEquals(0, first.completeCalls);
+    assertEquals(0, second.completeCalls);
 
-    assertCompletions("nested", "outer", "last");
-    assertEquals(1, nested.completeCalls);
+    // Ordinary initialization remains synchronous even between the two passes.
+    assertOrdinaryInitializationCompletes();
+    first.completeDeferredInitialization();
+    second.completeDeferredInitialization();
+    first.completeDeferredInitialization();
+
+    assertCompletions("ordinary", "first", "second");
+    assertEquals(1, first.completeCalls);
+    assertEquals(1, second.completeCalls);
+    assertArrayEquals(new Object[] {"first result"}, first.results);
   }
 
   @Test
@@ -165,7 +170,7 @@ public class TestOperatorInitialization {
     TestOperator first = operator("first");
     first.completionAction = this::assertOrdinaryInitializationCompletes;
 
-    Operator.initializeDeferringAsyncWaits(conf, singletonList(first));
+    initializeBatch(singletonList(first));
 
     assertCompletions("ordinary", "first");
     assertEquals(1, first.completeCalls);
@@ -182,7 +187,7 @@ public class TestOperatorInitialization {
     failing.initializationFailure = new HiveException("initialization failed");
 
     HiveException failure = assertThrows(HiveException.class,
-        () -> Operator.initializeDeferringAsyncWaits(conf, Arrays.asList(first, failing)));
+        () -> initializeBatch(Arrays.asList(first, failing)));
 
     assertSame(failing.initializationFailure, failure);
     assertTrue(firstLoad.isCancelled());
@@ -203,7 +208,7 @@ public class TestOperatorInitialization {
     second.operation = () -> secondLoad;
 
     HiveException failure = assertThrows(HiveException.class,
-        () -> Operator.initializeDeferringAsyncWaits(conf, Arrays.asList(first, second)));
+        () -> initializeBatch(Arrays.asList(first, second)));
 
     assertSame(loadFailure, failure.getCause());
     assertEquals(1, second.initializations);
@@ -222,7 +227,7 @@ public class TestOperatorInitialization {
     first.completionFailure = new HiveException("completion failed");
 
     HiveException failure = assertThrows(HiveException.class,
-        () -> Operator.initializeDeferringAsyncWaits(conf, Arrays.asList(first, second)));
+        () -> initializeBatch(Arrays.asList(first, second)));
 
     assertSame(first.completionFailure, failure);
     assertTrue(secondLoad.isCancelled());
@@ -252,7 +257,7 @@ public class TestOperatorInitialization {
     try {
       Future<?> initialized = initializer.submit(() -> {
         initializerThread.set(Thread.currentThread());
-        Operator.initializeDeferringAsyncWaits(conf, Arrays.asList(first, second));
+        initializeBatch(Arrays.asList(first, second));
         return null;
       });
       assertTrue(firstLoad.waiting.await(10, TimeUnit.SECONDS));
@@ -270,7 +275,7 @@ public class TestOperatorInitialization {
       assertTrue(firstLoad.isCancelled());
       assertTrue(secondLoad.isCancelled());
       assertTrue(completions.isEmpty());
-      // Reuse the same processor thread to detect a leaked deferral context.
+      // Ordinary initialization must still complete on the same processor thread.
       initializer.submit(() -> {
         assertOrdinaryInitializationCompletes();
         return null;
@@ -279,6 +284,25 @@ public class TestOperatorInitialization {
       firstLoad.cancel(true);
       secondLoad.cancel(true);
       shutdown(initializer);
+    }
+  }
+
+  private void initializeBatch(List<? extends Operator<?>> roots) throws HiveException {
+    boolean initialized = false;
+    try {
+      for (Operator<?> root : roots) {
+        root.initializeDeferringAsyncWaits(conf, null);
+      }
+      for (Operator<?> root : roots) {
+        root.completeDeferredInitialization();
+      }
+      initialized = true;
+    } finally {
+      if (!initialized) {
+        for (Operator<?> root : roots) {
+          root.cancelDeferredInitialization();
+        }
+      }
     }
   }
 

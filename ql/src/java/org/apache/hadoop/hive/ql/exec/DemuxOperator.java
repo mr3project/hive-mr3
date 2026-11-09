@@ -225,7 +225,7 @@ public class DemuxOperator extends Operator<DemuxDesc>
         ObjectInspector[] ois = childInputObjInspectors[i];
         for (int j = 0; j < ois.length; j++) {
           if (ois[j] != null) {
-            childOperatorsArray[i].initialize(hconf, ois[j], j);
+            childOperatorsArray[i].initialize(hconf, ois[j], j, deferredInitializationPending);
           }
         }
       } else {
@@ -239,7 +239,7 @@ public class DemuxOperator extends Operator<DemuxDesc>
       LOG.info("Initializing child " + i + " " + childOperatorsArray[i].getIdentifier() + " "
           + childOperatorsArray[i].getName() + " " + childInputObjInspectors[i].length);
       if (!(childOperatorsArray[i] instanceof MuxOperator)) {
-        childOperatorsArray[i].initialize(hconf, childInputObjInspectors[i]);
+        childOperatorsArray[i].initialize(hconf, childInputObjInspectors[i], deferredInitializationPending);
       } else {
         continue;
       }
