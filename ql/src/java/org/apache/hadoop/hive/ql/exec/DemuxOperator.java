@@ -206,7 +206,7 @@ public class DemuxOperator extends Operator<DemuxDesc>
 
   // Each child should has its own outputObjInspector
   @Override
-  protected void initializeChildren(Configuration hconf) throws HiveException {
+  protected void initializeChildren(Configuration hconf, boolean deferAsyncWaits) throws HiveException {
     state = State.INIT;
     LOG.info("Operator " + id + " " + getName() + " initialized");
     LOG.info("Initializing children of " + id + " " + getName());
