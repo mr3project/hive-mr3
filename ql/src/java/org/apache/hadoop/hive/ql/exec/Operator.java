@@ -93,9 +93,6 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
   private transient Configuration hconf;
   protected final transient Collection<Future<?>> asyncInitOperations = new HashSet<>();
 
-  // Also tracks callbacks with no futures, and prevents completing shared descendants twice.
-  protected transient boolean deferredInitializationPending;
-
   private String marker;
 
   // It can be optimized later so that an operator operator (init/close) is performed
@@ -316,9 +313,8 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
   /** Completes pending initialization throughout this subtree, once per operator. */
   public final void completeDeferredInitialization() throws HiveException {
-    if (deferredInitializationPending) {
+    if (!asyncInitOperations.isEmpty()) {
       completeInitialization(asyncInitOperations);
-      deferredInitializationPending = false;
     }
     for (Operator<?> child : childOperators) {
       child.completeDeferredInitialization();
@@ -328,7 +324,6 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
   /** Cancels outstanding work throughout this subtree after either pass fails. */
   public final void cancelDeferredInitialization() {
     cancelAsyncInitOps();
-    deferredInitializationPending = false;
     for (Operator<?> child : childOperators) {
       child.cancelDeferredInitialization();
     }
@@ -395,8 +390,6 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
     // derived classes can set this to different object if needed
     outputObjInspector = inputObjInspectors[0];
 
-    // Mark before initializeOp so failures also cancel partially started asynchronous work.
-    deferredInitializationPending = deferAsyncWaits;
     boolean isInitOk = false;
     try {
       initializeOp(hconf);
@@ -408,7 +401,11 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
       LOG.debug("Initialization Done: {}", this);
 
-      initializeChildren(hconf);
+      if (deferAsyncWaits) {
+        initializeChildren(hconf, true);
+      } else {
+        initializeChildren(hconf);
+      }
       isInitOk = true;
     } finally {
       // TODO: ugly hack because Java does not have dtors and Tez input
@@ -420,7 +417,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
     LOG.debug("Initialization Done - Reset: {}", this);
 
-    if (!deferAsyncWaits) {
+    if (!deferAsyncWaits || asyncInitOperations.isEmpty()) {
       completeInitialization(asyncInitOperations);
     }
   }
@@ -491,6 +488,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
     }
 
     completeInitializationOp(os);
+    fs.clear();
   }
 
   /**
@@ -533,6 +531,10 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
    * output row format.
    */
   protected void initializeChildren(Configuration hconf) throws HiveException {
+    initializeChildren(hconf, false);
+  }
+
+  private void initializeChildren(Configuration hconf, boolean deferAsyncWaits) throws HiveException {
     state = State.INIT;
     LOG.debug("Operator Initialized: {}", this);
 
@@ -544,7 +546,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
     for (int i = 0; i < childOperatorsArray.length; i++) {
       childOperatorsArray[i].initialize(hconf, outputObjInspector, childOperatorsTag[i],
-          deferredInitializationPending);
+          deferAsyncWaits);
       if (reporter != null) {
         childOperatorsArray[i].setReporter(reporter);
       }

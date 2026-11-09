@@ -121,6 +121,7 @@ public class TestOperatorInitialization {
       assertEquals(1, op.completeCalls);
     }
     assertArrayEquals(new Object[] {"shared result"}, shared.results);
+    assertTrue(shared.asyncInitOperations.isEmpty());
     assertCompletions("first", "shared", "second");
   }
 
@@ -151,7 +152,9 @@ public class TestOperatorInitialization {
     first.initializeDeferringAsyncWaits(conf, null);
     second.initializeDeferringAsyncWaits(conf, null);
     assertEquals(0, first.completeCalls);
-    assertEquals(0, second.completeCalls);
+    assertFalse(first.asyncInitOperations.isEmpty());
+    // Operators without futures complete synchronously during the first pass.
+    assertEquals(1, second.completeCalls);
 
     // Ordinary initialization remains synchronous even between the two passes.
     assertOrdinaryInitializationCompletes();
@@ -163,6 +166,7 @@ public class TestOperatorInitialization {
     assertEquals(1, first.completeCalls);
     assertEquals(1, second.completeCalls);
     assertArrayEquals(new Object[] {"first result"}, first.results);
+    assertTrue(first.asyncInitOperations.isEmpty());
   }
 
   @Test
@@ -309,6 +313,7 @@ public class TestOperatorInitialization {
     ordinary.initialize(conf, null);
     assertEquals(1, ordinary.completeCalls);
     assertArrayEquals(new Object[] {"ordinary result"}, ordinary.results);
+    assertTrue(ordinary.asyncInitOperations.isEmpty());
   }
 
   private void assertCompletions(String... expected) {
