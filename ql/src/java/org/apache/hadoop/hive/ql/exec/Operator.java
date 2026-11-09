@@ -92,6 +92,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
   protected transient long runTimeNumRows = 0;
   private transient Configuration hconf;
   protected final transient Collection<Future<?>> asyncInitOperations = new HashSet<>();
+
   private String marker;
 
   // It can be optimized later so that an operator operator (init/close) is performed
@@ -300,6 +301,24 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
     return true;
   }
 
+  // complete pending initialization throughout this subtree, once per operator
+  public final void completeDeferredInitialization() throws HiveException {
+    if (!asyncInitOperations.isEmpty()) {
+      completeInitialization(asyncInitOperations);
+    }
+    for (Operator<?> child : childOperators) {
+      child.completeDeferredInitialization();
+    }
+  }
+
+  // cancel outstanding work throughout this subtree after either pass fails
+  public final void cancelDeferredInitialization() {
+    cancelAsyncInitOps();
+    for (Operator<?> child : childOperators) {
+      child.cancelDeferredInitialization();
+    }
+  }
+
   /**
    * Initializes operators only if all parents have been initialized. Calls
    * operator specific initializer which then initializes child ops.
@@ -310,9 +329,15 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
    *          ignored.
    * @throws HiveException
    */
-  @SuppressWarnings("unchecked")
   public final void initialize(Configuration hconf, ObjectInspector[] inputOIs)
       throws HiveException {
+    initialize(hconf, inputOIs, false);
+  }
+
+  // initialize this subtree, optionally deferring asynchronous waits
+  @SuppressWarnings("unchecked")
+  public final void initialize(Configuration hconf, ObjectInspector[] inputOIs,
+      boolean deferAsyncWaits) throws HiveException {
 
     this.done = false;
     this.runTimeNumRows = 0; // initializeOp can be overridden
@@ -367,7 +392,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
       LOG.debug("Initialization Done: {}", this);
 
-      initializeChildren(hconf);
+      initializeChildren(hconf, deferAsyncWaits);
       isInitOk = true;
     } finally {
       // TODO: ugly hack because Java does not have dtors and Tez input
@@ -379,8 +404,9 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
     LOG.debug("Initialization Done - Reset: {}", this);
 
-    // let's wait on the async ops before continuing
-    completeInitialization(asyncInitOperations);
+    if (!deferAsyncWaits || asyncInitOperations.isEmpty()) {
+      completeInitialization(asyncInitOperations);
+    }
   }
 
   private void cancelAsyncInitOps() {
@@ -417,7 +443,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
               // Await future result with a timeout to check the abort field occasionally.
               // It's possible that the interrupt which comes in along with an abort, is suppressed
               // by some other operator.
-              Object futureResult = f.get(200l, TimeUnit.MILLISECONDS);
+              Object futureResult = f.get(100l, TimeUnit.MILLISECONDS);
               os[i++] = futureResult;
               break;
             } catch (TimeoutException e) {
@@ -449,6 +475,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
     }
 
     completeInitializationOp(os);
+    fs.clear();
   }
 
   /**
@@ -490,7 +517,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
    * Calls initialize on each of the children with outputObjetInspector as the
    * output row format.
    */
-  protected void initializeChildren(Configuration hconf) throws HiveException {
+  protected void initializeChildren(Configuration hconf, boolean deferAsyncWaits) throws HiveException {
     state = State.INIT;
     LOG.debug("Operator Initialized: {}", this);
 
@@ -501,7 +528,8 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
     LOG.debug("Initializing Children: {}", this);
 
     for (int i = 0; i < childOperatorsArray.length; i++) {
-      childOperatorsArray[i].initialize(hconf, outputObjInspector, childOperatorsTag[i]);
+      childOperatorsArray[i].initialize(
+          hconf, outputObjInspector, childOperatorsTag[i], deferAsyncWaits);
       if (reporter != null) {
         childOperatorsArray[i].setReporter(reporter);
       }
@@ -539,6 +567,11 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
    */
   protected void initialize(Configuration hconf, ObjectInspector inputOI,
       int parentId) throws HiveException {
+    initialize(hconf, inputOI, parentId, false);
+  }
+
+  protected final void initialize(Configuration hconf, ObjectInspector inputOI,
+      int parentId, boolean deferAsyncWaits) throws HiveException {
     LOG.debug("Initializing Child : {}", this);
     if (parentId >= inputObjInspectors.length) {
       // Determine the next power of 2 larger than the requested index
@@ -550,7 +583,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
     }
     inputObjInspectors[parentId] = inputOI;
     // call the actual operator initialization function
-    initialize(hconf, null);
+    initialize(hconf, null, deferAsyncWaits);
   }
 
   public ObjectInspector[] getInputObjInspectors() {

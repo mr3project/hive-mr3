@@ -223,7 +223,7 @@ public class MuxOperator extends Operator<MuxDesc> implements Serializable{
    * output row format.
    */
   @Override
-  protected void initializeChildren(Configuration hconf) throws HiveException {
+  protected void initializeChildren(Configuration hconf, boolean deferAsyncWaits) throws HiveException {
     state = State.INIT;
     LOG.info("Operator " + id + " " + getName() + " initialized");
     if (childOperators == null || childOperators.isEmpty()) {

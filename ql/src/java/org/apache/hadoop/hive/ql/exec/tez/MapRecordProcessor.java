@@ -197,6 +197,7 @@ public class MapRecordProcessor extends RecordProcessor {
     }
     checkAbortCondition();
 
+    List<HashTableDummyOperator> dummyOps = mapWork.getDummyOps();
     try {
 
       CompilationOpContext runtimeCtx = new CompilationOpContext();
@@ -333,13 +334,14 @@ public class MapRecordProcessor extends RecordProcessor {
       // Initialization isn't finished until all parents of all operators
       // are initialized. For broadcast joins that means initializing the
       // dummy parent operators as well.
-      List<HashTableDummyOperator> dummyOps = mapWork.getDummyOps();
       jconf.set(Utilities.INPUT_NAME, mapWork.getName());
       if (dummyOps != null) {
-        for (Operator<? extends OperatorDesc> dummyOp : dummyOps){
+        for (HashTableDummyOperator dummyOp : dummyOps) {
           dummyOp.setExecContext(execContext);
-          // TODO HIVE-14042. Handling of dummyOps, and propagating abort information to them
-          dummyOp.initialize(jconf, null);
+          dummyOp.initialize(jconf, null, true);
+        }
+        for (HashTableDummyOperator dummyOp : dummyOps) {
+          dummyOp.completeDeferredInitialization();
         }
       }
 
@@ -350,6 +352,11 @@ public class MapRecordProcessor extends RecordProcessor {
       processorContext.notifyPerVertexCacheLoaded();
     } catch (Throwable e) {
       setAborted(true);
+      if (dummyOps != null) {
+        for (HashTableDummyOperator dummyOp : dummyOps) {
+          dummyOp.cancelDeferredInitialization();
+        }
+      }
       if (e instanceof OutOfMemoryError) {
         // will this be true here?
         // Don't create a new object if we are already out of memory
