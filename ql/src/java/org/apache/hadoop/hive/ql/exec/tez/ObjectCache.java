@@ -19,15 +19,11 @@
 package org.apache.hadoop.hive.ql.exec.tez;
 
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
 
-import com.google.common.collect.MapMaker;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -69,19 +65,12 @@ public class ObjectCache implements org.apache.hadoop.hive.ql.exec.ObjectCache {
 
   private static final ExecutorService staticPool = Executors.newCachedThreadPool();
 
-  // Different ObjectCache wrappers can use the same registry. Coordinate loads across all of them,
-  // without retaining registries after their task/container lifetime has ended.
-  private static final ConcurrentMap<ObjectRegistry, ConcurrentMap<String, FutureTask<Object>>>
-      pendingLoadsByRegistry = new MapMaker().weakKeys().makeMap();
-
   private final ObjectRegistry registry;
-  private final ConcurrentMap<String, FutureTask<Object>> pendingLoads;
 
   public ObjectCache() {
     Preconditions.checkNotNull(staticRegistryIndex.get(),
         "Object registry not setup yet. This should have been setup by the TezProcessor");
     registry = staticRegistryIndex.get().registry;
-    pendingLoads = pendingLoadsByRegistry.computeIfAbsent(registry, ignored -> new ConcurrentHashMap<>());
   }
 
   public static boolean isObjectRegistryConfigured() {
@@ -150,47 +139,20 @@ public class ObjectCache implements org.apache.hadoop.hive.ql.exec.ObjectCache {
   @SuppressWarnings("unchecked")
   @Override
   public <T> T retrieve(String key, Callable<T> fn) throws HiveException {
+    T value;
     try {
-      T value = (T) registry.get(key);
-      if (value != null) {
-        LOG.debug("Found {} in cache with value: {}", key, value);
-        return value;
-      }
-
-      FutureTask<Object> load = new FutureTask<>(() -> {
-        // Another load may have finished between the first lookup and registering this task.
-        Object cached = registry.get(key);
-        if (cached != null) {
-          return cached;
-        }
-        T loaded = fn.call();
+      value = (T) registry.get(key);
+      if (value == null) {
+        value = fn.call();
         LOG.debug("Caching key: {}", key);
-        registry.cacheForVertex(key, loaded);
-        return loaded;
-      });
-      FutureTask<Object> existing = pendingLoads.putIfAbsent(key, load);
-      if (existing != null) {
-        return (T) existing.get();
+        registry.cacheForVertex(key, value);
+      } else {
+        LOG.debug("Found {} in cache with value: {}", key, value);
       }
-      try {
-        // The caller already runs on the async pool when invoked by retrieveAsync. Do not submit
-        // another task or hold a registry-wide lock while loading unrelated keys.
-        load.run();
-        return (T) load.get();
-      } finally {
-        pendingLoads.remove(key, load);
-      }
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new HiveException(e);
-    } catch (ExecutionException e) {
-      if (e.getCause() instanceof Error) {
-        throw (Error) e.getCause();
-      }
-      throw new HiveException(e.getCause());
     } catch (Exception e) {
       throw new HiveException(e);
     }
+    return value;
   }
 
   @Override
