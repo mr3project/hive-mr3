@@ -401,11 +401,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
       LOG.debug("Initialization Done: {}", this);
 
-      if (deferAsyncWaits) {
-        initializeChildren(hconf, true);
-      } else {
-        initializeChildren(hconf);
-      }
+      initializeChildren(hconf, deferAsyncWaits);
       isInitOk = true;
     } finally {
       // TODO: ugly hack because Java does not have dtors and Tez input
@@ -530,11 +526,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
    * Calls initialize on each of the children with outputObjetInspector as the
    * output row format.
    */
-  protected void initializeChildren(Configuration hconf) throws HiveException {
-    initializeChildren(hconf, false);
-  }
-
-  private void initializeChildren(Configuration hconf, boolean deferAsyncWaits) throws HiveException {
+  protected void initializeChildren(Configuration hconf, boolean deferAsyncWaits) throws HiveException {
     state = State.INIT;
     LOG.debug("Operator Initialized: {}", this);
 
