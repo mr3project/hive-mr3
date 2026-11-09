@@ -222,8 +222,11 @@ public class ReduceRecordProcessor extends RecordProcessor {
       // are initialized. For broadcast joins that means initializing the
       // dummy parent operators as well.
       for (HashTableDummyOperator dummyOp : dummyOps) {
-        // TODO HIVE-14042. Propagating abort to dummyOps.
-        dummyOp.initialize(jconf, null);
+        dummyOp.initialize(jconf, null, true);
+        checkAbortCondition();
+      }
+      for (HashTableDummyOperator dummyOp : dummyOps) {
+        dummyOp.completeDeferredInitialization();
         checkAbortCondition();
       }
 
@@ -236,6 +239,9 @@ public class ReduceRecordProcessor extends RecordProcessor {
       processorContext.notifyPerVertexCacheLoaded();
     } catch (Throwable e) {
       super.setAborted(true);
+      for (HashTableDummyOperator dummyOp : dummyOps) {
+        dummyOp.cancelDeferredInitialization();
+      }
       if (e instanceof OutOfMemoryError) {
         // Don't create a new object if we are already out of memory
         throw (OutOfMemoryError) e;
