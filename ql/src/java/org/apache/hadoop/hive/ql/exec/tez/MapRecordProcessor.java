@@ -339,7 +339,7 @@ public class MapRecordProcessor extends RecordProcessor {
         // Start every map join's load before waiting for any of them.
         for (HashTableDummyOperator dummyOp : dummyOps) {
           dummyOp.setExecContext(execContext);
-          dummyOp.initializeDeferringAsyncWaits(jconf, null);
+          dummyOp.initialize(jconf, null, true);
         }
         for (HashTableDummyOperator dummyOp : dummyOps) {
           dummyOp.completeDeferredInitialization();

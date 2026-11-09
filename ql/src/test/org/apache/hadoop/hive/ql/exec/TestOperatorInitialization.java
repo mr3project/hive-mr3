@@ -149,8 +149,8 @@ public class TestOperatorInitialization {
     TestOperator second = operator("second");
     first.operation = () -> CompletableFuture.completedFuture("first result");
 
-    first.initializeDeferringAsyncWaits(conf, null);
-    second.initializeDeferringAsyncWaits(conf, null);
+    first.initialize(conf, null, true);
+    second.initialize(conf, null, true);
     assertEquals(0, first.completeCalls);
     assertFalse(first.asyncInitOperations.isEmpty());
     // Operators without futures complete synchronously during the first pass.
@@ -294,7 +294,7 @@ public class TestOperatorInitialization {
   private void initializeBatch(List<? extends Operator<?>> roots) throws HiveException {
     try {
       for (Operator<?> root : roots) {
-        root.initializeDeferringAsyncWaits(conf, null);
+        root.initialize(conf, null, true);
       }
       for (Operator<?> root : roots) {
         root.completeDeferredInitialization();

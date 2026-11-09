@@ -223,7 +223,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
       // dummy parent operators as well.
       // Start every map join's load before waiting for any of them.
       for (HashTableDummyOperator dummyOp : dummyOps) {
-        dummyOp.initializeDeferringAsyncWaits(jconf, null);
+        dummyOp.initialize(jconf, null, true);
         checkAbortCondition();
       }
       for (HashTableDummyOperator dummyOp : dummyOps) {

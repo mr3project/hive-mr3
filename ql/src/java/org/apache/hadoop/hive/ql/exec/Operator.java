@@ -301,16 +301,6 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
     return true;
   }
 
-  /**
-   * Initializes this operator and its descendants without waiting for asynchronous work.
-   * Call completeDeferredInitialization() after starting every root in the batch. On failure,
-   * callers must cancel deferred initialization for all roots whose initialization was attempted.
-   */
-  public final void initializeDeferringAsyncWaits(Configuration hconf, ObjectInspector[] inputOIs)
-      throws HiveException {
-    initialize(hconf, inputOIs, true);
-  }
-
   /** Completes pending initialization throughout this subtree, once per operator. */
   public final void completeDeferredInitialization() throws HiveException {
     if (!asyncInitOperations.isEmpty()) {
@@ -344,8 +334,13 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
     initialize(hconf, inputOIs, false);
   }
 
+  /**
+   * Initializes this subtree, optionally deferring asynchronous waits. When deferring, call
+   * completeDeferredInitialization() after starting every root in the batch, or cancel deferred
+   * initialization for all roots if either pass fails.
+   */
   @SuppressWarnings("unchecked")
-  protected final void initialize(Configuration hconf, ObjectInspector[] inputOIs,
+  public final void initialize(Configuration hconf, ObjectInspector[] inputOIs,
       boolean deferAsyncWaits) throws HiveException {
 
     this.done = false;
