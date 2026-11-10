@@ -452,8 +452,8 @@ public class VectorCopyRow {
   }
 
   /**
-   * Copy one immutable source row into a selected range using column-major copying for
-   * long, double, and bytes columns and row-major copying for the remaining columns.
+   * Copy one immutable source row into a selected range, processing each column in turn.
+   * Resolve source metadata once for long, double, and bytes columns.
    */
   public void copyByReference(VectorizedRowBatch batch, int sourceIndex,
       int[] selected, int offset, int count) {
@@ -496,10 +496,9 @@ public class VectorCopyRow {
       }
     }
 
-    for (int i = 0; i < count; i++) {
-      int row = selected[offset + i];
-      for (CopyRow copier : rowMajorCopiersByReference) {
-        copier.copy(batch, sourceIndex, batch, row);
+    for (CopyRow copier : rowMajorCopiersByReference) {
+      for (int i = 0; i < count; i++) {
+        copier.copy(batch, sourceIndex, batch, selected[offset + i]);
       }
     }
   }
