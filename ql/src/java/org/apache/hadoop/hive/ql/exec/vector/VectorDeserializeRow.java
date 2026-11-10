@@ -237,6 +237,7 @@ public final class VectorDeserializeRow<T extends DeserializeRead> {
    * Allocate the source deserialization related arrays.
    */
   private void allocateArrays(int count) {
+    allIncludedWithoutConversion = null;
     projectionColumnNums = new int[count];
     Arrays.fill(projectionColumnNums, -1);
     topLevelFields = new Field[count];
@@ -1528,7 +1529,43 @@ public final class VectorDeserializeRow<T extends DeserializeRead> {
    * @param batchIndex
    * @throws IOException
    */
+  // Lazily compiled after initialization, invalidated whenever the schema is rebuilt.
+  private Boolean allIncludedWithoutConversion;
+
+  private boolean allIncludedWithoutConversion() {
+    if (allIncludedWithoutConversion == null) {
+      boolean simple = true;
+      for (int i = 0; i < topLevelFields.length; i++) {
+        if (projectionColumnNums[i] < 0 || topLevelFields[i] == null ||
+            topLevelFields[i].getIsConvert()) {
+          simple = false;
+          break;
+        }
+      }
+      allIncludedWithoutConversion = simple;
+    }
+    return allIncludedWithoutConversion;
+  }
+
+  private void deserializeSimple(VectorizedRowBatch batch, int batchIndex,
+      boolean canRetainByteRef) throws IOException {
+    for (int i = 0; i < topLevelFields.length; i++) {
+      if (deserializeRead.readNextField()) {
+        storeRowColumn(batch, batchIndex, topLevelFields[i], i, canRetainByteRef);
+      } else {
+        ColumnVector column = batch.cols[projectionColumnNums[i]];
+        column.isNull[batchIndex] = true;
+        column.noNulls = false;
+      }
+    }
+  }
+
   public void deserialize(VectorizedRowBatch batch, int batchIndex) throws IOException {
+    if (allIncludedWithoutConversion()) {
+      deserializeSimple(batch, batchIndex, false);
+      return;
+    }
+
 
     // Pass false for canRetainByteRef since we will NOT be keeping byte references to the input
     // bytes with the BytesColumnVector.setRef method.
@@ -1602,6 +1639,11 @@ public final class VectorDeserializeRow<T extends DeserializeRead> {
    * @throws IOException
    */
   public void deserializeByRef(VectorizedRowBatch batch, int batchIndex) throws IOException {
+    if (allIncludedWithoutConversion()) {
+      deserializeSimple(batch, batchIndex, true);
+      return;
+    }
+
 
     final int count = topLevelFields.length;
 
