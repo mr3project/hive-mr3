@@ -250,22 +250,27 @@ public abstract class VectorMapJoinInnerBigOnlyGenerateResultOperator
 
       int batchIndex = allMatches[allMatchesIndex + i];
 
+      int ownedSourceIndex = -1;
       for (long l = 0; l < count; l++) {
 
         // Copy the values into the overflow batch. Since the overflow batch may
         // not get flushed here, we must copy by value.
         if (bigTableRetainedVectorCopy != null) {
           bigTableRetainedVectorCopy.copyByValue(batch, batchIndex,
-                                                 overflowBatch, overflowBatch.size);
+                                                 overflowBatch, overflowBatch.size, ownedSourceIndex);
         }
         if (nonOuterSmallTableKeyVectorCopy != null) {
           nonOuterSmallTableKeyVectorCopy.copyByValue(batch, batchIndex,
-              overflowBatch, overflowBatch.size);
+              overflowBatch, overflowBatch.size, ownedSourceIndex);
         }
 
+        if (ownedSourceIndex < 0) {
+          ownedSourceIndex = overflowBatch.size;
+        }
         overflowBatch.size++;
         if (overflowBatch.size == overflowBatch.DEFAULT_SIZE) {
           forwardOverflow();
+          ownedSourceIndex = -1;
         }
       }
     }

@@ -417,6 +417,29 @@ public class VectorCopyRow {
     }
   }
 
+  /** Copy a repeated input row, reusing bytes already owned by the output batch. */
+  public void copyByValue(VectorizedRowBatch inBatch, int inBatchIndex,
+      VectorizedRowBatch outBatch, int outBatchIndex, int ownedSourceIndex) {
+    if (ownedSourceIndex < 0) {
+      copyByValue(inBatch, inBatchIndex, outBatch, outBatchIndex);
+      return;
+    }
+    for (CopyRow copier : subRowToBatchCopiersByValue) {
+      if (copier instanceof BytesCopyRowByValue) {
+        BytesColumnVector bytes = (BytesColumnVector) outBatch.cols[copier.outColumnIndex];
+        if (bytes.noNulls || !bytes.isNull[ownedSourceIndex]) {
+          bytes.setRef(outBatchIndex, bytes.vector[ownedSourceIndex],
+              bytes.start[ownedSourceIndex], bytes.length[ownedSourceIndex]);
+          bytes.isNull[outBatchIndex] = false;
+        } else {
+          VectorizedBatchUtil.setNullColIsNullValue(bytes, outBatchIndex);
+        }
+      } else {
+        copier.copy(inBatch, inBatchIndex, outBatch, outBatchIndex);
+      }
+    }
+  }
+
   /*
    * Use this copy method when the source batch is safe and will remain around until the target
    * batch is finished.
