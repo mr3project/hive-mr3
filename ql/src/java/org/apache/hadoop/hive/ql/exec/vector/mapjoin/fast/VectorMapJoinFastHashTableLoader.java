@@ -86,6 +86,8 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
 
   // Parallel loading variables
   private int numLoadThreads;
+  private int partitionShift;
+  private int partitionMask;
   private ExecutorService loadExecService;
   private List<Future<?>> loadTasks;
   private HashTableElementBatch[] elementBatches;
@@ -135,6 +137,8 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
 
       this.numLoadThreads = adjustedValue;
     }
+    partitionShift = numLoadThreads == 1 ? 0 : Integer.SIZE - Integer.numberOfTrailingZeros(numLoadThreads);
+    partitionMask = numLoadThreads - 1;
     this.totalEntries = new LongAccumulator(Long::sum, 0L);
     this.loadExecService = Executors.newFixedThreadPool(numLoadThreads,
         new ThreadFactoryBuilder()
@@ -375,7 +379,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
   }
 
   private void queueEntry(VectorMapJoinBatchEntry entry) {
-    int partitionId = (int) ((numLoadThreads - 1) & entry.hashCode);
+    int partitionId = ((int) entry.hashCode >>> partitionShift) & partitionMask;
     if (elementBatches[partitionId].addElement(entry)) {
       loadBatchQueues[partitionId].add(elementBatches[partitionId]);
       elementBatches[partitionId] = batchPool.take();

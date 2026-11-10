@@ -48,6 +48,7 @@ public class VectorMapJoinFastMultiKeyHashMultiSetContainer
   public VectorMapJoinFastMultiKeyHashMultiSetContainer(
       boolean isFullOuter,
       int initialCapacity, float loadFactor, int writeBuffersSize, long estimatedKeyCount, int numHTs) {
+    super(numHTs);
     this.vectorMapJoinFastMultiKeyHashMultiSets = new VectorMapJoinFastMultiKeyHashMultiSet[numHTs];
     LOG.info("Initializing {} HT Containers ", numHTs);
     for (int i = 0; i < numHTs; ++i) {
@@ -69,7 +70,7 @@ public class VectorMapJoinFastMultiKeyHashMultiSetContainer
   @Override
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
-    vectorMapJoinFastMultiKeyHashMultiSets[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey,
+    vectorMapJoinFastMultiKeyHashMultiSets[((int) hashCode >>> partitionShift) & partitionMask].putRow(hashCode, currentKey,
         currentValue);
   }
 
@@ -77,7 +78,7 @@ public class VectorMapJoinFastMultiKeyHashMultiSetContainer
   public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
       boolean isNull, BytesWritable currentValue) throws HiveException, IOException {
     assert !isNull : "Multi-key nulls must remain encoded in the key bytes";
-    vectorMapJoinFastMultiKeyHashMultiSets[(int) ((numThreads - 1) & hashCode)]
+    vectorMapJoinFastMultiKeyHashMultiSets[((int) hashCode >>> partitionShift) & partitionMask]
         .add(keyBytes, keyOffset, keyLength, currentValue, hashCode);
   }
 
@@ -122,7 +123,7 @@ public class VectorMapJoinFastMultiKeyHashMultiSetContainer
   public JoinUtil.JoinResult contains(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashMultiSetResult hashMultiSetResult) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-    return vectorMapJoinFastMultiKeyHashMultiSets[(int) ((numThreads - 1) & hashCode)].contains(keyBytes, keyStart, keyLength,
+    return vectorMapJoinFastMultiKeyHashMultiSets[((int) hashCode >>> partitionShift) & partitionMask].contains(keyBytes, keyStart, keyLength,
         hashMultiSetResult);
   }
 
