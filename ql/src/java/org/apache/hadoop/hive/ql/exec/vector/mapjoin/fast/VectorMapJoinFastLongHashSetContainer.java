@@ -105,7 +105,7 @@ public class VectorMapJoinFastLongHashSetContainer extends VectorMapJoinFastHash
 
   public JoinResult contains(long key, VectorMapJoinHashSetResult hashSetResult) {
     long hashCode = HashCodeUtil.calculateLongHashCode(key);
-    return vectorMapJoinFastLongHashSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].contains(key, hashSetResult);
+    return vectorMapJoinFastLongHashSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].contains(key, hashSetResult, hashCode);
   }
 
   @Override

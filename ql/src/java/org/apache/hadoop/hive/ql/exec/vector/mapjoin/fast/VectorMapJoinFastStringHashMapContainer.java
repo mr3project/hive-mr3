@@ -205,7 +205,7 @@ public class VectorMapJoinFastStringHashMapContainer extends VectorMapJoinFastHa
   public JoinUtil.JoinResult lookup(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashMapResult hashMapResult) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-    return vectorMapJoinFastStringHashMaps[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].lookup(keyBytes, keyStart, keyLength, hashMapResult);
+    return vectorMapJoinFastStringHashMaps[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].lookup(keyBytes, keyStart, keyLength, hashMapResult, hashCode);
   }
 
   @Override
@@ -216,7 +216,7 @@ public class VectorMapJoinFastStringHashMapContainer extends VectorMapJoinFastHa
     MatchTracker childMatchTracker = matchTracker != null ? matchTracker.getPartition(partition) : null;
 
     return vectorMapJoinFastStringHashMaps[partition].lookup(keyBytes, keyStart, keyLength, hashMapResult,
-        childMatchTracker);
+        childMatchTracker, hashCode);
   }
 
   @Override

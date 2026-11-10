@@ -141,7 +141,7 @@ public class VectorMapJoinFastStringHashMultiSetContainer extends VectorMapJoinF
       VectorMapJoinHashMultiSetResult hashMultiSetResult) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
     return vectorMapJoinFastStringHashMultiSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].contains(keyBytes, keyStart, keyLength,
-        hashMultiSetResult);
+        hashMultiSetResult, hashCode);
   }
 
   @Override

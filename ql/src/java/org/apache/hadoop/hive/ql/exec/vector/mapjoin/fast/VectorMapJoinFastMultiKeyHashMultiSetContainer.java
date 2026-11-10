@@ -123,7 +123,7 @@ public class VectorMapJoinFastMultiKeyHashMultiSetContainer
       VectorMapJoinHashMultiSetResult hashMultiSetResult) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
     return vectorMapJoinFastMultiKeyHashMultiSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].contains(keyBytes, keyStart, keyLength,
-        hashMultiSetResult);
+        hashMultiSetResult, hashCode);
   }
 
   @Override
