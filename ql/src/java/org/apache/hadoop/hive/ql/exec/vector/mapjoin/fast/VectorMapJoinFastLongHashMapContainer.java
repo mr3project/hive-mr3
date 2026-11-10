@@ -178,24 +178,24 @@ public class VectorMapJoinFastLongHashMapContainer extends VectorMapJoinFastHash
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
     // glad
-    vectorMapJoinFastLongHashMaps[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey, currentValue);
+    vectorMapJoinFastLongHashMaps[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].putRow(hashCode, currentKey, currentValue);
   }
 
   @Override
   public void putRowNative(long hashCode, long key, boolean isNull, BytesWritable currentValue)
       throws HiveException, IOException {
-    vectorMapJoinFastLongHashMaps[(int) ((numThreads - 1) & hashCode)].putRowNative(hashCode, key, isNull, currentValue);
+    vectorMapJoinFastLongHashMaps[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].putRowNative(hashCode, key, isNull, currentValue);
   }
 
   public JoinUtil.JoinResult lookup(long key, VectorMapJoinHashMapResult hashMapResult) {
     long hashCode = HashCodeUtil.calculateLongHashCode(key);
-    return vectorMapJoinFastLongHashMaps[(int) ((numThreads - 1) & hashCode)].lookup(key, hashMapResult);
+    return vectorMapJoinFastLongHashMaps[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].lookup(key, hashMapResult);
   }
 
   public JoinUtil.JoinResult lookup(long key, VectorMapJoinHashMapResult hashMapResult,
       MatchTracker matchTracker) {
     long hashCode = HashCodeUtil.calculateLongHashCode(key);
-    int partition = (int) ((numThreads - 1) & hashCode);
+    int partition = VectorMapJoinFastHashTable.partition(hashCode, numThreads);
     MatchTracker childMatchTracker = matchTracker != null ? matchTracker.getPartition(partition) : null;
 
     return vectorMapJoinFastLongHashMaps[partition].lookup(key, hashMapResult,

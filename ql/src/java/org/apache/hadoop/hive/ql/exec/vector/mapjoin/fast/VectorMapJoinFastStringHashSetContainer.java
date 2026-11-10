@@ -69,13 +69,13 @@ public class VectorMapJoinFastStringHashSetContainer extends VectorMapJoinFastHa
   @Override
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
-    vectorMapJoinFastStringHashSets[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey, currentValue);
+    vectorMapJoinFastStringHashSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].putRow(hashCode, currentKey, currentValue);
   }
 
   @Override
   public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
       boolean isNull, BytesWritable currentValue) throws HiveException, IOException {
-    vectorMapJoinFastStringHashSets[(int) ((numThreads - 1) & hashCode)]
+    vectorMapJoinFastStringHashSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)]
         .putRowNative(hashCode, keyBytes, keyOffset, keyLength, isNull, currentValue);
   }
 
@@ -140,7 +140,7 @@ public class VectorMapJoinFastStringHashSetContainer extends VectorMapJoinFastHa
   public JoinUtil.JoinResult contains(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashSetResult hashSetResult) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-    return vectorMapJoinFastStringHashSets[(int) ((numThreads - 1) & hashCode)].contains(keyBytes, keyStart, keyLength, hashSetResult);
+    return vectorMapJoinFastStringHashSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].contains(keyBytes, keyStart, keyLength, hashSetResult);
   }
 
   @Override

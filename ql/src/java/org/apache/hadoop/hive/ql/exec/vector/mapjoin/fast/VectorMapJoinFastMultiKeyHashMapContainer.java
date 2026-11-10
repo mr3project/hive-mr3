@@ -132,14 +132,14 @@ public class VectorMapJoinFastMultiKeyHashMapContainer
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
     // glad
-    vectorMapJoinFastMultiKeyHashMaps[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey, currentValue);
+    vectorMapJoinFastMultiKeyHashMaps[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].putRow(hashCode, currentKey, currentValue);
   }
 
   @Override
   public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
       boolean isNull, BytesWritable currentValue) throws HiveException, IOException {
     assert !isNull : "Multi-key nulls must remain encoded in the key bytes";
-    vectorMapJoinFastMultiKeyHashMaps[(int) ((numThreads - 1) & hashCode)]
+    vectorMapJoinFastMultiKeyHashMaps[VectorMapJoinFastHashTable.partition(hashCode, numThreads)]
         .add(keyBytes, keyOffset, keyLength, currentValue, hashCode);
   }
 
@@ -186,14 +186,14 @@ public class VectorMapJoinFastMultiKeyHashMapContainer
   public JoinUtil.JoinResult lookup(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashMapResult hashMapResult) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-    return vectorMapJoinFastMultiKeyHashMaps[(int) ((numThreads - 1) & hashCode)].lookup(keyBytes, keyStart, keyLength, hashMapResult);
+    return vectorMapJoinFastMultiKeyHashMaps[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].lookup(keyBytes, keyStart, keyLength, hashMapResult);
   }
 
   @Override
   public JoinUtil.JoinResult lookup(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashMapResult hashMapResult, MatchTracker matchTracker) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-    int partition = (int) ((numThreads - 1) & hashCode);
+    int partition = VectorMapJoinFastHashTable.partition(hashCode, numThreads);
     MatchTracker childMatchTracker = matchTracker != null ? matchTracker.getPartition(partition) : null;
 
     return vectorMapJoinFastMultiKeyHashMaps[partition].lookup(keyBytes, keyStart, keyLength, hashMapResult,

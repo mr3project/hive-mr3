@@ -375,7 +375,7 @@ public class VectorMapJoinFastHashTableLoader implements org.apache.hadoop.hive.
   }
 
   private void queueEntry(VectorMapJoinBatchEntry entry) {
-    int partitionId = (int) ((numLoadThreads - 1) & entry.hashCode);
+    int partitionId = VectorMapJoinFastHashTable.partition(entry.hashCode, numLoadThreads);
     if (elementBatches[partitionId].addElement(entry)) {
       loadBatchQueues[partitionId].add(elementBatches[partitionId]);
       elementBatches[partitionId] = batchPool.take();
