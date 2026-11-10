@@ -152,6 +152,18 @@ public abstract class VectorAggregateExpression  implements Serializable {
    * @param aggregationBuffer
    * @param aborted
    */
+  /** Whether this aggregate has lifecycle work before output. Evaluated once per plan.
+   * Reflection preserves existing subclasses that override finish without this capability.
+   */
+  public boolean requiresFinish() {
+    try {
+      return getClass().getMethod("finish", AggregationBuffer.class, boolean.class)
+          .getDeclaringClass() != VectorAggregateExpression.class;
+    } catch (NoSuchMethodException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
   public void finish(AggregationBuffer aggregationBuffer, boolean aborted) {
   }
 

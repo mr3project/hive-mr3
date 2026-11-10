@@ -276,9 +276,24 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       finishAggregators(aggregationBufferSet, aborted);
     }
 
+    private int[] finishingAggregators;
+
     public void finishAggregators(VectorAggregationBufferRow vectorAggregationBufferRow, boolean aborted) {
+      if (vectorAggregationBufferRow == null) {
+        return;
+      }
+      if (finishingAggregators == null) {
+        int[] indices = new int[aggregators.length];
+        int count = 0;
+        for (int i = 0; i < aggregators.length; i++) {
+          if (aggregators[i].requiresFinish()) {
+            indices[count++] = i;
+          }
+        }
+        finishingAggregators = Arrays.copyOf(indices, count);
+      }
       if (vectorAggregationBufferRow != null) {
-        for (int i = 0; i < aggregators.length; ++i) {
+        for (int i : finishingAggregators) {
           aggregators[i].finish(vectorAggregationBufferRow.getAggregationBuffer(i), aborted);
         }
       }
@@ -713,29 +728,35 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
             maxHashTblMemory/1024/1024,
             gcCanary.get() == null ? "dead" : "alive"));
       }
-      int avgAccess = computeAvgAccess();
-
-      /* Iterate the global (keywrapper,aggregationbuffers) map and emit
-       a row for each key */
-      Iterator<Map.Entry<KeyWrapper, VectorAggregationBufferRow>> iter =
-          mapKeysAggregationBuffers.entrySet().iterator();
-      while(iter.hasNext()) {
-        Map.Entry<KeyWrapper, VectorAggregationBufferRow> pair = iter.next();
-        KeyWrapper keyWrapper = pair.getKey();
-        VectorAggregationBufferRow bufferRow = pair.getValue();
-        if (!all && avgAccess >= 1) {
-          if (bufferRow.getAccessCount() > avgAccess) {
-            // resetting to give chance for other entries
-            totalAccessCount -= bufferRow.getAccessCount();
-            bufferRow.resetAccessCount();
-            continue;
-          }
+      if (all) {
+        for (Map.Entry<KeyWrapper, VectorAggregationBufferRow> pair :
+            mapKeysAggregationBuffers.entrySet()) {
+          finishAggregators(pair.getValue(), false);
+          writeSingleRow((VectorHashKeyWrapperBase) pair.getKey(), pair.getValue());
         }
+      } else {
+        int avgAccess = computeAvgAccess();
 
-        finishAggregators(bufferRow, false);
-        writeSingleRow((VectorHashKeyWrapperBase) keyWrapper, bufferRow);
+        /* Iterate the global (keywrapper,aggregationbuffers) map and emit
+         a row for each key */
+        Iterator<Map.Entry<KeyWrapper, VectorAggregationBufferRow>> iter =
+            mapKeysAggregationBuffers.entrySet().iterator();
+        while(iter.hasNext()) {
+          Map.Entry<KeyWrapper, VectorAggregationBufferRow> pair = iter.next();
+          KeyWrapper keyWrapper = pair.getKey();
+          VectorAggregationBufferRow bufferRow = pair.getValue();
+          if (avgAccess >= 1) {
+            if (bufferRow.getAccessCount() > avgAccess) {
+              // resetting to give chance for other entries
+              totalAccessCount -= bufferRow.getAccessCount();
+              bufferRow.resetAccessCount();
+              continue;
+            }
+          }
 
-        if (!all) {
+          finishAggregators(bufferRow, false);
+          writeSingleRow((VectorHashKeyWrapperBase) keyWrapper, bufferRow);
+
           totalAccessCount -= bufferRow.getAccessCount();
           reusableAggregationBufferRows.add(bufferRow);
           bufferRow.resetAccessCount();
