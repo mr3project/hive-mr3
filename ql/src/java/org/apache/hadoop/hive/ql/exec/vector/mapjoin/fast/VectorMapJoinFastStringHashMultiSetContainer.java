@@ -53,6 +53,7 @@ public class VectorMapJoinFastStringHashMultiSetContainer extends VectorMapJoinF
       boolean isFullOuter,
       int initialCapacity, float loadFactor, int writeBuffersSize, long estimatedKeyCount, TableDesc tableDesc,
       int numHTs) {
+    super(numHTs);
     vectorMapJoinFastStringHashMultiSets = new VectorMapJoinFastStringHashMultiSet[numHTs];
     LOG.info("Initializing {} HT Containers ", numHTs);
     for (int i = 0; i < numHTs; ++i) {
@@ -69,13 +70,13 @@ public class VectorMapJoinFastStringHashMultiSetContainer extends VectorMapJoinF
   @Override
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
-    vectorMapJoinFastStringHashMultiSets[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey, currentValue);
+    vectorMapJoinFastStringHashMultiSets[((int) hashCode >>> partitionShift) & partitionMask].putRow(hashCode, currentKey, currentValue);
   }
 
   @Override
   public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
       boolean isNull, BytesWritable currentValue) throws HiveException, IOException {
-    vectorMapJoinFastStringHashMultiSets[(int) ((numThreads - 1) & hashCode)]
+    vectorMapJoinFastStringHashMultiSets[((int) hashCode >>> partitionShift) & partitionMask]
         .putRowNative(hashCode, keyBytes, keyOffset, keyLength, isNull, currentValue);
   }
 
@@ -140,7 +141,7 @@ public class VectorMapJoinFastStringHashMultiSetContainer extends VectorMapJoinF
   public JoinUtil.JoinResult contains(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashMultiSetResult hashMultiSetResult) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-    return vectorMapJoinFastStringHashMultiSets[(int) ((numThreads - 1) & hashCode)].contains(keyBytes, keyStart, keyLength,
+    return vectorMapJoinFastStringHashMultiSets[((int) hashCode >>> partitionShift) & partitionMask].contains(keyBytes, keyStart, keyLength,
         hashMultiSetResult);
   }
 

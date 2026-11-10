@@ -56,6 +56,7 @@ public class VectorMapJoinFastLongHashMapContainer extends VectorMapJoinFastHash
       HashTableKeyType hashTableKeyType,
       int initialCapacity, float loadFactor, int writeBuffersSize, long estimatedKeyCount, TableDesc tableDesc,
       int numHTs) {
+    super(numHTs);
     this.hashTableKeyType = hashTableKeyType;
     this.vectorMapJoinFastLongHashMaps = new VectorMapJoinFastLongHashMap[numHTs];
     LOG.info("Initializing {} HT Containers ", numHTs);
@@ -178,24 +179,24 @@ public class VectorMapJoinFastLongHashMapContainer extends VectorMapJoinFastHash
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
     // glad
-    vectorMapJoinFastLongHashMaps[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey, currentValue);
+    vectorMapJoinFastLongHashMaps[((int) hashCode >>> partitionShift) & partitionMask].putRow(hashCode, currentKey, currentValue);
   }
 
   @Override
   public void putRowNative(long hashCode, long key, boolean isNull, BytesWritable currentValue)
       throws HiveException, IOException {
-    vectorMapJoinFastLongHashMaps[(int) ((numThreads - 1) & hashCode)].putRowNative(hashCode, key, isNull, currentValue);
+    vectorMapJoinFastLongHashMaps[((int) hashCode >>> partitionShift) & partitionMask].putRowNative(hashCode, key, isNull, currentValue);
   }
 
   public JoinUtil.JoinResult lookup(long key, VectorMapJoinHashMapResult hashMapResult) {
     long hashCode = HashCodeUtil.calculateLongHashCode(key);
-    return vectorMapJoinFastLongHashMaps[(int) ((numThreads - 1) & hashCode)].lookup(key, hashMapResult);
+    return vectorMapJoinFastLongHashMaps[((int) hashCode >>> partitionShift) & partitionMask].lookup(key, hashMapResult);
   }
 
   public JoinUtil.JoinResult lookup(long key, VectorMapJoinHashMapResult hashMapResult,
       MatchTracker matchTracker) {
     long hashCode = HashCodeUtil.calculateLongHashCode(key);
-    int partition = (int) ((numThreads - 1) & hashCode);
+    int partition = ((int) hashCode >>> partitionShift) & partitionMask;
     MatchTracker childMatchTracker = matchTracker != null ? matchTracker.getPartition(partition) : null;
 
     return vectorMapJoinFastLongHashMaps[partition].lookup(key, hashMapResult,

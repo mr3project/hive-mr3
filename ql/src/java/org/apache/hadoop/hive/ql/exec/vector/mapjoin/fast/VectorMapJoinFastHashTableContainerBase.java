@@ -29,6 +29,16 @@ import java.io.IOException;
  */
 public abstract class VectorMapJoinFastHashTableContainerBase implements VectorMapJoinHashTable {
 
+  protected final int partitionShift;
+  protected final int partitionMask;
+
+  protected VectorMapJoinFastHashTableContainerBase(int numHTs) {
+    assert numHTs > 0 && Integer.bitCount(numHTs) == 1;
+    // Route using high hash bits so child tables retain the low bucket bits.
+    partitionShift = numHTs == 1 ? 0 : Integer.SIZE - Integer.numberOfTrailingZeros(numHTs);
+    partitionMask = numHTs - 1;
+  }
+
   // glad
   public abstract void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException;
