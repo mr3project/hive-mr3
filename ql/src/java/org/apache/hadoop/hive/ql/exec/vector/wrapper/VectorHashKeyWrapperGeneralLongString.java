@@ -42,6 +42,8 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
   private static final byte[][] EMPTY_BYTES_ARRAY = new byte[0][];
   private long[] longValues;
 
+  // Logical nullness is separate from small, reusable owned byte buffers.
+  private static final int MAX_REUSABLE_NULL_BYTES = 1024;
   private byte[][] byteValues;
   private int[] byteStarts;
   private int[] byteLengths;
@@ -230,7 +232,9 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
         byteStarts[i] = 0;
         byteLengths[i] = length;
         if (length == -1) {
-          byteValues[i] = null;
+          if (byteValues[i] != null && byteValues[i].length > MAX_REUSABLE_NULL_BYTES) {
+            byteValues[i] = null;
+          }
         } else if (byteValues[i] != null && byteValues[i].length >= length) {
           System.arraycopy(owner.byteValues[offset], owner.byteStarts[offset],
               byteValues[i], 0, length);
@@ -316,7 +320,8 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
           if (byteLengths[i] != -1) {
             clone.byteValues[i] = Arrays.copyOfRange(byteValues[i],
                 byteStarts[i], byteStarts[i] + byteLengths[i]);
-          } else {
+          } else if (clone.byteValues[i] != null &&
+              clone.byteValues[i].length > MAX_REUSABLE_NULL_BYTES) {
             clone.byteValues[i] = null;
           }
         }
@@ -332,7 +337,8 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
               clone.byteValues[i] = Arrays.copyOfRange(byteValues[i],
                   byteStarts[i], byteStarts[i] + byteLengths[i]);
             }
-          } else {
+          } else if (clone.byteValues[i] != null &&
+              clone.byteValues[i].length > MAX_REUSABLE_NULL_BYTES) {
             clone.byteValues[i] = null;
           }
         }
@@ -487,7 +493,7 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
 
   @Override
   public byte[] getBytes(int i) {
-    return byteValues[i];
+    return byteLengths[i] < 0 ? null : byteValues[i];
   }
 
   @Override
@@ -505,7 +511,8 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
     int variableSize = 0;
     JavaDataModel model = JavaDataModel.get();
     for (int i = 0; i < byteLengths.length; ++i) {
-      variableSize += model.lengthForByteArrayOfSize(byteLengths[i]);
+      variableSize += model.lengthForByteArrayOfSize(
+          byteLengths[i] < 0 && byteValues[i] != null ? byteValues[i].length : byteLengths[i]);
     }
     return variableSize;
   }

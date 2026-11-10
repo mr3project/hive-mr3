@@ -760,7 +760,8 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
           totalAccessCount -= bufferRow.getAccessCount();
           reusableAggregationBufferRows.add(bufferRow);
           bufferRow.resetAccessCount();
-          if (reusableKeyWrapperBuffer != null) {
+          if (reusableKeyWrapperBuffer != null &&
+              reusableKeyWrapperBuffer.size() < VectorizedRowBatch.DEFAULT_SIZE) {
             reusableKeyWrapperBuffer.add(pair.getKey());
           }
           iter.remove();
