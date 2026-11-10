@@ -327,6 +327,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
    final class ProcessingModeHashAggregate extends ProcessingModeBase {
 
     private Queue<KeyWrapper> reusableKeyWrapperBuffer;
+    private boolean batchKeysRepeating;
 
     /**
      * The global key-aggregation hash map.
@@ -490,16 +491,29 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         }
       }
 
-      // First we traverse the batch to evaluate and prepare the KeyWrappers
-      // After this the KeyWrappers are properly set and hash code is computed
-      if (!groupingSetsPresent) {
-        keyWrappersBatch.evaluateBatch(batch);
-      } else {
-        keyWrappersBatch.evaluateBatchGroupingSets(batch, currentGroupingSetsOverrideIsNulls);
+      boolean repeatingKeys = batch.size > 0;
+      for (int i = 0; i < keyExpressions.length && repeatingKeys; i++) {
+        if ((!groupingSetsPresent || !currentGroupingSetsOverrideIsNulls[i]) &&
+            !batch.cols[keyExpressions[i].getOutputColumnNum()].isRepeating) {
+          repeatingKeys = false;
+        }
       }
-
-      // Next we locate the aggregation buffer set for each key
-      prepareBatchAggregationBufferSets(batch);
+      batchKeysRepeating = repeatingKeys;
+      // Only one dense key wrapper is needed for an all-repeating group.
+      int originalSize = batch.size;
+      try {
+        if (repeatingKeys) {
+          batch.size = 1;
+        }
+        if (!groupingSetsPresent) {
+          keyWrappersBatch.evaluateBatch(batch);
+        } else {
+          keyWrappersBatch.evaluateBatchGroupingSets(batch, currentGroupingSetsOverrideIsNulls);
+        }
+      } finally {
+        batch.size = originalSize;
+      }
+      prepareBatchAggregationBufferSets(batch, repeatingKeys);
 
       // sample each batch (and each grouping set) before any entries can be flushed
       peakEntries = Math.max(peakEntries, numEntriesHashTable);
@@ -583,7 +597,8 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
      * Locates the aggregation buffer sets to use for each key in the current batch.
      * The keyWrappersBatch must have evaluated the current batch first.
      */
-    private void prepareBatchAggregationBufferSets(VectorizedRowBatch batch) throws HiveException {
+    private void prepareBatchAggregationBufferSets(VectorizedRowBatch batch, boolean repeatingKeys)
+        throws HiveException {
       // The aggregation batch vector needs to know when we start a new batch
       // to bump its internal version.
       aggregationBatchInfo.startBatch();
@@ -596,7 +611,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       // the aggregation buffers to use for each key present in the batch
       VectorHashKeyWrapperBase[] keyWrappers = keyWrappersBatch.getVectorHashKeyWrappers();
 
-      final int n = keyExpressions.length == 0 ? 1 : batch.size;
+      final int n = keyExpressions.length == 0 || repeatingKeys ? 1 : batch.size;
       // note - the row mapping is not relevant when aggregationBatchInfo::getDistinctBufferSetCount() == 1
 
       for (int i=0; i < n; ++i) {
@@ -616,6 +631,11 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
           // for access tracking
           aggregationBuffer.incrementAccessCount();
           totalAccessCount++;
+        }
+        if (repeatingKeys && keyExpressions.length > 0) {
+          // Preserve the eviction policy's count of hits after the first row.
+          aggregationBuffer.incrementAccessCount(batch.size - 1);
+          totalAccessCount += batch.size - 1;
         }
         aggregationBatchInfo.mapAggregationBufferSet(aggregationBuffer, i);
       }
@@ -780,7 +800,9 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
      * that caused the check threshold to be reached.
      */
     private void updateAvgVariableSize(VectorizedRowBatch batch) {
-      int keyVariableSize = keyWrappersBatch.getVariableSize(batch.size);
+      int keyVariableSize = batchKeysRepeating ?
+          keyWrappersBatch.getVariableSize(1) * batch.size :
+          keyWrappersBatch.getVariableSize(batch.size);
       int aggVariableSize = aggregationBatchInfo.getVariableSize(batch.size);
 
       // This assumes the distribution of variable size keys/aggregates in the input
