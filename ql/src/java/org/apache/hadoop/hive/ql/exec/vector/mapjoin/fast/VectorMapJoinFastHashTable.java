@@ -27,6 +27,7 @@ import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinHash
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinNonMatchedIterator;
 
 public abstract class VectorMapJoinFastHashTable implements VectorMapJoinHashTable {
+
   public static final Logger LOG = LoggerFactory.getLogger(VectorMapJoinFastHashTable.class);
 
   // when rehashing, jump directly to 1M items

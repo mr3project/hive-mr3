@@ -48,6 +48,7 @@ public class VectorMapJoinFastMultiKeyHashMapContainer
   public VectorMapJoinFastMultiKeyHashMapContainer(
       boolean isFullOuter,
       int initialCapacity, float loadFactor, int writeBuffersSize, long estimatedKeyCount, int numHTs) {
+    super(numHTs);
     this.vectorMapJoinFastMultiKeyHashMaps = new VectorMapJoinFastMultiKeyHashMap[numHTs];
     LOG.info("Initializing {} HT Containers ", numHTs);
     for (int i = 0; i < numHTs; ++i) {
@@ -132,14 +133,14 @@ public class VectorMapJoinFastMultiKeyHashMapContainer
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
     // glad
-    vectorMapJoinFastMultiKeyHashMaps[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey, currentValue);
+    vectorMapJoinFastMultiKeyHashMaps[((int) hashCode >>> partitionShift) & partitionMask].putRow(hashCode, currentKey, currentValue);
   }
 
   @Override
   public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
       boolean isNull, BytesWritable currentValue) throws HiveException, IOException {
     assert !isNull : "Multi-key nulls must remain encoded in the key bytes";
-    vectorMapJoinFastMultiKeyHashMaps[(int) ((numThreads - 1) & hashCode)]
+    vectorMapJoinFastMultiKeyHashMaps[((int) hashCode >>> partitionShift) & partitionMask]
         .add(keyBytes, keyOffset, keyLength, currentValue, hashCode);
   }
 
@@ -186,14 +187,14 @@ public class VectorMapJoinFastMultiKeyHashMapContainer
   public JoinUtil.JoinResult lookup(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashMapResult hashMapResult) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-    return vectorMapJoinFastMultiKeyHashMaps[(int) ((numThreads - 1) & hashCode)].lookup(keyBytes, keyStart, keyLength, hashMapResult);
+    return vectorMapJoinFastMultiKeyHashMaps[((int) hashCode >>> partitionShift) & partitionMask].lookup(keyBytes, keyStart, keyLength, hashMapResult);
   }
 
   @Override
   public JoinUtil.JoinResult lookup(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashMapResult hashMapResult, MatchTracker matchTracker) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-    int partition = (int) ((numThreads - 1) & hashCode);
+    int partition = ((int) hashCode >>> partitionShift) & partitionMask;
     MatchTracker childMatchTracker = matchTracker != null ? matchTracker.getPartition(partition) : null;
 
     return vectorMapJoinFastMultiKeyHashMaps[partition].lookup(keyBytes, keyStart, keyLength, hashMapResult,
