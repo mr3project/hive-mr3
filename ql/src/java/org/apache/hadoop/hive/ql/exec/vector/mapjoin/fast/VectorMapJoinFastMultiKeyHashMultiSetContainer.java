@@ -69,7 +69,7 @@ public class VectorMapJoinFastMultiKeyHashMultiSetContainer
   @Override
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
-    vectorMapJoinFastMultiKeyHashMultiSets[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey,
+    vectorMapJoinFastMultiKeyHashMultiSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].putRow(hashCode, currentKey,
         currentValue);
   }
 
@@ -77,7 +77,7 @@ public class VectorMapJoinFastMultiKeyHashMultiSetContainer
   public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
       boolean isNull, BytesWritable currentValue) throws HiveException, IOException {
     assert !isNull : "Multi-key nulls must remain encoded in the key bytes";
-    vectorMapJoinFastMultiKeyHashMultiSets[(int) ((numThreads - 1) & hashCode)]
+    vectorMapJoinFastMultiKeyHashMultiSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)]
         .add(keyBytes, keyOffset, keyLength, currentValue, hashCode);
   }
 
@@ -122,7 +122,7 @@ public class VectorMapJoinFastMultiKeyHashMultiSetContainer
   public JoinUtil.JoinResult contains(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashMultiSetResult hashMultiSetResult) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-    return vectorMapJoinFastMultiKeyHashMultiSets[(int) ((numThreads - 1) & hashCode)].contains(keyBytes, keyStart, keyLength,
+    return vectorMapJoinFastMultiKeyHashMultiSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].contains(keyBytes, keyStart, keyLength,
         hashMultiSetResult);
   }
 

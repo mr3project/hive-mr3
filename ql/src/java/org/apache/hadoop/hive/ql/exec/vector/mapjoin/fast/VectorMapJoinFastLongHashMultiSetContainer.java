@@ -95,18 +95,18 @@ public class VectorMapJoinFastLongHashMultiSetContainer extends VectorMapJoinFas
   @Override
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
-    vectorMapJoinFastLongHashMultiSets[(int) ((numThreads - 1) & hashCode)].putRow(hashCode, currentKey, currentValue);
+    vectorMapJoinFastLongHashMultiSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].putRow(hashCode, currentKey, currentValue);
   }
 
   @Override
   public void putRowNative(long hashCode, long key, boolean isNull, BytesWritable currentValue)
       throws HiveException, IOException {
-    vectorMapJoinFastLongHashMultiSets[(int) ((numThreads - 1) & hashCode)].putRowNative(hashCode, key, isNull, currentValue);
+    vectorMapJoinFastLongHashMultiSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].putRowNative(hashCode, key, isNull, currentValue);
   }
 
   public JoinUtil.JoinResult contains(long key, VectorMapJoinHashMultiSetResult hashMultiSetResult) {
     long hashCode = HashCodeUtil.calculateLongHashCode(key);
-    return vectorMapJoinFastLongHashMultiSets[(int) ((numThreads - 1) & hashCode)].contains(key, hashMultiSetResult);
+    return vectorMapJoinFastLongHashMultiSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].contains(key, hashMultiSetResult);
   }
 
   @Override
