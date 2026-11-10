@@ -452,6 +452,53 @@ public class VectorCopyRow {
     }
   }
 
+  /** Copy one immutable source row into a selected range, resolving metadata per column. */
+  public void copyByReference(VectorizedRowBatch batch, int sourceIndex,
+      int[] selected, int offset, int count) {
+    for (CopyRow copier : subRowToBatchCopiersByReference) {
+      ColumnVector source = batch.cols[copier.inColumnIndex];
+      ColumnVector target = batch.cols[copier.outColumnIndex];
+      int sourceRow = source.isRepeating ? 0 : sourceIndex;
+      if (!source.noNulls && source.isNull[sourceRow]) {
+        target.noNulls = false;
+        for (int i = 0; i < count; i++) {
+          target.isNull[selected[offset + i]] = true;
+        }
+      } else if (source instanceof BytesColumnVector) {
+        BytesColumnVector from = (BytesColumnVector) source;
+        BytesColumnVector to = (BytesColumnVector) target;
+        byte[] bytes = from.vector[sourceRow];
+        int start = from.start[sourceRow];
+        int length = from.length[sourceRow];
+        for (int i = 0; i < count; i++) {
+          int row = selected[offset + i];
+          to.setRef(row, bytes, start, length);
+          to.isNull[row] = false;
+        }
+      } else if (source instanceof LongColumnVector) {
+        long value = ((LongColumnVector) source).vector[sourceRow];
+        long[] values = ((LongColumnVector) target).vector;
+        for (int i = 0; i < count; i++) {
+          int row = selected[offset + i];
+          values[row] = value;
+          target.isNull[row] = false;
+        }
+      } else if (source instanceof DoubleColumnVector) {
+        double value = ((DoubleColumnVector) source).vector[sourceRow];
+        double[] values = ((DoubleColumnVector) target).vector;
+        for (int i = 0; i < count; i++) {
+          int row = selected[offset + i];
+          values[row] = value;
+          target.isNull[row] = false;
+        }
+      } else {
+        for (int i = 0; i < count; i++) {
+          copier.copy(batch, sourceIndex, batch, selected[offset + i]);
+        }
+      }
+    }
+  }
+
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();

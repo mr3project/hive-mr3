@@ -198,6 +198,20 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
 
     ByteSegmentRef byteSegmentRef = hashMapResult.first();
 
+    if (duplicateCount > 0 && smallTableValueVectorDeserializeRow != null) {
+      int first = allMatches[allMatchesIndex];
+      if (smallTableValueVectorCopy != null) {
+        doSmallTableValueDeserializeRow(batch, first, byteSegmentRef, hashMapResult);
+        smallTableValueVectorCopy.copyByReference(batch, first, allMatches,
+            allMatchesIndex + 1, duplicateCount - 1);
+      } else {
+        for (int i = 0; i < duplicateCount; i++) {
+          doSmallTableValueDeserializeRow(batch, allMatches[allMatchesIndex + i],
+              byteSegmentRef, hashMapResult);
+        }
+      }
+    }
+
     // Generate result within big table batch itself.
 
     for (int i = 0; i < duplicateCount; i++) {
@@ -214,16 +228,6 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
             batch, batchIndex);
       }
 
-      if (smallTableValueVectorDeserializeRow != null) {
-        if (i == 0 || smallTableValueVectorCopy == null) {
-          doSmallTableValueDeserializeRow(batch, batchIndex,
-              byteSegmentRef, hashMapResult);
-        } else {
-          // only copy the decoded small table value columns
-          smallTableValueVectorCopy.copyByReference(
-              batch, allMatches[allMatchesIndex], batch, batchIndex);
-        }
-      }
 
       // Use the big table row as output.
       batch.selected[numSel++] = batchIndex;
