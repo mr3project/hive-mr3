@@ -78,6 +78,7 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
   private static final Logger LOG = LoggerFactory.getLogger(VectorMapJoinGenerateResultOperator.class.getName());
   private static final String CLASS_NAME = VectorMapJoinGenerateResultOperator.class.getName();
   private static final int CHECK_INTERRUPT_PER_OVERFLOW_BATCHES = 10;
+  private static final int DUPLICATE_COUNT_THRESHOLD = 2;
 
   //------------------------------------------------------------------------------------------------
 
@@ -202,8 +203,16 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
       int first = allMatches[allMatchesIndex];
       if (smallTableValueVectorCopy != null) {
         doSmallTableValueDeserializeRow(batch, first, byteSegmentRef, hashMapResult);
-        smallTableValueVectorCopy.copyByReference(batch, first, allMatches,
-            allMatchesIndex + 1, duplicateCount - 1);
+        if (duplicateCount > DUPLICATE_COUNT_THRESHOLD &&
+            smallTableValueVectorCopy.hasColumnMajorCopiers()) {
+          smallTableValueVectorCopy.copyByReference(batch, first, allMatches,
+              allMatchesIndex + 1, duplicateCount - 1);
+        } else {
+          for (int i = 1; i < duplicateCount; i++) {
+            smallTableValueVectorCopy.copyByReference(
+                batch, first, batch, allMatches[allMatchesIndex + i]);
+          }
+        }
       } else {
         for (int i = 0; i < duplicateCount; i++) {
           doSmallTableValueDeserializeRow(batch, allMatches[allMatchesIndex + i],

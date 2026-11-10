@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.hive.ql.exec.vector;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -339,6 +342,8 @@ public class VectorCopyRow {
 
   private CopyRow[] subRowToBatchCopiersByValue;
   private CopyRow[] subRowToBatchCopiersByReference;
+  private CopyRow[] columnMajorCopiersByReference;
+  private CopyRow[] rowMajorCopiersByReference;
 
   public void init(VectorColumnMapping columnMapping) throws HiveException {
     init(
@@ -404,6 +409,23 @@ public class VectorCopyRow {
         subRowToBatchCopiersByReference[i] = copyRowByReference;
       }
     }
+
+    List<CopyRow> columnMajorCopiers = new ArrayList<>();
+    List<CopyRow> rowMajorCopiers = new ArrayList<>();
+    for (CopyRow copier : subRowToBatchCopiersByReference) {
+      if (copier instanceof LongCopyRow || copier instanceof DoubleCopyRow ||
+          copier instanceof BytesCopyRowByReference) {
+        columnMajorCopiers.add(copier);
+      } else {
+        rowMajorCopiers.add(copier);
+      }
+    }
+    columnMajorCopiersByReference = columnMajorCopiers.toArray(new CopyRow[0]);
+    rowMajorCopiersByReference = rowMajorCopiers.toArray(new CopyRow[0]);
+  }
+
+  public boolean hasColumnMajorCopiers() {
+    return columnMajorCopiersByReference.length > 0;
   }
 
   /*
