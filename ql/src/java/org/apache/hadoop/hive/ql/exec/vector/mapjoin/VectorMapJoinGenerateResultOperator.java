@@ -251,7 +251,6 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
       int duplicateCount) throws HiveException, IOException {
 
     if (useOverflowRepeatedThreshold &&
-        hashMapResult.isCappedCountAvailable() &&
         hashMapResult.cappedCount() > overflowRepeatedThreshold) {
 
       // Large cross product: generate the vector optimization using repeating vectorized

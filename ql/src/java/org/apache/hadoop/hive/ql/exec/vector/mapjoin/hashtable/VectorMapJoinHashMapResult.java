@@ -36,11 +36,6 @@ public abstract class VectorMapJoinHashMapResult extends VectorMapJoinHashTableR
   public abstract boolean isSingleRow();
 
   /**
-   * @return Whether there is a capped count available from cappedCount.
-   */
-  public abstract boolean isCappedCountAvailable();
-
-  /**
    * @return The count of values, up to a arbitrary cap limit.  When available, the capped
    *         count can be used to make decisions on how to optimally generate join results.
    */

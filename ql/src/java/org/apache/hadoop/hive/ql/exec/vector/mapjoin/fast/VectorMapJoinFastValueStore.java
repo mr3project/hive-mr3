@@ -213,11 +213,6 @@ public class VectorMapJoinFastValueStore implements MemoryEstimate {
     }
 
     @Override
-    public boolean isCappedCountAvailable() {
-      return true;
-    }
-
-    @Override
     public int cappedCount() {
       if (!hasRows) {
         return 0;

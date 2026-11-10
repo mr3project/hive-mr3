@@ -304,11 +304,6 @@ public class VectorMapJoinFastBytesHashMapStore implements MemoryEstimate {
     }
 
     @Override
-    public boolean isCappedCountAvailable() {
-      return true;
-    }
-
-    @Override
     public int cappedCount() {
 
       // The return values are capped to return ==0, ==1 and >= 2.
