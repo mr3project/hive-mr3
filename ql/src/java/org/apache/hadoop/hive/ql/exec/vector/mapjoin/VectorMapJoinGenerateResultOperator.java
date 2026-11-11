@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.ql.exec.persistence.HybridHashTableContainer;
 import org.apache.hadoop.hive.ql.exec.persistence.HybridHashTableContainer.HashPartition;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.VectorCopyRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorDeserializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
@@ -748,6 +749,23 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
     //
     if (!aborted && overflowBatch.size > 0) {
       forwardOverflow();
+    }
+    if (!aborted) {
+      VectorCopyRow.CopyStatistics statistics = new VectorCopyRow.CopyStatistics();
+      if (bigTableRetainedVectorCopy != null) {
+        bigTableRetainedVectorCopy.addCopyStatistics(statistics);
+      }
+      if (nonOuterSmallTableKeyVectorCopy != null) {
+        nonOuterSmallTableKeyVectorCopy.addCopyStatistics(statistics);
+      }
+      if (outerSmallTableKeyVectorCopy != null) {
+        outerSmallTableKeyVectorCopy.addCopyStatistics(statistics);
+      }
+      if (statistics.numReusedRef > 0) {
+        LOG.error("VectorMapJoin overflow copy {} {} {} {}",
+            statistics.numSetVal, statistics.bytesSetVal,
+            statistics.numReusedRef, statistics.bytesReusedRef);
+      }
     }
     if (LOG.isDebugEnabled()) {
       LOG.debug("VectorMapJoinInnerLongOperator closeOp " + batchCounter + " batches processed");
