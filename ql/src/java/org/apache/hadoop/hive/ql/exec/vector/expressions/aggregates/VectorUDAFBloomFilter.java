@@ -479,7 +479,8 @@ public class VectorUDAFBloomFilter extends VectorAggregateExpression {
       BloomKFilter.serialize(byteStream, bfAgg.bf);
       byte[] bytes = byteStream.toByteArray();
 
-      outputColVector.setVal(batchIndex, bytes);
+      // toByteArray returns an independent array that subsequent stream resets cannot overwrite.
+      outputColVector.setRef(batchIndex, bytes, 0, bytes.length);
     } catch (IOException err) {
       throw new HiveException("Error encountered while serializing bloomfilter", err);
     } finally {
