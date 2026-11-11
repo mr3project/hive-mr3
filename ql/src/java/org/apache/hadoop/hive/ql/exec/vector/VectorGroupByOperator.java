@@ -168,6 +168,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
   // tracks overall access count in map agg buffer any given time.
   private long totalAccessCount;
+  private long numRepeatingGroupingKeyBatches;
   private boolean batchNeedsClone;
 
   /**
@@ -499,6 +500,9 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         }
       }
       batchKeysRepeating = repeatingKeys;
+      if (repeatingKeys) {
+        numRepeatingGroupingKeyBatches++;
+      }
       // Only one dense key wrapper is needed for an all-repeating group.
       int originalSize = batch.size;
       try {
@@ -1450,6 +1454,10 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     processingMode.close(aborted);
     if (!aborted && outputBatch.size > 0) {
       flushOutput();
+    }
+
+    if (numRepeatingGroupingKeyBatches > 0) {
+      LOG.error("xxxx {}", numRepeatingGroupingKeyBatches);
     }
 
     if (vectorDesc.getProcessingMode() == VectorGroupByDesc.ProcessingMode.HASH) {
