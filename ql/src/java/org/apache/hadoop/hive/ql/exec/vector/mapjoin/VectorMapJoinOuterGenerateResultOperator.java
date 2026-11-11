@@ -1003,6 +1003,7 @@ public abstract class VectorMapJoinOuterGenerateResultOperator
 
       VectorMapJoinHashMapResult hashMapResult = nonMatchedIterator.getNonMatchedHashMapResult();
 
+      int ownedSourceIndex = -1;
       ByteSegmentRef byteSegmentRef = hashMapResult.first();
       while (byteSegmentRef != null) {
 
@@ -1013,9 +1014,20 @@ public abstract class VectorMapJoinOuterGenerateResultOperator
             singleSmallTableKeyOutputColumnVector.isNull[overflowBatch.size] = true;
             singleSmallTableKeyOutputColumnVector.noNulls = false;
           } else {
-            singleSmallTableKeyOutputColumnVector.setVal(
-                overflowBatch.size,
-                keyBytes, keyOffset, keyLength);
+            if (ownedSourceIndex < 0) {
+              // The iterator may reuse its key buffer, so first copy into this batch.
+              singleSmallTableKeyOutputColumnVector.setVal(
+                  overflowBatch.size, keyBytes, keyOffset, keyLength);
+              ownedSourceIndex = overflowBatch.size;
+            } else {
+              assert ownedSourceIndex < overflowBatch.size;
+              // Reuse only bytes owned by the current overflow batch.
+              singleSmallTableKeyOutputColumnVector.setRef(
+                  overflowBatch.size,
+                  singleSmallTableKeyOutputColumnVector.vector[ownedSourceIndex],
+                  singleSmallTableKeyOutputColumnVector.start[ownedSourceIndex],
+                  singleSmallTableKeyOutputColumnVector.length[ownedSourceIndex]);
+            }
             singleSmallTableKeyOutputColumnVector.isNull[overflowBatch.size] = false;
           }
         }
@@ -1029,6 +1041,7 @@ public abstract class VectorMapJoinOuterGenerateResultOperator
         overflowBatch.size++;
         if (overflowBatch.size == overflowBatch.DEFAULT_SIZE) {
           forwardOverflow();
+          ownedSourceIndex = -1;
           markBigTableColumnsAsNullRepeating();
         }
         byteSegmentRef = hashMapResult.next();
