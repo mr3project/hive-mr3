@@ -53,6 +53,7 @@ public class VectorMapJoinFastStringHashSetContainer extends VectorMapJoinFastHa
       boolean isFullOuter,
       int initialCapacity, float loadFactor, int writeBuffersSize, long estimatedKeyCount, TableDesc tableDesc,
       int numHTs) {
+    super(numHTs);
     this.vectorMapJoinFastStringHashSets = new VectorMapJoinFastStringHashSet[numHTs];
     LOG.info("Initializing {} HT Containers ", numHTs);
     for (int i = 0; i < numHTs; ++i) {
@@ -69,13 +70,13 @@ public class VectorMapJoinFastStringHashSetContainer extends VectorMapJoinFastHa
   @Override
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
-    vectorMapJoinFastStringHashSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].putRow(hashCode, currentKey, currentValue);
+    vectorMapJoinFastStringHashSets[((int) hashCode >>> partitionShift) & partitionMask].putRow(hashCode, currentKey, currentValue);
   }
 
   @Override
   public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
       boolean isNull, BytesWritable currentValue) throws HiveException, IOException {
-    vectorMapJoinFastStringHashSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)]
+    vectorMapJoinFastStringHashSets[((int) hashCode >>> partitionShift) & partitionMask]
         .putRowNative(hashCode, keyBytes, keyOffset, keyLength, isNull, currentValue);
   }
 
@@ -140,7 +141,7 @@ public class VectorMapJoinFastStringHashSetContainer extends VectorMapJoinFastHa
   public JoinUtil.JoinResult contains(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashSetResult hashSetResult) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-    return vectorMapJoinFastStringHashSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].contains(keyBytes, keyStart, keyLength, hashSetResult);
+    return vectorMapJoinFastStringHashSets[((int) hashCode >>> partitionShift) & partitionMask].contains(keyBytes, keyStart, keyLength, hashSetResult);
   }
 
   @Override

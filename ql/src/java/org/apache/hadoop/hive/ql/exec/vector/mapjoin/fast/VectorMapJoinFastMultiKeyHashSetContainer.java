@@ -48,6 +48,7 @@ public class VectorMapJoinFastMultiKeyHashSetContainer
   public VectorMapJoinFastMultiKeyHashSetContainer(
       boolean isFullOuter,
       int initialCapacity, float loadFactor, int writeBuffersSize, long estimatedKeyCount, int numHTs) {
+    super(numHTs);
     this.vectorMapJoinFastMultiKeyHashSets = new VectorMapJoinFastMultiKeyHashSet[numHTs];
     LOG.info("Initializing {} HT Containers ", numHTs);
     for (int i = 0; i < numHTs; ++i) {
@@ -69,14 +70,14 @@ public class VectorMapJoinFastMultiKeyHashSetContainer
   @Override
   public void putRow(long hashCode, BytesWritable currentKey, BytesWritable currentValue)
       throws HiveException, IOException {
-    vectorMapJoinFastMultiKeyHashSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].putRow(hashCode, currentKey, currentValue);
+    vectorMapJoinFastMultiKeyHashSets[((int) hashCode >>> partitionShift) & partitionMask].putRow(hashCode, currentKey, currentValue);
   }
 
   @Override
   public void putRowNative(long hashCode, byte[] keyBytes, int keyOffset, int keyLength,
       boolean isNull, BytesWritable currentValue) throws HiveException, IOException {
     assert !isNull : "Multi-key nulls must remain encoded in the key bytes";
-    vectorMapJoinFastMultiKeyHashSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)]
+    vectorMapJoinFastMultiKeyHashSets[((int) hashCode >>> partitionShift) & partitionMask]
         .add(keyBytes, keyOffset, keyLength, currentValue, hashCode);
   }
 
@@ -121,7 +122,7 @@ public class VectorMapJoinFastMultiKeyHashSetContainer
   public JoinUtil.JoinResult contains(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashSetResult hashSetResult) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-    return vectorMapJoinFastMultiKeyHashSets[VectorMapJoinFastHashTable.partition(hashCode, numThreads)].contains(keyBytes, keyStart, keyLength, hashSetResult);
+    return vectorMapJoinFastMultiKeyHashSets[((int) hashCode >>> partitionShift) & partitionMask].contains(keyBytes, keyStart, keyLength, hashSetResult);
   }
 
   @Override

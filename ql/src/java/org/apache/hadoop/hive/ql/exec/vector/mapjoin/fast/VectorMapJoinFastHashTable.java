@@ -28,13 +28,6 @@ import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinNonM
 
 public abstract class VectorMapJoinFastHashTable implements VectorMapJoinHashTable {
 
-  /** Route on high hash bits so each child retains all low bucket bits. */
-  static int partition(long hashCode, int partitionCount) {
-    assert partitionCount > 0 && Integer.bitCount(partitionCount) == 1;
-    return partitionCount == 1 ? 0 :
-        (int) hashCode >>> (Integer.SIZE - Integer.numberOfTrailingZeros(partitionCount));
-  }
-
   public static final Logger LOG = LoggerFactory.getLogger(VectorMapJoinFastHashTable.class);
 
   // when rehashing, jump directly to 1M items
