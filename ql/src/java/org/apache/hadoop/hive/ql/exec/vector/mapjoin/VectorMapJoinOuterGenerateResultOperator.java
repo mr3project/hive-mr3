@@ -22,6 +22,7 @@ import java.io.IOException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.JoinUtil;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer;
@@ -119,6 +120,12 @@ public abstract class VectorMapJoinOuterGenerateResultOperator
   protected transient int[] nonSpills;
   protected transient int[] noMatchs;
   protected transient int[] merged;
+
+  // Byte copies and references for projected, non-null unmatched string keys only.
+  private transient long numSetVal;
+  private transient long bytesSetVal;
+  private transient long numReusedRef;
+  private transient long bytesReusedRef;
 
   /** Kryo ctor. */
   protected VectorMapJoinOuterGenerateResultOperator() {
@@ -1018,6 +1025,8 @@ public abstract class VectorMapJoinOuterGenerateResultOperator
               // The iterator may reuse its key buffer, so first copy into this batch.
               singleSmallTableKeyOutputColumnVector.setVal(
                   overflowBatch.size, keyBytes, keyOffset, keyLength);
+              numSetVal++;
+              bytesSetVal += keyLength;
               ownedSourceIndex = overflowBatch.size;
             } else {
               assert ownedSourceIndex < overflowBatch.size;
@@ -1027,6 +1036,8 @@ public abstract class VectorMapJoinOuterGenerateResultOperator
                   singleSmallTableKeyOutputColumnVector.vector[ownedSourceIndex],
                   singleSmallTableKeyOutputColumnVector.start[ownedSourceIndex],
                   singleSmallTableKeyOutputColumnVector.length[ownedSourceIndex]);
+              numReusedRef++;
+              bytesReusedRef += singleSmallTableKeyOutputColumnVector.length[ownedSourceIndex];
             }
             singleSmallTableKeyOutputColumnVector.isNull[overflowBatch.size] = false;
           }
@@ -1059,5 +1070,17 @@ public abstract class VectorMapJoinOuterGenerateResultOperator
   protected void fullOuterIntersectHashTableSetup() {
 
     matchTracker = vectorMapJoinHashTable.createMatchTracker();
+  }
+
+  @Override
+  public void closeOp(boolean aborted) throws HiveException {
+    // Closing the parent generates unmatched rows and flushes the final overflow batch.
+    super.closeOp(aborted);
+    if (!aborted && numReusedRef > 0) {
+      LOG.error("VectorMapJoin full outer string key overflow copy queryId={} operatorId={} " +
+          "numSetVal={} bytesSetVal={} numReusedRef={} bytesReusedRef={}",
+          HiveConf.getQueryId(getConfiguration()), getOperatorId(),
+          numSetVal, bytesSetVal, numReusedRef, bytesReusedRef);
+    }
   }
 }
