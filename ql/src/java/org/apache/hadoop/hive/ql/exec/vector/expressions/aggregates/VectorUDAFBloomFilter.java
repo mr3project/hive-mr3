@@ -58,6 +58,10 @@ public class VectorUDAFBloomFilter extends VectorAggregateExpression {
   transient private int bitSetSize;
   transient private ByteArrayOutputStream byteStream;
 
+  // Each published reference avoids one deep copy of the serialized filter.
+  private transient long numSetRef;
+  private transient long bytesSetRef;
+
   /**
    * class for storing the current aggregate value.
    */
@@ -481,10 +485,20 @@ public class VectorUDAFBloomFilter extends VectorAggregateExpression {
 
       // toByteArray returns an independent array that subsequent stream resets cannot overwrite.
       outputColVector.setRef(batchIndex, bytes, 0, bytes.length);
+      numSetRef++;
+      bytesSetRef += bytes.length;
     } catch (IOException err) {
       throw new HiveException("Error encountered while serializing bloomfilter", err);
     } finally {
       IOUtils.closeStream(byteStream);
     }
+  }
+
+  public long getNumSetRef() {
+    return numSetRef;
+  }
+
+  public long getBytesSetRef() {
+    return bytesSetRef;
   }
 }

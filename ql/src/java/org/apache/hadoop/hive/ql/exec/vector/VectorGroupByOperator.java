@@ -51,6 +51,7 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriter;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriterFactory;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates.VectorAggregateExpression;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates.VectorUDAFBloomFilter;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperFactory.KeyWrapperType;
@@ -1428,6 +1429,23 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     processingMode.close(aborted);
     if (!aborted && outputBatch.size > 0) {
       flushOutput();
+    }
+
+    if (!aborted) {
+      long numSetRef = 0;
+      long bytesSetRef = 0;
+      for (VectorAggregateExpression aggregator : aggregators) {
+        if (aggregator instanceof VectorUDAFBloomFilter) {
+          VectorUDAFBloomFilter bloomFilter = (VectorUDAFBloomFilter) aggregator;
+          numSetRef += bloomFilter.getNumSetRef();
+          bytesSetRef += bloomFilter.getBytesSetRef();
+        }
+      }
+      if (numSetRef > 0) {
+        // Query, operator, avoided deep copies, and bytes whose copying was avoided.
+        LOG.error("xxxx {} {} {} {}", HiveConf.getQueryId(getConfiguration()),
+            getOperatorId(), numSetRef, bytesSetRef);
+      }
     }
 
     if (vectorDesc.getProcessingMode() == VectorGroupByDesc.ProcessingMode.HASH) {
