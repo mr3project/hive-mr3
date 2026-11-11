@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.hive.ql.exec.vector;
 
+import java.util.Arrays;
+
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -339,6 +341,8 @@ public class VectorCopyRow {
 
   private CopyRow[] subRowToBatchCopiersByValue;
   private CopyRow[] subRowToBatchCopiersByReference;
+  private CopyRow[] subRowToBatchNonBytesCopiers;
+  private int[] repeatedBytesOutputColumns;
 
   public void init(VectorColumnMapping columnMapping) throws HiveException {
     init(
@@ -357,6 +361,11 @@ public class VectorCopyRow {
     final int count = inputColumnMap.length;
     subRowToBatchCopiersByValue = new CopyRow[count];
     subRowToBatchCopiersByReference = new CopyRow[count];
+
+    CopyRow[] nonBytesCopiers = new CopyRow[count];
+    int[] bytesOutputColumns = new int[count];
+    int nonBytesCount = 0;
+    int bytesCount = 0;
 
     for (int i = 0; i < count; i++) {
       int inputColumn = inputColumnMap[i];
@@ -387,6 +396,7 @@ public class VectorCopyRow {
       case BYTES:
         copyRowByValue = new BytesCopyRowByValue(inputColumn, outputColumn);
         copyRowByReference = new BytesCopyRowByReference(inputColumn, outputColumn);
+        bytesOutputColumns[bytesCount++] = outputColumn;
         break;
 
       case DECIMAL:
@@ -398,12 +408,18 @@ public class VectorCopyRow {
       }
 
       subRowToBatchCopiersByValue[i] = copyRowByValue;
+      if (columnVectorType != Type.BYTES) {
+        nonBytesCopiers[nonBytesCount++] = copyRowByValue;
+      }
       if (copyRowByReference == null) {
         subRowToBatchCopiersByReference[i] = copyRowByValue;
       } else {
         subRowToBatchCopiersByReference[i] = copyRowByReference;
       }
     }
+
+    subRowToBatchNonBytesCopiers = Arrays.copyOf(nonBytesCopiers, nonBytesCount);
+    repeatedBytesOutputColumns = Arrays.copyOf(bytesOutputColumns, bytesCount);
   }
 
   /*
@@ -420,22 +436,22 @@ public class VectorCopyRow {
   /** Copy a repeated input row, reusing bytes already owned by the output batch. */
   public void copyByValue(VectorizedRowBatch inBatch, int inBatchIndex,
       VectorizedRowBatch outBatch, int outBatchIndex, int ownedSourceIndex) {
-    if (ownedSourceIndex < 0) {
+    if (ownedSourceIndex < 0 || repeatedBytesOutputColumns.length == 0) {
       copyByValue(inBatch, inBatchIndex, outBatch, outBatchIndex);
       return;
     }
-    for (CopyRow copier : subRowToBatchCopiersByValue) {
-      if (copier instanceof BytesCopyRowByValue) {
-        BytesColumnVector bytes = (BytesColumnVector) outBatch.cols[copier.outColumnIndex];
-        if (bytes.noNulls || !bytes.isNull[ownedSourceIndex]) {
-          bytes.setRef(outBatchIndex, bytes.vector[ownedSourceIndex],
-              bytes.start[ownedSourceIndex], bytes.length[ownedSourceIndex]);
-          bytes.isNull[outBatchIndex] = false;
-        } else {
-          VectorizedBatchUtil.setNullColIsNullValue(bytes, outBatchIndex);
-        }
+    assert ownedSourceIndex < outBatchIndex;
+    for (CopyRow copier : subRowToBatchNonBytesCopiers) {
+      copier.copy(inBatch, inBatchIndex, outBatch, outBatchIndex);
+    }
+    for (int column : repeatedBytesOutputColumns) {
+      BytesColumnVector bytes = (BytesColumnVector) outBatch.cols[column];
+      if (bytes.noNulls || !bytes.isNull[ownedSourceIndex]) {
+        bytes.setRef(outBatchIndex, bytes.vector[ownedSourceIndex],
+            bytes.start[ownedSourceIndex], bytes.length[ownedSourceIndex]);
+        bytes.isNull[outBatchIndex] = false;
       } else {
-        copier.copy(inBatch, inBatchIndex, outBatch, outBatchIndex);
+        VectorizedBatchUtil.setNullColIsNullValue(bytes, outBatchIndex);
       }
     }
   }
