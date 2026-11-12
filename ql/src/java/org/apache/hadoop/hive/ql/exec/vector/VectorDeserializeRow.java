@@ -1514,6 +1514,15 @@ public final class VectorDeserializeRow<T extends DeserializeRead> {
     deserializeRead.set(bytes, offset, length);
   }
 
+  /** Releases serialized input references after the decoded values have been copied. */
+  public void releaseBytes() {
+    setBytes(null, 0, 0);
+    deserializeRead.currentBytes = null;
+    if (deserializeRead.currentTimestampWritable != null) {
+      deserializeRead.currentTimestampWritable.set(null, 0);
+    }
+  }
+
   /**
    * Deserialize a row from the range of bytes specified by setBytes.
    *
