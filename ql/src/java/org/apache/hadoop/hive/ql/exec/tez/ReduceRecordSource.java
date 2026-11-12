@@ -523,46 +523,13 @@ public class ReduceRecordSource implements RecordSource {
 
   private boolean pushRecordVector() {
     if (isKeyValueReader) {
-      // Currently, this path 'isKeyValueReader for unordered key/value records + vectorized' is never used.
+      // This path 'isKeyValueReader for unordered key/value records + vectorized' is never used.
       // For this path, consumeAll() should be called.
-      // Keep pushRecordVectorFromKeyValue() for future changes (e.g., vectorized merge join)
       assert false;
-      return pushRecordVectorFromKeyValueUnordered();
+      // restore pushRecordVectorFromKeyValueUnordered() for future changes (e.g., vectorized merge join)
+      return false;
     } else {
       return pushRecordVectorFromKeyValuesOrdered();
-    }
-  }
-
-  private boolean pushRecordVectorFromKeyValueUnordered() {
-    try {
-      if (!keyValueReader.next()) {
-        if (accumulateShuffleInput) {
-          shuffleAccumulator.flushPendingBatch();
-        }
-        return false;
-      }
-
-      BytesWritable keyWritable = keyValueReader.getCurrentKey();
-      BytesWritable valueWritable = keyValueReader.getCurrentValue();
-
-      if (accumulateShuffleInput) {
-        shuffleAccumulator.process(keyWritable, valueWritable, isVectorBatchKey(keyWritable));
-      } else {
-        processVectorRecordUnordered(keyWritable, valueWritable, tag);
-      }
-      return true;
-    } catch (Throwable e) {
-      abort = true;
-      if (shuffleAccumulator != null) {
-        shuffleAccumulator.discardPendingBatch();
-      }
-      if (e instanceof OutOfMemoryError) {
-        // Don't create a new object if we are already out of memory
-        throw (OutOfMemoryError) e;
-      } else {
-        l4j.error(StringUtils.stringifyException(e));
-        throw new RuntimeException(e);
-      }
     }
   }
 
@@ -623,12 +590,27 @@ public class ReduceRecordSource implements RecordSource {
   private void consumeAllUnorderedAccumulated(RecordProgress progress)
       throws HiveException, InterruptedException {
     try {
-      keyValueReader.consumeAll(() -> {}, (keyWritable, valueWritable) -> {
-        shuffleAccumulator.process(keyWritable, valueWritable, isVectorBatchKey(keyWritable));
-        progress.onRecord();
+      keyValueReader.consumeAll(() -> {},
+          new KeyValueReaderEdge.ThrowingBiConsumer<BytesWritable, BytesWritable>() {
+        @Override
+        public void accept(BytesWritable keyWritable, BytesWritable valueWritable)
+            throws Exception {
+          shuffleAccumulator.process(keyWritable, valueWritable, isVectorBatchKey(keyWritable));
+          progress.onRecord();
+        }
+
+        @Override
+        public void onInputEnd() throws Exception {
+          shuffleAccumulator.consumeStagedRows();
+        }
+
+        @Override
+        public void terminateInputEnd() {
+          shuffleAccumulator.discardPendingBatch();
+        }
       });
-      // only normal EOF may publish the partial batch, before downstream finalization
-      shuffleAccumulator.flushPendingBatch();
+      // only normal EOF may publish the partial batch
+      shuffleAccumulator.finish();
     } catch (Error | InterruptedException e) {
       abort = true;
       shuffleAccumulator.discardPendingBatch();
