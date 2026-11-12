@@ -27,10 +27,12 @@ import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinaryDeserializeRead;
 import org.apache.hadoop.io.BytesWritable;
 
 /**
- * Owns the pending unordered shuffle batch and its unchecked decoder.
+ * Owns staged ordinary rows, the pending unordered shuffle batch, and its unchecked decoder.
  * The legacy ReduceRecordSource path never touches this state or decoder.
  */
 public final class VectorShuffleBatchAccumulator {
+
+  private static final int STAGING_CAPACITY = VectorizedRowBatch.DEFAULT_SIZE;
 
   private final VectorizedRowBatchCtx batchContext;
   private final Operator<?> reducer;
@@ -60,6 +62,7 @@ public final class VectorShuffleBatchAccumulator {
 
   private final VectorShuffleBatchAccumulatingDeserializer decoder;
   private final int accumulatorRowLimit;
+  private final int stagingRowLimit;
 
   private final boolean inputHasTypeMetadata;
   private final VectorShuffleBatchMetadata batchMetadata;
@@ -74,6 +77,14 @@ public final class VectorShuffleBatchAccumulator {
   private long pendingBytes;
   private boolean pendingCompact;
 
+  private byte[] stagedBytes;
+  private final int[] stagedKeyOffsets = new int[STAGING_CAPACITY];
+  private final int[] stagedKeyLengths = new int[STAGING_CAPACITY];
+  private final int[] stagedValueOffsets = new int[STAGING_CAPACITY];
+  private final int[] stagedValueLengths = new int[STAGING_CAPACITY];
+  private int stagedRows;
+  private long stagedSerializedBytes;
+
   public VectorShuffleBatchAccumulator(VectorizedRowBatchCtx batchContext, Operator<?> reducer,
       VectorizedRowBatch batch, int inputColumnCount, byte tag,
       RowDeserializerFactory rowDeserializerFactory) {
@@ -86,7 +97,7 @@ public final class VectorShuffleBatchAccumulator {
 
     this.decoder = new VectorShuffleBatchAccumulatingDeserializer(batch, inputColumnCount);
     this.accumulatorRowLimit = decoder.getAppendCapacity();
-    assert accumulatorRowLimit > 0;
+    this.stagingRowLimit = Math.min(STAGING_CAPACITY, accumulatorRowLimit);
 
     this.inputHasTypeMetadata = decoder.hasInputTypeMetadata();
     this.batchMetadata = new VectorShuffleBatchMetadata(batch.cols, batch.cols.length);
@@ -105,23 +116,92 @@ public final class VectorShuffleBatchAccumulator {
   public void process(BytesWritable keyWritable, BytesWritable valueWritable,
       boolean compact) throws HiveException, IOException {
     try {
-      processRecord(keyWritable, valueWritable, compact);
+      if (compact) {
+        processCompact(keyWritable, valueWritable);
+      } else {
+        stageRow(keyWritable, valueWritable);
+      }
     } finally {
-      // the shuffle reader may reuse the incoming buffer as soon as this callback returns
+      // The compact decoder must not retain the incoming frame after this callback.
       decoder.releaseHeader();
     }
   }
 
-  private void processRecord(BytesWritable keyWritable, BytesWritable valueWritable,
-      boolean compact) throws HiveException, IOException {
+  private void stageRow(BytesWritable keyWritable, BytesWritable valueWritable)
+      throws HiveException, IOException {
+    byte[] keyBytes = keyWritable.getBytesRaw();
+    byte[] valueBytes = valueWritable.getBytesRaw();
+    if (keyBytes != valueBytes) {
+      // records are from disk-backed IFile.Reader
+      assert stagedRows == 0 && stagedBytes == null && stagedSerializedBytes == 0;
+      deserializeRow(keyBytes, keyWritable.getOffset(), keyWritable.getLength(),
+          valueBytes, valueWritable.getOffset(), valueWritable.getLength());
+    } else {
+      // records are from in-memory IFile.Reader
+      assert stagedRows < stagingRowLimit;
+      assert stagedRows == 0 || stagedBytes == keyBytes;
+
+      // keep the staged group within one decoded batch's byte budget
+      final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
+      if (stagedRows > 0 && incomingBytes + stagedSerializedBytes > BATCH_BYTES) {
+        consumeStagedRows();
+      }
+
+      if (stagedRows == 0) {
+        stagedBytes = keyBytes;
+      }
+      stagedKeyOffsets[stagedRows] = keyWritable.getOffset();
+      stagedKeyLengths[stagedRows] = keyWritable.getLength();
+      stagedValueOffsets[stagedRows] = valueWritable.getOffset();
+      stagedValueLengths[stagedRows] = valueWritable.getLength();
+      stagedRows++;
+      stagedSerializedBytes += incomingBytes;
+
+      // a single over-sized row is admitted alone and materialized immediately
+      if (stagedRows == stagingRowLimit || stagedSerializedBytes >= BATCH_BYTES) {
+        consumeStagedRows();
+      }
+    }
+  }
+
+  public void consumeStagedRows() throws HiveException, IOException {
+    final int rowCount = stagedRows;
+    final long incomingBytes = stagedSerializedBytes;
+
+    assert rowCount <= stagingRowLimit;
+    assert rowCount == 1 || incomingBytes <= BATCH_BYTES;
+
+    try {
+      if (rowCount > 0) {
+        prepareForAppend(rowCount, incomingBytes, false);
+        for (int i = 0; i < rowCount; i++) {
+          deserializeRowAt(stagedBytes, stagedKeyOffsets[i], stagedKeyLengths[i],
+              stagedBytes, stagedValueOffsets[i], stagedValueLengths[i], pendingRows + i);
+        }
+        finishAppend(rowCount, incomingBytes);
+      }
+    } finally {
+      clearStagedRows();
+      releaseRowBytes();
+    }
+  }
+
+  private void clearStagedRows() {
+    stagedBytes = null;
+    stagedRows = 0;
+    stagedSerializedBytes = 0;
+  }
+
+  private void processCompact(BytesWritable keyWritable, BytesWritable valueWritable)
+      throws HiveException, IOException {
     assert batch.size == pendingRows;
 
-    final VectorShuffleBatchHeader header = compact ? decoder.readHeader(valueWritable) : null;
-    final int incomingRows = compact ? header.getRowCount() : 1;
-    assert !compact || incomingRows > VectorReduceSinkCommonOperator.NUM_ROWS_THRESHOLD_FOR_BATCH;
+    final VectorShuffleBatchHeader header = decoder.readHeader(valueWritable);
+    final int incomingRows = header.getRowCount();
+    assert incomingRows > VectorReduceSinkCommonOperator.NUM_ROWS_THRESHOLD_FOR_BATCH;
 
     // use only the fixed header for the decision
-    if (compact && (incomingRows >= accumulatorRowLimit || header.hasNestedRepeating())) {
+    if (incomingRows >= accumulatorRowLimit || header.hasNestedRepeating()) {
       if (pendingRows > 0) {
         flushPendingBatch();
       }
@@ -134,6 +214,14 @@ public final class VectorShuffleBatchAccumulator {
     }
 
     final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
+    prepareForAppend(incomingRows, incomingBytes, true);
+    decoder.append(valueWritable, batch);
+    finishAppend(incomingRows, incomingBytes);
+  }
+
+  private void prepareForAppend(int incomingRows, long incomingBytes, boolean compact)
+      throws HiveException {
+    assert batch.size == pendingRows;
     if (pendingRows == 0) {
       pendingCompact = compact;
     } else if (
@@ -147,30 +235,53 @@ public final class VectorShuffleBatchAccumulator {
       pendingCompact = compact;
     }
     assert pendingRows == 0 || !inputHasTypeMetadata || compact == pendingCompact;
+  }
 
-    if (compact) {
-      decoder.append(valueWritable, batch);
-    } else {
-      if (rowDeserializers == null) {
-        rowDeserializers = rowDeserializerFactory.create();
-      }
-      rowDeserializers.key.setBytes(
-          keyWritable.getBytesRaw(), keyWritable.getOffset(), keyWritable.getLength());
-      rowDeserializers.key.deserialize(batch, pendingRows);
-      if (rowDeserializers.value != null) {
-        rowDeserializers.value.setBytes(
-            valueWritable.getBytesRaw(), valueWritable.getOffset(), valueWritable.getLength());
-        rowDeserializers.value.deserialize(batch, pendingRows);
-      }
-      batch.size = pendingRows + 1;
+  private void deserializeRow(byte[] keyBytes, int keyOffset, int keyLength,
+      byte[] valueBytes, int valueOffset, int valueLength) throws HiveException, IOException {
+    final long incomingBytes = (long) keyLength + valueLength;
+    prepareForAppend(1, incomingBytes, false);
+    deserializeRowAt(keyBytes, keyOffset, keyLength, valueBytes, valueOffset, valueLength, pendingRows);
+    finishAppend(1, incomingBytes);
+  }
+
+  private void deserializeRowAt(byte[] keyBytes, int keyOffset, int keyLength,
+      byte[] valueBytes, int valueOffset, int valueLength, int batchIndex)
+      throws HiveException, IOException {
+    assert batchIndex == batch.size;
+    if (rowDeserializers == null) {
+      rowDeserializers = rowDeserializerFactory.create();
     }
+    rowDeserializers.key.setBytes(keyBytes, keyOffset, keyLength);
+    rowDeserializers.key.deserialize(batch, batchIndex);
+    if (rowDeserializers.value != null) {
+      rowDeserializers.value.setBytes(valueBytes, valueOffset, valueLength);
+      rowDeserializers.value.deserialize(batch, batchIndex);
+    }
+    batch.size = batchIndex + 1;
+  }
 
+  private void finishAppend(int incomingRows, long incomingBytes) throws HiveException {
     pendingRows += incomingRows;
     pendingBytes += incomingBytes;
 
     if (pendingRows == accumulatorRowLimit || pendingBytes >= BATCH_BYTES) {
       flushPendingBatch();
     }
+  }
+
+  private void releaseRowBytes() {
+    if (rowDeserializers != null) {
+      rowDeserializers.key.releaseBytes();
+      if (rowDeserializers.value != null) {
+        rowDeserializers.value.releaseBytes();
+      }
+    }
+  }
+
+  public void finish() throws HiveException, IOException {
+    consumeStagedRows();
+    flushPendingBatch();
   }
 
   public void flushPendingBatch() throws HiveException {
@@ -186,6 +297,13 @@ public final class VectorShuffleBatchAccumulator {
   }
 
   public void discardPendingBatch() {
+    clearStagedRows();
+    releaseRowBytes();
+    decoder.releaseHeader();
+    resetDecodedBatch();
+  }
+
+  private void resetDecodedBatch() {
     decoder.resetAccumulation();
     pendingRows = 0;
     pendingBytes = 0;
@@ -208,6 +326,6 @@ public final class VectorShuffleBatchAccumulator {
     for (int i = 0; i < batch.projectedColumns.length; i++) {
       batch.projectedColumns[i] = i;
     }
-    discardPendingBatch();
+    resetDecodedBatch();
   }
 }

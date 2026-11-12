@@ -55,7 +55,7 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
   public VectorShuffleBatchAccumulatingDeserializer(VectorizedRowBatch schema, int inputColumnCount) {
     assert inputColumnCount >= 0 && inputColumnCount <= schema.cols.length;
     this.inputColumnCount = inputColumnCount;
-    this.fixedAppendCapacity = calculateAppendCapacity(schema, inputColumnCount);
+    this.fixedAppendCapacity = Math.min(VectorizedRowBatch.DEFAULT_SIZE, schema.selected.length);
     this.accumulatorRepeatingBitmap =
         inputColumnCount <= Long.SIZE ? null : new byte[(inputColumnCount + 7) / 8];
     this.metadata = new VectorShuffleBatchMetadata(schema.cols, inputColumnCount);
@@ -236,14 +236,6 @@ public final class VectorShuffleBatchAccumulatingDeserializer {
     if (position != limit) {
       throw new IOException("Vector shuffle batch has " + (limit - position) + " trailing bytes");
     }
-  }
-
-  private static int calculateAppendCapacity(VectorizedRowBatch batch, int columnCount) {
-    int capacity = Math.min(VectorizedRowBatch.DEFAULT_SIZE, batch.selected.length);
-    for (int i = 0; i < columnCount; i++) {
-      capacity = Math.min(capacity, batch.cols[i].isNull.length);
-    }
-    return capacity;
   }
 
   public void deserialize(BytesWritable serialized, VectorizedRowBatch destination)
