@@ -214,13 +214,17 @@ public abstract class VectorMapJoinFastBytesHashMap
   @Override
   public JoinUtil.JoinResult lookup(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashMapResult hashMapResult) {
+    return lookup(keyBytes, keyStart, keyLength, hashMapResult,
+        HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength));
+  }
+
+  public JoinUtil.JoinResult lookup(byte[] keyBytes, int keyStart, int keyLength,
+      VectorMapJoinHashMapResult hashMapResult, long hashCode) {
 
     VectorMapJoinFastBytesHashMapStore.HashMapResult fastHashMapResult =
          (VectorMapJoinFastBytesHashMapStore.HashMapResult) hashMapResult;
 
     fastHashMapResult.forget();
-
-    long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
 
     doHashMapMatch(
         keyBytes, keyStart, keyLength, hashCode, fastHashMapResult);
@@ -231,13 +235,17 @@ public abstract class VectorMapJoinFastBytesHashMap
   @Override
   public JoinUtil.JoinResult lookup(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashMapResult hashMapResult, MatchTracker matchTracker) {
+    return lookup(keyBytes, keyStart, keyLength, hashMapResult, matchTracker,
+        HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength));
+  }
+
+  public JoinUtil.JoinResult lookup(byte[] keyBytes, int keyStart, int keyLength,
+      VectorMapJoinHashMapResult hashMapResult, MatchTracker matchTracker, long hashCode) {
 
     VectorMapJoinFastBytesHashMapStore.HashMapResult fastHashMapResult =
          (VectorMapJoinFastBytesHashMapStore.HashMapResult) hashMapResult;
 
     fastHashMapResult.forget();
-
-    long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
 
     final int slot =
         doHashMapMatch(

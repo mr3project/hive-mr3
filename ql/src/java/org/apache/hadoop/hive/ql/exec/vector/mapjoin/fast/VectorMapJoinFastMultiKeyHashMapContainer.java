@@ -187,7 +187,8 @@ public class VectorMapJoinFastMultiKeyHashMapContainer
   public JoinUtil.JoinResult lookup(byte[] keyBytes, int keyStart, int keyLength,
       VectorMapJoinHashMapResult hashMapResult) throws IOException {
     long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
-    return vectorMapJoinFastMultiKeyHashMaps[((int) hashCode >>> partitionShift) & partitionMask].lookup(keyBytes, keyStart, keyLength, hashMapResult);
+    return vectorMapJoinFastMultiKeyHashMaps[((int) hashCode >>> partitionShift) & partitionMask]
+        .lookup(keyBytes, keyStart, keyLength, hashMapResult, hashCode);
   }
 
   @Override
@@ -198,7 +199,7 @@ public class VectorMapJoinFastMultiKeyHashMapContainer
     MatchTracker childMatchTracker = matchTracker != null ? matchTracker.getPartition(partition) : null;
 
     return vectorMapJoinFastMultiKeyHashMaps[partition].lookup(keyBytes, keyStart, keyLength, hashMapResult,
-        childMatchTracker);
+        childMatchTracker, hashCode);
   }
 
   @Override
