@@ -97,6 +97,7 @@ public final class VectorShuffleBatchAccumulator {
 
     this.decoder = new VectorShuffleBatchAccumulatingDeserializer(batch, inputColumnCount);
     this.accumulatorRowLimit = decoder.getAppendCapacity();
+    assert accumulatorRowLimit > 0;
     this.stagingRowLimit = Math.min(STAGING_CAPACITY, accumulatorRowLimit);
 
     this.inputHasTypeMetadata = decoder.hasInputTypeMetadata();
@@ -141,12 +142,7 @@ public final class VectorShuffleBatchAccumulator {
       assert stagedRows < stagingRowLimit;
       assert stagedRows == 0 || stagedBytes == keyBytes;
 
-      // keep the staged group within one decoded batch's byte budget
       final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
-      if (stagedRows > 0 && incomingBytes + stagedSerializedBytes > BATCH_BYTES) {
-        consumeStagedRows();
-      }
-
       if (stagedRows == 0) {
         stagedBytes = keyBytes;
       }
@@ -157,7 +153,7 @@ public final class VectorShuffleBatchAccumulator {
       stagedRows++;
       stagedSerializedBytes += incomingBytes;
 
-      // a single over-sized row is admitted alone and materialized immediately
+      // Bytes trigger consumption without imposing a hard limit on the retained prefix.
       if (stagedRows == stagingRowLimit || stagedSerializedBytes >= BATCH_BYTES) {
         consumeStagedRows();
       }
@@ -168,22 +164,73 @@ public final class VectorShuffleBatchAccumulator {
     final int rowCount = stagedRows;
     final long incomingBytes = stagedSerializedBytes;
 
+    assert batch.size == pendingRows;
+    assert pendingRows < accumulatorRowLimit;
+    assert pendingBytes < BATCH_BYTES;
     assert rowCount <= stagingRowLimit;
-    assert rowCount == 1 || incomingBytes <= BATCH_BYTES;
 
     try {
       if (rowCount > 0) {
-        prepareForAppend(rowCount, incomingBytes, false);
-        for (int i = 0; i < rowCount; i++) {
-          deserializeRowAt(stagedBytes, stagedKeyOffsets[i], stagedKeyLengths[i],
-              stagedBytes, stagedValueOffsets[i], stagedValueLengths[i], pendingRows + i);
+        if (pendingRows > 0 && ((inputHasTypeMetadata && pendingCompact)
+            || decoder.hasRepeatingColumns())) {
+          flushPendingBatch();
         }
-        finishAppend(rowCount, incomingBytes);
+
+        int appendRows = rowCount;
+        boolean byteLimited = false;
+        if (pendingRows > 0) {
+          appendRows = Math.min(rowCount, accumulatorRowLimit - pendingRows);
+          if (incomingBytes > 0) {
+            // Divide the byte allowance by the average staged-row size without rounding it first.
+            final long byteAllowance = (BATCH_BYTES - pendingBytes) * rowCount / incomingBytes;
+            if (byteAllowance <= appendRows) {
+              appendRows = (int) byteAllowance;
+              byteLimited = true;
+            }
+          }
+          if (appendRows == 0) {
+            flushPendingBatch();
+            appendRows = rowCount;
+            byteLimited = false;
+          }
+        }
+        if (pendingRows == 0) {
+          pendingCompact = false;
+        }
+        assert !inputHasTypeMetadata || !pendingCompact;
+        assert !decoder.hasRepeatingColumns();
+        assert appendRows > 0 && appendRows <= rowCount;
+        assert appendRows <= accumulatorRowLimit - pendingRows;
+
+        if (rowDeserializers == null) {
+          rowDeserializers = rowDeserializerFactory.create();
+        }
+        final int firstRow = rowCount - appendRows;
+        long appendedBytes = 0;
+        for (int i = firstRow; i < rowCount; i++) {
+          deserializeRowAt(stagedBytes, stagedKeyOffsets[i], stagedKeyLengths[i],
+              stagedBytes, stagedValueOffsets[i], stagedValueLengths[i], pendingRows + i - firstRow);
+          appendedBytes += (long) stagedKeyLengths[i] + stagedValueLengths[i];
+        }
+        stagedRows = firstRow;
+        stagedSerializedBytes -= appendedBytes;
+        assert stagedSerializedBytes >= 0;
+        if (stagedRows == 0) {
+          assert stagedSerializedBytes == 0;
+          clearStagedRows();
+        }
+        finishAppend(appendRows, appendedBytes, byteLimited);
       }
     } finally {
-      clearStagedRows();
       releaseRowBytes();
     }
+  }
+
+  /** Materialize every staged row before the reader releases its backing buffer. */
+  public void drainStagedRows() throws HiveException, IOException {
+    do {
+      consumeStagedRows();
+    } while (stagedRows > 0);
   }
 
   private void clearStagedRows() {
@@ -216,7 +263,7 @@ public final class VectorShuffleBatchAccumulator {
     final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
     prepareForAppend(incomingRows, incomingBytes, true);
     decoder.append(valueWritable, batch);
-    finishAppend(incomingRows, incomingBytes);
+    finishAppend(incomingRows, incomingBytes, false);
   }
 
   private void prepareForAppend(int incomingRows, long incomingBytes, boolean compact)
@@ -241,17 +288,19 @@ public final class VectorShuffleBatchAccumulator {
       byte[] valueBytes, int valueOffset, int valueLength) throws HiveException, IOException {
     final long incomingBytes = (long) keyLength + valueLength;
     prepareForAppend(1, incomingBytes, false);
+    if (rowDeserializers == null) {
+      rowDeserializers = rowDeserializerFactory.create();
+    }
     deserializeRowAt(keyBytes, keyOffset, keyLength, valueBytes, valueOffset, valueLength, pendingRows);
-    finishAppend(1, incomingBytes);
+    finishAppend(1, incomingBytes, false);
   }
 
   private void deserializeRowAt(byte[] keyBytes, int keyOffset, int keyLength,
       byte[] valueBytes, int valueOffset, int valueLength, int batchIndex)
       throws HiveException, IOException {
     assert batchIndex == batch.size;
-    if (rowDeserializers == null) {
-      rowDeserializers = rowDeserializerFactory.create();
-    }
+    assert batchIndex < accumulatorRowLimit;
+    assert rowDeserializers != null;
     rowDeserializers.key.setBytes(keyBytes, keyOffset, keyLength);
     rowDeserializers.key.deserialize(batch, batchIndex);
     if (rowDeserializers.value != null) {
@@ -261,11 +310,12 @@ public final class VectorShuffleBatchAccumulator {
     batch.size = batchIndex + 1;
   }
 
-  private void finishAppend(int incomingRows, long incomingBytes) throws HiveException {
+  private void finishAppend(int incomingRows, long incomingBytes, boolean byteLimited)
+      throws HiveException {
     pendingRows += incomingRows;
     pendingBytes += incomingBytes;
 
-    if (pendingRows == accumulatorRowLimit || pendingBytes >= BATCH_BYTES) {
+    if (pendingRows == accumulatorRowLimit || pendingBytes >= BATCH_BYTES || byteLimited) {
       flushPendingBatch();
     }
   }
@@ -280,7 +330,7 @@ public final class VectorShuffleBatchAccumulator {
   }
 
   public void finish() throws HiveException, IOException {
-    consumeStagedRows();
+    drainStagedRows();
     flushPendingBatch();
   }
 

@@ -601,7 +601,7 @@ public class ReduceRecordSource implements RecordSource {
 
         @Override
         public void onInputEnd() throws Exception {
-          shuffleAccumulator.consumeStagedRows();
+          shuffleAccumulator.drainStagedRows();
         }
 
         @Override
