@@ -79,6 +79,7 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
   private static final Logger LOG = LoggerFactory.getLogger(VectorMapJoinGenerateResultOperator.class.getName());
   private static final String CLASS_NAME = VectorMapJoinGenerateResultOperator.class.getName();
   private static final int CHECK_INTERRUPT_PER_OVERFLOW_BATCHES = 10;
+  private static final int DUPLICATE_COUNT_THRESHOLD = 2;
 
   //------------------------------------------------------------------------------------------------
 
@@ -199,6 +200,28 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
 
     ByteSegmentRef byteSegmentRef = hashMapResult.first();
 
+    if (duplicateCount > 0 && smallTableValueVectorDeserializeRow != null) {
+      int first = allMatches[allMatchesIndex];
+      if (smallTableValueVectorCopy != null) {
+        doSmallTableValueDeserializeRow(batch, first, byteSegmentRef, hashMapResult);
+        if (duplicateCount > DUPLICATE_COUNT_THRESHOLD &&
+            smallTableValueVectorCopy.hasColumnMajorCopiers()) {
+          smallTableValueVectorCopy.copyByReference(batch, first, allMatches,
+              allMatchesIndex + 1, duplicateCount - 1);
+        } else {
+          for (int i = 1; i < duplicateCount; i++) {
+            smallTableValueVectorCopy.copyByReference(
+                batch, first, batch, allMatches[allMatchesIndex + i]);
+          }
+        }
+      } else {
+        for (int i = 0; i < duplicateCount; i++) {
+          doSmallTableValueDeserializeRow(batch, allMatches[allMatchesIndex + i],
+              byteSegmentRef, hashMapResult);
+        }
+      }
+    }
+
     // Generate result within big table batch itself.
 
     for (int i = 0; i < duplicateCount; i++) {
@@ -215,16 +238,6 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
             batch, batchIndex);
       }
 
-      if (smallTableValueVectorDeserializeRow != null) {
-        if (i == 0 || smallTableValueVectorCopy == null) {
-          doSmallTableValueDeserializeRow(batch, batchIndex,
-              byteSegmentRef, hashMapResult);
-        } else {
-          // only copy the decoded small table value columns
-          smallTableValueVectorCopy.copyByReference(
-              batch, allMatches[allMatchesIndex], batch, batchIndex);
-        }
-      }
 
       // Use the big table row as output.
       batch.selected[numSel++] = batchIndex;
