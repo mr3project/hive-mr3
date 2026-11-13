@@ -107,13 +107,17 @@ public abstract class VectorMapJoinFastBytesHashMultiSet
   @Override
   public JoinUtil.JoinResult contains(byte[] keyBytes, int keyStart, int keyLength,
           VectorMapJoinHashMultiSetResult hashMultiSetResult) {
+    return contains(keyBytes, keyStart, keyLength, hashMultiSetResult,
+        HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength));
+  }
+
+  public JoinUtil.JoinResult contains(byte[] keyBytes, int keyStart, int keyLength,
+          VectorMapJoinHashMultiSetResult hashMultiSetResult, long hashCode) {
 
     VectorMapJoinFastBytesHashMultiSetStore.HashMultiSetResult fastHashMultiSetResult =
         (VectorMapJoinFastBytesHashMultiSetStore.HashMultiSetResult) hashMultiSetResult;
 
     fastHashMultiSetResult.forget();
-
-    long hashCode = HashCodeUtil.murmurHash(keyBytes, keyStart, keyLength);
 
     doHashMultiSetContains(
         keyBytes, keyStart, keyLength, hashCode, fastHashMultiSetResult);
