@@ -90,13 +90,16 @@ public class VectorMapJoinFastLongHashSet
 
   @Override
   public JoinResult contains(long key, VectorMapJoinHashSetResult hashSetResult) {
+    return contains(key, hashSetResult, HashCodeUtil.calculateLongHashCode(key));
+  }
+
+  public JoinResult contains(long key, VectorMapJoinHashSetResult hashSetResult, long hashCode) {
 
     VectorMapJoinFastHashSet.HashSetResult optimizedHashSetResult =
         (VectorMapJoinFastHashSet.HashSetResult) hashSetResult;
 
     optimizedHashSetResult.forget();
 
-    long hashCode = HashCodeUtil.calculateLongHashCode(key);
     int pairIndex = findReadSlot(key, hashCode);
     JoinUtil.JoinResult joinResult;
     if (pairIndex == -1) {
