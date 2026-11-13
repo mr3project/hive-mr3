@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.ql.exec.persistence.HybridHashTableContainer;
 import org.apache.hadoop.hive.ql.exec.persistence.HybridHashTableContainer.HashPartition;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer;
 import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
+import org.apache.hadoop.hive.ql.exec.vector.VectorCopyRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorDeserializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
@@ -268,6 +269,7 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
 
       final int batchIndex = allMatches[allMatchesIndex + i];
 
+      int ownedSourceIndex = -1;
       ByteSegmentRef byteSegmentRef = hashMapResult.first();
       while (byteSegmentRef != null) {
 
@@ -277,7 +279,7 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
         if (bigTableRetainedVectorCopy != null) {
           bigTableRetainedVectorCopy.copyByValue(
               batch, batchIndex,
-              overflowBatch, overflowBatch.size);
+              overflowBatch, overflowBatch.size, ownedSourceIndex);
         }
 
         if (nonOuterSmallTableKeyVectorCopy != null) {
@@ -287,7 +289,7 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
           //
           nonOuterSmallTableKeyVectorCopy.copyByValue(
               batch, batchIndex,
-              overflowBatch, overflowBatch.size);
+              overflowBatch, overflowBatch.size, ownedSourceIndex);
         }
 
         if (outerSmallTableKeyVectorCopy != null) {
@@ -297,7 +299,7 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
           //
           outerSmallTableKeyVectorCopy.copyByValue(
               batch, batchIndex,
-              overflowBatch, overflowBatch.size);
+              overflowBatch, overflowBatch.size, ownedSourceIndex);
         }
 
         if (smallTableValueVectorDeserializeRow != null) {
@@ -306,9 +308,13 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
               byteSegmentRef, hashMapResult);
         }
 
+        if (ownedSourceIndex < 0) {
+          ownedSourceIndex = overflowBatch.size;
+        }
         overflowBatch.size++;
         if (overflowBatch.size == overflowBatch.DEFAULT_SIZE) {
           forwardOverflow();
+          ownedSourceIndex = -1;
         }
         byteSegmentRef = hashMapResult.next();
       }
@@ -743,6 +749,23 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
     //
     if (!aborted && overflowBatch.size > 0) {
       forwardOverflow();
+    }
+    if (!aborted) {
+      VectorCopyRow.CopyStatistics statistics = new VectorCopyRow.CopyStatistics();
+      if (bigTableRetainedVectorCopy != null) {
+        bigTableRetainedVectorCopy.addCopyStatistics(statistics);
+      }
+      if (nonOuterSmallTableKeyVectorCopy != null) {
+        nonOuterSmallTableKeyVectorCopy.addCopyStatistics(statistics);
+      }
+      if (outerSmallTableKeyVectorCopy != null) {
+        outerSmallTableKeyVectorCopy.addCopyStatistics(statistics);
+      }
+      if (statistics.numReusedRef > 0) {
+        LOG.error("VectorMapJoin overflow copy {} {} {} {}",
+            statistics.numSetVal, statistics.bytesSetVal,
+            statistics.numReusedRef, statistics.bytesReusedRef);
+      }
     }
     if (LOG.isDebugEnabled()) {
       LOG.debug("VectorMapJoinInnerLongOperator closeOp " + batchCounter + " batches processed");
