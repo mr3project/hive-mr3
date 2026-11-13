@@ -19,6 +19,8 @@
 package org.apache.hadoop.hive.ql.exec.vector;
 
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
 import org.slf4j.Logger;
@@ -348,6 +350,9 @@ public class VectorCopyRow {
   private CopyRow[] subRowToBatchNonBytesCopiers;
   private int[] repeatedBytesOutputColumns;
 
+  private CopyRow[] columnMajorCopiersByReference;
+  private CopyRow[] rowMajorCopiersByReference;
+
   private long numSetVal;
   private long bytesSetVal;
   private long numReusedRef;
@@ -443,6 +448,23 @@ public class VectorCopyRow {
 
     subRowToBatchNonBytesCopiers = Arrays.copyOf(nonBytesCopiers, nonBytesCount);
     repeatedBytesOutputColumns = Arrays.copyOf(bytesOutputColumns, bytesCount);
+
+    List<CopyRow> columnMajorCopiers = new ArrayList<>();
+    List<CopyRow> rowMajorCopiers = new ArrayList<>();
+    for (CopyRow copier : subRowToBatchCopiersByReference) {
+      if (copier instanceof LongCopyRow || copier instanceof DoubleCopyRow ||
+          copier instanceof BytesCopyRowByReference) {
+        columnMajorCopiers.add(copier);
+      } else {
+        rowMajorCopiers.add(copier);
+      }
+    }
+    columnMajorCopiersByReference = columnMajorCopiers.toArray(new CopyRow[0]);
+    rowMajorCopiersByReference = rowMajorCopiers.toArray(new CopyRow[0]);
+  }
+
+  public boolean hasColumnMajorCopiers() {
+    return columnMajorCopiersByReference.length > 0;
   }
 
   /*
@@ -490,6 +512,58 @@ public class VectorCopyRow {
   public void copyByReference(VectorizedRowBatch inBatch, int inBatchIndex, VectorizedRowBatch outBatch, int outBatchIndex) {
     for (CopyRow copyRow : subRowToBatchCopiersByReference) {
       copyRow.copy(inBatch, inBatchIndex, outBatch, outBatchIndex);
+    }
+  }
+
+  /**
+   * Copy one immutable source row into a selected range, processing each column in turn.
+   * Resolve source metadata once for long, double, and bytes columns.
+   */
+  public void copyByReference(VectorizedRowBatch batch, int sourceIndex,
+      int[] selected, int offset, int count) {
+    for (CopyRow copier : columnMajorCopiersByReference) {
+      ColumnVector source = batch.cols[copier.inColumnIndex];
+      ColumnVector target = batch.cols[copier.outColumnIndex];
+      int sourceRow = source.isRepeating ? 0 : sourceIndex;
+      if (!source.noNulls && source.isNull[sourceRow]) {
+        target.noNulls = false;
+        for (int i = 0; i < count; i++) {
+          target.isNull[selected[offset + i]] = true;
+        }
+      } else if (source instanceof BytesColumnVector) {
+        BytesColumnVector from = (BytesColumnVector) source;
+        BytesColumnVector to = (BytesColumnVector) target;
+        byte[] bytes = from.vector[sourceRow];
+        int start = from.start[sourceRow];
+        int length = from.length[sourceRow];
+        for (int i = 0; i < count; i++) {
+          int row = selected[offset + i];
+          to.setRef(row, bytes, start, length);
+          to.isNull[row] = false;
+        }
+      } else if (source instanceof LongColumnVector) {
+        long value = ((LongColumnVector) source).vector[sourceRow];
+        long[] values = ((LongColumnVector) target).vector;
+        for (int i = 0; i < count; i++) {
+          int row = selected[offset + i];
+          values[row] = value;
+          target.isNull[row] = false;
+        }
+      } else if (source instanceof DoubleColumnVector) {
+        double value = ((DoubleColumnVector) source).vector[sourceRow];
+        double[] values = ((DoubleColumnVector) target).vector;
+        for (int i = 0; i < count; i++) {
+          int row = selected[offset + i];
+          values[row] = value;
+          target.isNull[row] = false;
+        }
+      }
+    }
+
+    for (CopyRow copier : rowMajorCopiersByReference) {
+      for (int i = 0; i < count; i++) {
+        copier.copy(batch, sourceIndex, batch, selected[offset + i]);
+      }
     }
   }
 
