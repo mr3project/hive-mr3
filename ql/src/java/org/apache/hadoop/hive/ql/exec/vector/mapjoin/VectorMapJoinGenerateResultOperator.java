@@ -268,6 +268,7 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
 
       final int batchIndex = allMatches[allMatchesIndex + i];
 
+      int ownedSourceIndex = -1;
       ByteSegmentRef byteSegmentRef = hashMapResult.first();
       while (byteSegmentRef != null) {
 
@@ -277,7 +278,7 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
         if (bigTableRetainedVectorCopy != null) {
           bigTableRetainedVectorCopy.copyByValue(
               batch, batchIndex,
-              overflowBatch, overflowBatch.size);
+              overflowBatch, overflowBatch.size, ownedSourceIndex);
         }
 
         if (nonOuterSmallTableKeyVectorCopy != null) {
@@ -287,7 +288,7 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
           //
           nonOuterSmallTableKeyVectorCopy.copyByValue(
               batch, batchIndex,
-              overflowBatch, overflowBatch.size);
+              overflowBatch, overflowBatch.size, ownedSourceIndex);
         }
 
         if (outerSmallTableKeyVectorCopy != null) {
@@ -297,7 +298,7 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
           //
           outerSmallTableKeyVectorCopy.copyByValue(
               batch, batchIndex,
-              overflowBatch, overflowBatch.size);
+              overflowBatch, overflowBatch.size, ownedSourceIndex);
         }
 
         if (smallTableValueVectorDeserializeRow != null) {
@@ -306,9 +307,13 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
               byteSegmentRef, hashMapResult);
         }
 
+        if (ownedSourceIndex < 0) {
+          ownedSourceIndex = overflowBatch.size;
+        }
         overflowBatch.size++;
         if (overflowBatch.size == overflowBatch.DEFAULT_SIZE) {
           forwardOverflow();
+          ownedSourceIndex = -1;
         }
         byteSegmentRef = hashMapResult.next();
       }
