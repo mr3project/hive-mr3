@@ -614,8 +614,6 @@ public class TestVectorShuffleBatchAccumulator {
       return batch;
     };
     VectorizedRowBatch initial = factory.get();
-    List<VectorizedRowBatch> compactAllocations = new ArrayList<>();
-    compactAllocations.add(initial);
     assertEquals(context, sequence.rowCapacity, initial.getMaxSize());
     List<Long> expectedRowIds = new ArrayList<>();
     for (GeneratedFrame frame : sequence.frames) {
@@ -626,13 +624,8 @@ public class TestVectorShuffleBatchAccumulator {
     }
     assertEquals(context + ", distinct row IDs", expectedRowIds.size(),
         new HashSet<>(expectedRowIds).size());
-    // The constructor creates the ordinary batch; subsequent allocations replace compact output.
-    when(batchContext.createVectorizedRowBatch()).thenAnswer(invocation -> factory.get())
-        .thenAnswer(invocation -> {
-          VectorizedRowBatch replacement = factory.get();
-          compactAllocations.add(replacement);
-          return replacement;
-        });
+    // Compact-only input reuses the initial batch and allocates only retained-output replacements.
+    when(batchContext.createVectorizedRowBatch()).thenAnswer(invocation -> factory.get());
     when(reducer.batchNeedsClone()).thenReturn(retained);
     List<Integer> emittedSizes = new ArrayList<>();
     List<Long> emittedRowIds = new ArrayList<>();
@@ -666,16 +659,7 @@ public class TestVectorShuffleBatchAccumulator {
         () -> {
           throw new AssertionError(context + ": compact inputs must not create row readers");
         });
-    assertEquals(context + ", initial allocations", 2, allocations.size());
-    VectorizedRowBatch ordinary = allocations.get(1);
-    assertNotSame(context + ", column arrays", initial.cols, ordinary.cols);
-    assertNotSame(context + ", selection arrays", initial.selected, ordinary.selected);
-    assertNotSame(context + ", projection arrays", initial.projectedColumns, ordinary.projectedColumns);
-    for (int column = 0; column < initial.cols.length; column++) {
-      assertNotSame(context + ", column=" + column, initial.cols[column], ordinary.cols[column]);
-      assertNotSame(context + ", null array, column=" + column,
-          initial.cols[column].isNull, ordinary.cols[column].isNull);
-    }
+    assertEquals(context + ", initial allocations", 1, allocations.size());
 
     for (int frameIndex = 0; frameIndex < sequence.frames.size(); frameIndex++) {
       processingFrame[0] = frameIndex;
@@ -700,12 +684,9 @@ public class TestVectorShuffleBatchAccumulator {
         }
       }
       assertEquals(frameContext + ", emissions after process", expectedEmissions, emittedSizes.size());
-      assertEquals(frameContext + ", allocations", retained ? expectedEmissions + 2 : 2,
+      assertEquals(frameContext + ", allocations", retained ? expectedEmissions + 1 : 1,
           allocations.size());
-      assertEquals(frameContext + ", compact allocations", retained ? expectedEmissions + 1 : 1,
-          compactAllocations.size());
-      assertEquals(frameContext + ", ordinary batch remains empty", 0, ordinary.size);
-      VectorizedRowBatch pending = compactAllocations.get(compactAllocations.size() - 1);
+      VectorizedRowBatch pending = allocations.get(allocations.size() - 1);
       if (pendingStart <= frameIndex) {
         // Recheck earlier frames after every append, including nested offsets and metadata.
         assertCompatibleFrameSequenceResult(sequence, pending, pendingStart,
@@ -720,11 +701,10 @@ public class TestVectorShuffleBatchAccumulator {
     assertEquals(context + ", all planned batches emitted", sequence.expectedBatches.size(),
         emittedSizes.size());
     assertEquals(context + ", concatenated emitted rows", expectedRowIds, emittedRowIds);
-    assertEquals(context + ", allocations after final flush", retained ? emittedSizes.size() + 2 : 2,
+    assertEquals(context + ", allocations after final flush", retained ? emittedSizes.size() + 1 : 1,
         allocations.size());
     assertEquals(context + ", empty after final flush", 0,
-        compactAllocations.get(compactAllocations.size() - 1).size);
-    assertEquals(context + ", ordinary batch remains empty after final flush", 0, ordinary.size);
+        allocations.get(allocations.size() - 1).size);
     for (int batch = 0; batch < retainedOutputs.size(); batch++) {
       ExpectedSequenceBatch expected = sequence.expectedBatches.get(batch);
       assertCompatibleFrameSequenceResult(sequence, retainedOutputs.get(batch),

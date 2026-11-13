@@ -60,12 +60,12 @@ public final class VectorShuffleBatchAccumulator {
   private final RowDeserializerFactory rowDeserializerFactory;
   private RowDeserializers rowDeserializers;
 
-  private final VectorShuffleBatchAccumulatingDeserializer decoder;
+  private VectorShuffleBatchAccumulatingDeserializer decoder;
   private final int accumulatorRowLimit;
   private final int stagingRowLimit;
 
   // The shared layout resolves schema paths against each batch's independent vectors.
-  private final VectorShuffleBatchMetadata batchMetadata;
+  private VectorShuffleBatchMetadata batchMetadata;
 
   private final int BATCH_BYTES = VectorizedRowBatch.DEFAULT_BYTES;
 
@@ -89,14 +89,14 @@ public final class VectorShuffleBatchAccumulator {
     }
   }
 
-  private final BatchState compactState;
-  private final BatchState ordinaryState;
+  private VectorizedRowBatch initialBatch;
+  private BatchState compactState;
+  private BatchState ordinaryState;
 
   private byte[] stagedBytes;
-  private final int[] stagedKeyOffsets = new int[STAGING_CAPACITY];
-  private final int[] stagedKeyLengths = new int[STAGING_CAPACITY];
-  private final int[] stagedValueOffsets = new int[STAGING_CAPACITY];
-  private final int[] stagedValueLengths = new int[STAGING_CAPACITY];
+  private int[] stagedKeyLengths;
+  private int[] stagedValueOffsets;
+  private int[] stagedValueLengths;
   private int stagedRows;
   private long stagedSerializedBytes;
 
@@ -110,32 +110,51 @@ public final class VectorShuffleBatchAccumulator {
 
     this.rowDeserializerFactory = rowDeserializerFactory;
 
-    this.decoder = new VectorShuffleBatchAccumulatingDeserializer(batch, inputColumnCount);
-    this.accumulatorRowLimit = decoder.getAppendCapacity();
+    this.initialBatch = batch;
+    this.accumulatorRowLimit = Math.min(VectorizedRowBatch.DEFAULT_SIZE, batch.getMaxSize());
     this.stagingRowLimit = Math.min(STAGING_CAPACITY, accumulatorRowLimit);
+  }
 
-    this.batchMetadata = new VectorShuffleBatchMetadata(batch.cols, batch.cols.length);
-    this.compactState = new BatchState(batch, inputColumnCount);
-    this.ordinaryState = new BatchState(batchContext.createVectorizedRowBatch(), inputColumnCount);
-    assert ordinaryState.batch.getMaxSize() == batch.getMaxSize();
+  private BatchState createBatchState() {
+    final VectorizedRowBatch batch;
+    if (initialBatch != null) {
+      batch = initialBatch;
+      batchMetadata = new VectorShuffleBatchMetadata(batch.cols, batch.cols.length);
+      initialBatch = null;
+    } else {
+      batch = batchContext.createVectorizedRowBatch();
+    }
+    assert Math.min(VectorizedRowBatch.DEFAULT_SIZE, batch.getMaxSize()) == accumulatorRowLimit;
+    return new BatchState(batch, inputColumnCount);
+  }
+
+  private void ensureCompactState() {
+    if (compactState == null) {
+      final BatchState state = createBatchState();
+      decoder = new VectorShuffleBatchAccumulatingDeserializer(state.batch, inputColumnCount);
+      compactState = state;
+      assert decoder.getAppendCapacity() == accumulatorRowLimit;
+    }
   }
 
   public void process(BytesWritable keyWritable, BytesWritable valueWritable,
       boolean compact) throws HiveException, IOException {
-    try {
-      if (compact) {
+    if (compact) {
+      ensureCompactState();
+      try {
         processCompact(keyWritable, valueWritable);
-      } else {
-        stageRow(keyWritable, valueWritable);
+      } finally {
+        // The compact decoder must not retain the incoming frame after this callback.
+        decoder.releaseHeader();
       }
-    } finally {
-      // The compact decoder must not retain the incoming frame after this callback.
-      decoder.releaseHeader();
+    } else {
+      stageRow(keyWritable, valueWritable);
     }
   }
 
   private void stageRow(BytesWritable keyWritable, BytesWritable valueWritable)
       throws HiveException, IOException {
+    ensureRowDeserializers();
     byte[] keyBytes = keyWritable.getBytesRaw();
     byte[] valueBytes = valueWritable.getBytesRaw();
     if (keyBytes != valueBytes) {
@@ -146,14 +165,18 @@ public final class VectorShuffleBatchAccumulator {
     } else {
       // records are from in-memory IFile.Reader
       assert stagedRows < stagingRowLimit;
+      assert ordinaryState.pendingRows + stagedRows < accumulatorRowLimit;
       assert stagedRows == 0 || stagedBytes == keyBytes;
 
-      // keep the staged group within one decoded batch's byte budget
+      // Reserve capacity for both decoded and staged ordinary rows before borrowing selection.
       final long incomingBytes = (long) keyWritable.getLength() + valueWritable.getLength();
-      if (stagedRows > 0 && incomingBytes + stagedSerializedBytes > BATCH_BYTES) {
+      if (ordinaryState.pendingRows + stagedRows > 0
+          && incomingBytes > BATCH_BYTES - ordinaryState.pendingBytes - stagedSerializedBytes) {
         consumeStagedRows();
+        prepareOrdinaryAppend(1, incomingBytes);
       }
 
+      final int[] stagedKeyOffsets = ordinaryState.selection;
       if (stagedRows == 0) {
         stagedBytes = keyBytes;
       }
@@ -165,7 +188,8 @@ public final class VectorShuffleBatchAccumulator {
       stagedSerializedBytes += incomingBytes;
 
       // a single over-sized row is admitted alone and materialized immediately
-      if (stagedRows == stagingRowLimit || stagedSerializedBytes >= BATCH_BYTES) {
+      if (ordinaryState.pendingRows + stagedRows == accumulatorRowLimit
+          || ordinaryState.pendingBytes + stagedSerializedBytes >= BATCH_BYTES) {
         consumeStagedRows();
       }
     }
@@ -180,18 +204,23 @@ public final class VectorShuffleBatchAccumulator {
 
     try {
       if (rowCount > 0) {
-        prepareOrdinaryAppend(rowCount, incomingBytes);
-        ensureRowDeserializers();
+        assert ordinaryState.batch.size == ordinaryState.pendingRows;
+        assert rowCount <= accumulatorRowLimit - ordinaryState.pendingRows;
+        assert ordinaryState.pendingRows + rowCount == 1
+            || incomingBytes <= BATCH_BYTES - ordinaryState.pendingBytes;
+        final int[] stagedKeyOffsets = ordinaryState.selection;
         final int firstRow = ordinaryState.pendingRows;
         for (int i = 0; i < rowCount; i++) {
           deserializeRowAt(stagedBytes, stagedKeyOffsets[i], stagedKeyLengths[i],
               stagedBytes, stagedValueOffsets[i], stagedValueLengths[i], firstRow + i);
         }
-        finishOrdinaryAppend(rowCount, incomingBytes);
       }
     } finally {
       clearStagedRows();
       releaseRowBytes();
+    }
+    if (rowCount > 0) {
+      finishOrdinaryAppend(rowCount, incomingBytes);
     }
   }
 
@@ -238,6 +267,7 @@ public final class VectorShuffleBatchAccumulator {
 
   private void prepareOrdinaryAppend(int incomingRows, long incomingBytes)
       throws HiveException {
+    assert stagedRows == 0;
     assert ordinaryState.batch.size == ordinaryState.pendingRows;
     if (ordinaryState.pendingRows > 0 && (
          incomingRows > accumulatorRowLimit - ordinaryState.pendingRows
@@ -250,7 +280,6 @@ public final class VectorShuffleBatchAccumulator {
       byte[] valueBytes, int valueOffset, int valueLength) throws HiveException, IOException {
     final long incomingBytes = (long) keyLength + valueLength;
     prepareOrdinaryAppend(1, incomingBytes);
-    ensureRowDeserializers();
     deserializeRowAt(keyBytes, keyOffset, keyLength,
         valueBytes, valueOffset, valueLength, ordinaryState.pendingRows);
     finishOrdinaryAppend(1, incomingBytes);
@@ -258,6 +287,10 @@ public final class VectorShuffleBatchAccumulator {
 
   private void ensureRowDeserializers() throws HiveException {
     if (rowDeserializers == null) {
+      ordinaryState = createBatchState();
+      stagedKeyLengths = new int[STAGING_CAPACITY];
+      stagedValueOffsets = new int[STAGING_CAPACITY];
+      stagedValueLengths = new int[STAGING_CAPACITY];
       rowDeserializers = rowDeserializerFactory.create();
     }
   }
@@ -297,22 +330,27 @@ public final class VectorShuffleBatchAccumulator {
   }
 
   public void finish() throws HiveException, IOException {
-    consumeStagedRows();
     flushPendingBatch();
   }
 
-  public void flushPendingBatch() throws HiveException {
+  public void flushPendingBatch() throws HiveException, IOException {
+    consumeStagedRows();
     flushOrdinaryBatch();
     flushCompactBatch();
   }
 
   private void flushOrdinaryBatch() throws HiveException {
-    flushBatch(ordinaryState);
+    assert stagedRows == 0;
+    if (ordinaryState != null) {
+      flushBatch(ordinaryState);
+    }
   }
 
   private void flushCompactBatch() throws HiveException {
-    flushBatch(compactState);
-    decoder.resetAccumulation();
+    if (compactState != null) {
+      flushBatch(compactState);
+      decoder.resetAccumulation();
+    }
   }
 
   private void flushBatch(BatchState state) throws HiveException {
@@ -330,10 +368,14 @@ public final class VectorShuffleBatchAccumulator {
   public void discardPendingBatch() {
     clearStagedRows();
     releaseRowBytes();
-    decoder.releaseHeader();
-    decoder.resetAccumulation();
-    ordinaryState.clearPending();
-    compactState.clearPending();
+    if (ordinaryState != null) {
+      ordinaryState.clearPending();
+    }
+    if (compactState != null) {
+      decoder.releaseHeader();
+      decoder.resetAccumulation();
+      compactState.clearPending();
+    }
   }
 
   private void prepareAccumulator(BatchState state, boolean replace) {
