@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import org.apache.hadoop.hive.common.type.DataTypePhysicalVariation;
 import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +40,7 @@ import org.apache.hadoop.hive.serde2.io.HiveIntervalDayTimeWritable;
 import org.apache.hadoop.hive.serde2.io.HiveIntervalYearMonthWritable;
 import org.apache.hadoop.hive.serde2.io.HiveVarcharWritable;
 import org.apache.hadoop.hive.serde2.io.ShortWritable;
+import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinaryDeserializeRead;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory;
@@ -607,6 +609,33 @@ public final class VectorDeserializeRow<T extends DeserializeRead> {
 
   public void init() throws HiveException {
     init(0);
+  }
+
+  /** Creates a column decoder only when the entire initialized value schema is supported. */
+  VectorLazyBinaryDeserializeBatch createLazyBinaryDeserializeBatch() {
+    assert deserializeRead instanceof LazyBinaryDeserializeRead;
+    final DataTypePhysicalVariation[] variations = deserializeRead.getDataTypePhysicalVariations();
+    final int count = sourceTypeInfos.length;
+    for (int i = 0; i < count; i++) {
+      if (sourceTypeInfos[i].getCategory() != Category.PRIMITIVE
+          || variations[i] != DataTypePhysicalVariation.NONE
+          || (topLevelFields[i] != null && topLevelFields[i].getIsConvert())) {
+        return null;
+      }
+      final PrimitiveCategory category = ((PrimitiveTypeInfo) sourceTypeInfos[i]).getPrimitiveCategory();
+      if (!VectorLazyBinaryDeserializeBatch.isSupported(category)) {
+        return null;
+      }
+    }
+    final PrimitiveCategory[] categories = new PrimitiveCategory[count];
+    final int[] maxLengths = new int[count];
+    for (int i = 0; i < count; i++) {
+      categories[i] = ((PrimitiveTypeInfo) sourceTypeInfos[i]).getPrimitiveCategory();
+      if (topLevelFields[i] != null) {
+        maxLengths[i] = topLevelFields[i].getMaxLength();
+      }
+    }
+    return new VectorLazyBinaryDeserializeBatch(categories, projectionColumnNums, maxLengths);
   }
 
   class VectorVoidDeserializer extends VectorBatchDeserializer {

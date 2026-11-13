@@ -59,6 +59,7 @@ public final class VectorShuffleBatchAccumulator {
 
   private final RowDeserializerFactory rowDeserializerFactory;
   private RowDeserializers rowDeserializers;
+  private VectorLazyBinaryDeserializeBatch valueBatchDeserializer;
 
   private final VectorShuffleBatchAccumulatingDeserializer decoder;
   private final int accumulatorRowLimit;
@@ -174,9 +175,22 @@ public final class VectorShuffleBatchAccumulator {
     try {
       if (rowCount > 0) {
         prepareForAppend(rowCount, incomingBytes, false);
-        for (int i = 0; i < rowCount; i++) {
-          deserializeRowAt(stagedBytes, stagedKeyOffsets[i], stagedKeyLengths[i],
-              stagedBytes, stagedValueOffsets[i], stagedValueLengths[i], pendingRows + i);
+        ensureRowDeserializers();
+        final int baseRow = pendingRows;
+        if (valueBatchDeserializer == null) {
+          for (int i = 0; i < rowCount; i++) {
+            deserializeRowAt(stagedBytes, stagedKeyOffsets[i], stagedKeyLengths[i],
+                stagedBytes, stagedValueOffsets[i], stagedValueLengths[i], baseRow + i);
+          }
+        } else {
+          for (int i = 0; i < rowCount; i++) {
+            rowDeserializers.key.setBytes(stagedBytes, stagedKeyOffsets[i], stagedKeyLengths[i]);
+            rowDeserializers.key.deserialize(batch, baseRow + i);
+          }
+          // The consumed key locations become value cursors and null-state storage.
+          valueBatchDeserializer.deserialize(batch, baseRow, rowCount, stagedBytes,
+              stagedValueOffsets, stagedValueLengths, stagedKeyOffsets, stagedKeyLengths);
+          batch.size = baseRow + rowCount;
         }
         finishAppend(rowCount, incomingBytes);
       }
@@ -241,17 +255,25 @@ public final class VectorShuffleBatchAccumulator {
       byte[] valueBytes, int valueOffset, int valueLength) throws HiveException, IOException {
     final long incomingBytes = (long) keyLength + valueLength;
     prepareForAppend(1, incomingBytes, false);
+    ensureRowDeserializers();
     deserializeRowAt(keyBytes, keyOffset, keyLength, valueBytes, valueOffset, valueLength, pendingRows);
     finishAppend(1, incomingBytes);
+  }
+
+  private void ensureRowDeserializers() throws HiveException {
+    if (rowDeserializers == null) {
+      rowDeserializers = rowDeserializerFactory.create();
+      if (rowDeserializers.value != null) {
+        valueBatchDeserializer = rowDeserializers.value.createLazyBinaryDeserializeBatch();
+      }
+    }
   }
 
   private void deserializeRowAt(byte[] keyBytes, int keyOffset, int keyLength,
       byte[] valueBytes, int valueOffset, int valueLength, int batchIndex)
       throws HiveException, IOException {
     assert batchIndex == batch.size;
-    if (rowDeserializers == null) {
-      rowDeserializers = rowDeserializerFactory.create();
-    }
+    assert rowDeserializers != null;
     rowDeserializers.key.setBytes(keyBytes, keyOffset, keyLength);
     rowDeserializers.key.deserialize(batch, batchIndex);
     if (rowDeserializers.value != null) {
