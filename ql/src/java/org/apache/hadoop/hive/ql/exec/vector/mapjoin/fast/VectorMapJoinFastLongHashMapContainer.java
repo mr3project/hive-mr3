@@ -190,7 +190,8 @@ public class VectorMapJoinFastLongHashMapContainer extends VectorMapJoinFastHash
 
   public JoinUtil.JoinResult lookup(long key, VectorMapJoinHashMapResult hashMapResult) {
     long hashCode = HashCodeUtil.calculateLongHashCode(key);
-    return vectorMapJoinFastLongHashMaps[((int) hashCode >>> partitionShift) & partitionMask].lookup(key, hashMapResult);
+    return vectorMapJoinFastLongHashMaps[((int) hashCode >>> partitionShift) & partitionMask]
+        .lookup(key, hashMapResult, hashCode);
   }
 
   public JoinUtil.JoinResult lookup(long key, VectorMapJoinHashMapResult hashMapResult,
@@ -200,7 +201,7 @@ public class VectorMapJoinFastLongHashMapContainer extends VectorMapJoinFastHash
     MatchTracker childMatchTracker = matchTracker != null ? matchTracker.getPartition(partition) : null;
 
     return vectorMapJoinFastLongHashMaps[partition].lookup(key, hashMapResult,
-        childMatchTracker);
+        childMatchTracker, hashCode);
   }
 
   public long getEstimatedMemorySize() {
