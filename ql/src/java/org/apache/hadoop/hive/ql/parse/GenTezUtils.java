@@ -748,6 +748,8 @@ public class GenTezUtils {
     TezWork tezWork = procCtx.currentTask.getWork();
     tezWork.connect(parentWork, childWork, edgeProperty);
 
+    // Runtime values use the fast codec in both row and native vector execution.
+    rs.getConf().setRuntimeValueOutput(true);
     // DynamicValueRegistryTez consumes ordinary key/value records rather than vector shuffle batches.
     rs.getConf().setVectorShuffleBatchEnabled(false);
 

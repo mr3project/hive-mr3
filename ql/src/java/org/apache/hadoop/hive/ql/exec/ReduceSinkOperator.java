@@ -96,6 +96,7 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
   protected transient Serializer keySerializer;
   protected transient boolean keyIsText;
   protected transient Serializer valueSerializer;
+  private transient RuntimeValueSerializer runtimeValueSerializer;
   protected transient byte[] tagByte = new byte[1];
   protected transient int numDistributionKeys;
   protected transient int numDistinctExprs;
@@ -294,6 +295,9 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
             conf.getOutputKeyColumnNames(), numDistributionKeys, rowInspector);
         valueObjectInspector = initEvaluatorsAndReturnStruct(valueEval,
             conf.getOutputValueColumnNames(), rowInspector);
+        if (conf.isRuntimeValueOutput()) {
+          runtimeValueSerializer = new RuntimeValueSerializer((StructObjectInspector) valueObjectInspector);
+        }
         final ObjectInspector[] partitionObjectInspectors = initEvaluators(partitionEval, rowInspector);
         partitionHashFunc = conf.getPartitionFunction(partitionObjectInspectors);
         if (bucketEval != null) {
@@ -522,6 +526,9 @@ public class ReduceSinkOperator extends TerminalOperator<ReduceSinkDesc>
     }
 
     // Serialize the value
+    if (conf.isRuntimeValueOutput()) {
+      return runtimeValueSerializer.serialize(cachedValues);
+    }
     return (BytesWritable) valueSerializer.serialize(cachedValues, valueObjectInspector);
   }
 

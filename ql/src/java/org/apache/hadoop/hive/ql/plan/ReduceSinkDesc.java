@@ -121,6 +121,8 @@ public class ReduceSinkDesc extends AbstractOperatorDesc {
   private boolean vectorShuffleBatchEnabled = true;
   // Whether this output supplies a map-join small-table input.
   private boolean mapJoinOutput;
+  // Whether this output supplies the dynamic runtime-value registry.
+  private boolean runtimeValueOutput;
 
   public static enum ReducerTraits {
     UNSET(0), // unset
@@ -204,6 +206,7 @@ public class ReduceSinkDesc extends AbstractOperatorDesc {
     desc.outputName = outputName;
     desc.vectorShuffleBatchEnabled = vectorShuffleBatchEnabled;
     desc.mapJoinOutput = mapJoinOutput;
+    desc.runtimeValueOutput = runtimeValueOutput;
     return desc;
   }
 
@@ -554,6 +557,14 @@ public class ReduceSinkDesc extends AbstractOperatorDesc {
 
   public boolean isMapJoinOutput() {
     return mapJoinOutput;
+  }
+
+  public void setRuntimeValueOutput(boolean runtimeValueOutput) {
+    this.runtimeValueOutput = runtimeValueOutput;
+  }
+
+  public boolean isRuntimeValueOutput() {
+    return runtimeValueOutput;
   }
 
   @Explain(displayName = "auto parallelism", explainLevels = { Level.EXTENDED })

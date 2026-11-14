@@ -27,7 +27,31 @@ import org.apache.hadoop.hive.ql.plan.BaseWork;
 import org.apache.hadoop.hive.common.NoDynamicValuesException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.serde2.AbstractSerDe;
+import org.apache.hadoop.hive.serde2.io.ByteWritable;
+import org.apache.hadoop.hive.serde2.io.DateWritableV2;
+import org.apache.hadoop.hive.serde2.io.DoubleWritable;
+import org.apache.hadoop.hive.serde2.io.HiveCharWritable;
+import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
+import org.apache.hadoop.hive.serde2.io.HiveIntervalDayTimeWritable;
+import org.apache.hadoop.hive.serde2.io.HiveIntervalYearMonthWritable;
+import org.apache.hadoop.hive.serde2.io.HiveVarcharWritable;
+import org.apache.hadoop.hive.serde2.io.ShortWritable;
+import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
+import org.apache.hadoop.hive.serde2.lazybinary.fast.LazyBinaryDeserializeRead;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
+import org.apache.hadoop.hive.serde2.typeinfo.CharTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.StructTypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils;
+import org.apache.hadoop.hive.serde2.typeinfo.VarcharTypeInfo;
+import org.apache.hadoop.io.BooleanWritable;
+import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.FloatWritable;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.tez.runtime.api.Input;
 import org.apache.tez.runtime.api.LogicalInput;
@@ -37,6 +61,7 @@ import org.apache.tez.runtime.library.api.LogicalInputEdge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -103,10 +128,18 @@ public class DynamicValueRegistryTez implements DynamicValueRegistry {
       LogicalInputEdge runtimeValueInput = (LogicalInputEdge) rct.inputs.get(inputSourceName);
       RuntimeValuesInfo runtimeValuesInfo = rct.baseWork.getInputSourceToRuntimeValuesInfo().get(inputSourceName);
 
-      // Setup deserializer/obj inspectors for the incoming data source
+      // The table descriptor supplies the schema; runtime values use the fast wire format.
       AbstractSerDe serDe = ReflectionUtils.newInstance(runtimeValuesInfo.getTableDesc().getSerDeClass(), null);
       serDe.initialize(rct.conf, runtimeValuesInfo.getTableDesc().getProperties(), null);
-      ObjectInspector inspector = serDe.getObjectInspector();
+      StructTypeInfo rowTypeInfo =
+          (StructTypeInfo) TypeInfoUtils.getTypeInfoFromObjectInspector(serDe.getObjectInspector());
+      TypeInfo[] fieldTypes = rowTypeInfo.getAllStructFieldTypeInfos().toArray(new TypeInfo[0]);
+      for (TypeInfo fieldType : fieldTypes) {
+        assert fieldType.getCategory() == Category.PRIMITIVE;
+      }
+      LazyBinaryDeserializeRead deserializeRead = new LazyBinaryDeserializeRead(fieldTypes, false);
+      ObjectInspector inspector = TypeInfoUtils.getStandardWritableObjectInspectorFromTypeInfo(rowTypeInfo);
+      Object[] row = new Object[fieldTypes.length];
 
       // Set up col expressions for the dynamic values using this input
       List<ExprNodeEvaluator> colExprEvaluators = new ArrayList<ExprNodeEvaluator>();
@@ -124,7 +157,12 @@ public class DynamicValueRegistryTez implements DynamicValueRegistry {
       KeyValueReaderEdge kvReader = (KeyValueReaderEdge) runtimeValueInput.getReader();
       long rowCount = 0;
       while (kvReader.next()) {
-        Object row = serDe.deserializeBytesWritable(kvReader.getCurrentValue());
+        BytesWritable value = kvReader.getCurrentValue();
+        deserializeRead.set(value.getBytesRaw(), value.getOffset(), value.getLength());
+        for (int fieldIndex = 0; fieldIndex < fieldTypes.length; ++fieldIndex) {
+          row[fieldIndex] = deserializeRead.readNextField()
+              ? readField(deserializeRead, (PrimitiveTypeInfo) fieldTypes[fieldIndex]) : null;
+        }
         rowCount++;
         for (int colIdx = 0; colIdx < colExprEvaluators.size(); ++colIdx) {
           // Read each expression and save it to the value registry
@@ -144,5 +182,58 @@ public class DynamicValueRegistryTez implements DynamicValueRegistry {
         throw new IllegalStateException("Expected 0 or 1 rows from " + inputSourceName + ", got " + rowCount);
       }
     }
+  }
+
+  private static Object readField(LazyBinaryDeserializeRead reader, PrimitiveTypeInfo typeInfo) {
+    // Copy each field out of the reader's shared scratch storage.
+    switch (typeInfo.getPrimitiveCategory()) {
+    case BOOLEAN:
+      return new BooleanWritable(reader.currentBoolean);
+    case BYTE:
+      return new ByteWritable(reader.currentByte);
+    case SHORT:
+      return new ShortWritable(reader.currentShort);
+    case INT:
+      return new IntWritable(reader.currentInt);
+    case LONG:
+      return new LongWritable(reader.currentLong);
+    case FLOAT:
+      return new FloatWritable(reader.currentFloat);
+    case DOUBLE:
+      return new DoubleWritable(reader.currentDouble);
+    case STRING:
+      Text text = new Text();
+      text.set(reader.currentBytes, reader.currentBytesStart, reader.currentBytesLength);
+      return text;
+    case CHAR:
+      HiveCharWritable hiveChar = new HiveCharWritable();
+      hiveChar.set(readString(reader), ((CharTypeInfo) typeInfo).getLength());
+      return hiveChar;
+    case VARCHAR:
+      HiveVarcharWritable hiveVarchar = new HiveVarcharWritable();
+      hiveVarchar.set(readString(reader), ((VarcharTypeInfo) typeInfo).getLength());
+      return hiveVarchar;
+    case BINARY:
+      BytesWritable binary = new BytesWritable();
+      binary.set(reader.currentBytes, reader.currentBytesStart, reader.currentBytesLength);
+      return binary;
+    case DATE:
+      return new DateWritableV2(reader.currentDateWritable);
+    case TIMESTAMP:
+      return new TimestampWritableV2(reader.currentTimestampWritable);
+    case INTERVAL_YEAR_MONTH:
+      return new HiveIntervalYearMonthWritable(reader.currentHiveIntervalYearMonthWritable);
+    case INTERVAL_DAY_TIME:
+      return new HiveIntervalDayTimeWritable(reader.currentHiveIntervalDayTimeWritable);
+    case DECIMAL:
+      return new HiveDecimalWritable(reader.currentHiveDecimalWritable);
+    default:
+      throw new AssertionError("Unexpected runtime value type " + typeInfo);
+    }
+  }
+
+  private static String readString(LazyBinaryDeserializeRead reader) {
+    return new String(reader.currentBytes, reader.currentBytesStart, reader.currentBytesLength,
+        StandardCharsets.UTF_8);
   }
 }
