@@ -25,6 +25,7 @@ import org.apache.hadoop.hive.ql.util.JavaDataModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinLongHashTable;
+import org.apache.hadoop.hive.ql.exec.vector.mapjoin.hashtable.VectorMapJoinHashTableResult;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.VectorMapJoinDesc.HashTableKeyType;
 import org.apache.hadoop.hive.serde2.binarysortable.fast.BinarySortableDeserializeRead;
@@ -211,31 +212,46 @@ public abstract class VectorMapJoinFastLongHashTable
   }
 
   protected int findReadSlot(long key, long hashCode) {
+    return findReadSlot(key, hashCode, null);
+  }
 
-    int intHashCode = (int) hashCode;
-    int slot = intHashCode & logicalHashBucketMask;
-
+  protected int findReadSlot(long key, long hashCode, VectorMapJoinHashTableResult result) {
+    int slot = ((int) hashCode) & logicalHashBucketMask;
     long probeSlot = slot;
     int i = 0;
+    long bucketsExamined = 0;
+    long low32Matches = 0;
+    int foundPairIndex = -1;
+
     while (true) {
       int pairIndex = 2 * slot;
+      bucketsExamined++;
       long valueRef = slotPairs[pairIndex];
       if (valueRef == 0) {
         // Given that we do not delete, an empty slot means no match.
-        return -1;
+        break;
       }
       long tableKey = slotPairs[pairIndex + 1];
+      if ((int) key == (int) tableKey) {
+        low32Matches++;
+      }
       if (key == tableKey) {
-        return pairIndex;
+        foundPairIndex = pairIndex;
+        break;
       }
       // Some other key (collision) - keep probing.
       probeSlot += (++i);
       if (i > largestNumberOfSteps) {
         // We know we never went that far when we were inserting.
-        return -1;
+        break;
       }
       slot = (int)(probeSlot & logicalHashBucketMask);
     }
+
+    if (result != null) {
+      result.recordFindReadSlot(bucketsExamined, low32Matches, foundPairIndex != -1);
+    }
+    return foundPairIndex;
   }
 
   /*

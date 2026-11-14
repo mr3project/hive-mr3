@@ -209,7 +209,7 @@ public class VectorMapJoinFastLongHashMap
 
     optimizedHashMapResult.forget();
 
-    int pairIndex = findReadSlot(key, hashCode);
+    int pairIndex = findReadSlot(key, hashCode, optimizedHashMapResult);
     JoinUtil.JoinResult joinResult;
     if (pairIndex == -1) {
       joinResult = JoinUtil.JoinResult.NOMATCH;
@@ -238,7 +238,7 @@ public class VectorMapJoinFastLongHashMap
 
     optimizedHashMapResult.forget();
 
-    int pairIndex = findReadSlot(key, hashCode);
+    int pairIndex = findReadSlot(key, hashCode, optimizedHashMapResult);
     JoinUtil.JoinResult joinResult;
     if (pairIndex == -1) {
       joinResult = JoinUtil.JoinResult.NOMATCH;

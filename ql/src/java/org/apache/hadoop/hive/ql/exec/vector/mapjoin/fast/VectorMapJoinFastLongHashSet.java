@@ -100,7 +100,7 @@ public class VectorMapJoinFastLongHashSet
 
     optimizedHashSetResult.forget();
 
-    int pairIndex = findReadSlot(key, hashCode);
+    int pairIndex = findReadSlot(key, hashCode, optimizedHashSetResult);
     JoinUtil.JoinResult joinResult;
     if (pairIndex == -1) {
       joinResult = JoinUtil.JoinResult.NOMATCH;

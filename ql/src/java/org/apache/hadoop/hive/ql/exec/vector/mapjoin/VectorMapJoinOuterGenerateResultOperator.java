@@ -147,6 +147,7 @@ public abstract class VectorMapJoinOuterGenerateResultOperator
     for (int i = 0; i < hashMapResults.length; i++) {
       hashMapResults[i] = baseHashMap.createHashMapResult();
     }
+    findReadSlotResults = hashMapResults;
 
     inputSelected = new int[VectorizedRowBatch.DEFAULT_SIZE];
 

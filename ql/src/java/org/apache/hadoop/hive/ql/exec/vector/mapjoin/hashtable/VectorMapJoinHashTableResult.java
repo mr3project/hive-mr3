@@ -32,6 +32,11 @@ public abstract class VectorMapJoinHashTableResult {
 
   private final WriteBuffers.Position readPos;
 
+  private long findReadSlotBucketsExamined;
+  private long findReadSlotLow32Matches;
+  private long findReadSlotSuccessfulLookups;
+  private long findReadSlotUnsuccessfulLookups;
+
   public VectorMapJoinHashTableResult() {
     joinResult = JoinUtil.JoinResult.NOMATCH;
     spillPartitionId = -1;
@@ -74,6 +79,32 @@ public abstract class VectorMapJoinHashTableResult {
    */
   public int spillPartitionId() {
     return spillPartitionId;
+  }
+
+  public void recordFindReadSlot(long bucketsExamined, long low32Matches, boolean matched) {
+    findReadSlotBucketsExamined += bucketsExamined;
+    findReadSlotLow32Matches += low32Matches;
+    if (matched) {
+      findReadSlotSuccessfulLookups++;
+    } else {
+      findReadSlotUnsuccessfulLookups++;
+    }
+  }
+
+  public long getFindReadSlotBucketsExamined() {
+    return findReadSlotBucketsExamined;
+  }
+
+  public long getFindReadSlotLow32Matches() {
+    return findReadSlotLow32Matches;
+  }
+
+  public long getFindReadSlotSuccessfulLookups() {
+    return findReadSlotSuccessfulLookups;
+  }
+
+  public long getFindReadSlotUnsuccessfulLookups() {
+    return findReadSlotUnsuccessfulLookups;
   }
 
   @Override

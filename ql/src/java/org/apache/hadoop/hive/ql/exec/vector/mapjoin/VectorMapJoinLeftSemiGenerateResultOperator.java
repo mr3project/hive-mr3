@@ -99,6 +99,7 @@ public abstract class VectorMapJoinLeftSemiGenerateResultOperator
     for (int i = 0; i < hashSetResults.length; i++) {
       hashSetResults[i] = baseHashSet.createHashSetResult();
     }
+    findReadSlotResults = hashSetResults;
 
     allMatches = new int[VectorizedRowBatch.DEFAULT_SIZE];
 

@@ -118,6 +118,7 @@ public abstract class VectorMapJoinInnerGenerateResultOperator
     for (int i = 0; i < hashMapResults.length; i++) {
       hashMapResults[i] = baseHashMap.createHashMapResult();
     }
+    findReadSlotResults = hashMapResults;
 
     allMatches = new int[VectorizedRowBatch.DEFAULT_SIZE];
 

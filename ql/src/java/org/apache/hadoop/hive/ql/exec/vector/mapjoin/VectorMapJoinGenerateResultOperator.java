@@ -85,6 +85,8 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
 
   private transient TypeInfo[] bigTableTypeInfos;
 
+  protected transient VectorMapJoinHashTableResult[] findReadSlotResults;
+
   private transient VectorSerializeRow bigTableVectorSerializeRow;
 
   private transient VectorDeserializeRow bigTableVectorDeserializeRow;
@@ -779,6 +781,20 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
             statistics.numSetVal, statistics.bytesSetVal,
             statistics.numReusedRef, statistics.bytesReusedRef);
       }
+    }
+    if (findReadSlotResults != null) {
+      long bucketsExamined = 0;
+      long low32Matches = 0;
+      long successfulLookups = 0;
+      long unsuccessfulLookups = 0;
+      for (VectorMapJoinHashTableResult result : findReadSlotResults) {
+        bucketsExamined += result.getFindReadSlotBucketsExamined();
+        low32Matches += result.getFindReadSlotLow32Matches();
+        successfulLookups += result.getFindReadSlotSuccessfulLookups();
+        unsuccessfulLookups += result.getFindReadSlotUnsuccessfulLookups();
+      }
+      LOG.error("xxxxx {} {} {} {}", bucketsExamined, low32Matches,
+          successfulLookups, unsuccessfulLookups);
     }
     if (LOG.isDebugEnabled()) {
       LOG.debug("VectorMapJoinInnerLongOperator closeOp " + batchCounter + " batches processed");
