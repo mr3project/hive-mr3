@@ -91,22 +91,21 @@ public class TestLazyBinaryFast {
       serializeWriteBytes[i] = bytesWritable;
     }
 
-    // Try to deserialize
+    // Reuse the reader across rows to exercise state reset after reads and skips.
+    // Specifying the right type info length tells the reader which is the last column.
+    LazyBinaryDeserializeRead lazyBinaryDeserializeRead =
+        new LazyBinaryDeserializeRead(writeTypeInfos, /* useExternalBuffer */ false);
     for (int i = 0; i < rowCount; i++) {
       Object[] row = rows[i];
-
-      // Specifying the right type info length tells LazyBinaryDeserializeRead which is the last
-      // column.
-      LazyBinaryDeserializeRead lazyBinaryDeserializeRead =
-              new LazyBinaryDeserializeRead(
-                  writeTypeInfos,
-                  /* useExternalBuffer */ false);
 
       BytesWritable bytesWritable = serializeWriteBytes[i];
       lazyBinaryDeserializeRead.set(bytesWritable.getBytes(), 0, bytesWritable.getLength());
 
       for (int index = 0; index < columnCount; index++) {
-        if (useIncludeColumns && !columnsToInclude[index]) {
+        // Alternate the projection so every field is both read and skipped across rows.
+        final boolean includeColumn =
+            !useIncludeColumns || columnsToInclude[index] == ((i & 1) == 0);
+        if (!includeColumn) {
           lazyBinaryDeserializeRead.skipNextField();
         } else if (index >= writeColumnCount) {
           // Should come back a null.
