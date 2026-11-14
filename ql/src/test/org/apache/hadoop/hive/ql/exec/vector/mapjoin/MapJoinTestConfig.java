@@ -730,15 +730,18 @@ public class MapJoinTestConfig {
   }
 
   private static void loadTableContainerData(MapJoinTestDescription testDesc, MapJoinTestData testData,
-      MapJoinTableContainer mapJoinTableContainer )
+      MapJoinTableContainer mapJoinTableContainer, AbstractSerDe valueSerDe)
           throws IOException, SerDeException, HiveException {
 
     LazyBinarySerializeWrite valueSerializeWrite = null;
     Output valueOutput = null;
-    if (testData.smallTableValues != null) {
+    if (testData.smallTableValues != null && valueSerDe == null) {
       valueSerializeWrite = new LazyBinarySerializeWrite(testDesc.smallTableValueTypeInfos.length);
       valueOutput = new Output();
     }
+    StandardStructObjectInspector valueObjectInspector =
+        ObjectInspectorFactory.getStandardStructObjectInspector(
+            testDesc.smallTableValueColumnNameList, testDesc.smallTableValueObjectInspectorList);
     BytesWritable valueBytesWritable = new BytesWritable();
 
     BytesWritable keyBytesWritable = new BytesWritable();
@@ -781,16 +784,18 @@ public class MapJoinTestConfig {
             mapJoinTableContainer.putRow(keyBytesWritable, valueBytesWritable);
           } else {
             Object[] smallTableValue = valueRow.getRow();
-            valueOutput.reset();
-            valueSerializeWrite.set(valueOutput);
-            for (int index = 0; index < testDesc.smallTableValueTypeInfos.length; index++) {
-
-              Writable valueWritable = (Writable) smallTableValue[index];
-
-              VerifyFastRow.serializeWrite(
-                  valueSerializeWrite, (PrimitiveTypeInfo) testDesc.smallTableValueTypeInfos[index], valueWritable);
+            if (valueSerDe != null) {
+              valueBytesWritable = (BytesWritable) valueSerDe.serialize(smallTableValue, valueObjectInspector);
+            } else {
+              valueOutput.reset();
+              valueSerializeWrite.set(valueOutput);
+              for (int index = 0; index < testDesc.smallTableValueTypeInfos.length; index++) {
+                Writable valueWritable = (Writable) smallTableValue[index];
+                VerifyFastRow.serializeWrite(
+                    valueSerializeWrite, (PrimitiveTypeInfo) testDesc.smallTableValueTypeInfos[index], valueWritable);
+              }
+              valueBytesWritable.set(valueOutput.getData(), 0, valueOutput.getLength());
             }
-            valueBytesWritable.set(valueOutput.getData(), 0, valueOutput.getLength());
             mapJoinTableContainer.putRow(keyBytesWritable, valueBytesWritable);
           }
         }
@@ -843,7 +848,7 @@ public class MapJoinTestConfig {
         mapJoinTableContainerSerDe.getKeyContext(),
         mapJoinTableContainerSerDe.getValueContext());
 
-    loadTableContainerData(testDesc, testData, mapJoinTableContainer);
+    loadTableContainerData(testDesc, testData, mapJoinTableContainer, valCtx.getSerDe());
 
     MapJoinOperator operator;
     if (!isVectorMapJoin) {
@@ -932,7 +937,7 @@ public class MapJoinTestConfig {
     }
 
 //    if (shareMapJoinTableContainer == null) {
-      loadTableContainerData(testDesc, testData, mapJoinTableContainer);
+      loadTableContainerData(testDesc, testData, mapJoinTableContainer, null);
 //    } else {
 //      setTableContainerData(mapJoinTableContainer, shareMapJoinTableContainer);
 //    }
