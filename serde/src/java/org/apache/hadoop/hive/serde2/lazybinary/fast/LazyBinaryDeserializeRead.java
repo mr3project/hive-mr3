@@ -416,6 +416,50 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
     return value;
   }
 
+  private void skipPrimitive(Field field) throws EOFException {
+    switch (field.primitiveCategory) {
+    case BOOLEAN:
+    case BYTE:
+      offset++;
+      break;
+    case SHORT:
+      offset += Short.BYTES;
+      break;
+    case INT:
+    case FLOAT:
+    case DATE:
+    case INTERVAL_YEAR_MONTH:
+      offset += Integer.BYTES;
+      break;
+    case LONG:
+    case DOUBLE:
+      offset += Long.BYTES;
+      break;
+    case TIMESTAMP:
+    case INTERVAL_DAY_TIME:
+      offset += Long.BYTES + Integer.BYTES;
+      break;
+    case BINARY:
+    case STRING:
+    case CHAR:
+    case VARCHAR:
+      {
+        final int length = readInt();
+        offset += length;
+      }
+      break;
+    case DECIMAL:
+      {
+        offset += Integer.BYTES;
+        final int length = readInt();
+        offset += length;
+      }
+      break;
+    default:
+      throw new Error("Unexpected primitive category " + field.primitiveCategory.name());
+    }
+  }
+
   /*
    * Reads through an undesired field.
    *
@@ -440,18 +484,14 @@ public final class LazyBinaryDeserializeRead extends DeserializeRead {
     final Field child = getChild(current);
 
     if (child.category == Category.PRIMITIVE) {
-      readPrimitive(child);
-      current.index++;
+      skipPrimitive(child);
     } else {
-      parseHeader(child);
-      prepareField(child);
-      pushStack(child);
-
-      for (int i = 0; i < child.count; i++) {
-        skipNextField();
-      }
-      finishComplexVariableFieldsType();
+      assert !skipLengthPrefix;
+      // The prefix covers the complete payload, including nested fields.
+      final int length = LazyBinaryUtils.byteArrayToInt(bytes, offset);
+      offset += Integer.BYTES + length;
     }
+    current.index++;
 
     if (offset > end) {
       throw new EOFException();
