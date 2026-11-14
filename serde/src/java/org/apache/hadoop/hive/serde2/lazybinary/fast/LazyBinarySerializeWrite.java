@@ -25,7 +25,6 @@ import java.util.Map;
 
 import org.apache.hadoop.hive.common.type.Date;
 import org.apache.hadoop.hive.serde2.ByteStream;
-import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,10 +37,7 @@ import org.apache.hadoop.hive.common.type.Timestamp;
 import org.apache.hadoop.hive.serde2.ByteStream.Output;
 import org.apache.hadoop.hive.serde2.io.DateWritableV2;
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable;
-import org.apache.hadoop.hive.serde2.io.HiveIntervalDayTimeWritable;
-import org.apache.hadoop.hive.serde2.io.HiveIntervalYearMonthWritable;
 import org.apache.hadoop.hive.serde2.lazybinary.LazyBinarySerDe;
-import org.apache.hadoop.hive.serde2.lazybinary.LazyBinaryUtils;
 import org.apache.hadoop.hive.serde2.fast.SerializeWrite;
 
 import static org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category.LIST;
@@ -50,10 +46,10 @@ import static org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Cate
 import static org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector.Category.UNION;
 
 /*
- * Directly serialize, field-by-field, the LazyBinary format.
-*
- * This is an alternative way to serialize than what is provided by LazyBinarySerDe.
-  */
+ * Directly serialize fields using fixed-width integers and lengths.
+ *
+ * This fast format differs from the variable-length format used by LazyBinarySerDe.
+ */
 public class LazyBinarySerializeWrite implements SerializeWrite {
   public static final Logger LOG = LoggerFactory.getLogger(LazyBinarySerializeWrite.class.getName());
 
@@ -62,16 +58,10 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   private int rootFieldCount;
   private boolean skipLengthPrefix = false;
 
-  // For thread safety, we allocate private writable objects for our use only.
-  private TimestampWritableV2 timestampWritable;
-  private HiveIntervalYearMonthWritable hiveIntervalYearMonthWritable;
-  private HiveIntervalDayTimeWritable hiveIntervalDayTimeWritable;
-  private HiveIntervalDayTime hiveIntervalDayTime;
+  // Private reusable decimal conversion buffers.
   private HiveDecimalWritable hiveDecimalWritable;
-  private byte[] vLongBytes;
   private long[] scratchLongs;
   private byte[] scratchBuffer;
-  private byte[] scratchLongBytes;
 
   private static final int INITIAL_STACK_SIZE = 16;
 
@@ -107,7 +97,6 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
 
   public LazyBinarySerializeWrite(int fieldCount) {
     this();
-    vLongBytes = new byte[LazyBinaryUtils.VLONG_BYTES_LEN];
     this.rootFieldCount = fieldCount;
     resetWithoutOutput();
   }
@@ -246,7 +235,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeInt(int v) throws IOException {
     beginElement();
-    writeVInt(v);
+    output.appendInt(v);
     finishElement();
   }
 
@@ -256,7 +245,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeLong(long v) throws IOException {
     beginElement();
-    writeVLong(v);
+    output.appendLong(v);
     finishElement();
   }
 
@@ -266,11 +255,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeFloat(float vf) throws IOException {
     beginElement();
-    int v = Float.floatToIntBits(vf);
-    output.write((byte) (v >> 24));
-    output.write((byte) (v >> 16));
-    output.write((byte) (v >> 8));
-    output.write((byte) (v));
+    output.appendInt(Float.floatToIntBits(vf));
     finishElement();
   }
 
@@ -280,7 +265,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeDouble(double v) throws IOException {
     beginElement();
-    LazyBinaryUtils.writeDouble(output, v);
+    output.appendLong(Double.doubleToLongBits(v));
     finishElement();
   }
 
@@ -294,7 +279,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   public void writeString(byte[] v) throws IOException {
     beginElement();
     final int length = v.length;
-    writeVInt(length);
+    output.appendInt(length);
     output.write(v, 0, length);
     finishElement();
   }
@@ -302,7 +287,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeString(byte[] v, int start, int length) throws IOException {
     beginElement();
-    writeVInt(length);
+    output.appendInt(length);
     output.write(v, start, length);
     finishElement();
   }
@@ -346,7 +331,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeDate(Date date) throws IOException {
     beginElement();
-    writeVInt(DateWritableV2.dateToDays(date));
+    output.appendInt(DateWritableV2.dateToDays(date));
     finishElement();
   }
 
@@ -354,7 +339,7 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeDate(int dateAsDays) throws IOException {
     beginElement();
-    writeVInt(dateAsDays);
+    output.appendInt(dateAsDays);
     finishElement();
   }
 
@@ -364,11 +349,8 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeTimestamp(Timestamp v) throws IOException {
     beginElement();
-    if (timestampWritable == null) {
-      timestampWritable = new TimestampWritableV2();
-    }
-    timestampWritable.set(v);
-    timestampWritable.writeToByteStream(output);
+    output.appendLong(v.toEpochSecond());
+    output.appendInt(v.getNanos());
     finishElement();
   }
 
@@ -378,22 +360,14 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeHiveIntervalYearMonth(HiveIntervalYearMonth viyt) throws IOException {
     beginElement();
-    if (hiveIntervalYearMonthWritable == null) {
-      hiveIntervalYearMonthWritable = new HiveIntervalYearMonthWritable();
-    }
-    hiveIntervalYearMonthWritable.set(viyt);
-    hiveIntervalYearMonthWritable.writeToByteStream(output);
+    output.appendInt(viyt.getTotalMonths());
     finishElement();
   }
 
   @Override
   public void writeHiveIntervalYearMonth(int totalMonths) throws IOException {
     beginElement();
-    if (hiveIntervalYearMonthWritable == null) {
-      hiveIntervalYearMonthWritable = new HiveIntervalYearMonthWritable();
-    }
-    hiveIntervalYearMonthWritable.set(totalMonths);
-    hiveIntervalYearMonthWritable.writeToByteStream(output);
+    output.appendInt(totalMonths);
     finishElement();
   }
 
@@ -403,11 +377,8 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
   @Override
   public void writeHiveIntervalDayTime(HiveIntervalDayTime vidt) throws IOException {
     beginElement();
-    if (hiveIntervalDayTimeWritable == null) {
-      hiveIntervalDayTimeWritable = new HiveIntervalDayTimeWritable();
-    }
-    hiveIntervalDayTimeWritable.set(vidt);
-    hiveIntervalDayTimeWritable.writeToByteStream(output);
+    output.appendLong(vidt.getTotalSeconds());
+    output.appendInt(vidt.getNanos());
     finishElement();
   }
 
@@ -432,15 +403,11 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
     if (scratchLongs == null) {
       scratchLongs = new long[HiveDecimal.SCRATCH_LONGS_LEN];
       scratchBuffer = new byte[HiveDecimal.SCRATCH_BUFFER_LEN_BIG_INTEGER_BYTES];
-      scratchLongBytes = new byte[LazyBinaryUtils.VLONG_BYTES_LEN];
     }
-    LazyBinarySerDe.writeToByteStream(
-        output,
-        dec,
-        scratchLongs,
-        scratchBuffer,
-        scratchLongBytes
-        );
+    output.appendInt(dec.scale());
+    int byteLength = dec.bigIntegerBytes(scratchLongs, scratchBuffer);
+    output.appendInt(byteLength);
+    output.write(scratchBuffer, 0, byteLength);
     finishElement();
   }
 
@@ -450,30 +417,12 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
     if (scratchLongs == null) {
       scratchLongs = new long[HiveDecimal.SCRATCH_LONGS_LEN];
       scratchBuffer = new byte[HiveDecimal.SCRATCH_BUFFER_LEN_BIG_INTEGER_BYTES];
-      scratchLongBytes = new byte[LazyBinaryUtils.VLONG_BYTES_LEN];
     }
-    LazyBinarySerDe.writeToByteStream(
-        output,
-        decWritable,
-        scratchLongs,
-        scratchBuffer,
-        scratchLongBytes
-        );
+    output.appendInt(decWritable.scale());
+    int byteLength = decWritable.bigIntegerBytes(scratchLongs, scratchBuffer);
+    output.appendInt(byteLength);
+    output.write(scratchBuffer, 0, byteLength);
     finishElement();
-  }
-
-  /*
-   * Write a VInt using our temporary byte buffer instead of paying the thread local performance
-   * cost of LazyBinaryUtils.writeVInt
-   */
-  private void writeVInt(int v) {
-    final int len = LazyBinaryUtils.writeVLongToByteArray(vLongBytes, v);
-    output.write(vLongBytes, 0, len);
-  }
-
-  private void writeVLong(long v) {
-    final int len = LazyBinaryUtils.writeVLongToByteArray(vLongBytes, v);
-    output.write(vLongBytes, 0, len);
   }
 
   @Override
@@ -491,8 +440,8 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
       output.reserve(4);
       current.start = output.getLength();
     }
-    // 2/ write the size of the list as a VInt
-    LazyBinaryUtils.writeVInt(output, size);
+    // 2/ write the element count as a fixed-width integer
+    output.appendInt(size);
 
     // 3/ write the null bytes
     byte nullByte = 0;
@@ -541,10 +490,10 @@ public class LazyBinarySerializeWrite implements SerializeWrite {
       current.start = output.getLength();
     }
 
-    // 2/ write the size of the map which is a VInt
+    // 2/ write the entry count as a fixed-width integer
     final int size = map.size();
     current.fieldIndex = size;
-    LazyBinaryUtils.writeVInt(output, size);
+    output.appendInt(size);
 
     // 3/ write the null bytes
     int b = 0;

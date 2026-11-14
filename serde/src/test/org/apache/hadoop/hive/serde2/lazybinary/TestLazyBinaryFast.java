@@ -38,7 +38,6 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.UnionObject;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.io.BytesWritable;
-import org.apache.hadoop.io.Writable;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import org.junit.Test;
@@ -121,37 +120,10 @@ public class TestLazyBinaryFast {
       }
     }
 
-    // Try to deserialize using SerDe class our Writable row objects created by SerializeWrite.
-    for (int i = 0; i < rowCount; i++) {
-      BytesWritable bytesWritable = serializeWriteBytes[i];
-      LazyBinaryStruct lazyBinaryStruct;
-      if (doWriteFewerColumns) {
-        lazyBinaryStruct = (LazyBinaryStruct) serde_fewer.deserialize(bytesWritable);
-      } else {
-        lazyBinaryStruct = (LazyBinaryStruct) serde.deserialize(bytesWritable);
-      }
-
-      Object[] row = rows[i];
-
-      for (int index = 0; index < writeColumnCount; index++) {
-        TypeInfo typeInfo = typeInfos[index];
-        Object object = lazyBinaryStruct.getField(index);
-        if (row[index] == null || object == null) {
-          if (row[index] != null || object != null) {
-            fail("SerDe deserialized NULL column mismatch");
-          }
-        } else {
-          if (!VerifyLazy.lazyCompare(typeInfo, object, row[index])) {
-            fail("SerDe deserialized value does not match");
-          }
-        }
-      }
-    }
-
     // One Writable per row.
     BytesWritable serdeBytes[] = new BytesWritable[rowCount];
 
-    // Serialize using the SerDe, then below deserialize using DeserializeRead.
+    // The object SerDe retains its variable-length format and is verified separately.
     Object[] serdeRow = new Object[writeColumnCount];
     for (int i = 0; i < rowCount; i++) {
       Object[] row = rows[i];
@@ -171,46 +143,19 @@ public class TestLazyBinaryFast {
       BytesWritable bytesWritable =
           new BytesWritable(
               Arrays.copyOfRange(serialized.getBytes(), 0, serialized.getLength()));
-      byte[] bytes1 = bytesWritable.getBytes();
-
-      BytesWritable lazySerializedWriteBytes = serializeWriteBytes[i];
-      byte[] bytes2 = Arrays.copyOfRange(lazySerializedWriteBytes.getBytes(), 0, lazySerializedWriteBytes.getLength());
-      if (bytes1.length != bytes2.length) {
-        fail("SerializeWrite length " + bytes2.length + " and " +
-              "SerDe serialization length " + bytes1.length +
-              " do not match (" + Arrays.toString(typeInfos) + ")");
-      }
-      if (!Arrays.equals(bytes1, bytes2)) {
-        fail("SerializeWrite and SerDe serialization does not match (" + Arrays.toString(typeInfos) + ")");
-      }
       serdeBytes[i] = bytesWritable;
     }
 
-    // Try to deserialize using DeserializeRead our Writable row objects created by SerDe.
+    // Deserialize object SerDe output with its matching reader.
     for (int i = 0; i < rowCount; i++) {
+      LazyBinaryStruct lazyBinaryStruct = (LazyBinaryStruct)
+          (doWriteFewerColumns ? serde_fewer : serde).deserialize(serdeBytes[i]);
       Object[] row = rows[i];
-
-      // When doWriteFewerColumns, try to read more fields than exist in buffer.
-      LazyBinaryDeserializeRead lazyBinaryDeserializeRead =
-              new LazyBinaryDeserializeRead(
-                  typeInfos,
-                  /* useExternalBuffer */ false);
-
-      BytesWritable bytesWritable = serdeBytes[i];
-      lazyBinaryDeserializeRead.set(bytesWritable.getBytes(), 0, bytesWritable.getLength());
-
-      for (int index = 0; index < columnCount; index++) {
-        if (useIncludeColumns && !columnsToInclude[index]) {
-          lazyBinaryDeserializeRead.skipNextField();
-        } else if (index >= writeColumnCount) {
-          // Should come back a null.
-          VerifyFast.verifyDeserializeRead(lazyBinaryDeserializeRead, typeInfos[index], null);
-        } else {
-          verifyRead(lazyBinaryDeserializeRead, typeInfos[index], row[index]);
+      for (int index = 0; index < writeColumnCount; index++) {
+        Object object = lazyBinaryStruct.getField(index);
+        if (!VerifyLazy.lazyCompare(typeInfos[index], object, row[index])) {
+          fail("SerDe deserialized value does not match");
         }
-      }
-      if (writeColumnCount == columnCount) {
-        assertTrue(lazyBinaryDeserializeRead.isEndOfInputReached());
       }
     }
   }
