@@ -52,7 +52,10 @@ final class VectorGroupByLongHashTable {
    * Returns the matching slot, or the bitwise complement of an insertion slot.
    */
   int findSlot(long key, int hashCode) {
-    assert numEntries + numDeleted <= resizeThreshold && resizeThreshold < values.length;
+    assert keys.length == values.length && Integer.bitCount(values.length) == 1;
+    assert numEntries >= 0 && numDeleted >= 0 &&
+        numEntries + numDeleted <= resizeThreshold && resizeThreshold < values.length;
+    assert hashCode == HashCodeUtil.calculateLongHashCode(key);
     int mask = values.length - 1;
     int slot = (hashCode ^ (hashCode >>> 16)) & mask;
     int firstDeleted = -1;
@@ -76,6 +79,7 @@ final class VectorGroupByLongHashTable {
   void put(long key, int hashCode, int insertionSlot, VectorAggregationBufferRow value) {
     assert value != null && value != DELETED;
     assert values[insertionSlot] == null || values[insertionSlot] == DELETED;
+    assert insertionSlot == ~findSlot(key, hashCode);
     if (numEntries + 1 > resizeThreshold) {
       rehash(Math.multiplyExact(values.length, 2));
       insertionSlot = ~findSlot(key, hashCode);
@@ -90,6 +94,9 @@ final class VectorGroupByLongHashTable {
     keys[insertionSlot] = key;
     values[insertionSlot] = value;
     ++numEntries;
+    assert numEntries + numDeleted <= resizeThreshold;
+    assert findSlot(key, hashCode) == insertionSlot;
+    assert getValue(insertionSlot) == value;
   }
 
   VectorAggregationBufferRow getValue(int slot) {
@@ -121,6 +128,7 @@ final class VectorGroupByLongHashTable {
     values[slot] = DELETED;
     --numEntries;
     ++numDeleted;
+    assert numEntries >= 0 && numEntries + numDeleted <= resizeThreshold;
   }
 
   int size() {
@@ -145,6 +153,7 @@ final class VectorGroupByLongHashTable {
     if (numEntries == 0) {
       Arrays.fill(values, null);
       numDeleted = 0;
+      assert checkInvariants();
     } else if (numDeleted > numEntries) {
       rehash(values.length);
     }
@@ -158,6 +167,7 @@ final class VectorGroupByLongHashTable {
     resizeThreshold = (int) (capacity * MAX_LOAD_FACTOR);
     numDeleted = 0;
     int mask = capacity - 1;
+    int copiedEntries = 0;
     for (int i = 0; i < oldValues.length; ++i) {
       VectorAggregationBufferRow value = oldValues[i];
       if (value != null && value != DELETED) {
@@ -169,8 +179,37 @@ final class VectorGroupByLongHashTable {
         }
         keys[slot] = key;
         values[slot] = value;
+        ++copiedEntries;
       }
     }
+    assert copiedEntries == numEntries;
+    assert checkInvariants();
+  }
+
+  /**
+   * Checks probe reachability and the live/tombstone counts after rehashing.
+   */
+  private boolean checkInvariants() {
+    if (keys.length != values.length || Integer.bitCount(values.length) != 1 ||
+        numEntries < 0 || numDeleted < 0 ||
+        numEntries + numDeleted > resizeThreshold || resizeThreshold >= values.length) {
+      return false;
+    }
+    int liveEntries = 0;
+    int deletedEntries = 0;
+    for (int slot = 0; slot < values.length; ++slot) {
+      VectorAggregationBufferRow value = values[slot];
+      if (value == DELETED) {
+        ++deletedEntries;
+      } else if (value != null) {
+        ++liveEntries;
+        int hashCode = HashCodeUtil.calculateLongHashCode(keys[slot]);
+        if (findSlot(keys[slot], hashCode) != slot) {
+          return false;
+        }
+      }
+    }
+    return liveEntries == numEntries && deletedEntries == numDeleted;
   }
 
   long getEstimatedMemorySize() {
