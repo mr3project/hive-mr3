@@ -54,6 +54,7 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates.VectorAggreg
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperFactory.KeyWrapperType;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLong;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.GroupByDesc;
@@ -329,10 +330,12 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     private Queue<KeyWrapper> reusableKeyWrapperBuffer;
 
     /**
-     * The global key-aggregation hash map.
+     * The global aggregation hash map for generic keys.
      */
     @VisibleForTesting
     Map<KeyWrapper, VectorAggregationBufferRow> mapKeysAggregationBuffers;
+
+    private VectorGroupByLongHashTable longHashTable;
 
     private Queue<VectorAggregationBufferRow> reusableAggregationBufferRows =
         new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
@@ -429,10 +432,15 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
       sumBatchSize = 0;
 
-      if (peakEntriesHintAtStart == null) {
+      assert peakEntriesHintAtStart == null ||
+          peakEntriesHintAtStart > INITIAL_HASH_MAP_ENTRY_THRESHOLD;
+      KeyWrapperType keyWrapperType = keyWrappersBatch.getKeyWrapperType();
+      if (keyWrapperType == KeyWrapperType.SINGLE_LONG) {
+        longHashTable = new VectorGroupByLongHashTable(
+            peakEntriesHintAtStart == null ? 0 : peakEntriesHintAtStart);
+      } else if (peakEntriesHintAtStart == null) {
         mapKeysAggregationBuffers = new HashMap<KeyWrapper, VectorAggregationBufferRow>();
       } else {
-        assert peakEntriesHintAtStart > INITIAL_HASH_MAP_ENTRY_THRESHOLD;
         // do not consider memory limits which the previous VectorGroupByOperator already took care of
         mapKeysAggregationBuffers = HashMap.newHashMap(peakEntriesHintAtStart);
       }
@@ -466,7 +474,6 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       computeMemoryLimits();
       LOG.debug("using hash aggregation processing mode");
 
-      KeyWrapperType keyWrapperType = keyWrappersBatch.getKeyWrapperType();
       if (keyWrapperType == KeyWrapperType.GENERAL ||
           keyWrapperType == KeyWrapperType.GENERAL_LONG_STRING) {
         reusableKeyWrapperBuffer = new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
@@ -599,6 +606,11 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       final int n = keyExpressions.length == 0 ? 1 : batch.size;
       // note - the row mapping is not relevant when aggregationBatchInfo::getDistinctBufferSetCount() == 1
 
+      if (longHashTable != null) {
+        prepareLongBatchAggregationBufferSets(keyWrappers, n);
+        return;
+      }
+
       for (int i=0; i < n; ++i) {
         VectorHashKeyWrapperBase kw = keyWrappers[i];
         VectorAggregationBufferRow aggregationBuffer = mapKeysAggregationBuffers.get(kw);
@@ -621,6 +633,32 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       }
     }
 
+    private void prepareLongBatchAggregationBufferSets(VectorHashKeyWrapperBase[] keyWrappers, int n)
+        throws HiveException {
+      for (int i = 0; i < n; ++i) {
+        VectorHashKeyWrapperSingleLong kw = (VectorHashKeyWrapperSingleLong) keyWrappers[i];
+        boolean isNull = kw.isNull(0);
+        int slot = isNull ? 0 : longHashTable.findSlot(kw.getLongValue(0), kw.hashCode());
+        VectorAggregationBufferRow aggregationBuffer = isNull ? longHashTable.getNullValue() :
+            (slot >= 0 ? longHashTable.getValue(slot) : null);
+        if (aggregationBuffer == null) {
+          aggregationBuffer = allocateAggregationBuffer();
+          if (isNull) {
+            longHashTable.setNullValue(aggregationBuffer);
+          } else {
+            longHashTable.put(kw.getLongValue(0), kw.hashCode(), ~slot, aggregationBuffer);
+          }
+          ++numEntriesHashTable;
+          ++numEntriesSinceCheck;
+        } else {
+          aggregationBuffer.incrementAccessCount();
+          ++totalAccessCount;
+        }
+        aggregationBatchInfo.mapAggregationBufferSet(aggregationBuffer, i);
+      }
+      assert longHashTable.size() == numEntriesHashTable;
+    }
+
     private KeyWrapper cloneKeyWrapper(VectorHashKeyWrapperBase from) {
       if (reusableKeyWrapperBuffer != null && !reusableKeyWrapperBuffer.isEmpty()) {
         KeyWrapper keyWrapper = reusableKeyWrapperBuffer.poll();
@@ -637,10 +675,10 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     private void computeMemoryLimits() {
       JavaDataModel model = JavaDataModel.get();
 
-      fixedHashEntrySize =
-          model.hashMapEntry() +
-          keyWrappersBatch.getKeysFixedSize() +
-          aggregationBatchInfo.getAggregatorsFixedSize();
+      fixedHashEntrySize = aggregationBatchInfo.getAggregatorsFixedSize();
+      if (longHashTable == null) {
+        fixedHashEntrySize += model.hashMapEntry() + keyWrappersBatch.getKeysFixedSize();
+      }
 
       maxMemory = getConf().getMaxMemoryAvailable();    // assume MR3, so do not use MemoryMXBean. Cf. HIVE-20648
       hashTableMemoryPercentage = conf.getGroupByMemoryUsage();
@@ -689,11 +727,13 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
             "Flush %d %s entries:%d fixed:%d variable:%d (used:%dMb max:%dMb) gcCanary:%s",
             entriesToFlush, all ? "(all)" : "",
             numEntriesHashTable, fixedHashEntrySize, avgVariableSize,
-            numEntriesHashTable * (fixedHashEntrySize + avgVariableSize)/1024/1024,
+            getEstimatedHashTableMemory()/1024/1024,
             maxHashTblMemory/1024/1024,
             gcCanary.get() == null ? "dead" : "alive"));
       }
-      if (all) {
+      if (longHashTable != null) {
+        entriesFlushed = flushLongHashTable(all, entriesToFlush);
+      } else if (all) {
         for (Map.Entry<KeyWrapper, VectorAggregationBufferRow> pair :
             mapKeysAggregationBuffers.entrySet()) {
           finishAggregators(pair.getValue(), false);
@@ -741,7 +781,11 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       }
 
       if (all) {
-        mapKeysAggregationBuffers.clear();
+        if (longHashTable != null) {
+          longHashTable.clear();
+        } else {
+          mapKeysAggregationBuffers.clear();
+        }
         totalAccessCount = 0;
         numEntriesHashTable = 0;
         numFlushedOutEntriesBeforeFinalFlush = 0;
@@ -750,6 +794,65 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       if (all && LOG.isDebugEnabled()) {
         LOG.debug(String.format("GC canary caused %d flushes", gcCanaryFlushes));
       }
+    }
+
+    private int flushLongHashTable(boolean all, int entriesToFlush) throws HiveException {
+      VectorHashKeyWrapperSingleLong keyWrapper =
+          (VectorHashKeyWrapperSingleLong) keyWrappersBatch.getVectorHashKeyWrappers()[0];
+      int avgAccess = all ? 0 : computeAvgAccess();
+      int entriesFlushed = 0;
+      // Visit the separate NULL group before the occupied array slots.
+      for (int slot = -1; slot < longHashTable.capacity(); ++slot) {
+        VectorAggregationBufferRow bufferRow = slot == -1 ? longHashTable.getNullValue() :
+            longHashTable.getValue(slot);
+        if (bufferRow == null) {
+          continue;
+        }
+        if (!all && avgAccess >= 1 && bufferRow.getAccessCount() > avgAccess) {
+          totalAccessCount -= bufferRow.getAccessCount();
+          bufferRow.resetAccessCount();
+          continue;
+        }
+
+        finishAggregators(bufferRow, false);
+        if (slot == -1) {
+          keyWrapper.assignNullLong(0, 0);
+        } else {
+          keyWrapper.assignLong(0, 0, longHashTable.getKey(slot));
+        }
+        // writeSingleRow copies the key into outputBatch before this wrapper is reused.
+        writeSingleRow(keyWrapper, bufferRow);
+
+        if (!all) {
+          totalAccessCount -= bufferRow.getAccessCount();
+          reusableAggregationBufferRows.add(bufferRow);
+          bufferRow.resetAccessCount();
+          if (slot == -1) {
+            longHashTable.removeNullValue();
+          } else {
+            longHashTable.remove(slot);
+          }
+          --numEntriesHashTable;
+          if (++entriesFlushed >= entriesToFlush) {
+            break;
+          }
+        }
+      }
+      if (!all) {
+        longHashTable.compact();
+        assert longHashTable.size() == numEntriesHashTable;
+      }
+      return entriesFlushed;
+    }
+
+    private long getEstimatedHashTableMemory() {
+      // Keep the existing active-aggregation estimate; charge allocated primitive-table storage
+      // separately because partial flushing does not release its arrays.
+      long memory = numEntriesHashTable * (fixedHashEntrySize + avgVariableSize);
+      if (longHashTable != null) {
+        memory += longHashTable.getEstimatedMemorySize();
+      }
+      return memory;
     }
 
     /**
@@ -767,7 +870,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         updateAvgVariableSize(batch);
         numEntriesSinceCheck = 0;
       }
-      long currMemUsed = numEntriesHashTable * (fixedHashEntrySize + avgVariableSize);
+      long currMemUsed = getEstimatedHashTableMemory();
       // Protect against low maxHtEntries setting: if memory usage is below 30% avoid flushing
       if ( ((numEntriesHashTable > this.maxHtEntries) && (currMemUsed > 0.3 * maxHashTblMemory))  ||
           currMemUsed > maxHashTblMemory) {
