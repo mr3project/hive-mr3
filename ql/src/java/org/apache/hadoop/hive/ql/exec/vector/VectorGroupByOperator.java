@@ -797,10 +797,13 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     }
 
     private int flushLongHashTable(boolean all, int entriesToFlush) throws HiveException {
+      assert longHashTable.size() == numEntriesHashTable;
+      int initialEntries = numEntriesHashTable;
       VectorHashKeyWrapperSingleLong keyWrapper =
           (VectorHashKeyWrapperSingleLong) keyWrappersBatch.getVectorHashKeyWrappers()[0];
       int avgAccess = all ? 0 : computeAvgAccess();
       int entriesFlushed = 0;
+      int rowsEmitted = 0;
       // Visit the separate NULL group before the occupied array slots.
       for (int slot = -1; slot < longHashTable.capacity(); ++slot) {
         VectorAggregationBufferRow bufferRow = slot == -1 ? longHashTable.getNullValue() :
@@ -822,6 +825,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         }
         // writeSingleRow copies the key into outputBatch before this wrapper is reused.
         writeSingleRow(keyWrapper, bufferRow);
+        ++rowsEmitted;
 
         if (!all) {
           totalAccessCount -= bufferRow.getAccessCount();
@@ -840,7 +844,11 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       }
       if (!all) {
         longHashTable.compact();
+        assert rowsEmitted == entriesFlushed;
+        assert initialEntries - entriesFlushed == numEntriesHashTable;
         assert longHashTable.size() == numEntriesHashTable;
+      } else {
+        assert rowsEmitted == initialEntries;
       }
       return entriesFlushed;
     }
