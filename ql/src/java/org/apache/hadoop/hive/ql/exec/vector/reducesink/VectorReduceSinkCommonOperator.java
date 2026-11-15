@@ -74,7 +74,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
   private static final String CLASS_NAME = VectorReduceSinkCommonOperator.class.getName();
   private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
 
-  public static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 1;
+  public static final int NUM_ROWS_THRESHOLD_FOR_BATCH = 0;
   private static final int SERIALIZE_BUFFER_SIZE_FOR_BATCH = 100 * 1024;  // only for single-partition output
   private static final int MIN_VALUE_BYTES_FOR_BATCH = 128;
 
@@ -501,7 +501,7 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
       vectorShufflePartitionOffsets[partition + 1] =
           vectorShufflePartitionOffsets[partition] + vectorShufflePartitionCounts[partition];
       vectorShufflePartitionPositions[partition] = vectorShufflePartitionOffsets[partition];
-      if (vectorShufflePartitionCounts[partition] > NUM_ROWS_THRESHOLD_FOR_BATCH) {
+      if (vectorShufflePartitionCounts[partition] > 1) {
         compactCandidateCount++;
       }
     }
@@ -525,20 +525,27 @@ public abstract class VectorReduceSinkCommonOperator extends TerminalOperator<Re
         WriteValueBytes valueBytes = out.requestWriteValueBytes(vectorShuffleBatchKey, partition);
         int valueLength = 0;
         if (valueBytes != null &&
-            (commonPrefixReady || valueBytes.maxValueBytes > MIN_VALUE_BYTES_FOR_BATCH)) {
+            (rowCount == 1 || commonPrefixReady || valueBytes.maxValueBytes > MIN_VALUE_BYTES_FOR_BATCH)) {
           try {
-            if (!commonPrefixReady) {
-              // Keep this local: repeating flags, nullability, and metadata can change with
-              // the next batch. Preparation also computes the reusable lower-bound terms.
-              vectorShuffleBatchSerializer.setupCommonPrefix(batch,
-                  vectorShuffleBatchColumnMap, valueBytes.buffer, valueBytes.offsetToValueBytes,
-                  compactCandidateCount);
-              commonPrefixReady = true;
+            if (rowCount == 1) {
+              valueLength = vectorShuffleBatchSerializer.serializeSingleRow(batch,
+                  vectorShuffleBatchColumnMap,
+                  vectorShufflePartitionRowIndices[vectorShufflePartitionOffsets[partition]],
+                  valueBytes.buffer, valueBytes.offsetToValueBytes, valueBytes.maxValueBytes);
+            } else {
+              if (!commonPrefixReady) {
+                // Keep this local: repeating flags, nullability, and metadata can change with
+                // the next batch. Preparation also computes the reusable lower-bound terms.
+                vectorShuffleBatchSerializer.setupCommonPrefix(batch,
+                    vectorShuffleBatchColumnMap, valueBytes.buffer, valueBytes.offsetToValueBytes,
+                    compactCandidateCount);
+                commonPrefixReady = true;
+              }
+              // Includes the first partition. Zero means its writer region cannot fit the bound.
+              valueLength = vectorShuffleBatchSerializer.serializePartition(batch,
+                  vectorShufflePartitionRowIndices, vectorShufflePartitionOffsets[partition], rowCount,
+                  valueBytes.buffer, valueBytes.offsetToValueBytes, valueBytes.maxValueBytes);
             }
-            // Includes the first partition. Zero means its writer region cannot fit the bound.
-            valueLength = vectorShuffleBatchSerializer.serializePartition(batch,
-                vectorShufflePartitionRowIndices, vectorShufflePartitionOffsets[partition], rowCount,
-                valueBytes.buffer, valueBytes.offsetToValueBytes, valueBytes.maxValueBytes);
           } catch (ArrayIndexOutOfBoundsException ex) {
             // The bound omits payloads that require scanning; retain overflow fallback.
           }
