@@ -155,6 +155,10 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
   // keep the peak on the operator: hash aggregation can switch to streaming before close
   private transient int peakEntries;
+  private transient long hashMapGetCount;
+  private transient long hashMapHitCount;
+  private transient long hashMapMissCount;
+  private transient long totalBatchDistinctKeys;
   private transient Integer peakEntriesHintAtStart;
   private transient ObjectCache peakEntriesCache;
   // 12 = initial HashMap capacity 16 * HashMap load factor 0.75
@@ -597,12 +601,14 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       VectorHashKeyWrapperBase[] keyWrappers = keyWrappersBatch.getVectorHashKeyWrappers();
 
       final int n = keyExpressions.length == 0 ? 1 : batch.size;
+      hashMapGetCount += n;
       // note - the row mapping is not relevant when aggregationBatchInfo::getDistinctBufferSetCount() == 1
 
       for (int i=0; i < n; ++i) {
         VectorHashKeyWrapperBase kw = keyWrappers[i];
         VectorAggregationBufferRow aggregationBuffer = mapKeysAggregationBuffers.get(kw);
         if (null == aggregationBuffer) {
+          hashMapMissCount++;
           // the probe failed, we must allocate a set of aggregation buffers
           // and push the (keywrapper,buffers) pair into the hash.
           // is very important to clone the keywrapper, the one we have from our
@@ -613,12 +619,14 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
           numEntriesHashTable++;
           numEntriesSinceCheck++;
         } else {
+          hashMapHitCount++;
           // for access tracking
           aggregationBuffer.incrementAccessCount();
           totalAccessCount++;
         }
         aggregationBatchInfo.mapAggregationBufferSet(aggregationBuffer, i);
       }
+      totalBatchDistinctKeys += aggregationBatchInfo.getDistinctBufferSetCount();
     }
 
     private KeyWrapper cloneKeyWrapper(VectorHashKeyWrapperBase from) {
@@ -1242,6 +1250,10 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
   private void initializePeakEntries(Configuration hconf) throws HiveException {
     peakEntries = 0;
+    hashMapGetCount = 0;
+    hashMapHitCount = 0;
+    hashMapMissCount = 0;
+    totalBatchDistinctKeys = 0;
     peakEntriesHintAtStart = null;
     peakEntriesCache = null;
 
@@ -1437,6 +1449,8 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     }
 
     if (vectorDesc.getProcessingMode() == VectorGroupByDesc.ProcessingMode.HASH) {
+      LOG.error("xxxxx {} {} {} {} {}", keyWrappersBatch.getKeyWrapperType(), hashMapGetCount,
+          hashMapHitCount + "/" + hashMapMissCount, totalBatchDistinctKeys, peakEntries);
       LOG.debug("Final peakEntries {} = {}", getOperatorId(), peakEntries);
       if (!aborted && peakEntriesCache != null && peakEntriesHintAtStart == null &&
           peakEntries > INITIAL_HASH_MAP_ENTRY_THRESHOLD) {
