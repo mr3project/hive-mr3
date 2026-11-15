@@ -19,7 +19,6 @@
 package org.apache.hadoop.hive.ql.exec.vector.mapjoin;
 
 import java.io.IOException;
-import java.util.Arrays;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,9 +86,9 @@ public abstract class VectorMapJoinInnerBigOnlyGenerateResultOperator
   // Pre-allocated member for storing index into the hashMultiSetResults for each spilled row.
   protected transient int[] spillHashMapResultIndices;
 
-  private transient long[] repeatedBatchCounts;
-  private transient int[] repeatedBatchSizes;
-  private transient int repeatedBatchCount;
+  private transient long totalRepeatedCount;
+  private transient long totalRepeatedBatchSize;
+  private transient long numRepeatedBatches;
 
   /** Kryo ctor. */
   protected VectorMapJoinInnerBigOnlyGenerateResultOperator() {
@@ -295,7 +294,9 @@ public abstract class VectorMapJoinInnerBigOnlyGenerateResultOperator
           VectorMapJoinHashMultiSetResult hashMultiSetResult) throws HiveException {
 
     long count = hashMultiSetResult.count();
-    recordRepeatedBatch(count, batch.size);
+    totalRepeatedCount += count;
+    totalRepeatedBatchSize += batch.size;
+    numRepeatedBatches++;
 
     if (batch.selectedInUse) {
       // The selected array is already filled in as we want it.
@@ -316,28 +317,12 @@ public abstract class VectorMapJoinInnerBigOnlyGenerateResultOperator
     return 0;
   }
 
-  private void recordRepeatedBatch(long count, int batchSize) {
-    if (repeatedBatchCounts == null) {
-      repeatedBatchCounts = new long[16];
-      repeatedBatchSizes = new int[16];
-    } else if (repeatedBatchCount == repeatedBatchCounts.length) {
-      repeatedBatchCounts = Arrays.copyOf(repeatedBatchCounts, repeatedBatchCount * 2);
-      repeatedBatchSizes = Arrays.copyOf(repeatedBatchSizes, repeatedBatchCount * 2);
-    }
-    repeatedBatchCounts[repeatedBatchCount] = count;
-    repeatedBatchSizes[repeatedBatchCount] = batchSize;
-    repeatedBatchCount++;
-  }
-
   @Override
   public void closeOp(boolean aborted) throws HiveException {
     super.closeOp(aborted);
-    for (int i = 0; i < repeatedBatchCount; ++i) {
-      LOG.error("yyyyy {} {}", repeatedBatchCounts[i], repeatedBatchSizes[i]);
-    }
-    repeatedBatchCounts = null;
-    repeatedBatchSizes = null;
-    repeatedBatchCount = 0;
+    double avgBatchSize = numRepeatedBatches == 0 ? 0.0 :
+        (double) totalRepeatedBatchSize / numRepeatedBatches;
+    LOG.error("yyyyy {} {}", totalRepeatedCount, avgBatchSize);
   }
 
   protected void finishInnerBigOnlyRepeated(VectorizedRowBatch batch, JoinUtil.JoinResult joinResult,
