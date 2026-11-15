@@ -17,7 +17,6 @@
  */
 package org.apache.hadoop.hive.ql.exec.vector;
 
-import static org.apache.hadoop.hive.ql.exec.vector.reducesink.VectorReduceSinkCommonOperator.NUM_ROWS_THRESHOLD_FOR_BATCH;
 import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
 import static org.apache.tez.util.FastByteComparisons.theUnsafe;
 
@@ -28,19 +27,21 @@ import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
 /**
  * Serializes the active rows of selected columns from a {@link VectorizedRowBatch}.
  *
- * <p>The receiver is expected to know the column schema. Selected rows
+ * The receiver is expected to know the column schema. Selected rows
  * are compacted in logical order, inactive rows and unselected columns are omitted, null values are
  * omitted, and repeating columns are represented by a single value. Primitive, list, map, struct, and
- * union vectors are supported recursively.</p>
+ * union vectors are supported recursively.
  *
- * <p>Call {@link #initialize(ColumnVector[], int[])} before serializing to set the schema and
+ * Call {@link #initialize(ColumnVector[], int[])} before serializing to set the schema and
  * column mapping and reuse schema metadata and scratch arrays. Call it again when the schema
- * or mapping changes.</p>
+ * or mapping changes.
  *
- * <p>Frames contain the common prefix described by {@link VectorShuffleBatchHeader}, followed by
+ * Singleton frames contain format flags, runtime metadata, and ordinary column payloads.
+ * Other frames contain format flags and the common prefix described by
+ * {@link VectorShuffleBatchHeader}, followed by
  * the partition row count, nested-repetition flag, and ordinary column payloads. Prepare the prefix
  * once with {@link #setupCommonPrefix(VectorizedRowBatch, int[], byte[], int, int)} to reuse it across
- * multiple compact partitions of the same input batch.</p>
+ * multiple compact partitions of the same input batch.
  */
 public final class VectorShuffleBatchSerializer {
 
@@ -56,6 +57,8 @@ public final class VectorShuffleBatchSerializer {
   private int columnCount;
   private int bitmapLength;
   private int commonHeaderSize;
+  private int[] sourceColumnMap;
+  private long singleRowMinimumBytes;
   private int[] repeatingColumns;
   private int[] ordinaryColumns;
   // subtree sizes in logical output order, including duplicate mappings
@@ -89,9 +92,11 @@ public final class VectorShuffleBatchSerializer {
   public void initialize(ColumnVector[] columns, int[] sourceColumnMap) {
     firstPartitionReady = false;
     metadata = new VectorShuffleBatchMetadata(columns, sourceColumnMap);
+    this.sourceColumnMap = sourceColumnMap;
     columnCount = sourceColumnMap.length;
     bitmapLength = (columnCount + 7) / 8;
-    commonHeaderSize = Integer.BYTES + bitmapLength + metadata.getByteCount();
+    commonHeaderSize = Byte.BYTES + Integer.BYTES + bitmapLength + metadata.getByteCount();
+    singleRowMinimumBytes = Byte.BYTES + metadata.getByteCount();
     if (repeatingColumns == null || repeatingColumns.length != columnCount) {
       repeatingColumns = new int[columnCount];
       ordinaryColumns = new int[columnCount];
@@ -99,6 +104,7 @@ public final class VectorShuffleBatchSerializer {
     columnNodeCounts = new long[columnCount];
     for (int logical = 0; logical < columnCount; logical++) {
       columnNodeCounts[logical] = countColumnNodes(columns[sourceColumnMap[logical]]);
+      singleRowMinimumBytes += columnNodeCounts[logical];
     }
   }
 
@@ -123,7 +129,7 @@ public final class VectorShuffleBatchSerializer {
    */
   public void setupCommonPrefix(VectorizedRowBatch source, int[] sourceColumnMap,
       byte[] buffer, int position, int compactCandidateCount) {
-    assert source.size > NUM_ROWS_THRESHOLD_FOR_BATCH;
+    assert source.size > 1;
     assert compactCandidateCount > 0;
     reset(buffer, position);
 
@@ -168,6 +174,10 @@ public final class VectorShuffleBatchSerializer {
    */
   public int serializePartition(VectorizedRowBatch source, int[] rowIndices,
       int rowOffset, int rowCount, byte[] buffer, int position, int maxValueBytes) {
+    if (rowCount == 1) {
+      return serializeSingleRow(source, sourceColumnMap, rowIndices[rowOffset], buffer, position,
+          maxValueBytes);
+    }
     if (maxValueBytes < getCommonPartitionLowerBound(rowCount)) {
       firstPartitionReady = false;
       return 0;
@@ -181,8 +191,11 @@ public final class VectorShuffleBatchSerializer {
    */
   public int serializePartition(VectorizedRowBatch source, int[] rowIndices,
       int rowOffset, int rowCount, byte[] buffer, int position) {
+    if (rowCount == 1) {
+      return serializeSingleRow(source, sourceColumnMap, rowIndices[rowOffset], buffer, position);
+    }
     CommonPrefix prefix = commonPrefix;
-    assert rowCount > NUM_ROWS_THRESHOLD_FOR_BATCH;
+    assert rowCount > 1;
     assert rowIndices != null && rowOffset >= 0 && rowCount <= rowIndices.length - rowOffset;
 
     if (firstPartitionReady && this.buffer == buffer && this.position - position == prefix.length) {
@@ -205,6 +218,10 @@ public final class VectorShuffleBatchSerializer {
 
   private int serializeColumns(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
       int rowOffset, int rowCount, byte[] buffer, int position) {
+    if (rowCount == 1) {
+      int physicalRow = rowIndices == null ? rowOffset : rowIndices[rowOffset];
+      return serializeSingleRow(source, sourceColumnMap, physicalRow, buffer, position);
+    }
     reset(buffer, position);
     int ordinaryCount = writeCommonPrefix(
         source, sourceColumnMap, rowIndices, rowOffset, rowCount, null);
@@ -213,16 +230,90 @@ public final class VectorShuffleBatchSerializer {
     return this.position - position;
   }
 
+  /** Write one selected row without constructing a common prefix or grouping columns. */
+  public int serializeSingleRow(VectorizedRowBatch source, int[] sourceColumnMap, int physicalRow,
+      byte[] buffer, int position) {
+    reset(buffer, position);
+    ensureCapacity(Byte.BYTES + metadata.getByteCount());
+    writeByte(VectorShuffleBatchHeader.SINGLE_ROW);
+    metadata.write(source.cols, buffer, this.position);
+    this.position += metadata.getByteCount();
+    nestedRepeating = false;
+    for (int sourceColumn : sourceColumnMap) {
+      writeSingleColumn(source.cols[sourceColumn], physicalRow);
+    }
+    if (nestedRepeating) {
+      buffer[position] |= VectorShuffleBatchHeader.SINGLE_ROW_NESTED_REPEATING;
+    }
+    return this.position - position;
+  }
+
+  /** Reject writer regions that cannot fit even the singleton header and column flags. */
+  public int serializeSingleRow(VectorizedRowBatch source, int[] sourceColumnMap, int physicalRow,
+      byte[] buffer, int position, int maxValueBytes) {
+    if (maxValueBytes < singleRowMinimumBytes) {
+      return 0;
+    }
+    return serializeSingleRow(source, sourceColumnMap, physicalRow, buffer, position);
+  }
+
+  private void writeSingleColumn(ColumnVector column, int physicalRow) {
+    if (column instanceof StructColumnVector || column instanceof UnionColumnVector
+        || column instanceof MultiValuedColumnVector) {
+      // A single collection row can still contain multiple repeating child values.
+      writeColumn(column, null, physicalRow, 1, false);
+      return;
+    }
+
+    int index = column.isRepeating ? 0 : physicalRow;
+    boolean isNull = !column.noNulls && column.isNull[index];
+    ensureCapacity(Byte.BYTES + (isNull ? Byte.BYTES : 0));
+    writeByte((column instanceof Decimal64ColumnVector ? IS_DECIMAL_64 : 0)
+        | (isNull ? HAS_NULLS : 0));
+    if (isNull) {
+      writeByte(1);
+    } else if (column instanceof BytesColumnVector) {
+      BytesColumnVector bytes = (BytesColumnVector) column;
+      int length = bytes.length[index];
+      int valueOffset = position + Integer.BYTES;
+      System.arraycopy(bytes.vector[index], bytes.start[index], buffer, valueOffset, length);
+      theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position, length);
+      position = valueOffset + length;
+    } else if (column instanceof TimestampColumnVector) {
+      TimestampColumnVector timestamp = (TimestampColumnVector) column;
+      ensureCapacity(Long.BYTES + Integer.BYTES);
+      writeLong(timestamp.time[index]);
+      writeInt(timestamp.nanos[index]);
+    } else if (column instanceof IntervalDayTimeColumnVector) {
+      ensureCapacity(Long.BYTES + Integer.BYTES);
+      HiveIntervalDayTime interval =
+          ((IntervalDayTimeColumnVector) column).asScratchIntervalDayTime(index);
+      writeLong(interval.getTotalSeconds());
+      writeInt(interval.getNanos());
+    } else if (column instanceof DecimalColumnVector) {
+      position += ((DecimalColumnVector) column).vector[index].writeDirect(buffer, position);
+    } else if (column instanceof LongColumnVector) {
+      ensureCapacity(Long.BYTES);
+      writeLong(((LongColumnVector) column).vector[index]);
+    } else if (column instanceof DoubleColumnVector) {
+      ensureCapacity(Double.BYTES);
+      writeDouble(((DoubleColumnVector) column).vector[index]);
+    } else {
+      assert column instanceof VoidColumnVector;
+    }
+  }
+
   private int writeCommonPrefix(VectorizedRowBatch source, int[] sourceColumnMap, int[] rowIndices,
       int rowOffset, int rowCount, CommonPrefix prefix) {
     // add Integer.BYTES for writeInt() when repeatingCount != 0
     ensureCapacity(commonHeaderSize + Integer.BYTES);   // once per common prefix
+    writeByte(0);
     theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + position, columnCount);
 
     // Bits refer to the sourceColumnMap's logical order, least significant bit first.
     final int bitmapOffset = position + Integer.BYTES;
     final int metadataOffset = bitmapOffset + bitmapLength;
-    position += commonHeaderSize;
+    position += commonHeaderSize - Byte.BYTES;
     Arrays.fill(buffer, bitmapOffset, metadataOffset, (byte) 0);
 
     int repeatingCount = 0;

@@ -590,9 +590,11 @@ final class VectorShuffleBatchTestSupport {
     assertEquals(context, scenarios.length, actual.projectionSize);
     for (int column = 0; column < scenarios.length; column++) {
       assertEquals(context, column, actual.projectedColumns[column]);
-      assertNestedRepeatingColumn(scenarios[column], actual.cols[column], actual.size,
-          standalone || scenarios[column].source.cols[0].isRepeating,
-          context + ", column=" + column);
+      NestedRepeatingCase scenario = scenarios[column];
+      boolean preserveRepeating = standalone
+          || (scenario.source.size > 1 && scenario.source.cols[0].isRepeating);
+      assertNestedRepeatingColumn(scenario, actual.cols[column], actual.size,
+          preserveRepeating, context + ", column=" + column);
     }
   }
 
@@ -710,7 +712,10 @@ final class VectorShuffleBatchTestSupport {
     assertEquals(context, expected.size(), result.size);
     assertFalse(context, result.selectedInUse);
     ColumnVector actual = result.cols[0];
-    assertEquals(context, scenario.columnLayout.isRepeating, actual.isRepeating);
+    // A repeating source column with one row can decode into either layout.
+    if (scenario.size() != 1 || !scenario.columnLayout.isRepeating) {
+      assertEquals(context, scenario.columnLayout.isRepeating, actual.isRepeating);
+    }
     for (int logical = 0; logical < expected.size(); logical++) {
       int actualIndex = actual.isRepeating ? 0 : logical;
       boolean actualIsNull = !actual.noNulls && actual.isNull[actualIndex];
@@ -2062,6 +2067,7 @@ final class VectorShuffleBatchTestSupport {
       boolean utc = (metadataMode & 1) != 0;
       boolean proleptic = (metadataMode & 2) != 0;
       int rowCapacity = random.nextBoolean() ? 32 : 64;
+      int repetitionMode = iteration % 4;
       List<Integer> rowCounts = new ArrayList<>();
       List<ExpectedSequenceBatch> expectedBatches = new ArrayList<>();
       int frameCount = 2 + random.nextInt(7);
@@ -2069,6 +2075,10 @@ final class VectorShuffleBatchTestSupport {
       case FITS:
         addSequenceBatch(random, rowCounts, expectedBatches, frameCount,
             fittingSequenceRows(random, frameCount, rowCapacity), SequenceFlushReason.FINAL_FLUSH);
+        if (repetitionMode == 0) {
+          // Singleton frames can accumulate with multi-row frames that have no repeating columns.
+          rowCounts.set(iteration / 4 % frameCount, 1);
+        }
         break;
       case ROW_LIMIT_EXACT:
         addSequenceBatch(random, rowCounts, expectedBatches, frameCount,
@@ -2120,7 +2130,6 @@ final class VectorShuffleBatchTestSupport {
         // This extra dense STRING lets the test size real payloads to the serialized-byte limit.
         adapters[paddingColumn] = stringAdapter();
       }
-      int repetitionMode = iteration % 4;
       int repeatedNullPattern = iteration / 4 % 3;
       boolean[] repeating = new boolean[adapters.length];
       NullableValue<?>[] representatives = new NullableValue<?>[adapters.length];
@@ -2171,7 +2180,7 @@ final class VectorShuffleBatchTestSupport {
     expectedBatches.add(new ExpectedSequenceBatch(firstFrame, rowCounts.size(), reason));
   }
 
-  /** Random positive composition with at least two rows in every compact frame. */
+  /** Random composition with at least two rows per part. */
   static void addSequenceRows(Random random, List<Integer> rowCounts, int frameCount, int rows) {
     assert rows >= 2 * frameCount;
     int remaining = rows;
@@ -2209,7 +2218,7 @@ final class VectorShuffleBatchTestSupport {
           // Disjoint row IDs make lost/reordered/duplicated rows observable across the sequence.
           value = new NullableValue<>(false, frameNumber * 100000L + logical);
         } else {
-          // Pattern 2 always contains NULL and non-NULL rows, even for the minimum size two.
+          // For two or more rows, pattern 2 always contains NULL and non-NULL rows.
           boolean isNull = column != paddingColumn && (nullPattern == 1 || nullPattern == 2
               && (logical < 2 ? logical == (column + frameNumber) % 2 : random.nextInt(5) == 0));
           Object generated = isNull ? null

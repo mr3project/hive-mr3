@@ -339,7 +339,7 @@ public class TestVectorShuffleBatchAccumulator {
           VectorShuffleBatchAccumulatingDeserializer accumulating =
               new VectorShuffleBatchAccumulatingDeserializer(result, 1);
           VectorShuffleBatchHeader header = accumulating.readHeader(serialized);
-          if (scenario.size() > 1 && scenario.size() < accumulating.getAppendCapacity()
+          if (scenario.size() > 0 && scenario.size() < accumulating.getAppendCapacity()
               && !header.hasNestedRepeating()) {
             accumulating.append(serialized, result);
             assertColumnRoundTrip(expected, scenario, result, adapter, context + ", first append");
@@ -398,7 +398,7 @@ public class TestVectorShuffleBatchAccumulator {
         new VectorShuffleBatchAccumulatingDeserializer(result, scenarios.length);
     assertEquals(context, expectedNestedRepeating, decoder.readHeader(frame).hasNestedRepeating());
     // Choose the path from the case's independent oracle, never from the decoded flag.
-    if (expectedNestedRepeating || source.size == 1) {
+    if (expectedNestedRepeating) {
       decoder.deserializeWithHeader(frame, result);
       assertNestedRepeatingBatch(scenarios, result, 1, true, context + ", standalone");
     } else {
@@ -409,8 +409,8 @@ public class TestVectorShuffleBatchAccumulator {
           assertTrue(context, decoder.isCompatible());
         }
         decoder.append(frame, result);
-        // Repeated top-level columns retain their representation; appended ordinary columns
-        // normalize every nested zero/singleton repeating child, including inactive fields.
+        // Top-level repeating columns with multiple rows retain their representation.
+        // Appended ordinary columns normalize repetition for zero or one value.
         assertNestedRepeatingBatch(scenarios, result, copies, false,
             context + ", append=" + copies);
       }
@@ -427,7 +427,7 @@ public class TestVectorShuffleBatchAccumulator {
     VectorShuffleBatchAccumulatingDeserializer decoder =
         new VectorShuffleBatchAccumulatingDeserializer(destination, sourceColumnMap.length);
     VectorShuffleBatchHeader header = decoder.readHeader(serialized);
-    if (source.size > 1 && source.size < decoder.getAppendCapacity()
+    if (source.size > 0 && source.size < decoder.getAppendCapacity()
         && !header.hasNestedRepeating()) {
       decoder.append(serialized, destination);
     } else {
@@ -555,7 +555,7 @@ public class TestVectorShuffleBatchAccumulator {
     String context = sequence.context;
     for (int frame = 0; frame < lengths.length; frame++) {
       int rows = sequence.frames.get(frame).source.size;
-      assertTrue(context + ", compact frame=" + frame, rows > 1 && rows < sequence.rowCapacity);
+      assertTrue(context + ", compact frame=" + frame, rows > 0 && rows < sequence.rowCapacity);
       assertTrue(context + ", frame byte budget=" + frame,
           lengths[frame] > 0 && lengths[frame] < VectorizedRowBatch.DEFAULT_BYTES);
     }
@@ -717,7 +717,6 @@ public class TestVectorShuffleBatchAccumulator {
     header.read(frame, source.numCols,
         new VectorShuffleBatchMetadata(source.cols, source.numCols).getByteCount());
     assertEquals(context, source.size, header.getRowCount());
-    assertTrue(context, source.size > 1);
     assertFalse(context, header.hasNestedRepeating());
   }
 

@@ -58,12 +58,22 @@ public final class VectorShuffleBatchDeserializer {
   // IOException is for handling in-transit data corruption.
   public void deserialize(BytesWritable serialized, VectorizedRowBatch destination)
       throws IOException {
-    if (serialized.getLength() < Integer.BYTES) {
+    if (serialized.getLength() < Byte.BYTES) {
       throw new IOException("Truncated vector shuffle batch header");
     }
 
-    final int columnCount = theUnsafe.getInt(serialized.getBytesRaw(),
-        BYTE_ARRAY_BASE_OFFSET + serialized.getOffset());
+    final boolean singleRow = (serialized.getBytesRaw()[serialized.getOffset()]
+        & VectorShuffleBatchHeader.SINGLE_ROW) != 0;
+    final int columnCount;
+    if (singleRow) {
+      columnCount = fixedSchema ? inputColumnCount : destination.projectionSize;
+    } else {
+      if (serialized.getLength() < Byte.BYTES + Integer.BYTES) {
+        throw new IOException("Truncated vector shuffle batch header");
+      }
+      columnCount = theUnsafe.getInt(serialized.getBytesRaw(),
+          BYTE_ARRAY_BASE_OFFSET + serialized.getOffset() + Byte.BYTES);
+    }
     if (columnCount < 0 || columnCount > destination.cols.length) {
       throw new IOException("Invalid vector shuffle batch column count " + columnCount);
     }
