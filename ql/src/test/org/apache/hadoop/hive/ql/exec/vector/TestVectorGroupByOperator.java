@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.vector;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.spy;
@@ -29,6 +30,7 @@ import static org.mockito.Mockito.verify;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -45,7 +47,6 @@ import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.llap.io.api.LlapProxy;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
-import org.apache.hadoop.hive.ql.exec.KeyWrapper;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorFactory;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.ConstantVectorExpression;
@@ -699,7 +700,7 @@ public class TestVectorGroupByOperator {
   }
 
   @Test
-  public void testRollupAggregationWithFlush() throws HiveException {
+  public void testRollupAggregationWithFlush() throws HiveException, ReflectiveOperationException {
 
     List<String> mapColumnNames = new ArrayList<String>();
     mapColumnNames.add("k1");
@@ -737,74 +738,60 @@ public class TestVectorGroupByOperator {
     // Set really low check interval setting
     hconf.set("hive.groupby.mapaggr.checkinterval", "10");
     hconf.set("hive.vectorized.groupby.checkinterval", "10");
+    // Visit every group during the partial flush so the checks do not depend on bucket order.
+    hconf.setFloatVar(HiveConf.ConfVars.HIVE_VECTORIZATION_GROUPBY_FLUSH_PERCENT, 1.0f);
 
     Operator<? extends OperatorDesc> groupByOp = OperatorFactory.get(cCtx, desc);
 
     VectorGroupByOperator vgo =
         (VectorGroupByOperator) Vectorizer.vectorizeGroupByOperator(groupByOp, ctx, vectorDesc);
 
-    FakeCaptureVectorToRowOutputOperator out = FakeCaptureVectorToRowOutputOperator.addCaptureOutputChild(cCtx, vgo);
+    FakeCaptureVectorToRowOutputOperator.addCaptureOutputChild(cCtx, vgo);
     vgo.initialize(hconf, null);
 
-    //Get the processing mode
     VectorGroupByOperator.ProcessingModeHashAggregate processingMode =
         (VectorGroupByOperator.ProcessingModeHashAggregate) vgo.processingMode;
-    // No changes to the size of the hashtable due to grouping sets.
-    assertEquals(1000000,
-        ((VectorGroupByOperator.ProcessingModeHashAggregate)vgo.processingMode).getMaxHtEntries());
-
-    this.outputRowCount = 0;
-    out.setOutputInspector(new FakeCaptureVectorToRowOutputOperator.OutputInspector() {
-      @Override
-      public void inspectRow(Object row, int tag) throws HiveException {
-        ++outputRowCount;
-      }
-    });
+    assertEquals(1000000, processingMode.getMaxHtEntries());
+    Field hashTableField = VectorGroupByOperator.ProcessingModeHashAggregate.class.getDeclaredField("hashTable");
+    hashTableField.setAccessible(true);
+    VectorGroupByThreeLongHashTable hashTable = (VectorGroupByThreeLongHashTable) hashTableField.get(processingMode);
+    assertNotNull(hashTable);
 
     FakeVectorRowBatchFromObjectIterables data = getDataForRollup();
+    int rowsProcessed = 0;
+    while (rowsProcessed < 100) {
+      VectorizedRowBatch batch = data.produceNextBatch();
+      rowsProcessed += batch.size;
+      vgo.process(batch, 0);
+    }
 
-    long countRowsProduced = 0;
-    long numElementsToBeRetained = 0;
-    int avgAccess = 0;
-    for (VectorizedRowBatch unit: data) {
-      countRowsProduced += unit.size;
-      vgo.process(unit,  0);
-
-      if (countRowsProduced >= 100) {
-        // note down avg access
-        avgAccess = processingMode.computeAvgAccess();
-        numElementsToBeRetained = getElementsHigherThan(processingMode.mapKeysAggregationBuffers, avgAccess);
-        // trigger flush explicitly on next iteration
-        processingMode.gcCanary.clear();
-        break;
+    int entriesBeforeFlush = hashTable.size();
+    int avgAccess = processingMode.computeAvgAccess();
+    // The grouping-set ID is non-null, so all groups are stored in the regular slots.
+    VectorAggregationBufferRow[] buffersBeforeFlush = hashTable.values.clone();
+    List<Integer> frequentSlots = new ArrayList<>();
+    for (int slot = 0; slot < buffersBeforeFlush.length; ++slot) {
+      VectorAggregationBufferRow buffer = buffersBeforeFlush[slot];
+      if (buffer != null && buffer.getAccessCount() > avgAccess) {
+        frequentSlots.add(slot);
       }
     }
+    assertTrue("Expected frequently accessed groups before the flush", !frequentSlots.isEmpty());
 
-    // This processing would trigger flush
-    for (VectorizedRowBatch unit: data) {
-      long zeroAccessBeforeFlush = getElementsWithZeroAccess(processingMode.mapKeysAggregationBuffers);
-      vgo.process(unit,  0);
-      long freqElementsAfterFlush = getElementsHigherThan(processingMode.mapKeysAggregationBuffers, avgAccess);
+    VectorizedRowBatch batch = data.produceNextBatch();
+    int batchSize = batch.size;
+    processingMode.gcCanary.clear();
+    vgo.process(batch, 0);
 
-      assertTrue("After flush: " + freqElementsAfterFlush + ", before flush: " + numElementsToBeRetained,
-          (freqElementsAfterFlush >= numElementsToBeRetained));
-
-      // ensure that freq elements are reset for providing chance for others
-      long zeroAccessAfterFlush = getElementsWithZeroAccess(processingMode.mapKeysAggregationBuffers);
-      assertTrue("After flush: " + zeroAccessAfterFlush + ", before flush: " + zeroAccessBeforeFlush,
-          (zeroAccessAfterFlush > zeroAccessBeforeFlush));
-
-      break;
+    assertTrue("Expected the partial flush to evict infrequently accessed groups",
+        hashTable.size() < entriesBeforeFlush);
+    for (int slot : frequentSlots) {
+      VectorAggregationBufferRow buffer = buffersBeforeFlush[slot];
+      assertSame("Expected the frequent group to retain its buffer", buffer, hashTable.values[slot]);
+      // A retained group can only be accessed by the remaining rows of this batch after the reset.
+      assertTrue("Expected the retained group's access count to reset", buffer.getAccessCount() <= batchSize);
     }
     vgo.close(false);
-  }
-
-  long getElementsHigherThan(Map<KeyWrapper, VectorAggregationBufferRow> aggMap, int avgAccess) {
-    return aggMap.values().stream().filter(v -> (v.getAccessCount() > avgAccess)).count();
-  }
-
-  long getElementsWithZeroAccess(Map<KeyWrapper, VectorAggregationBufferRow> aggMap) {
-    return aggMap.values().stream().filter(v -> (v.getAccessCount() == 0)).count();
   }
 
   @Test

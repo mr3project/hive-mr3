@@ -152,7 +152,7 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
     assert insertionSlot == ~findSlot(key, hashCode);
     allocateSlot(insertionSlot);
     keys[insertionSlot] = key;
-    linkEntry(insertionSlot, hashCode, value);
+    linkEntryWithSpreadHash(insertionSlot, spreadHash(hashCode), value);
     assert findSlot(key, hashCode) == insertionSlot;
     assert getValue(insertionSlot) == value;
   }

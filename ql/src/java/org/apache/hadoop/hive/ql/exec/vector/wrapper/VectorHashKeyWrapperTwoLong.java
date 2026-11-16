@@ -35,17 +35,18 @@ public final class VectorHashKeyWrapperTwoLong extends VectorHashKeyWrapperTwoBa
 
   @Override
   public void setHashKey() {
-    if (isNull0 || isNull1) {
-      hashcode =
-          (isNull0 && isNull1 ?
-            twoNullHashcode :
-            (isNull0 ?
-                null0Hashcode ^
-                HashCodeUtil.calculateLongHashCode(longValue1) :
-                HashCodeUtil.calculateLongHashCode(longValue0) ^
-                null1Hashcode));
+    hashcode = calculateHashCode(longValue0, longValue1,
+        (isNull0 ? 1 : 0) | (isNull1 ? 2 : 0));
+  }
+
+  public static int calculateHashCode(long longValue0, long longValue1, int nullMask) {
+    if (nullMask != 0) {
+      return nullMask == 3 ? twoNullHashcode :
+          ((nullMask & 1) != 0 ?
+              null0Hashcode ^ HashCodeUtil.calculateLongHashCode(longValue1) :
+              HashCodeUtil.calculateLongHashCode(longValue0) ^ null1Hashcode);
     } else {
-      hashcode = HashCodeUtil.calculateTwoLongHashCode(longValue0, longValue1);
+      return HashCodeUtil.calculateTwoLongHashCode(longValue0, longValue1);
     }
   }
 

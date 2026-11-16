@@ -66,8 +66,20 @@ public class VectorHashKeyWrapperSingleLongTwoString extends VectorHashKeyWrappe
 
   @Override
   public void setHashKey() {
-    int hash = calculateLongValuesHashCode();
-    hash = 31 * hash + calculateNullsHashCode();
+    int nullMask = (isNull0 ? 1 : 0) | (isNull1 ? 2 : 0) | (isNull2 ? 4 : 0);
+    hashcode = calculateHashCode(longValue0, nullMask,
+        bytes0, start0, length0, bytes1, start1, length1, hashCtx);
+  }
+
+  public static int calculateHashCode(long longValue, int nullMask,
+      byte[] bytes0, int start0, int length0, byte[] bytes1, int start1, int length1,
+      HashContext hashCtx) {
+    int hash = 31 + (int) (longValue ^ (longValue >>> 32));
+    int nullsHash = 1;
+    nullsHash = 31 * nullsHash + ((nullMask & 1) != 0 ? 1231 : 1237);
+    nullsHash = 31 * nullsHash + ((nullMask & 2) != 0 ? 1231 : 1237);
+    nullsHash = 31 * nullsHash + ((nullMask & 4) != 0 ? 1231 : 1237);
+    hash = 31 * hash + nullsHash;
     Murmur3.IncrementalHash32 bytesHash = null;
     if (length0 != -1) {
       bytesHash = HashContext.getBytesHash(hashCtx);
@@ -81,21 +93,7 @@ public class VectorHashKeyWrapperSingleLongTwoString extends VectorHashKeyWrappe
       }
       bytesHash.add(bytes1, start1, length1);
     }
-    hashcode = bytesHash == null ? hash : bytesHash.end();
-  }
-
-  private int calculateLongValuesHashCode() {
-    int result = 1;
-    result = 31 * result + (int) (longValue0 ^ (longValue0 >>> 32));
-    return result;
-  }
-
-  private int calculateNullsHashCode() {
-    int result = 1;
-    result = 31 * result + (isNull0 ? 1231 : 1237);
-    result = 31 * result + (isNull1 ? 1231 : 1237);
-    result = 31 * result + (isNull2 ? 1231 : 1237);
-    return result;
+    return bytesHash == null ? hash : bytesHash.end();
   }
 
   @Override
