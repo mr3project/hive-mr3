@@ -22,14 +22,14 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hive.ql.exec.vector.expressions.StringExpr;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneralLongString;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.util.JavaDataModel;
 
 /**
  * Array-backed, separate-chaining aggregation hash table for long and string grouping keys.
  */
-final class VectorGroupByGeneraLongStringHashTable {
-  private static final double MAX_LOAD_FACTOR = 0.75;
-  private static final int INITIAL_CAPACITY = 16;
+final class VectorGroupByGeneraLongStringHashTable extends VectorGroupByHashTable {
   private static final byte[] EMPTY_BYTES = new byte[0];
 
   private final int[] longIndices;
@@ -37,40 +37,105 @@ final class VectorGroupByGeneraLongStringHashTable {
   private final int keyCount;
   private final int nullWordCount;
 
-  // Bucket heads and next links store slot + 1; zero terminates a chain or the free list.
-  private int[] buckets;
-  private int[] next;
   private int[] hashes;
-  private VectorAggregationBufferRow[] values;
   // Entry-major storage keeps each key's offsets stable when entry arrays grow.
   private long[] longValues;
   private byte[][] stringValues;
   private long[] nullWords;
-  private int numEntries;
-  private int numUsed;
-  private int freeList;
-  private int resizeThreshold;
   private long stringMemorySize;
 
   VectorGroupByGeneraLongStringHashTable(int expectedEntries, VectorColumnSetInfo keyInfo) {
+    super(expectedEntries);
     longIndices = keyInfo.longIndices;
     stringIndices = keyInfo.stringIndices;
     keyCount = keyInfo.keyCount;
     nullWordCount = (keyCount + Long.SIZE - 1) / Long.SIZE;
     assert keyCount == longIndices.length + stringIndices.length;
-    int capacity = INITIAL_CAPACITY;
-    while (expectedEntries > (int) (capacity * MAX_LOAD_FACTOR)) {
-      capacity = Math.multiplyExact(capacity, 2);
-    }
-    buckets = new int[capacity];
-    resizeThreshold = (int) (capacity * MAX_LOAD_FACTOR);
-    next = new int[resizeThreshold];
-    hashes = new int[resizeThreshold];
-    values = new VectorAggregationBufferRow[resizeThreshold];
-    longValues = new long[Math.multiplyExact(resizeThreshold, longIndices.length)];
-    stringValues = new byte[Math.multiplyExact(resizeThreshold, stringIndices.length)][];
-    nullWords = new long[Math.multiplyExact(resizeThreshold, nullWordCount)];
+    hashes = new int[values.length];
+    longValues = new long[Math.multiplyExact(values.length, longIndices.length)];
+    stringValues = new byte[Math.multiplyExact(values.length, stringIndices.length)][];
+    nullWords = new long[Math.multiplyExact(values.length, nullWordCount)];
     assert checkInvariants();
+  }
+
+  @Override
+  int prepareBatch(VectorGroupByOperator.ProcessingModeHashAggregate context,
+      VectorHashKeyWrapperBase[] keyWrappers, int n, VectorAggregationBufferBatch batchInfo)
+      throws HiveException {
+    int newEntries = 0;
+    for (int i = 0; i < n; ++i) {
+      VectorHashKeyWrapperBase key = keyWrappers[i];
+      int slot = findSlot(key);
+      VectorAggregationBufferRow aggregationBuffer =
+          slot >= 0 ? getValue(slot) : null;
+      if (aggregationBuffer == null) {
+        aggregationBuffer = context.allocateAggregationBuffer();
+        put(key, ~slot, aggregationBuffer);
+        ++newEntries;
+      } else {
+        aggregationBuffer.incrementAccessCount();
+      }
+      batchInfo.mapAggregationBufferSet(aggregationBuffer, i);
+    }
+    assert size() == context.getHashTableSize() + newEntries;
+    return newEntries;
+  }
+
+  @Override
+  int flush(VectorGroupByOperator.ProcessingModeHashAggregate context, boolean all,
+      int entriesToFlush, int avgAccess, VectorHashKeyWrapperBase outputKey) throws HiveException {
+    VectorHashKeyWrapperGeneralLongString keyWrapper =
+        (VectorHashKeyWrapperGeneralLongString) outputKey;
+    assert size() == context.getHashTableSize();
+    int initialEntries = context.getHashTableSize();
+    int entriesFlushed = 0;
+    int rowsEmitted = 0;
+    try {
+      flushEntries:
+      for (int bucket = 0; bucket < bucketCount(); ++bucket) {
+        int previousSlot = -1;
+        int slot = firstSlot(bucket);
+        while (slot != -1) {
+          int nextSlot = nextSlot(slot);
+          VectorAggregationBufferRow bufferRow = getValue(slot);
+          if (!all && avgAccess >= 1 && bufferRow.getAccessCount() > avgAccess) {
+            context.resetHashTableAccess(bufferRow);
+            previousSlot = slot;
+            slot = nextSlot;
+            continue;
+          }
+
+          copyKey(slot, keyWrapper);
+          // String keys are copied into outputBatch before the retained entry is removed.
+          context.writeHashTableRow(keyWrapper, bufferRow);
+          ++rowsEmitted;
+          if (!all) {
+            context.recycleHashTableBuffer(bufferRow);
+            remove(bucket, previousSlot, slot);
+            if (++entriesFlushed >= entriesToFlush) {
+              break flushEntries;
+            }
+          } else {
+            previousSlot = slot;
+          }
+          slot = nextSlot;
+        }
+      }
+    } finally {
+      // The reusable output key must not retain bytes from flushed entries.
+      for (int i = 0; i < stringIndices.length; ++i) {
+        keyWrapper.assignNullString(stringIndices[i], i);
+      }
+    }
+    if (!all) {
+      assert checkInvariants();
+      assert rowsEmitted == entriesFlushed;
+      assert initialEntries - entriesFlushed == context.getHashTableSize();
+      assert size() == context.getHashTableSize();
+    } else {
+      assert rowsEmitted == initialEntries;
+    }
+    return entriesFlushed;
   }
 
   /**
@@ -120,19 +185,7 @@ final class VectorGroupByGeneraLongStringHashTable {
   void put(VectorHashKeyWrapperBase key, int insertionSlot, VectorAggregationBufferRow value) {
     assert value != null;
     assert insertionSlot == ~findSlot(key);
-    if (numEntries + 1 > resizeThreshold) {
-      rehash(Math.multiplyExact(buckets.length, 2));
-    }
-    if (freeList != 0) {
-      assert insertionSlot == freeList - 1 && values[insertionSlot] == null;
-      freeList = next[insertionSlot];
-    } else {
-      assert insertionSlot == numUsed;
-      if (numUsed == values.length) {
-        growEntries();
-      }
-      ++numUsed;
-    }
+    allocateSlot(insertionSlot);
     int nullOffset = insertionSlot * nullWordCount;
     Arrays.fill(nullWords, nullOffset, nullOffset + nullWordCount, 0);
     for (int i = 0; i < keyCount; ++i) {
@@ -157,20 +210,10 @@ final class VectorGroupByGeneraLongStringHashTable {
       }
     }
     int hash = key.hashCode();
-    int bucket = (hash ^ (hash >>> 16)) & (buckets.length - 1);
     hashes[insertionSlot] = hash;
-    values[insertionSlot] = value;
-    next[insertionSlot] = buckets[bucket];
-    buckets[bucket] = insertionSlot + 1;
-    ++numEntries;
-    assert numEntries <= resizeThreshold;
+    linkEntry(insertionSlot, hash, value);
     assert findSlot(key) == insertionSlot && equalKey(insertionSlot, key);
     assert getValue(insertionSlot) == value;
-  }
-
-  VectorAggregationBufferRow getValue(int slot) {
-    assert values[slot] != null;
-    return values[slot];
   }
 
   void copyKey(int slot, VectorHashKeyWrapperBase target) {
@@ -196,13 +239,6 @@ final class VectorGroupByGeneraLongStringHashTable {
   void remove(int bucket, int previousSlot, int slot) {
     assert values[slot] != null;
     assert bucket == ((hashes[slot] ^ (hashes[slot] >>> 16)) & (buckets.length - 1));
-    assert previousSlot == -1 ? buckets[bucket] == slot + 1 :
-        values[previousSlot] != null && next[previousSlot] == slot + 1;
-    if (previousSlot == -1) {
-      buckets[bucket] = next[slot];
-    } else {
-      next[previousSlot] = next[slot];
-    }
     JavaDataModel model = JavaDataModel.get();
     for (int i = 0, offset = slot * stringIndices.length; i < stringIndices.length; ++i) {
       byte[] bytes = stringValues[offset + i];
@@ -212,62 +248,35 @@ final class VectorGroupByGeneraLongStringHashTable {
       stringValues[offset + i] = null;
     }
     Arrays.fill(nullWords, slot * nullWordCount, (slot + 1) * nullWordCount, 0);
-    values[slot] = null;
-    next[slot] = freeList;
-    freeList = slot + 1;
-    --numEntries;
-    assert numEntries >= 0 && numEntries <= resizeThreshold && stringMemorySize >= 0;
-    assert (freeList == 0) == (numEntries == numUsed);
+    unlinkEntry(bucket, previousSlot, slot);
+    assert stringMemorySize >= 0;
   }
 
-  int size() {
-    return numEntries;
-  }
-
-  int bucketCount() {
-    return buckets.length;
-  }
-
-  int firstSlot(int bucket) {
-    return buckets[bucket] - 1;
-  }
-
-  int nextSlot(int slot) {
-    assert values[slot] != null;
-    return next[slot] - 1;
-  }
-
+  @Override
   void clear() {
-    Arrays.fill(buckets, 0);
-    Arrays.fill(values, 0, numUsed, null);
     Arrays.fill(stringValues, 0, numUsed * stringIndices.length, null);
     Arrays.fill(nullWords, 0, numUsed * nullWordCount, 0);
-    numEntries = 0;
-    numUsed = 0;
-    freeList = 0;
+    clearEntries();
     stringMemorySize = 0;
     assert checkInvariants();
   }
 
-  private void growEntries() {
-    int capacity = Math.multiplyExact(values.length, 2);
-    next = Arrays.copyOf(next, capacity);
+  @Override
+  protected void growKeyStorage(int capacity) {
     hashes = Arrays.copyOf(hashes, capacity);
-    values = Arrays.copyOf(values, capacity);
     longValues = Arrays.copyOf(longValues, Math.multiplyExact(capacity, longIndices.length));
     stringValues = Arrays.copyOf(stringValues, Math.multiplyExact(capacity, stringIndices.length));
     nullWords = Arrays.copyOf(nullWords, Math.multiplyExact(capacity, nullWordCount));
-    assert checkInvariants();
   }
 
-  private void rehash(int capacity) {
-    buckets = new int[capacity];
-    resizeThreshold = (int) (capacity * MAX_LOAD_FACTOR);
+  @Override
+  protected void rehash() {
+    resizeBuckets();
     int copiedEntries = 0;
     for (int slot = 0; slot < numUsed; ++slot) {
       if (values[slot] != null) {
         int hash = hashes[slot];
-        int bucket = (hash ^ (hash >>> 16)) & (capacity - 1);
+        int bucket = (hash ^ (hash >>> 16)) & (buckets.length - 1);
         next[slot] = buckets[bucket];
         buckets[bucket] = slot + 1;
         ++copiedEntries;
@@ -301,28 +310,20 @@ final class VectorGroupByGeneraLongStringHashTable {
   /**
    * Checks chain reachability, unique key membership, the free list, and owned string bytes.
    */
+  @Override
   boolean checkInvariants() {
-    if (next.length != values.length || hashes.length != values.length ||
+    if (!checkStructure() || hashes.length != values.length ||
         longValues.length != (long) values.length * longIndices.length ||
         stringValues.length != (long) values.length * stringIndices.length ||
-        nullWords.length != (long) values.length * nullWordCount ||
-        Integer.bitCount(buckets.length) != 1 ||
-        resizeThreshold != (int) (buckets.length * MAX_LOAD_FACTOR) ||
-        numEntries < 0 || numEntries > resizeThreshold ||
-        numEntries > numUsed || numUsed > values.length) {
+        nullWords.length != (long) values.length * nullWordCount) {
       return false;
     }
-    boolean[] visited = new boolean[numUsed];
-    int liveEntries = 0;
     for (int bucket = 0; bucket < buckets.length; ++bucket) {
       for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
         int slot = ref - 1;
-        if (slot < 0 || slot >= numUsed || visited[slot] || values[slot] == null ||
-            ((hashes[slot] ^ (hashes[slot] >>> 16)) & (buckets.length - 1)) != bucket) {
+        if (((hashes[slot] ^ (hashes[slot] >>> 16)) & (buckets.length - 1)) != bucket) {
           return false;
         }
-        visited[slot] = true;
-        ++liveEntries;
         for (int other = buckets[bucket]; other != ref; other = next[other - 1]) {
           if (hashes[slot] == hashes[other - 1] && equalKeys(slot, other - 1)) {
             return false;
@@ -330,21 +331,9 @@ final class VectorGroupByGeneraLongStringHashTable {
         }
       }
     }
-    int freeEntries = 0;
-    for (int ref = freeList; ref != 0; ref = next[ref - 1]) {
-      int slot = ref - 1;
-      if (slot < 0 || slot >= numUsed || visited[slot] || values[slot] != null) {
-        return false;
-      }
-      visited[slot] = true;
-      ++freeEntries;
-    }
     long stringBytes = 0;
     JavaDataModel model = JavaDataModel.get();
     for (int slot = 0; slot < values.length; ++slot) {
-      if (slot >= numUsed && values[slot] != null) {
-        return false;
-      }
       for (int i = 0; i < stringIndices.length; ++i) {
         byte[] bytes = stringValues[slot * stringIndices.length + i];
         if (values[slot] == null ? bytes != null :
@@ -363,22 +352,22 @@ final class VectorGroupByGeneraLongStringHashTable {
         }
       }
     }
-    return liveEntries == numEntries && liveEntries + freeEntries == numUsed &&
-        stringBytes == stringMemorySize;
+    return stringBytes == stringMemorySize;
   }
 
+  @Override
   long getEstimatedFixedMemorySize() {
     JavaDataModel model = JavaDataModel.get();
     // Column mappings are shared with the compiled key layout.
     return JavaDataModel.alignUp(model.object() + 9L * model.ref() + 6L * model.primitive1() +
-        model.primitive2(), model.memoryAlign()) + model.lengthForIntArrayOfSize(buckets.length)
-        + model.lengthForIntArrayOfSize(next.length) + model.lengthForIntArrayOfSize(hashes.length)
-        + model.lengthForObjectArrayOfSize(values.length)
+        model.primitive2(), model.memoryAlign()) + getEstimatedArrayMemorySize()
+        + model.lengthForIntArrayOfSize(hashes.length)
         + model.lengthForLongArrayOfSize(longValues.length)
         + model.lengthForObjectArrayOfSize(stringValues.length)
         + model.lengthForLongArrayOfSize(nullWords.length);
   }
 
+  @Override
   long getEstimatedMemorySize() {
     return getEstimatedFixedMemorySize() + stringMemorySize;
   }

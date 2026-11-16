@@ -20,38 +20,116 @@ package org.apache.hadoop.hive.ql.exec.vector;
 
 import java.util.Arrays;
 
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperSingleLong;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.util.JavaDataModel;
 import org.apache.hive.common.util.HashCodeUtil;
 
 /**
  * Array-backed, separate-chaining aggregation hash table for a single long grouping key.
  */
-final class VectorGroupByLongHashTable {
-  private static final double MAX_LOAD_FACTOR = 0.75;
-  private static final int INITIAL_CAPACITY = 16;
-
-  // Bucket heads and next links store slot + 1; zero terminates a chain.
-  private int[] buckets;
-  private int[] next;
+final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
   private long[] keys;
-  private VectorAggregationBufferRow[] values;
   private VectorAggregationBufferRow nullValue;
-  private int numEntries;
-  private int numUsed;
-  private int freeList;
-  private int resizeThreshold;
 
   VectorGroupByLongHashTable(int expectedEntries) {
-    int capacity = INITIAL_CAPACITY;
-    while (expectedEntries > (int) (capacity * MAX_LOAD_FACTOR)) {
-      capacity = Math.multiplyExact(capacity, 2);
-    }
-    buckets = new int[capacity];
-    resizeThreshold = (int) (capacity * MAX_LOAD_FACTOR);
-    next = new int[resizeThreshold];
-    keys = new long[resizeThreshold];
-    values = new VectorAggregationBufferRow[resizeThreshold];
+    super(expectedEntries);
+    keys = new long[values.length];
     assert checkInvariants();
+  }
+
+  @Override
+  int prepareBatch(VectorGroupByOperator.ProcessingModeHashAggregate context,
+      VectorHashKeyWrapperBase[] keyWrappers, int n, VectorAggregationBufferBatch batchInfo)
+      throws HiveException {
+    int newEntries = 0;
+    for (int i = 0; i < n; ++i) {
+      VectorHashKeyWrapperSingleLong kw = (VectorHashKeyWrapperSingleLong) keyWrappers[i];
+      boolean isNull = kw.isNull(0);
+      int slot = isNull ? 0 : findSlot(kw.getLongValue(0), kw.hashCode());
+      VectorAggregationBufferRow aggregationBuffer = isNull ? getNullValue() :
+          (slot >= 0 ? getValue(slot) : null);
+      if (aggregationBuffer == null) {
+        aggregationBuffer = context.allocateAggregationBuffer();
+        if (isNull) {
+          setNullValue(aggregationBuffer);
+        } else {
+          put(kw.getLongValue(0), kw.hashCode(), ~slot, aggregationBuffer);
+        }
+        ++newEntries;
+      } else {
+        aggregationBuffer.incrementAccessCount();
+      }
+      batchInfo.mapAggregationBufferSet(aggregationBuffer, i);
+    }
+    assert size() == context.getHashTableSize() + newEntries;
+    return newEntries;
+  }
+
+  @Override
+  int flush(VectorGroupByOperator.ProcessingModeHashAggregate context, boolean all,
+      int entriesToFlush, int avgAccess, VectorHashKeyWrapperBase outputKey) throws HiveException {
+    assert size() == context.getHashTableSize();
+    int initialEntries = context.getHashTableSize();
+    VectorHashKeyWrapperSingleLong keyWrapper =
+        (VectorHashKeyWrapperSingleLong) outputKey;
+    int entriesFlushed = 0;
+    int rowsEmitted = 0;
+    // Visit the separate NULL group before the bucket chains.
+    flushEntries:
+    for (int bucket = -1; bucket < bucketCount(); ++bucket) {
+      if (bucket == -1 && getNullValue() == null) {
+        continue;
+      }
+      int previousSlot = -1;
+      int slot = bucket == -1 ? 0 : firstSlot(bucket);
+      while (slot != -1) {
+        int nextSlot = bucket == -1 ? -1 : nextSlot(slot);
+        VectorAggregationBufferRow bufferRow = bucket == -1 ? getNullValue() :
+            getValue(slot);
+        assert bufferRow != null;
+        if (!all && avgAccess >= 1 && bufferRow.getAccessCount() > avgAccess) {
+          context.resetHashTableAccess(bufferRow);
+          previousSlot = slot;
+          slot = nextSlot;
+          continue;
+        }
+
+        if (bucket == -1) {
+          keyWrapper.assignNullLong(0, 0);
+        } else {
+          keyWrapper.assignLong(0, 0, getKey(slot));
+        }
+        // writeSingleRow copies the key into outputBatch before this wrapper is reused.
+        context.writeHashTableRow(keyWrapper, bufferRow);
+        ++rowsEmitted;
+
+        if (!all) {
+          context.recycleHashTableBuffer(bufferRow);
+          if (bucket == -1) {
+            removeNullValue();
+          } else {
+            remove(bucket, previousSlot, slot);
+          }
+          if (++entriesFlushed >= entriesToFlush) {
+            break flushEntries;
+          }
+        } else {
+          previousSlot = slot;
+        }
+        slot = nextSlot;
+      }
+    }
+    if (!all) {
+      assert checkInvariants();
+      assert rowsEmitted == entriesFlushed;
+      assert initialEntries - entriesFlushed == context.getHashTableSize();
+      assert size() == context.getHashTableSize();
+    } else {
+      assert rowsEmitted == initialEntries;
+    }
+    return entriesFlushed;
   }
 
   /**
@@ -77,34 +155,11 @@ final class VectorGroupByLongHashTable {
   void put(long key, int hashCode, int insertionSlot, VectorAggregationBufferRow value) {
     assert value != null;
     assert insertionSlot == ~findSlot(key, hashCode);
-    if (numEntries + 1 > resizeThreshold) {
-      rehash(Math.multiplyExact(buckets.length, 2));
-    }
-    if (freeList != 0) {
-      assert insertionSlot == freeList - 1 && values[insertionSlot] == null;
-      freeList = next[insertionSlot];
-    } else {
-      assert insertionSlot == numUsed;
-      if (numUsed == values.length) {
-        growEntries();
-      }
-      ++numUsed;
-    }
-    int bucket = (hashCode ^ (hashCode >>> 16)) & (buckets.length - 1);
+    allocateSlot(insertionSlot);
     keys[insertionSlot] = key;
-    values[insertionSlot] = value;
-    next[insertionSlot] = buckets[bucket];
-    buckets[bucket] = insertionSlot + 1;
-    ++numEntries;
-    assert numEntries <= resizeThreshold;
-    assert (freeList == 0) == (numEntries == numUsed);
+    linkEntry(insertionSlot, hashCode, value);
     assert findSlot(key, hashCode) == insertionSlot;
     assert getValue(insertionSlot) == value;
-  }
-
-  VectorAggregationBufferRow getValue(int slot) {
-    assert values[slot] != null;
-    return values[slot];
   }
 
   long getKey(int slot) {
@@ -130,60 +185,31 @@ final class VectorGroupByLongHashTable {
     assert values[slot] != null;
     assert bucket == ((HashCodeUtil.calculateLongHashCode(keys[slot]) ^
         (HashCodeUtil.calculateLongHashCode(keys[slot]) >>> 16)) & (buckets.length - 1));
-    assert previousSlot == -1 ? buckets[bucket] == slot + 1 :
-        values[previousSlot] != null && next[previousSlot] == slot + 1;
-    if (previousSlot == -1) {
-      buckets[bucket] = next[slot];
-    } else {
-      next[previousSlot] = next[slot];
-    }
-    values[slot] = null;
-    next[slot] = freeList;
-    freeList = slot + 1;
-    --numEntries;
-    assert numEntries >= 0 && numEntries <= resizeThreshold;
+    unlinkEntry(bucket, previousSlot, slot);
     assert findSlot(keys[slot], HashCodeUtil.calculateLongHashCode(keys[slot])) == ~slot;
   }
 
+  @Override
   int size() {
     return numEntries + (nullValue == null ? 0 : 1);
   }
 
-  int bucketCount() {
-    return buckets.length;
-  }
-
-  int firstSlot(int bucket) {
-    return buckets[bucket] - 1;
-  }
-
-  int nextSlot(int slot) {
-    assert values[slot] != null;
-    return next[slot] - 1;
-  }
-
+  @Override
   void clear() {
-    Arrays.fill(buckets, 0);
-    Arrays.fill(values, 0, numUsed, null);
+    clearEntries();
     nullValue = null;
-    numEntries = 0;
-    numUsed = 0;
-    freeList = 0;
     assert checkInvariants();
   }
 
-  private void growEntries() {
-    int capacity = Math.multiplyExact(values.length, 2);
-    next = Arrays.copyOf(next, capacity);
+  @Override
+  protected void growKeyStorage(int capacity) {
     keys = Arrays.copyOf(keys, capacity);
-    values = Arrays.copyOf(values, capacity);
-    assert checkInvariants();
   }
 
-  private void rehash(int capacity) {
-    buckets = new int[capacity];
-    resizeThreshold = (int) (capacity * MAX_LOAD_FACTOR);
-    int mask = capacity - 1;
+  @Override
+  protected void rehash() {
+    resizeBuckets();
+    int mask = buckets.length - 1;
     int copiedEntries = 0;
     for (int slot = 0; slot < numUsed; ++slot) {
       if (values[slot] != null) {
@@ -201,53 +227,25 @@ final class VectorGroupByLongHashTable {
   /**
    * Checks bucket-chain reachability, entry counts, and free-list membership.
    */
+  @Override
   boolean checkInvariants() {
-    if (keys.length != values.length || next.length != values.length ||
-        Integer.bitCount(buckets.length) != 1 ||
-        resizeThreshold != (int) (buckets.length * MAX_LOAD_FACTOR) ||
-        numEntries < 0 || numEntries > resizeThreshold ||
-        numEntries > numUsed || numUsed > values.length) {
+    if (!checkStructure() || keys.length != values.length) {
       return false;
     }
-    boolean[] visited = new boolean[numUsed];
-    int liveEntries = 0;
-    for (int bucket = 0; bucket < buckets.length; ++bucket) {
-      for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
-        int slot = ref - 1;
-        if (slot < 0 || slot >= numUsed || visited[slot] || values[slot] == null) {
-          return false;
-        }
-        visited[slot] = true;
-        ++liveEntries;
-        int hashCode = HashCodeUtil.calculateLongHashCode(keys[slot]);
-        if (((hashCode ^ (hashCode >>> 16)) & (buckets.length - 1)) != bucket ||
-            findSlot(keys[slot], hashCode) != slot) {
-          return false;
-        }
-      }
-    }
-    int freeEntries = 0;
-    for (int ref = freeList; ref != 0; ref = next[ref - 1]) {
-      int slot = ref - 1;
-      if (slot < 0 || slot >= numUsed || visited[slot] || values[slot] != null) {
-        return false;
-      }
-      visited[slot] = true;
-      ++freeEntries;
-    }
-    for (int slot = numUsed; slot < values.length; ++slot) {
-      if (values[slot] != null) {
+    for (int slot = 0; slot < numUsed; ++slot) {
+      if (values[slot] != null &&
+          findSlot(keys[slot], HashCodeUtil.calculateLongHashCode(keys[slot])) != slot) {
         return false;
       }
     }
-    return liveEntries == numEntries && liveEntries + freeEntries == numUsed;
+    return true;
   }
 
-  long getEstimatedMemorySize() {
+  @Override
+  long getEstimatedFixedMemorySize() {
     JavaDataModel model = JavaDataModel.get();
     return JavaDataModel.alignUp(model.object() + 5L * model.ref() + 4L * model.primitive1(),
-        model.memoryAlign()) + model.lengthForIntArrayOfSize(buckets.length)
-        + model.lengthForIntArrayOfSize(next.length) + model.lengthForLongArrayOfSize(keys.length)
-        + model.lengthForObjectArrayOfSize(values.length);
+        model.memoryAlign()) + getEstimatedArrayMemorySize()
+        + model.lengthForLongArrayOfSize(keys.length);
   }
 }
