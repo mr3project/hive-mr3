@@ -831,18 +831,9 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         numEntriesSinceCheck = 0;
       }
       long currMemUsed = getEstimatedHashTableMemory();
-      long memoryLimit = maxHashTblMemory;
-      if (hashTable != null) {
-        long tableMemory = hashTable.getEstimatedFixedMemorySize();
-        // When retained arrays exhaust the budget, give active aggregation entries the original
-        // budget instead of repeatedly flushing because of storage that flushing cannot release.
-        if (tableMemory >= memoryLimit) {
-          memoryLimit += tableMemory;
-        }
-      }
       // Protect against low maxHtEntries setting: if memory usage is below 30% avoid flushing
-      if ( ((numEntriesHashTable > this.maxHtEntries) && (currMemUsed > 0.3 * memoryLimit))  ||
-          currMemUsed > memoryLimit) {
+      if ( ((numEntriesHashTable > this.maxHtEntries) && (currMemUsed > 0.3 * maxHashTblMemory))  ||
+          currMemUsed > maxHashTblMemory) {
         return true;
       }
       if (gcCanary.get() == null) {
