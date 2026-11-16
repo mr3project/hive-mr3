@@ -31,6 +31,7 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
   private long[] keys0;
   private long[] keys1;
   private byte[] nullMasks;
+  private int[] hashCodes;
   private VectorAggregationBufferRow nullValue;
 
   VectorGroupByTwoLongHashTable(int expectedEntries) {
@@ -144,7 +145,8 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
    */
   int findSlot(long key0, long key1, int nullMask, int hashCode) {
     assert keys0.length == values.length && keys1.length == values.length &&
-        nullMasks.length == values.length && next.length == values.length;
+        nullMasks.length == values.length && next.length == values.length &&
+        hashCodes.length == values.length;
     assert Integer.bitCount(buckets.length) == 1;
     assert numEntries >= 0 && numEntries <= numUsed && numUsed <= values.length &&
         numEntries <= resizeThreshold && resizeThreshold < buckets.length;
@@ -154,7 +156,8 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
     int bucket = (hashCode ^ (hashCode >>> 16)) & (buckets.length - 1);
     for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
       int slot = ref - 1;
-      if (nullMasks[slot] == nullMask && keys0[slot] == key0 && keys1[slot] == key1) {
+      if (hashCodes[slot] == hashCode && nullMasks[slot] == nullMask &&
+          keys0[slot] == key0 && keys1[slot] == key1) {
         return slot;
       }
     }
@@ -169,6 +172,7 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
     keys0[insertionSlot] = key0;
     keys1[insertionSlot] = key1;
     nullMasks[insertionSlot] = (byte) nullMask;
+    hashCodes[insertionSlot] = hashCode;
     linkEntry(insertionSlot, hashCode, value);
     assert findSlot(key0, key1, nullMask, hashCode) == insertionSlot;
     assert getValue(insertionSlot) == value;
@@ -188,15 +192,15 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
     nullValue = null;
   }
 
-  private int getHashCode(int slot) {
+  private int calculateHashCode(int slot) {
     return VectorHashKeyWrapperTwoLong.calculateHashCode(keys0[slot], keys1[slot], nullMasks[slot]);
   }
 
   void remove(int bucket, int previousSlot, int slot) {
     assert values[slot] != null;
-    assert bucket == ((getHashCode(slot) ^ (getHashCode(slot) >>> 16)) & (buckets.length - 1));
+    assert bucket == ((hashCodes[slot] ^ (hashCodes[slot] >>> 16)) & (buckets.length - 1));
     unlinkEntry(bucket, previousSlot, slot);
-    assert findSlot(keys0[slot], keys1[slot], nullMasks[slot], getHashCode(slot)) == ~slot;
+    assert findSlot(keys0[slot], keys1[slot], nullMasks[slot], hashCodes[slot]) == ~slot;
   }
 
   @Override
@@ -216,6 +220,7 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
     keys0 = Arrays.copyOf(keys0, capacity);
     keys1 = Arrays.copyOf(keys1, capacity);
     nullMasks = Arrays.copyOf(nullMasks, capacity);
+    hashCodes = Arrays.copyOf(hashCodes, capacity);
   }
 
   @Override
@@ -223,6 +228,7 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
     keys0 = new long[values.length];
     keys1 = new long[values.length];
     nullMasks = new byte[values.length];
+    hashCodes = new int[values.length];
     nullValue = null;
   }
 
@@ -233,7 +239,7 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
     int copiedEntries = 0;
     for (int slot = 0; slot < numUsed; ++slot) {
       if (values[slot] != null) {
-        int hashCode = getHashCode(slot);
+        int hashCode = hashCodes[slot];
         int bucket = (hashCode ^ (hashCode >>> 16)) & mask;
         next[slot] = buckets[bucket];
         buckets[bucket] = slot + 1;
@@ -250,12 +256,13 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
   @Override
   boolean checkInvariants() {
     if (!checkStructure() || keys0.length != values.length || keys1.length != values.length ||
-        nullMasks.length != values.length) {
+        nullMasks.length != values.length || hashCodes.length != values.length) {
       return false;
     }
     for (int slot = 0; slot < numUsed; ++slot) {
       if (values[slot] != null &&
-          findSlot(keys0[slot], keys1[slot], nullMasks[slot], getHashCode(slot)) != slot) {
+          (hashCodes[slot] != calculateHashCode(slot) ||
+              findSlot(keys0[slot], keys1[slot], nullMasks[slot], hashCodes[slot]) != slot)) {
         return false;
       }
     }
@@ -267,6 +274,7 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
     return getEstimatedArrayMemorySize()
         + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys0.length)
         + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys1.length)
-        + JAVA_DATA_MODEL.lengthForByteArrayOfSize(nullMasks.length);
+        + JAVA_DATA_MODEL.lengthForByteArrayOfSize(nullMasks.length)
+        + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes.length);
   }
 }
