@@ -29,8 +29,6 @@ import org.apache.hadoop.hive.serde2.io.DateWritableV2;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hive.common.util.Murmur3;
 
-import com.google.common.base.Preconditions;
-
 public class VectorHashKeyWrapperTwoLongSingleString extends VectorHashKeyWrapperBase {
 
   private long longValue0;
@@ -61,27 +59,24 @@ public class VectorHashKeyWrapperTwoLongSingleString extends VectorHashKeyWrappe
 
   @Override
   public void setHashKey() {
-    int hash = calculateLongValuesHashCode();
-    hash = 31 * hash + calculateNullsHashCode();
-    if (length0 != -1) {
-      hash = Murmur3.IncrementalHash32.hash32(bytes0, start0, length0, hash);
+    int nullMask = (isNull0 ? 1 : 0) | (isNull1 ? 2 : 0) | (isNull2 ? 4 : 0);
+    hashcode = calculateHashCode(longValue0, longValue1, nullMask, bytes0, start0, length0);
+  }
+
+  public static int calculateHashCode(long longValue0, long longValue1, int nullMask,
+      byte[] bytes, int start, int length) {
+    int longHash = 1;
+    longHash = 31 * longHash + (int) (longValue0 ^ (longValue0 >>> 32));
+    longHash = 31 * longHash + (int) (longValue1 ^ (longValue1 >>> 32));
+    int nullHash = 1;
+    nullHash = 31 * nullHash + ((nullMask & 1) != 0 ? 1231 : 1237);
+    nullHash = 31 * nullHash + ((nullMask & 2) != 0 ? 1231 : 1237);
+    nullHash = 31 * nullHash + ((nullMask & 4) != 0 ? 1231 : 1237);
+    int hash = 31 * longHash + nullHash;
+    if (length != -1) {
+      hash = Murmur3.IncrementalHash32.hash32(bytes, start, length, hash);
     }
-    hashcode = hash;
-  }
-
-  private int calculateLongValuesHashCode() {
-    int result = 1;
-    result = 31 * result + (int) (longValue0 ^ (longValue0 >>> 32));
-    result = 31 * result + (int) (longValue1 ^ (longValue1 >>> 32));
-    return result;
-  }
-
-  private int calculateNullsHashCode() {
-    int result = 1;
-    result = 31 * result + (isNull0 ? 1231 : 1237);
-    result = 31 * result + (isNull1 ? 1231 : 1237);
-    result = 31 * result + (isNull2 ? 1231 : 1237);
-    return result;
+    return hash;
   }
 
   @Override
