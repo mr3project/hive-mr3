@@ -464,6 +464,9 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       case SINGLE_LONG_TWO_STRING:
         hashTable = new VectorGroupByLongTwoStringHashTable(expectedEntries, keyWrappersBatch);
         break;
+      case GENERAL_LONG_STRING:
+        hashTable = new VectorGroupByGeneralLongStringHashTable(expectedEntries, keyWrappersBatch);
+        break;
       default:
         if (peakEntriesHintAtStart == null) {
           mapKeysAggregationBuffers = new HashMap<KeyWrapper, VectorAggregationBufferRow>();
