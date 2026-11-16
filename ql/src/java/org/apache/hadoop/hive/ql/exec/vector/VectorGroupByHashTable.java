@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.ql.util.JavaDataModel;
  * Key lookup, batch preparation, and flushing remain in the concrete implementations.
  */
 abstract class VectorGroupByHashTable {
+  protected static final JavaDataModel JAVA_DATA_MODEL = JavaDataModel.get();
   protected static final double MAX_LOAD_FACTOR = 0.75;
   private static final int INITIAL_CAPACITY = 16;
 
@@ -221,9 +222,8 @@ abstract class VectorGroupByHashTable {
   }
 
   protected final long getEstimatedArrayMemorySize() {
-    JavaDataModel model = JavaDataModel.get();
-    return model.lengthForIntArrayOfSize(buckets.length)
-        + model.lengthForIntArrayOfSize(next.length)
-        + model.lengthForObjectArrayOfSize(values.length);
+    return JAVA_DATA_MODEL.lengthForIntArrayOfSize(buckets.length)
+        + JAVA_DATA_MODEL.lengthForIntArrayOfSize(next.length)
+        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(values.length);
   }
 }

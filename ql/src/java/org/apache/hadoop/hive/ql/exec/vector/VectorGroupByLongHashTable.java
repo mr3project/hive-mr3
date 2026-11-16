@@ -30,6 +30,10 @@ import org.apache.hive.common.util.HashCodeUtil;
  * Array-backed, separate-chaining aggregation hash table for a single long grouping key.
  */
 final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
+  private static final long OBJECT_MEMORY_SIZE = JavaDataModel.alignUp(
+      JAVA_DATA_MODEL.object() + 5L * JAVA_DATA_MODEL.ref() + 4L * JAVA_DATA_MODEL.primitive1(),
+      JAVA_DATA_MODEL.memoryAlign());
+
   private long[] keys;
   private VectorAggregationBufferRow nullValue;
 
@@ -245,9 +249,7 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
 
   @Override
   long getEstimatedFixedMemorySize() {
-    JavaDataModel model = JavaDataModel.get();
-    return JavaDataModel.alignUp(model.object() + 5L * model.ref() + 4L * model.primitive1(),
-        model.memoryAlign()) + getEstimatedArrayMemorySize()
-        + model.lengthForLongArrayOfSize(keys.length);
+    return OBJECT_MEMORY_SIZE + getEstimatedArrayMemorySize()
+        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys.length);
   }
 }

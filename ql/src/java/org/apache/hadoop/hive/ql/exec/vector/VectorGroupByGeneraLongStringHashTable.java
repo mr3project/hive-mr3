@@ -30,6 +30,10 @@ import org.apache.hadoop.hive.ql.util.JavaDataModel;
  * Array-backed, separate-chaining aggregation hash table for long and string grouping keys.
  */
 final class VectorGroupByGeneraLongStringHashTable extends VectorGroupByHashTable {
+  // Column mappings are shared with the compiled key layout.
+  private static final long OBJECT_MEMORY_SIZE = JavaDataModel.alignUp(
+      JAVA_DATA_MODEL.object() + 9L * JAVA_DATA_MODEL.ref() + 6L * JAVA_DATA_MODEL.primitive1() +
+      JAVA_DATA_MODEL.primitive2(), JAVA_DATA_MODEL.memoryAlign());
   private static final byte[] EMPTY_BYTES = new byte[0];
 
   private final int[] longIndices;
@@ -189,7 +193,6 @@ final class VectorGroupByGeneraLongStringHashTable extends VectorGroupByHashTabl
     for (int i = 0, offset = insertionSlot * longIndices.length; i < longIndices.length; ++i) {
       longValues[offset + i] = key.getLongValue(i);
     }
-    JavaDataModel model = JavaDataModel.get();
     for (int i = 0, offset = insertionSlot * stringIndices.length; i < stringIndices.length; ++i) {
       assert stringValues[offset + i] == null;
       if (!key.isNull(stringIndices[i])) {
@@ -198,7 +201,7 @@ final class VectorGroupByGeneraLongStringHashTable extends VectorGroupByHashTabl
             key.getBytes(i), key.getByteStart(i), key.getByteStart(i) + length);
         stringValues[offset + i] = bytes;
         if (length != 0) {
-          stringMemorySize += model.lengthForByteArrayOfSize(length);
+          stringMemorySize += JAVA_DATA_MODEL.lengthForByteArrayOfSize(length);
         }
       }
     }
@@ -232,11 +235,10 @@ final class VectorGroupByGeneraLongStringHashTable extends VectorGroupByHashTabl
   void remove(int bucket, int previousSlot, int slot) {
     assert values[slot] != null;
     assert bucket == ((hashes[slot] ^ (hashes[slot] >>> 16)) & (buckets.length - 1));
-    JavaDataModel model = JavaDataModel.get();
     for (int i = 0, offset = slot * stringIndices.length; i < stringIndices.length; ++i) {
       byte[] bytes = stringValues[offset + i];
       if (bytes != null && bytes.length != 0) {
-        stringMemorySize -= model.lengthForByteArrayOfSize(bytes.length);
+        stringMemorySize -= JAVA_DATA_MODEL.lengthForByteArrayOfSize(bytes.length);
       }
       stringValues[offset + i] = null;
     }
@@ -334,7 +336,6 @@ final class VectorGroupByGeneraLongStringHashTable extends VectorGroupByHashTabl
       }
     }
     long stringBytes = 0;
-    JavaDataModel model = JavaDataModel.get();
     for (int slot = 0; slot < values.length; ++slot) {
       for (int i = 0; i < stringIndices.length; ++i) {
         byte[] bytes = stringValues[slot * stringIndices.length + i];
@@ -343,7 +344,7 @@ final class VectorGroupByGeneraLongStringHashTable extends VectorGroupByHashTabl
           return false;
         }
         if (bytes != null && bytes.length != 0) {
-          stringBytes += model.lengthForByteArrayOfSize(bytes.length);
+          stringBytes += JAVA_DATA_MODEL.lengthForByteArrayOfSize(bytes.length);
         }
       }
       if (values[slot] == null) {
@@ -359,14 +360,11 @@ final class VectorGroupByGeneraLongStringHashTable extends VectorGroupByHashTabl
 
   @Override
   long getEstimatedFixedMemorySize() {
-    JavaDataModel model = JavaDataModel.get();
-    // Column mappings are shared with the compiled key layout.
-    return JavaDataModel.alignUp(model.object() + 9L * model.ref() + 6L * model.primitive1() +
-        model.primitive2(), model.memoryAlign()) + getEstimatedArrayMemorySize()
-        + model.lengthForIntArrayOfSize(hashes.length)
-        + model.lengthForLongArrayOfSize(longValues.length)
-        + model.lengthForObjectArrayOfSize(stringValues.length)
-        + model.lengthForLongArrayOfSize(nullWords.length);
+    return OBJECT_MEMORY_SIZE + getEstimatedArrayMemorySize()
+        + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashes.length)
+        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(longValues.length)
+        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(stringValues.length)
+        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(nullWords.length);
   }
 
   @Override
