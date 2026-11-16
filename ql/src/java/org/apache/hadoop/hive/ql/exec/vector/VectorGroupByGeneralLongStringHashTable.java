@@ -129,6 +129,12 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
         int nextSlot = bucket == -1 ? -1 : nextSlot(slot);
         VectorAggregationBufferRow bufferRow = bucket == -1 ? nullValue : getValue(slot);
         assert bufferRow != null;
+        if (!all && avgAccess >= 1 && bufferRow.getAccessCount() > avgAccess) {
+          context.resetHashTableAccess(bufferRow);
+          previousSlot = slot;
+          slot = nextSlot;
+          continue;
+        }
         outputKey.clearIsNull();
         int maskOffset = slot * nullMaskBytes;
         int longOffset = slot * longCount;
@@ -150,13 +156,6 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
             outputKey.assignString(i, bytes, 0, bytes.length);
           }
         }
-        if (!all && avgAccess >= 1 && bufferRow.getAccessCount() > avgAccess) {
-          context.resetHashTableAccess(bufferRow);
-          previousSlot = slot;
-          slot = nextSlot;
-          continue;
-        }
-
         // writeSingleRow copies the key bytes before owned storage is released.
         context.writeHashTableRow(outputKey, bufferRow);
         ++rowsEmitted;
@@ -201,6 +200,7 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
     assert numEntries >= 0 && numEntries <= numUsed && numUsed <= values.length &&
         numEntries <= resizeThreshold && resizeThreshold < buckets.length;
     assert (freeList == 0) == (numEntries == numUsed);
+    assert hashCode == spreadHash(key.hashCode());
     int bucket = hashCode & (buckets.length - 1);
     for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
       int slot = ref - 1;
