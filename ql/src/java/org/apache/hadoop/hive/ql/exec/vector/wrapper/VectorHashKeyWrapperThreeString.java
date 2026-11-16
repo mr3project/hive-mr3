@@ -26,8 +26,6 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.StringExpr;
 import org.apache.hadoop.hive.ql.util.JavaDataModel;
 import org.apache.hive.common.util.Murmur3;
 
-import com.google.common.base.Preconditions;
-
 public final class VectorHashKeyWrapperThreeString extends VectorHashKeyWrapperBase {
 
   private byte[] bytes0;
@@ -76,7 +74,15 @@ public final class VectorHashKeyWrapperThreeString extends VectorHashKeyWrapperB
 
   @Override
   public void setHashKey() {
-    int hash = nullHashcode();
+    int nullMask = (isNull0 ? 1 : 0) | (isNull1 ? 2 : 0) | (isNull2 ? 4 : 0);
+    hashcode = calculateHashCode(nullMask, bytes0, start0, length0,
+        bytes1, start1, length1, bytes2, start2, length2, hashCtx);
+  }
+
+  public static int calculateHashCode(int nullMask,
+      byte[] bytes0, int start0, int length0, byte[] bytes1, int start1, int length1,
+      byte[] bytes2, int start2, int length2, HashContext hashCtx) {
+    int hash = nullHashcode(nullMask);
     Murmur3.IncrementalHash32 bytesHash = null;
     if (length0 != -1) {
       bytesHash = HashContext.getBytesHash(hashCtx);
@@ -97,20 +103,20 @@ public final class VectorHashKeyWrapperThreeString extends VectorHashKeyWrapperB
       }
       bytesHash.add(bytes2, start2, length2);
     }
-    hashcode = bytesHash == null ? hash : bytesHash.end();
+    return bytesHash == null ? hash : bytesHash.end();
   }
 
-  private int nullHashcode() {
-    if (isNull0) {
-      if (isNull1) {
-        return isNull2 ? threeNullHashcode : null0Null1Hashcode;
+  private static int nullHashcode(int nullMask) {
+    if ((nullMask & 1) != 0) {
+      if ((nullMask & 2) != 0) {
+        return (nullMask & 4) != 0 ? threeNullHashcode : null0Null1Hashcode;
       } else {
-        return isNull2 ? null0Null2Hashcode : null0Hashcode;
+        return (nullMask & 4) != 0 ? null0Null2Hashcode : null0Hashcode;
       }
-    } else if (isNull1) {
-      return isNull2 ? null1Null2Hashcode : null1Hashcode;
+    } else if ((nullMask & 2) != 0) {
+      return (nullMask & 4) != 0 ? null1Null2Hashcode : null1Hashcode;
     } else {
-      return isNull2 ? null2Hashcode : nonNullHashcode;
+      return (nullMask & 4) != 0 ? null2Hashcode : nonNullHashcode;
     }
   }
 

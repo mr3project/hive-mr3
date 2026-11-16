@@ -28,9 +28,8 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
  * Array-backed, separate-chaining aggregation hash table for three long grouping keys.
  */
 final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
-  private long[] keys0;
-  private long[] keys1;
-  private long[] keys2;
+  // The three long components of each slot are stored consecutively.
+  private long[] keys;
   private byte[] nullMasks;
   // Cached spread hashes used for lookup and bucket selection.
   private int[] hashCodes;
@@ -108,20 +107,21 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
           keyWrapper.assignNullLong(1, 1);
           keyWrapper.assignNullLong(2, 2);
         } else {
+          int keyOffset = 3 * slot;
           if ((nullMasks[slot] & 1) != 0) {
             keyWrapper.assignNullLong(0, 0);
           } else {
-            keyWrapper.assignLong(0, 0, keys0[slot]);
+            keyWrapper.assignLong(0, 0, keys[keyOffset]);
           }
           if ((nullMasks[slot] & 2) != 0) {
             keyWrapper.assignNullLong(1, 1);
           } else {
-            keyWrapper.assignLong(1, 1, keys1[slot]);
+            keyWrapper.assignLong(1, 1, keys[keyOffset + 1]);
           }
           if ((nullMasks[slot] & 4) != 0) {
             keyWrapper.assignNullLong(2, 2);
           } else {
-            keyWrapper.assignLong(2, 2, keys2[slot]);
+            keyWrapper.assignLong(2, 2, keys[keyOffset + 2]);
           }
         }
         // writeSingleRow copies the key into outputBatch before this wrapper is reused.
@@ -156,8 +156,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
    * The supplied hash code has already been spread for bucket selection.
    */
   int findSlot(long key0, long key1, long key2, int nullMask, int hashCode) {
-    assert keys0.length == values.length && keys1.length == values.length &&
-        keys2.length == values.length && nullMasks.length == values.length &&
+    assert keys.length == 3L * values.length && nullMasks.length == values.length &&
         next.length == values.length && hashCodes.length == values.length;
     assert Integer.bitCount(buckets.length) == 1;
     assert numEntries >= 0 && numEntries <= numUsed && numUsed <= values.length &&
@@ -169,8 +168,9 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
     int bucket = hashCode & (buckets.length - 1);
     for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
       int slot = ref - 1;
-      if (hashCodes[slot] == hashCode && nullMasks[slot] == nullMask && keys0[slot] == key0 &&
-          keys1[slot] == key1 && keys2[slot] == key2) {
+      int keyOffset = 3 * slot;
+      if (hashCodes[slot] == hashCode && nullMasks[slot] == nullMask &&
+          keys[keyOffset] == key0 && keys[keyOffset + 1] == key1 && keys[keyOffset + 2] == key2) {
         return slot;
       }
     }
@@ -182,9 +182,10 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
     assert value != null;
     assert insertionSlot == ~findSlot(key0, key1, key2, nullMask, hashCode);
     allocateSlot(insertionSlot);
-    keys0[insertionSlot] = key0;
-    keys1[insertionSlot] = key1;
-    keys2[insertionSlot] = key2;
+    int keyOffset = 3 * insertionSlot;
+    keys[keyOffset] = key0;
+    keys[keyOffset + 1] = key1;
+    keys[keyOffset + 2] = key2;
     nullMasks[insertionSlot] = (byte) nullMask;
     hashCodes[insertionSlot] = hashCode;
     linkEntryWithSpreadHash(insertionSlot, hashCode, value);
@@ -207,15 +208,16 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
   }
 
   private int calculateHashCode(int slot) {
+    int keyOffset = 3 * slot;
     return VectorHashKeyWrapperThreeLong.calculateHashCode(
-        keys0[slot], keys1[slot], keys2[slot], nullMasks[slot]);
+        keys[keyOffset], keys[keyOffset + 1], keys[keyOffset + 2], nullMasks[slot]);
   }
 
   void remove(int bucket, int previousSlot, int slot) {
     assert values[slot] != null;
     assert bucket == (hashCodes[slot] & (buckets.length - 1));
     unlinkEntry(bucket, previousSlot, slot);
-    assert findSlot(keys0[slot], keys1[slot], keys2[slot], nullMasks[slot],
+    assert findSlot(keys[3 * slot], keys[3 * slot + 1], keys[3 * slot + 2], nullMasks[slot],
         hashCodes[slot]) == ~slot;
   }
 
@@ -233,18 +235,14 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
 
   @Override
   protected void growKeyStorage(int capacity) {
-    keys0 = Arrays.copyOf(keys0, capacity);
-    keys1 = Arrays.copyOf(keys1, capacity);
-    keys2 = Arrays.copyOf(keys2, capacity);
+    keys = Arrays.copyOf(keys, Math.multiplyExact(capacity, 3));
     nullMasks = Arrays.copyOf(nullMasks, capacity);
     hashCodes = Arrays.copyOf(hashCodes, capacity);
   }
 
   @Override
   protected void resetKeyStorage() {
-    keys0 = new long[values.length];
-    keys1 = new long[values.length];
-    keys2 = new long[values.length];
+    keys = new long[Math.multiplyExact(values.length, 3)];
     nullMasks = new byte[values.length];
     hashCodes = new int[values.length];
     nullValue = null;
@@ -272,15 +270,15 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
    */
   @Override
   boolean checkInvariants() {
-    if (!checkStructure() || keys0.length != values.length || keys1.length != values.length ||
-        keys2.length != values.length || nullMasks.length != values.length ||
+    if (!checkStructure() || keys.length != 3L * values.length || nullMasks.length != values.length ||
         hashCodes.length != values.length) {
       return false;
     }
     for (int slot = 0; slot < numUsed; ++slot) {
+      int keyOffset = 3 * slot;
       if (values[slot] != null &&
           (hashCodes[slot] != spreadHash(calculateHashCode(slot)) ||
-              findSlot(keys0[slot], keys1[slot], keys2[slot], nullMasks[slot],
+              findSlot(keys[keyOffset], keys[keyOffset + 1], keys[keyOffset + 2], nullMasks[slot],
                   hashCodes[slot]) != slot)) {
         return false;
       }
@@ -291,9 +289,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
   @Override
   long getEstimatedFixedMemorySize() {
     return getEstimatedArrayMemorySize()
-        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys0.length)
-        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys1.length)
-        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys2.length)
+        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys.length)
         + JAVA_DATA_MODEL.lengthForByteArrayOfSize(nullMasks.length)
         + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes.length);
   }

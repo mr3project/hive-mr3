@@ -455,6 +455,9 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       case TWO_STRING:
         hashTable = new VectorGroupByTwoStringHashTable(expectedEntries);
         break;
+      case THREE_STRING:
+        hashTable = new VectorGroupByThreeStringHashTable(expectedEntries);
+        break;
       case TWO_LONG_SINGLE_STRING:
         hashTable = new VectorGroupByTwoLongStringHashTable(expectedEntries, keyWrappersBatch);
         break;
