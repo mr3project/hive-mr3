@@ -435,15 +435,43 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       assert peakEntriesHintAtStart == null ||
           peakEntriesHintAtStart > INITIAL_HASH_MAP_ENTRY_THRESHOLD;
       KeyWrapperType keyWrapperType = keyWrappersBatch.getKeyWrapperType();
-      if (keyWrapperType == KeyWrapperType.SINGLE_LONG) {
-        hashTable = new VectorGroupByLongHashTable(
-            peakEntriesHintAtStart == null ? 0 : peakEntriesHintAtStart);
+      int expectedEntries = peakEntriesHintAtStart == null ? 0 : peakEntriesHintAtStart;
+      switch (keyWrapperType) {
+      case SINGLE_LONG:
+        hashTable = new VectorGroupByLongHashTable(expectedEntries);
+        break;
+      case TWO_LONG:
+        hashTable = new VectorGroupByTwoLongHashTable(expectedEntries);
+        break;
+      case THREE_LONG:
+        hashTable = new VectorGroupByThreeLongHashTable(expectedEntries);
+        break;
+      case SINGLE_STRING:
+        hashTable = new VectorGroupByStringHashTable(expectedEntries);
+        break;
+      case SINGLE_LONG_SINGLE_STRING:
+        hashTable = new VectorGroupByLongStringHashTable(expectedEntries, keyWrappersBatch);
+        break;
+      case TWO_STRING:
+        hashTable = new VectorGroupByTwoStringHashTable(expectedEntries);
+        break;
+      case TWO_LONG_SINGLE_STRING:
+        hashTable = new VectorGroupByTwoLongStringHashTable(expectedEntries, keyWrappersBatch);
+        break;
+      case SINGLE_LONG_TWO_STRING:
+        hashTable = new VectorGroupByLongTwoStringHashTable(expectedEntries, keyWrappersBatch);
+        break;
+      default:
+        if (peakEntriesHintAtStart == null) {
+          mapKeysAggregationBuffers = new HashMap<KeyWrapper, VectorAggregationBufferRow>();
+        } else {
+          // do not consider memory limits which the previous VectorGroupByOperator already took care of
+          mapKeysAggregationBuffers = HashMap.newHashMap(peakEntriesHintAtStart);
+        }
+        break;
+      }
+      if (hashTable != null) {
         hashTableOutputKey = keyWrappersBatch.getVectorHashKeyWrappers()[0];
-      } else if (peakEntriesHintAtStart == null) {
-        mapKeysAggregationBuffers = new HashMap<KeyWrapper, VectorAggregationBufferRow>();
-      } else {
-        // do not consider memory limits which the previous VectorGroupByOperator already took care of
-        mapKeysAggregationBuffers = HashMap.newHashMap(peakEntriesHintAtStart);
       }
       /*
        * The grouping sets expand the hash sizes by producing intermediate keys. 3 grouping sets
@@ -815,7 +843,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     }
 
     private long getEstimatedHashTableMemory() {
-      // Keep the existing active-aggregation estimate; charge allocated primitive-table storage
+      // Keep the existing active-aggregation estimate; charge allocated specialized-table storage
       // separately because partial flushing does not release its arrays.
       long memory = numEntriesHashTable * (fixedHashEntrySize + avgVariableSize);
       if (hashTable != null) {

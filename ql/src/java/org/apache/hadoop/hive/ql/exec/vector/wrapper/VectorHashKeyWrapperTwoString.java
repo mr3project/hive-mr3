@@ -58,9 +58,16 @@ public class VectorHashKeyWrapperTwoString extends VectorHashKeyWrapperTwoBase {
 
   @Override
   public void setHashKey() {
+    hashcode = calculateHashCode((isNull0 ? 1 : 0) | (isNull1 ? 2 : 0),
+        bytes0, start0, length0, bytes1, start1, length1, hashCtx);
+  }
+
+  public static int calculateHashCode(int nullMask,
+      byte[] bytes0, int start0, int length0, byte[] bytes1, int start1, int length1,
+      HashContext hashCtx) {
     int hash;
-    if (isNull0 || isNull1) {
-      hash = isNull0 && isNull1 ? twoNullHashcode : isNull0 ? null0Hashcode : null1Hashcode;
+    if (nullMask != 0) {
+      hash = nullMask == 3 ? twoNullHashcode : nullMask == 1 ? null0Hashcode : null1Hashcode;
     } else {
       hash = nonNullHashcode;
     }
@@ -78,7 +85,7 @@ public class VectorHashKeyWrapperTwoString extends VectorHashKeyWrapperTwoBase {
       }
       bytesHash.add(bytes1, start1, length1);
     }
-    hashcode = bytesHash == null ? hash : bytesHash.end();
+    return bytesHash == null ? hash : bytesHash.end();
   }
 
   @Override

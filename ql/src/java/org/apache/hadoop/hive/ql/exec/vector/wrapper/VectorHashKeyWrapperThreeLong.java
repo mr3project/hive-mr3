@@ -50,23 +50,21 @@ public final class VectorHashKeyWrapperThreeLong extends VectorHashKeyWrapperBas
 
   @Override
   public void setHashKey() {
-    hashcode = calculateLongValuesHashCode() ^ EMPTY_DOUBLE_ARRAY_HASH ^ calculateNullsHashCode();
+    hashcode = calculateHashCode(longValue0, longValue1, longValue2,
+        (isNull0 ? 1 : 0) | (isNull1 ? 2 : 0) | (isNull2 ? 4 : 0));
   }
 
-  private int calculateLongValuesHashCode() {
+  public static int calculateHashCode(long longValue0, long longValue1, long longValue2,
+      int nullMask) {
     int result = 1;
     result = 31 * result + (int) (longValue0 ^ (longValue0 >>> 32));
     result = 31 * result + (int) (longValue1 ^ (longValue1 >>> 32));
     result = 31 * result + (int) (longValue2 ^ (longValue2 >>> 32));
-    return result;
-  }
-
-  private int calculateNullsHashCode() {
-    int result = 1;
-    result = 31 * result + (isNull0 ? 1231 : 1237);
-    result = 31 * result + (isNull1 ? 1231 : 1237);
-    result = 31 * result + (isNull2 ? 1231 : 1237);
-    return result;
+    int nullsHash = 1;
+    nullsHash = 31 * nullsHash + ((nullMask & 1) != 0 ? 1231 : 1237);
+    nullsHash = 31 * nullsHash + ((nullMask & 2) != 0 ? 1231 : 1237);
+    nullsHash = 31 * nullsHash + ((nullMask & 4) != 0 ? 1231 : 1237);
+    return result ^ EMPTY_DOUBLE_ARRAY_HASH ^ nullsHash;
   }
 
   @Override
