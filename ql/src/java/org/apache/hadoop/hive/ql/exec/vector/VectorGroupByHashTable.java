@@ -110,9 +110,14 @@ abstract class VectorGroupByHashTable {
     }
   }
 
-  protected final void linkEntry(int slot, int hash, VectorAggregationBufferRow value) {
+  protected static int spreadHash(int hashCode) {
+    return hashCode ^ (hashCode >>> 16);
+  }
+
+  protected final void linkEntryWithSpreadHash(int slot, int spreadHashCode,
+      VectorAggregationBufferRow value) {
     assert value != null && values[slot] == null;
-    int bucket = (hash ^ (hash >>> 16)) & (buckets.length - 1);
+    int bucket = spreadHashCode & (buckets.length - 1);
     values[slot] = value;
     next[slot] = buckets[bucket];
     buckets[bucket] = slot + 1;

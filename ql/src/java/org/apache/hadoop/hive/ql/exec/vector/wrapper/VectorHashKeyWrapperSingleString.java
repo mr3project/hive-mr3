@@ -49,11 +49,15 @@ public class VectorHashKeyWrapperSingleString extends VectorHashKeyWrapperSingle
 
   @Override
   public void setHashKey() {
-    int hash = isNull0 ? singleStringNullHashcode : nonNullHashcode;
-    if (length0 != -1) {
-      hash = Murmur3.IncrementalHash32.hash32(bytes0, start0, length0, hash);
+    hashcode = calculateHashCode(isNull0, bytes0, start0, length0);
+  }
+
+  public static int calculateHashCode(boolean isNull, byte[] bytes, int start, int length) {
+    int hash = isNull ? singleStringNullHashcode : nonNullHashcode;
+    if (length != -1) {
+      hash = Murmur3.IncrementalHash32.hash32(bytes, start, length, hash);
     }
-    hashcode = hash;
+    return hash;
   }
 
   @Override
