@@ -804,46 +804,58 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       int avgAccess = all ? 0 : computeAvgAccess();
       int entriesFlushed = 0;
       int rowsEmitted = 0;
-      // Visit the separate NULL group before the occupied array slots.
-      for (int slot = -1; slot < longHashTable.capacity(); ++slot) {
-        VectorAggregationBufferRow bufferRow = slot == -1 ? longHashTable.getNullValue() :
-            longHashTable.getValue(slot);
-        if (bufferRow == null) {
+      // Visit the separate NULL group before the bucket chains.
+      flushEntries:
+      for (int bucket = -1; bucket < longHashTable.bucketCount(); ++bucket) {
+        if (bucket == -1 && longHashTable.getNullValue() == null) {
           continue;
         }
-        if (!all && avgAccess >= 1 && bufferRow.getAccessCount() > avgAccess) {
-          totalAccessCount -= bufferRow.getAccessCount();
-          bufferRow.resetAccessCount();
-          continue;
-        }
+        int previousSlot = -1;
+        int slot = bucket == -1 ? 0 : longHashTable.firstSlot(bucket);
+        while (slot != -1) {
+          int nextSlot = bucket == -1 ? -1 : longHashTable.nextSlot(slot);
+          VectorAggregationBufferRow bufferRow = bucket == -1 ? longHashTable.getNullValue() :
+              longHashTable.getValue(slot);
+          assert bufferRow != null;
+          if (!all && avgAccess >= 1 && bufferRow.getAccessCount() > avgAccess) {
+            totalAccessCount -= bufferRow.getAccessCount();
+            bufferRow.resetAccessCount();
+            previousSlot = slot;
+            slot = nextSlot;
+            continue;
+          }
 
-        finishAggregators(bufferRow, false);
-        if (slot == -1) {
-          keyWrapper.assignNullLong(0, 0);
-        } else {
-          keyWrapper.assignLong(0, 0, longHashTable.getKey(slot));
-        }
-        // writeSingleRow copies the key into outputBatch before this wrapper is reused.
-        writeSingleRow(keyWrapper, bufferRow);
-        ++rowsEmitted;
-
-        if (!all) {
-          totalAccessCount -= bufferRow.getAccessCount();
-          reusableAggregationBufferRows.add(bufferRow);
-          bufferRow.resetAccessCount();
-          if (slot == -1) {
-            longHashTable.removeNullValue();
+          finishAggregators(bufferRow, false);
+          if (bucket == -1) {
+            keyWrapper.assignNullLong(0, 0);
           } else {
-            longHashTable.remove(slot);
+            keyWrapper.assignLong(0, 0, longHashTable.getKey(slot));
           }
-          --numEntriesHashTable;
-          if (++entriesFlushed >= entriesToFlush) {
-            break;
+          // writeSingleRow copies the key into outputBatch before this wrapper is reused.
+          writeSingleRow(keyWrapper, bufferRow);
+          ++rowsEmitted;
+
+          if (!all) {
+            totalAccessCount -= bufferRow.getAccessCount();
+            reusableAggregationBufferRows.add(bufferRow);
+            bufferRow.resetAccessCount();
+            if (bucket == -1) {
+              longHashTable.removeNullValue();
+            } else {
+              longHashTable.remove(bucket, previousSlot, slot);
+            }
+            --numEntriesHashTable;
+            if (++entriesFlushed >= entriesToFlush) {
+              break flushEntries;
+            }
+          } else {
+            previousSlot = slot;
           }
+          slot = nextSlot;
         }
       }
       if (!all) {
-        longHashTable.compact();
+        assert longHashTable.checkInvariants();
         assert rowsEmitted == entriesFlushed;
         assert initialEntries - entriesFlushed == numEntriesHashTable;
         assert longHashTable.size() == numEntriesHashTable;
@@ -879,9 +891,18 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         numEntriesSinceCheck = 0;
       }
       long currMemUsed = getEstimatedHashTableMemory();
+      long memoryLimit = maxHashTblMemory;
+      if (longHashTable != null) {
+        long tableMemory = longHashTable.getEstimatedMemorySize();
+        // When retained arrays exhaust the budget, give active aggregation entries the original
+        // budget instead of repeatedly flushing because of storage that flushing cannot release.
+        if (tableMemory >= memoryLimit) {
+          memoryLimit += tableMemory;
+        }
+      }
       // Protect against low maxHtEntries setting: if memory usage is below 30% avoid flushing
-      if ( ((numEntriesHashTable > this.maxHtEntries) && (currMemUsed > 0.3 * maxHashTblMemory))  ||
-          currMemUsed > maxHashTblMemory) {
+      if ( ((numEntriesHashTable > this.maxHtEntries) && (currMemUsed > 0.3 * memoryLimit))  ||
+          currMemUsed > memoryLimit) {
         return true;
       }
       if (gcCanary.get() == null) {

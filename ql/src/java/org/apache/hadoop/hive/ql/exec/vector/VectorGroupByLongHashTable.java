@@ -24,18 +24,21 @@ import org.apache.hadoop.hive.ql.util.JavaDataModel;
 import org.apache.hive.common.util.HashCodeUtil;
 
 /**
- * Linear-probing aggregation hash table for a single long grouping key.
+ * Array-backed, separate-chaining aggregation hash table for a single long grouping key.
  */
 final class VectorGroupByLongHashTable {
-  private static final double MAX_LOAD_FACTOR = 0.60;
+  private static final double MAX_LOAD_FACTOR = 0.75;
   private static final int INITIAL_CAPACITY = 16;
-  private static final VectorAggregationBufferRow DELETED = new VectorAggregationBufferRow(null);
 
+  // Bucket heads and next links store slot + 1; zero terminates a chain.
+  private int[] buckets;
+  private int[] next;
   private long[] keys;
   private VectorAggregationBufferRow[] values;
   private VectorAggregationBufferRow nullValue;
   private int numEntries;
-  private int numDeleted;
+  private int numUsed;
+  private int freeList;
   private int resizeThreshold;
 
   VectorGroupByLongHashTable(int expectedEntries) {
@@ -43,69 +46,69 @@ final class VectorGroupByLongHashTable {
     while (expectedEntries > (int) (capacity * MAX_LOAD_FACTOR)) {
       capacity = Math.multiplyExact(capacity, 2);
     }
-    keys = new long[capacity];
-    values = new VectorAggregationBufferRow[capacity];
+    buckets = new int[capacity];
     resizeThreshold = (int) (capacity * MAX_LOAD_FACTOR);
+    next = new int[resizeThreshold];
+    keys = new long[resizeThreshold];
+    values = new VectorAggregationBufferRow[resizeThreshold];
+    assert checkInvariants();
   }
 
   /**
    * Returns the matching slot, or the bitwise complement of an insertion slot.
    */
   int findSlot(long key, int hashCode) {
-    assert keys.length == values.length && Integer.bitCount(values.length) == 1;
-    assert numEntries >= 0 && numDeleted >= 0 &&
-        numEntries + numDeleted <= resizeThreshold && resizeThreshold < values.length;
+    assert keys.length == values.length && next.length == values.length;
+    assert Integer.bitCount(buckets.length) == 1;
+    assert numEntries >= 0 && numEntries <= numUsed && numUsed <= values.length &&
+        numEntries <= resizeThreshold && resizeThreshold < buckets.length;
+    assert (freeList == 0) == (numEntries == numUsed);
     assert hashCode == HashCodeUtil.calculateLongHashCode(key);
-    int mask = values.length - 1;
-    int slot = (hashCode ^ (hashCode >>> 16)) & mask;
-    int firstDeleted = -1;
-    // Occupancy stays below capacity, so every probe reaches an empty slot or its key.
-    while (true) {
-      VectorAggregationBufferRow value = values[slot];
-      if (value == null) {
-        return ~(firstDeleted == -1 ? slot : firstDeleted);
-      }
-      if (value == DELETED) {
-        if (firstDeleted == -1) {
-          firstDeleted = slot;
-        }
-      } else if (keys[slot] == key) {
+    int bucket = (hashCode ^ (hashCode >>> 16)) & (buckets.length - 1);
+    for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
+      int slot = ref - 1;
+      if (keys[slot] == key) {
         return slot;
       }
-      slot = (slot + 1) & mask;
     }
+    return ~(freeList == 0 ? numUsed : freeList - 1);
   }
 
   void put(long key, int hashCode, int insertionSlot, VectorAggregationBufferRow value) {
-    assert value != null && value != DELETED;
-    assert values[insertionSlot] == null || values[insertionSlot] == DELETED;
+    assert value != null;
     assert insertionSlot == ~findSlot(key, hashCode);
     if (numEntries + 1 > resizeThreshold) {
-      rehash(Math.multiplyExact(values.length, 2));
-      insertionSlot = ~findSlot(key, hashCode);
-    } else if (values[insertionSlot] == null && numEntries + numDeleted + 1 > resizeThreshold) {
-      rehash(values.length);
-      insertionSlot = ~findSlot(key, hashCode);
+      rehash(Math.multiplyExact(buckets.length, 2));
     }
-    assert values[insertionSlot] == null || values[insertionSlot] == DELETED;
-    if (values[insertionSlot] == DELETED) {
-      --numDeleted;
+    if (freeList != 0) {
+      assert insertionSlot == freeList - 1 && values[insertionSlot] == null;
+      freeList = next[insertionSlot];
+    } else {
+      assert insertionSlot == numUsed;
+      if (numUsed == values.length) {
+        growEntries();
+      }
+      ++numUsed;
     }
+    int bucket = (hashCode ^ (hashCode >>> 16)) & (buckets.length - 1);
     keys[insertionSlot] = key;
     values[insertionSlot] = value;
+    next[insertionSlot] = buckets[bucket];
+    buckets[bucket] = insertionSlot + 1;
     ++numEntries;
-    assert numEntries + numDeleted <= resizeThreshold;
+    assert numEntries <= resizeThreshold;
+    assert (freeList == 0) == (numEntries == numUsed);
     assert findSlot(key, hashCode) == insertionSlot;
     assert getValue(insertionSlot) == value;
   }
 
   VectorAggregationBufferRow getValue(int slot) {
-    VectorAggregationBufferRow value = values[slot];
-    return value == DELETED ? null : value;
+    assert values[slot] != null;
+    return values[slot];
   }
 
   long getKey(int slot) {
-    assert values[slot] != null && values[slot] != DELETED;
+    assert values[slot] != null;
     return keys[slot];
   }
 
@@ -114,7 +117,7 @@ final class VectorGroupByLongHashTable {
   }
 
   void setNullValue(VectorAggregationBufferRow value) {
-    assert nullValue == null && value != null && value != DELETED;
+    assert nullValue == null && value != null;
     nullValue = value;
   }
 
@@ -123,62 +126,71 @@ final class VectorGroupByLongHashTable {
     nullValue = null;
   }
 
-  void remove(int slot) {
-    assert values[slot] != null && values[slot] != DELETED;
-    values[slot] = DELETED;
+  void remove(int bucket, int previousSlot, int slot) {
+    assert values[slot] != null;
+    assert bucket == ((HashCodeUtil.calculateLongHashCode(keys[slot]) ^
+        (HashCodeUtil.calculateLongHashCode(keys[slot]) >>> 16)) & (buckets.length - 1));
+    assert previousSlot == -1 ? buckets[bucket] == slot + 1 :
+        values[previousSlot] != null && next[previousSlot] == slot + 1;
+    if (previousSlot == -1) {
+      buckets[bucket] = next[slot];
+    } else {
+      next[previousSlot] = next[slot];
+    }
+    values[slot] = null;
+    next[slot] = freeList;
+    freeList = slot + 1;
     --numEntries;
-    ++numDeleted;
-    assert numEntries >= 0 && numEntries + numDeleted <= resizeThreshold;
+    assert numEntries >= 0 && numEntries <= resizeThreshold;
+    assert findSlot(keys[slot], HashCodeUtil.calculateLongHashCode(keys[slot])) == ~slot;
   }
 
   int size() {
     return numEntries + (nullValue == null ? 0 : 1);
   }
 
-  int capacity() {
-    return values.length;
+  int bucketCount() {
+    return buckets.length;
+  }
+
+  int firstSlot(int bucket) {
+    return buckets[bucket] - 1;
+  }
+
+  int nextSlot(int slot) {
+    assert values[slot] != null;
+    return next[slot] - 1;
   }
 
   void clear() {
-    Arrays.fill(values, null);
+    Arrays.fill(buckets, 0);
+    Arrays.fill(values, 0, numUsed, null);
     nullValue = null;
     numEntries = 0;
-    numDeleted = 0;
+    numUsed = 0;
+    freeList = 0;
+    assert checkInvariants();
   }
 
-  /**
-   * Cleans up tombstones after an iteration that may have removed entries.
-   */
-  void compact() {
-    if (numEntries == 0) {
-      Arrays.fill(values, null);
-      numDeleted = 0;
-      assert checkInvariants();
-    } else if (numDeleted > numEntries) {
-      rehash(values.length);
-    }
+  private void growEntries() {
+    int capacity = Math.multiplyExact(values.length, 2);
+    next = Arrays.copyOf(next, capacity);
+    keys = Arrays.copyOf(keys, capacity);
+    values = Arrays.copyOf(values, capacity);
+    assert checkInvariants();
   }
 
   private void rehash(int capacity) {
-    long[] oldKeys = keys;
-    VectorAggregationBufferRow[] oldValues = values;
-    keys = new long[capacity];
-    values = new VectorAggregationBufferRow[capacity];
+    buckets = new int[capacity];
     resizeThreshold = (int) (capacity * MAX_LOAD_FACTOR);
-    numDeleted = 0;
     int mask = capacity - 1;
     int copiedEntries = 0;
-    for (int i = 0; i < oldValues.length; ++i) {
-      VectorAggregationBufferRow value = oldValues[i];
-      if (value != null && value != DELETED) {
-        long key = oldKeys[i];
-        int hashCode = HashCodeUtil.calculateLongHashCode(key);
-        int slot = (hashCode ^ (hashCode >>> 16)) & mask;
-        while (values[slot] != null) {
-          slot = (slot + 1) & mask;
-        }
-        keys[slot] = key;
-        values[slot] = value;
+    for (int slot = 0; slot < numUsed; ++slot) {
+      if (values[slot] != null) {
+        int hashCode = HashCodeUtil.calculateLongHashCode(keys[slot]);
+        int bucket = (hashCode ^ (hashCode >>> 16)) & mask;
+        next[slot] = buckets[bucket];
+        buckets[bucket] = slot + 1;
         ++copiedEntries;
       }
     }
@@ -187,35 +199,55 @@ final class VectorGroupByLongHashTable {
   }
 
   /**
-   * Checks probe reachability and the live/tombstone counts after rehashing.
+   * Checks bucket-chain reachability, entry counts, and free-list membership.
    */
-  private boolean checkInvariants() {
-    if (keys.length != values.length || Integer.bitCount(values.length) != 1 ||
-        numEntries < 0 || numDeleted < 0 ||
-        numEntries + numDeleted > resizeThreshold || resizeThreshold >= values.length) {
+  boolean checkInvariants() {
+    if (keys.length != values.length || next.length != values.length ||
+        Integer.bitCount(buckets.length) != 1 ||
+        resizeThreshold != (int) (buckets.length * MAX_LOAD_FACTOR) ||
+        numEntries < 0 || numEntries > resizeThreshold ||
+        numEntries > numUsed || numUsed > values.length) {
       return false;
     }
+    boolean[] visited = new boolean[numUsed];
     int liveEntries = 0;
-    int deletedEntries = 0;
-    for (int slot = 0; slot < values.length; ++slot) {
-      VectorAggregationBufferRow value = values[slot];
-      if (value == DELETED) {
-        ++deletedEntries;
-      } else if (value != null) {
+    for (int bucket = 0; bucket < buckets.length; ++bucket) {
+      for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
+        int slot = ref - 1;
+        if (slot < 0 || slot >= numUsed || visited[slot] || values[slot] == null) {
+          return false;
+        }
+        visited[slot] = true;
         ++liveEntries;
         int hashCode = HashCodeUtil.calculateLongHashCode(keys[slot]);
-        if (findSlot(keys[slot], hashCode) != slot) {
+        if (((hashCode ^ (hashCode >>> 16)) & (buckets.length - 1)) != bucket ||
+            findSlot(keys[slot], hashCode) != slot) {
           return false;
         }
       }
     }
-    return liveEntries == numEntries && deletedEntries == numDeleted;
+    int freeEntries = 0;
+    for (int ref = freeList; ref != 0; ref = next[ref - 1]) {
+      int slot = ref - 1;
+      if (slot < 0 || slot >= numUsed || visited[slot] || values[slot] != null) {
+        return false;
+      }
+      visited[slot] = true;
+      ++freeEntries;
+    }
+    for (int slot = numUsed; slot < values.length; ++slot) {
+      if (values[slot] != null) {
+        return false;
+      }
+    }
+    return liveEntries == numEntries && liveEntries + freeEntries == numUsed;
   }
 
   long getEstimatedMemorySize() {
     JavaDataModel model = JavaDataModel.get();
-    return JavaDataModel.alignUp(model.object() + 3L * model.ref() + 3L * model.primitive1(),
-        model.memoryAlign()) + model.lengthForLongArrayOfSize(keys.length)
+    return JavaDataModel.alignUp(model.object() + 5L * model.ref() + 4L * model.primitive1(),
+        model.memoryAlign()) + model.lengthForIntArrayOfSize(buckets.length)
+        + model.lengthForIntArrayOfSize(next.length) + model.lengthForLongArrayOfSize(keys.length)
         + model.lengthForObjectArrayOfSize(values.length);
   }
 }
