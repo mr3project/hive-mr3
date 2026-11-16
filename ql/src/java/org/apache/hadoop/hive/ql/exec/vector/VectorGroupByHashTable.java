@@ -46,10 +46,17 @@ abstract class VectorGroupByHashTable {
     while (expectedEntries > (int) (capacity * MAX_LOAD_FACTOR)) {
       capacity = Math.multiplyExact(capacity, 2);
     }
+    initializeEntries(capacity);
+  }
+
+  private void initializeEntries(int capacity) {
     buckets = new int[capacity];
     resizeThreshold = (int) (capacity * MAX_LOAD_FACTOR);
     next = new int[resizeThreshold];
     values = new VectorAggregationBufferRow[resizeThreshold];
+    numEntries = 0;
+    numUsed = 0;
+    freeList = 0;
   }
 
   abstract int prepareBatch(VectorGroupByOperator.ProcessingModeHashAggregate context,
@@ -61,6 +68,16 @@ abstract class VectorGroupByHashTable {
 
   abstract void clear();
 
+  /**
+   * Discards all entries and replaces their storage at initial capacity after a full flush.
+   */
+  final void reset() {
+    initializeEntries(INITIAL_CAPACITY);
+    resetKeyStorage();
+    assert size() == 0;
+    assert checkInvariants();
+  }
+
   abstract long getEstimatedFixedMemorySize();
 
   long getEstimatedMemorySize() {
@@ -69,11 +86,13 @@ abstract class VectorGroupByHashTable {
 
   abstract boolean checkInvariants();
 
+  // Storage hooks are called only when arrays are allocated or resized.
   protected abstract void growKeyStorage(int capacity);
+
+  protected abstract void resetKeyStorage();
 
   protected abstract void rehash();
 
-  // These hooks are reached only when capacity grows, outside the lookup loops.
   protected final void allocateSlot(int insertionSlot) {
     if (numEntries + 1 > resizeThreshold) {
       rehash();

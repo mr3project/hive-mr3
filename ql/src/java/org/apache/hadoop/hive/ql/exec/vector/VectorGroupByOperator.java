@@ -697,12 +697,17 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
     /**
      * Flushes the entries in the hash table by emiting output (forward).
-     * When parameter 'all' is true all the entries are flushed.
-     * @param all
+     * A final flush emits all entries before hash aggregation ends. During processing,
+     * oversized specialized storage is fully flushed and reset to its initial capacity.
+     * @param finalFlush
      * @throws HiveException
      */
-    private void flush(boolean all) throws HiveException {
+    private void flush(boolean finalFlush) throws HiveException {
 
+      boolean resetTable = !finalFlush && hashTable != null &&
+          hashTable.getEstimatedFixedMemorySize() >= maxHashTblMemory;
+      // TODO: Support partial flushing and rebuilding into smaller arrays for oversized storage.
+      boolean all = finalFlush || resetTable;
       int entriesToFlush = all ? numEntriesHashTable :
         (int)(numEntriesHashTable * this.percentEntriesToFlush);
       int entriesFlushed = 0;
@@ -762,23 +767,33 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         }
       }
 
-      if (!all) {
+      if (all) {
+        entriesFlushed = entriesToFlush;
+      }
+      if (!finalFlush) {
         numFlushedOutEntriesBeforeFinalFlush += entriesFlushed;
       }
 
       if (all) {
         if (hashTable != null) {
-          hashTable.clear();
+          if (resetTable) {
+            hashTable.reset();
+          } else {
+            hashTable.clear();
+          }
+          assert hashTable.size() == 0;
         } else {
           mapKeysAggregationBuffers.clear();
         }
         totalAccessCount = 0;
         numEntriesHashTable = 0;
-        numFlushedOutEntriesBeforeFinalFlush = 0;
       }
 
-      if (all && LOG.isDebugEnabled()) {
-        LOG.debug(String.format("GC canary caused %d flushes", gcCanaryFlushes));
+      if (finalFlush) {
+        numFlushedOutEntriesBeforeFinalFlush = 0;
+        if (LOG.isDebugEnabled()) {
+          LOG.debug(String.format("GC canary caused %d flushes", gcCanaryFlushes));
+        }
       }
     }
 

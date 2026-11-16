@@ -51,10 +51,7 @@ final class VectorGroupByGeneraLongStringHashTable extends VectorGroupByHashTabl
     keyCount = keyInfo.keyCount;
     nullWordCount = (keyCount + Long.SIZE - 1) / Long.SIZE;
     assert keyCount == longIndices.length + stringIndices.length;
-    hashes = new int[values.length];
-    longValues = new long[Math.multiplyExact(values.length, longIndices.length)];
-    stringValues = new byte[Math.multiplyExact(values.length, stringIndices.length)][];
-    nullWords = new long[Math.multiplyExact(values.length, nullWordCount)];
+    resetKeyStorage();
     assert checkInvariants();
   }
 
@@ -267,6 +264,15 @@ final class VectorGroupByGeneraLongStringHashTable extends VectorGroupByHashTabl
     longValues = Arrays.copyOf(longValues, Math.multiplyExact(capacity, longIndices.length));
     stringValues = Arrays.copyOf(stringValues, Math.multiplyExact(capacity, stringIndices.length));
     nullWords = Arrays.copyOf(nullWords, Math.multiplyExact(capacity, nullWordCount));
+  }
+
+  @Override
+  protected void resetKeyStorage() {
+    hashes = new int[values.length];
+    longValues = new long[Math.multiplyExact(values.length, longIndices.length)];
+    stringValues = new byte[Math.multiplyExact(values.length, stringIndices.length)][];
+    nullWords = new long[Math.multiplyExact(values.length, nullWordCount)];
+    stringMemorySize = 0;
   }
 
   @Override

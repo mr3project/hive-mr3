@@ -35,7 +35,7 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
 
   VectorGroupByLongHashTable(int expectedEntries) {
     super(expectedEntries);
-    keys = new long[values.length];
+    resetKeyStorage();
     assert checkInvariants();
   }
 
@@ -204,6 +204,12 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
   @Override
   protected void growKeyStorage(int capacity) {
     keys = Arrays.copyOf(keys, capacity);
+  }
+
+  @Override
+  protected void resetKeyStorage() {
+    keys = new long[values.length];
+    nullValue = null;
   }
 
   @Override
