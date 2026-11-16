@@ -24,18 +24,14 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.StringExpr;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneralLongString;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
-import org.apache.hadoop.hive.ql.util.JavaDataModel;
 
 /**
  * Array-backed, separate-chaining aggregation hash table for long and string grouping keys.
  */
 final class VectorGroupByGeneraLongStringHashTable extends VectorGroupByHashTable {
-  // Column mappings are shared with the compiled key layout.
-  private static final long OBJECT_MEMORY_SIZE = JavaDataModel.alignUp(
-      JAVA_DATA_MODEL.object() + 9L * JAVA_DATA_MODEL.ref() + 6L * JAVA_DATA_MODEL.primitive1() +
-      JAVA_DATA_MODEL.primitive2(), JAVA_DATA_MODEL.memoryAlign());
   private static final byte[] EMPTY_BYTES = new byte[0];
 
+  // Column mappings are shared with the compiled key layout.
   private final int[] longIndices;
   private final int[] stringIndices;
   private final int keyCount;
@@ -360,7 +356,7 @@ final class VectorGroupByGeneraLongStringHashTable extends VectorGroupByHashTabl
 
   @Override
   long getEstimatedFixedMemorySize() {
-    return OBJECT_MEMORY_SIZE + getEstimatedArrayMemorySize()
+    return getEstimatedArrayMemorySize()
         + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashes.length)
         + JAVA_DATA_MODEL.lengthForLongArrayOfSize(longValues.length)
         + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(stringValues.length)
