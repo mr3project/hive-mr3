@@ -124,14 +124,10 @@ final class VectorGroupByGeneraLongStringHashTable extends VectorGroupByHashTabl
         keyWrapper.assignNullString(stringIndices[i], i);
       }
     }
-    if (!all) {
-      assert checkInvariants();
-      assert rowsEmitted == entriesFlushed;
-      assert initialEntries - entriesFlushed == context.getHashTableSize();
-      assert size() == context.getHashTableSize();
-    } else {
-      assert rowsEmitted == initialEntries;
-    }
+    assert all || (checkInvariants() && rowsEmitted == entriesFlushed &&
+        initialEntries - entriesFlushed == context.getHashTableSize() &&
+        size() == context.getHashTableSize());
+    assert !all || rowsEmitted == initialEntries;
     return entriesFlushed;
   }
 
