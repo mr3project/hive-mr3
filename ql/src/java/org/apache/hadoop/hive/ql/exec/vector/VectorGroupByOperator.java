@@ -54,7 +54,6 @@ import org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates.VectorAggreg
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperFactory.KeyWrapperType;
-import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneralLongString;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.GroupByDesc;
@@ -440,12 +439,6 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         hashTable = new VectorGroupByLongHashTable(
             peakEntriesHintAtStart == null ? 0 : peakEntriesHintAtStart);
         hashTableOutputKey = keyWrappersBatch.getVectorHashKeyWrappers()[0];
-      } else if (keyWrapperType == KeyWrapperType.GENERAL_LONG_STRING) {
-        hashTable = new VectorGroupByGeneraLongStringHashTable(
-            peakEntriesHintAtStart == null ? 0 : peakEntriesHintAtStart, keyWrappersBatch);
-        hashTableOutputKey = new VectorHashKeyWrapperGeneralLongString(null,
-            keyWrappersBatch.longIndices.length, keyWrappersBatch.stringIndices.length,
-            keyWrappersBatch.keyCount);
       } else if (peakEntriesHintAtStart == null) {
         mapKeysAggregationBuffers = new HashMap<KeyWrapper, VectorAggregationBufferRow>();
       } else {
@@ -482,7 +475,8 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       computeMemoryLimits();
       LOG.debug("using hash aggregation processing mode");
 
-      if (keyWrapperType == KeyWrapperType.GENERAL) {
+      if (keyWrapperType == KeyWrapperType.GENERAL ||
+          keyWrapperType == KeyWrapperType.GENERAL_LONG_STRING) {
         reusableKeyWrapperBuffer = new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
       }
     }
