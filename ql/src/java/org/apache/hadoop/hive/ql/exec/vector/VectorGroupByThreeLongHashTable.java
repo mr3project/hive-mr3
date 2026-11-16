@@ -32,6 +32,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
   private long[] keys1;
   private long[] keys2;
   private byte[] nullMasks;
+  // Cached spread hashes used for lookup and bucket selection.
   private int[] hashCodes;
   private VectorAggregationBufferRow nullValue;
 
@@ -50,8 +51,9 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
       VectorHashKeyWrapperThreeLong kw = (VectorHashKeyWrapperThreeLong) keyWrappers[i];
       int nullMask = (kw.isNull(0) ? 1 : 0) | (kw.isNull(1) ? 2 : 0) | (kw.isNull(2) ? 4 : 0);
       boolean isNull = nullMask == 7;
+      int hashCode = isNull ? 0 : spreadHash(kw.hashCode());
       int slot = isNull ? 0 : findSlot(kw.getLongValue(0), kw.getLongValue(1),
-          kw.getLongValue(2), nullMask, kw.hashCode());
+          kw.getLongValue(2), nullMask, hashCode);
       VectorAggregationBufferRow aggregationBuffer = isNull ? getNullValue() :
           (slot >= 0 ? getValue(slot) : null);
       if (aggregationBuffer == null) {
@@ -60,7 +62,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
           setNullValue(aggregationBuffer);
         } else {
           put(kw.getLongValue(0), kw.getLongValue(1), kw.getLongValue(2), nullMask,
-              kw.hashCode(), ~slot, aggregationBuffer);
+              hashCode, ~slot, aggregationBuffer);
         }
         ++newEntries;
       } else {
@@ -151,6 +153,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
 
   /**
    * Returns the matching slot, or the bitwise complement of an insertion slot.
+   * The supplied hash code has already been spread for bucket selection.
    */
   int findSlot(long key0, long key1, long key2, int nullMask, int hashCode) {
     assert keys0.length == values.length && keys1.length == values.length &&
@@ -161,8 +164,9 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
         numEntries <= resizeThreshold && resizeThreshold < buckets.length;
     assert (freeList == 0) == (numEntries == numUsed);
     assert nullMask >= 0 && nullMask < 7;
-    assert hashCode == VectorHashKeyWrapperThreeLong.calculateHashCode(key0, key1, key2, nullMask);
-    int bucket = (hashCode ^ (hashCode >>> 16)) & (buckets.length - 1);
+    assert hashCode == spreadHash(
+        VectorHashKeyWrapperThreeLong.calculateHashCode(key0, key1, key2, nullMask));
+    int bucket = hashCode & (buckets.length - 1);
     for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
       int slot = ref - 1;
       if (hashCodes[slot] == hashCode && nullMasks[slot] == nullMask && keys0[slot] == key0 &&
@@ -183,7 +187,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
     keys2[insertionSlot] = key2;
     nullMasks[insertionSlot] = (byte) nullMask;
     hashCodes[insertionSlot] = hashCode;
-    linkEntry(insertionSlot, hashCode, value);
+    linkEntryWithSpreadHash(insertionSlot, hashCode, value);
     assert findSlot(key0, key1, key2, nullMask, hashCode) == insertionSlot;
     assert getValue(insertionSlot) == value;
   }
@@ -209,7 +213,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
 
   void remove(int bucket, int previousSlot, int slot) {
     assert values[slot] != null;
-    assert bucket == ((hashCodes[slot] ^ (hashCodes[slot] >>> 16)) & (buckets.length - 1));
+    assert bucket == (hashCodes[slot] & (buckets.length - 1));
     unlinkEntry(bucket, previousSlot, slot);
     assert findSlot(keys0[slot], keys1[slot], keys2[slot], nullMasks[slot],
         hashCodes[slot]) == ~slot;
@@ -253,8 +257,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
     int copiedEntries = 0;
     for (int slot = 0; slot < numUsed; ++slot) {
       if (values[slot] != null) {
-        int hashCode = hashCodes[slot];
-        int bucket = (hashCode ^ (hashCode >>> 16)) & mask;
+        int bucket = hashCodes[slot] & mask;
         next[slot] = buckets[bucket];
         buckets[bucket] = slot + 1;
         ++copiedEntries;
@@ -276,7 +279,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
     }
     for (int slot = 0; slot < numUsed; ++slot) {
       if (values[slot] != null &&
-          (hashCodes[slot] != calculateHashCode(slot) ||
+          (hashCodes[slot] != spreadHash(calculateHashCode(slot)) ||
               findSlot(keys0[slot], keys1[slot], keys2[slot], nullMasks[slot],
                   hashCodes[slot]) != slot)) {
         return false;

@@ -34,6 +34,7 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
   private long[] keys1;
   private byte[][] stringKeys;
   private byte[] nullMasks;
+  // Cached spread hashes used for lookup and bucket selection.
   private int[] hashCodes;
   private final int longKeyIndex0;
   private final int longKeyIndex1;
@@ -60,8 +61,9 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
           (VectorHashKeyWrapperTwoLongSingleString) keyWrappers[i];
       int nullMask = (kw.isNull(0) ? 1 : 0) | (kw.isNull(1) ? 2 : 0) | (kw.isNull(2) ? 4 : 0);
       boolean isNull = nullMask == 7;
+      int hashCode = isNull ? 0 : spreadHash(kw.hashCode());
       int slot = isNull ? 0 : findSlot(kw.getLongValue(0), kw.getLongValue(1), nullMask,
-          kw.getBytes(0), kw.getByteStart(0), kw.getByteLength(0), kw.hashCode());
+          kw.getBytes(0), kw.getByteStart(0), kw.getByteLength(0), hashCode);
       VectorAggregationBufferRow aggregationBuffer = isNull ? nullValue :
           (slot >= 0 ? getValue(slot) : null);
       if (aggregationBuffer == null) {
@@ -71,7 +73,7 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
           nullValue = aggregationBuffer;
         } else {
           put(kw.getLongValue(0), kw.getLongValue(1), nullMask, kw.getBytes(0), kw.getByteStart(0),
-              kw.getByteLength(0), kw.hashCode(), ~slot, aggregationBuffer);
+              kw.getByteLength(0), hashCode, ~slot, aggregationBuffer);
         }
         ++newEntries;
       } else {
@@ -159,6 +161,7 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
 
   /**
    * Returns the matching slot, or the bitwise complement of an insertion slot.
+   * The supplied hash code has already been spread for bucket selection.
    */
   int findSlot(long key0, long key1, int nullMask, byte[] bytes, int start, int length,
       int hashCode) {
@@ -171,9 +174,9 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
     assert (freeList == 0) == (numEntries == numUsed);
     assert nullMask >= 0 && nullMask < 7;
     assert ((nullMask & (1 << stringKeyIndex)) != 0) == (length == -1);
-    assert hashCode == VectorHashKeyWrapperTwoLongSingleString.calculateHashCode(
-        key0, key1, nullMask, bytes, start, length);
-    int bucket = (hashCode ^ (hashCode >>> 16)) & (buckets.length - 1);
+    assert hashCode == spreadHash(VectorHashKeyWrapperTwoLongSingleString.calculateHashCode(
+        key0, key1, nullMask, bytes, start, length));
+    int bucket = hashCode & (buckets.length - 1);
     for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
       int slot = ref - 1;
       if (hashCodes[slot] == hashCode && keys0[slot] == key0 && keys1[slot] == key1 &&
@@ -200,7 +203,7 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
       stringKeys[insertionSlot] = Arrays.copyOfRange(bytes, start, start + length);
       keyMemorySize += JAVA_DATA_MODEL.lengthForByteArrayOfSize(length);
     }
-    linkEntry(insertionSlot, hashCode, value);
+    linkEntryWithSpreadHash(insertionSlot, hashCode, value);
     assert findSlot(key0, key1, nullMask, bytes, start, length, hashCode) == insertionSlot;
     assert getValue(insertionSlot) == value;
   }
@@ -213,7 +216,7 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
 
   void remove(int bucket, int previousSlot, int slot) {
     assert values[slot] != null;
-    assert bucket == ((hashCodes[slot] ^ (hashCodes[slot] >>> 16)) & (buckets.length - 1));
+    assert bucket == (hashCodes[slot] & (buckets.length - 1));
     unlinkEntry(bucket, previousSlot, slot);
     byte[] bytes = stringKeys[slot];
     assert findSlot(keys0[slot], keys1[slot], nullMasks[slot], bytes, 0,
@@ -265,8 +268,7 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
     int copiedEntries = 0;
     for (int slot = 0; slot < numUsed; ++slot) {
       if (values[slot] != null) {
-        int hashCode = hashCodes[slot];
-        int bucket = (hashCode ^ (hashCode >>> 16)) & mask;
+        int bucket = hashCodes[slot] & mask;
         next[slot] = buckets[bucket];
         buckets[bucket] = slot + 1;
         ++copiedEntries;
@@ -302,7 +304,7 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
         if ((nullMasks[slot] & (1 << longKeyIndex1)) != 0 && keys1[slot] != 0) {
           return false;
         }
-        if (hashCodes[slot] != hashCode(slot) ||
+        if (hashCodes[slot] != spreadHash(hashCode(slot)) ||
             findSlot(keys0[slot], keys1[slot], nullMasks[slot], bytes, 0,
                 bytes == null ? -1 : bytes.length, hashCodes[slot]) != slot) {
           return false;
