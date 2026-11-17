@@ -97,12 +97,15 @@ abstract class VectorGroupByHashTable {
   protected final void allocateSlot(int insertionSlot) {
     if (numEntries + 1 > resizeThreshold) {
       assert freeList == 0 && numUsed == values.length;
-      resizeBuckets();
-      rehash();
+      int bucketCapacity = Math.multiplyExact(buckets.length, 2);
+      buckets = new int[bucketCapacity];
+      resizeThreshold = (int) (bucketCapacity * MAX_LOAD_FACTOR);
       int capacity = Math.multiplyExact(values.length, 2);
-      next = Arrays.copyOf(next, capacity);
+      // Every allocated slot is live; rehash() rebuilds all next[] links.
+      next = new int[capacity];
       values = Arrays.copyOf(values, capacity);
       growKeyStorage(capacity);
+      rehash();
       assert checkInvariants();
     }
     if (freeList != 0) {
@@ -175,12 +178,6 @@ abstract class VectorGroupByHashTable {
     numEntries = 0;
     numUsed = 0;
     freeList = 0;
-  }
-
-  private void resizeBuckets() {
-    int capacity = Math.multiplyExact(buckets.length, 2);
-    buckets = new int[capacity];
-    resizeThreshold = (int) (capacity * MAX_LOAD_FACTOR);
   }
 
   /**
