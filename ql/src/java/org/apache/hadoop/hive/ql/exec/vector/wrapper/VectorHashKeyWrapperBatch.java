@@ -1429,28 +1429,17 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
     compiledKeyWrapperBatch.keysFixedSize += model.lengthForObjectArrayOfSize(compiledKeyWrapperBatch.timestampIndices.length);
     compiledKeyWrapperBatch.keysFixedSize += model.lengthForObjectArrayOfSize(compiledKeyWrapperBatch.intervalDayTimeIndices.length);
     compiledKeyWrapperBatch.keysFixedSize += model.lengthForIntArrayOfSize(compiledKeyWrapperBatch.longIndices.length) * 2;
-    compiledKeyWrapperBatch.keysFixedSize +=
-        model.lengthForBooleanArrayOfSize(keyExpressions.length);
+    compiledKeyWrapperBatch.keysFixedSize += model.lengthForBooleanArrayOfSize(keyExpressions.length);
 
     return compiledKeyWrapperBatch;
   }
 
   private void allocateKeyWrappers() {
     switch (keyWrapperType) {
-    case GENERAL: {
-      generalStorage = new VectorHashKeyWrapperGeneralBatchStorage(
-          hashCtx, VectorizedRowBatch.DEFAULT_SIZE, longIndices.length, doubleIndices.length,
-          stringIndices.length, decimalIndices.length, timestampIndices.length,
-          intervalDayTimeIndices.length, keyCount);
-      vectorHashKeyWrappers = generalStorage.rowViews;
+    case EMPTY:
+      vectorHashKeyWrappers = new VectorHashKeyWrapperBase[VectorizedRowBatch.DEFAULT_SIZE];
+      Arrays.fill(vectorHashKeyWrappers, VectorHashKeyWrapperEmpty.EMPTY_KEY_WRAPPER);
       break;
-    }
-    case GENERAL_LONG_STRING: {
-      longStringStorage = new VectorHashKeyWrapperLongStringBatchStorage(
-          hashCtx, VectorizedRowBatch.DEFAULT_SIZE, longIndices.length, stringIndices.length, keyCount);
-      vectorHashKeyWrappers = longStringStorage.rowViews;
-      break;
-    }
     case SINGLE_LONG: {
       VectorHashKeyWrapperSingleLong[] wrappers =
           new VectorHashKeyWrapperSingleLong[VectorizedRowBatch.DEFAULT_SIZE];
@@ -1478,6 +1467,24 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
       vectorHashKeyWrappers = wrappers;
       break;
     }
+    case SINGLE_STRING: {
+      VectorHashKeyWrapperSingleString[] wrappers =
+          new VectorHashKeyWrapperSingleString[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperSingleString(hashCtx);
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
+    case TWO_STRING: {
+      VectorHashKeyWrapperTwoString[] wrappers =
+          new VectorHashKeyWrapperTwoString[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperTwoString(hashCtx);
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
     case THREE_STRING: {
       VectorHashKeyWrapperThreeString[] wrappers =
           new VectorHashKeyWrapperThreeString[VectorizedRowBatch.DEFAULT_SIZE];
@@ -1487,28 +1494,51 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
       vectorHashKeyWrappers = wrappers;
       break;
     }
-    case EMPTY:
-      vectorHashKeyWrappers = new VectorHashKeyWrapperBase[VectorizedRowBatch.DEFAULT_SIZE];
-      Arrays.fill(vectorHashKeyWrappers, VectorHashKeyWrapperEmpty.EMPTY_KEY_WRAPPER);
-      break;
-    default:
-      vectorHashKeyWrappers = new VectorHashKeyWrapperBase[VectorizedRowBatch.DEFAULT_SIZE];
-      for (int i = 0; i < vectorHashKeyWrappers.length; ++i) {
-        vectorHashKeyWrappers[i] = allocateKeyWrapper();
+    case SINGLE_LONG_SINGLE_STRING: {
+      VectorHashKeyWrapperSingleLongSingleString[] wrappers =
+          new VectorHashKeyWrapperSingleLongSingleString[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperSingleLongSingleString(hashCtx);
       }
+      vectorHashKeyWrappers = wrappers;
       break;
     }
-  }
-
-  public VectorHashKeyWrapperBase allocateKeyWrapper() {
-    return VectorHashKeyWrapperFactory.allocate(keyWrapperType, hashCtx,
-        longIndices.length,
-        doubleIndices.length,
-        stringIndices.length,
-        decimalIndices.length,
-        timestampIndices.length,
-        intervalDayTimeIndices.length,
-        keyCount);
+    case SINGLE_LONG_TWO_STRING: {
+      VectorHashKeyWrapperSingleLongTwoString[] wrappers =
+          new VectorHashKeyWrapperSingleLongTwoString[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperSingleLongTwoString(hashCtx);
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
+    case TWO_LONG_SINGLE_STRING: {
+      VectorHashKeyWrapperTwoLongSingleString[] wrappers =
+          new VectorHashKeyWrapperTwoLongSingleString[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperTwoLongSingleString(hashCtx);
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
+    case GENERAL_LONG_STRING: {
+      longStringStorage = new VectorHashKeyWrapperLongStringBatchStorage(
+        hashCtx, VectorizedRowBatch.DEFAULT_SIZE, longIndices.length, stringIndices.length, keyCount);
+      vectorHashKeyWrappers = longStringStorage.rowViews;
+      break;
+    }
+    case GENERAL: {
+      generalStorage = new VectorHashKeyWrapperGeneralBatchStorage(
+        hashCtx, VectorizedRowBatch.DEFAULT_SIZE, longIndices.length, doubleIndices.length,
+        stringIndices.length, decimalIndices.length, timestampIndices.length,
+        intervalDayTimeIndices.length, keyCount);
+      vectorHashKeyWrappers = generalStorage.rowViews;
+      break;
+    }
+    default:
+      assert false;
+      break;
+    }
   }
 
   /**

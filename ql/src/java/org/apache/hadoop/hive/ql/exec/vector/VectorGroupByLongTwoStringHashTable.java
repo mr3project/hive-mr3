@@ -42,7 +42,6 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
   // Each slot stores its two string references at consecutive offsets.
   private byte[][] stringKeys;
   private long keyMemorySize;
-  private VectorAggregationBufferRow nullValue;
 
   VectorGroupByLongTwoStringHashTable(int expectedEntries, VectorHashKeyWrapperBatch keyLayout) {
     super(expectedEntries);
@@ -69,7 +68,7 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
           kw.getBytes(0), kw.getByteStart(0), kw.getByteLength(0),
           kw.getBytes(1), kw.getByteStart(1), kw.getByteLength(1), hashCode);
       VectorAggregationBufferRow aggregationBuffer = isNull ? nullValue :
-          (slot >= 0 ? getValue(slot) : null);
+          (slot >= 0 ? values[slot] : null);
       if (aggregationBuffer == null) {
         aggregationBuffer = context.allocateAggregationBuffer();
         if (isNull) {
@@ -102,7 +101,7 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
     int rowsEmitted = 0;
     // Visit the separate all-NULL group before the bucket chains.
     flushEntries:
-    for (int bucket = -1; bucket < bucketCount(); ++bucket) {
+    for (int bucket = -1; bucket < buckets.length; ++bucket) {
       if (bucket == -1 && nullValue == null) {
         continue;
       }
@@ -110,7 +109,7 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
       int slot = bucket == -1 ? 0 : firstSlot(bucket);
       while (slot != -1) {
         int nextSlot = bucket == -1 ? -1 : nextSlot(slot);
-        VectorAggregationBufferRow bufferRow = bucket == -1 ? nullValue : getValue(slot);
+        VectorAggregationBufferRow bufferRow = bucket == -1 ? nullValue : values[slot];
         assert bufferRow != null;
         if (!all && avgAccess >= 1 && bufferRow.getAccessCount() > avgAccess) {
           context.resetHashTableAccess(bufferRow);
@@ -227,7 +226,7 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
     linkEntryWithSpreadHash(insertionSlot, hashCode, value);
     assert findSlot(key, nullMask,
         bytes0, start0, length0, bytes1, start1, length1, hashCode) == insertionSlot;
-    assert getValue(insertionSlot) == value;
+    assert values[insertionSlot] == value;
   }
 
   void remove(int bucket, int previousSlot, int slot) {
@@ -261,16 +260,10 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
   }
 
   @Override
-  int size() {
-    return numEntries + (nullValue == null ? 0 : 1);
-  }
-
-  @Override
   void clear() {
     Arrays.fill(stringKeys, 0, 2 * numUsed, null);
     clearEntries();
     keyMemorySize = 0;
-    nullValue = null;
     assert checkInvariants();
   }
 
@@ -289,12 +282,10 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
     nullMasks = new byte[values.length];
     stringKeys = new byte[Math.multiplyExact(values.length, 2)][];
     keyMemorySize = 0;
-    nullValue = null;
   }
 
   @Override
   protected void rehash() {
-    resizeBuckets();
     int mask = buckets.length - 1;
     int copiedEntries = 0;
     for (int slot = 0; slot < numUsed; ++slot) {
@@ -307,6 +298,20 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
     }
     assert copiedEntries == numEntries;
     assert checkInvariants();
+  }
+
+  @Override
+  long getBucketFixedMemorySize() {
+    return getBucketBaseMemorySize()
+        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys.length)
+        + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes.length)
+        + JAVA_DATA_MODEL.lengthForByteArrayOfSize(nullMasks.length)
+        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(stringKeys.length);
+  }
+
+  @Override
+  long getTotalMemorySize() {
+    return getBucketFixedMemorySize() + keyMemorySize;
   }
 
   /**
@@ -351,19 +356,5 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
       }
     }
     return ownedMemorySize == keyMemorySize;
-  }
-
-  @Override
-  long getEstimatedFixedMemorySize() {
-    return getEstimatedArrayMemorySize()
-        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys.length)
-        + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes.length)
-        + JAVA_DATA_MODEL.lengthForByteArrayOfSize(nullMasks.length)
-        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(stringKeys.length);
-  }
-
-  @Override
-  long getEstimatedMemorySize() {
-    return getEstimatedFixedMemorySize() + keyMemorySize;
   }
 }
