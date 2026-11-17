@@ -18,8 +18,6 @@
 
 package org.apache.hadoop.hive.ql.exec.vector;
 
-import java.lang.management.ManagementFactory;
-import java.lang.management.MemoryMXBean;
 import java.lang.ref.SoftReference;
 import java.lang.reflect.Constructor;
 import java.util.ArrayDeque;
@@ -37,7 +35,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.type.DataTypePhysicalVariation;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.llap.LlapUtil;
-import org.apache.hadoop.hive.llap.io.api.LlapProxy;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.exec.GroupByOperator;
 import org.apache.hadoop.hive.ql.exec.IConfigureJobConf;
@@ -126,8 +123,6 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
    * The very same instance gets reused for all batches.
    */
   private transient VectorHashKeyWrapperBatch keyWrappersBatch;
-
-  private transient Object[] forwardCache;
 
   private transient VectorizedRowBatch outputBatch;
   private transient VectorizedRowBatchCtx vrbCtx;
@@ -511,8 +506,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       computeMemoryLimits();
       LOG.debug("using hash aggregation processing mode");
 
-      if (keyWrapperType == KeyWrapperType.GENERAL ||
-          keyWrapperType == KeyWrapperType.GENERAL_LONG_STRING) {
+      if (keyWrapperType == KeyWrapperType.GENERAL) {
         reusableKeyWrapperBuffer = new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
       }
     }
@@ -735,7 +729,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     private void flush(boolean finalFlush) throws HiveException {
 
       boolean resetTable = !finalFlush && hashTable != null &&
-          hashTable.getEstimatedFixedMemorySize() >= maxHashTblMemory;
+          hashTable.getBucketFixedMemorySize() >= maxHashTblMemory;
       // TODO: Support partial flushing and rebuilding into smaller arrays for oversized storage.
       boolean all = finalFlush || resetTable;
       int entriesToFlush = all ? numEntriesHashTable :
@@ -855,7 +849,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       // separately because partial flushing does not release its arrays.
       long memory = numEntriesHashTable * (fixedHashEntrySize + avgVariableSize);
       if (hashTable != null) {
-        memory += hashTable.getEstimatedMemorySize();
+        memory += hashTable.getTotalMemorySize();
       }
       return memory;
     }
@@ -1325,8 +1319,6 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     } catch (Throwable e) {
       throw new HiveException(e);
     }
-
-    forwardCache = new Object[outputKeyLength + aggregators.length];
 
     setupGroupingSets();
 

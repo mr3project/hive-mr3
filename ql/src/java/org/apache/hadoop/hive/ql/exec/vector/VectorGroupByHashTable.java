@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.ql.util.JavaDataModel;
  * Key lookup, batch preparation, and flushing remain in the concrete implementations.
  */
 abstract class VectorGroupByHashTable {
+
   protected static final JavaDataModel JAVA_DATA_MODEL = JavaDataModel.get();
   protected static final double MAX_LOAD_FACTOR = 0.75;
   private static final int INITIAL_CAPACITY = 16;
@@ -41,6 +42,9 @@ abstract class VectorGroupByHashTable {
   protected int numUsed;
   protected int freeList;
   protected int resizeThreshold;
+
+  // The all-null group is stored separately from the bucket chains.
+  protected VectorAggregationBufferRow nullValue;
 
   VectorGroupByHashTable(int expectedEntries) {
     int capacity = INITIAL_CAPACITY;
@@ -75,17 +79,10 @@ abstract class VectorGroupByHashTable {
   final void reset() {
     initializeEntries(INITIAL_CAPACITY);
     resetKeyStorage();
+    nullValue = null;
     assert size() == 0;
     assert checkInvariants();
   }
-
-  abstract long getEstimatedFixedMemorySize();
-
-  long getEstimatedMemorySize() {
-    return getEstimatedFixedMemorySize();
-  }
-
-  abstract boolean checkInvariants();
 
   // Storage hooks are called only when arrays are allocated or resized.
   protected abstract void growKeyStorage(int capacity);
@@ -96,16 +93,23 @@ abstract class VectorGroupByHashTable {
 
   protected final void allocateSlot(int insertionSlot) {
     if (numEntries + 1 > resizeThreshold) {
+      assert freeList == 0 && numUsed == values.length;
+      int bucketCapacity = Math.multiplyExact(buckets.length, 2);
+      buckets = new int[bucketCapacity];
+      resizeThreshold = (int) (bucketCapacity * MAX_LOAD_FACTOR);
+      int capacity = Math.multiplyExact(values.length, 2);
+      // Every allocated slot is live; rehash() rebuilds all next[] links.
+      next = new int[capacity];
+      values = Arrays.copyOf(values, capacity);
+      growKeyStorage(capacity);
       rehash();
+      assert checkInvariants();
     }
     if (freeList != 0) {
       assert insertionSlot == freeList - 1 && values[insertionSlot] == null;
       freeList = next[insertionSlot];
     } else {
-      assert insertionSlot == numUsed;
-      if (numUsed == values.length) {
-        growEntries();
-      }
+      assert insertionSlot == numUsed && numUsed < values.length;
       ++numUsed;
     }
   }
@@ -143,17 +147,8 @@ abstract class VectorGroupByHashTable {
     assert (freeList == 0) == (numEntries == numUsed);
   }
 
-  final VectorAggregationBufferRow getValue(int slot) {
-    assert values[slot] != null;
-    return values[slot];
-  }
-
-  int size() {
-    return numEntries;
-  }
-
-  final int bucketCount() {
-    return buckets.length;
+  protected final int size() {
+    return numEntries + (nullValue == null ? 0 : 1);
   }
 
   final int firstSlot(int bucket) {
@@ -171,20 +166,7 @@ abstract class VectorGroupByHashTable {
     numEntries = 0;
     numUsed = 0;
     freeList = 0;
-  }
-
-  private void growEntries() {
-    int capacity = Math.multiplyExact(values.length, 2);
-    next = Arrays.copyOf(next, capacity);
-    values = Arrays.copyOf(values, capacity);
-    growKeyStorage(capacity);
-    assert checkInvariants();
-  }
-
-  protected final void resizeBuckets() {
-    int capacity = Math.multiplyExact(buckets.length, 2);
-    buckets = new int[capacity];
-    resizeThreshold = (int) (capacity * MAX_LOAD_FACTOR);
+    nullValue = null;
   }
 
   /**
@@ -226,9 +208,13 @@ abstract class VectorGroupByHashTable {
     return liveEntries == numEntries && liveEntries + freeEntries == numUsed;
   }
 
-  protected final long getEstimatedArrayMemorySize() {
+  protected final long getBucketBaseMemorySize() {
     return JAVA_DATA_MODEL.lengthForIntArrayOfSize(buckets.length)
-        + JAVA_DATA_MODEL.lengthForIntArrayOfSize(next.length)
-        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(values.length);
+      + JAVA_DATA_MODEL.lengthForIntArrayOfSize(next.length)
+      + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(values.length);
   }
+
+  abstract long getBucketFixedMemorySize();
+  abstract long getTotalMemorySize();
+  abstract boolean checkInvariants();
 }

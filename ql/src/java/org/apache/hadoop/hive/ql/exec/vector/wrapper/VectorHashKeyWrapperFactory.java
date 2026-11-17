@@ -18,8 +18,6 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.wrapper;
 
-import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase.HashContext;
-
 public class VectorHashKeyWrapperFactory {
 
   /** Wrapper implementation selected from the compiled key layout. */
@@ -80,52 +78,5 @@ public class VectorHashKeyWrapperFactory {
     }
 
     return KeyWrapperType.GENERAL;
-  }
-
-  public static VectorHashKeyWrapperBase allocate(HashContext ctx, int longValuesCount,
-      int doubleValuesCount, int byteValuesCount, int decimalValuesCount, int timestampValuesCount,
-      int intervalDayTimeValuesCount, int keyCount) {
-    return allocate(classify(longValuesCount, doubleValuesCount, byteValuesCount, decimalValuesCount,
-        timestampValuesCount, intervalDayTimeValuesCount), ctx, longValuesCount, doubleValuesCount,
-        byteValuesCount, decimalValuesCount, timestampValuesCount, intervalDayTimeValuesCount, keyCount);
-  }
-
-  static VectorHashKeyWrapperBase allocate(KeyWrapperType keyWrapperType, HashContext ctx,
-      int longValuesCount, int doubleValuesCount, int byteValuesCount, int decimalValuesCount,
-      int timestampValuesCount, int intervalDayTimeValuesCount, int keyCount) {
-    switch (keyWrapperType) {
-    case EMPTY:
-      assert false : "Allocated directly by VectorHashKeyWrapperBatch.allocateKeyWrappers()";
-      return VectorHashKeyWrapperEmpty.EMPTY_KEY_WRAPPER;
-    case SINGLE_LONG:
-      assert false : "Allocated directly by VectorHashKeyWrapperBatch.allocateKeyWrappers()";
-      return new VectorHashKeyWrapperSingleLong();
-    case TWO_LONG:
-      assert false : "Allocated directly by VectorHashKeyWrapperBatch.allocateKeyWrappers()";
-      return new VectorHashKeyWrapperTwoLong();
-    case THREE_LONG:
-      assert false : "Allocated directly by VectorHashKeyWrapperBatch.allocateKeyWrappers()";
-      return new VectorHashKeyWrapperThreeLong();
-    case SINGLE_STRING:
-      return new VectorHashKeyWrapperSingleString(ctx);
-    case TWO_STRING:
-      return new VectorHashKeyWrapperTwoString(ctx);
-    case THREE_STRING:
-      assert false : "Allocated directly by VectorHashKeyWrapperBatch.allocateKeyWrappers()";
-      return new VectorHashKeyWrapperThreeString(ctx);
-    case SINGLE_LONG_SINGLE_STRING:
-      return new VectorHashKeyWrapperSingleLongSingleString(ctx);
-    case SINGLE_LONG_TWO_STRING:
-      return new VectorHashKeyWrapperSingleLongTwoString(ctx);
-    case TWO_LONG_SINGLE_STRING:
-      return new VectorHashKeyWrapperTwoLongSingleString(ctx);
-    case GENERAL_LONG_STRING:
-      assert false : "Allocated directly by VectorHashKeyWrapperBatch.allocateKeyWrappers()";
-      return new VectorHashKeyWrapperGeneralLongString(ctx, longValuesCount, byteValuesCount, keyCount);
-    case GENERAL:
-    default:
-      return new VectorHashKeyWrapperGeneral(ctx, longValuesCount, doubleValuesCount,
-          byteValuesCount, decimalValuesCount, timestampValuesCount, intervalDayTimeValuesCount, keyCount);
-    }
   }
 }

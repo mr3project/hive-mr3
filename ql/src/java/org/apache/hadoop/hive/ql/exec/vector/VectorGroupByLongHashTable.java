@@ -30,7 +30,6 @@ import org.apache.hive.common.util.HashCodeUtil;
  */
 final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
   private long[] keys;
-  private VectorAggregationBufferRow nullValue;
 
   VectorGroupByLongHashTable(int expectedEntries) {
     super(expectedEntries);
@@ -48,7 +47,7 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
       boolean isNull = kw.isNull(0);
       int slot = isNull ? 0 : findSlot(kw.getLongValue(0), kw.hashCode());
       VectorAggregationBufferRow aggregationBuffer = isNull ? getNullValue() :
-          (slot >= 0 ? getValue(slot) : null);
+          (slot >= 0 ? values[slot] : null);
       if (aggregationBuffer == null) {
         aggregationBuffer = context.allocateAggregationBuffer();
         if (isNull) {
@@ -77,7 +76,7 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
     int rowsEmitted = 0;
     // Visit the separate NULL group before the bucket chains.
     flushEntries:
-    for (int bucket = -1; bucket < bucketCount(); ++bucket) {
+    for (int bucket = -1; bucket < buckets.length; ++bucket) {
       if (bucket == -1 && getNullValue() == null) {
         continue;
       }
@@ -86,7 +85,7 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
       while (slot != -1) {
         int nextSlot = bucket == -1 ? -1 : nextSlot(slot);
         VectorAggregationBufferRow bufferRow = bucket == -1 ? getNullValue() :
-            getValue(slot);
+            values[slot];
         assert bufferRow != null;
         if (!all && avgAccess >= 1 && bufferRow.getAccessCount() > avgAccess) {
           context.resetHashTableAccess(bufferRow);
@@ -154,7 +153,7 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
     keys[insertionSlot] = key;
     linkEntryWithSpreadHash(insertionSlot, spreadHash(hashCode), value);
     assert findSlot(key, hashCode) == insertionSlot;
-    assert getValue(insertionSlot) == value;
+    assert values[insertionSlot] == value;
   }
 
   long getKey(int slot) {
@@ -185,14 +184,8 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
   }
 
   @Override
-  int size() {
-    return numEntries + (nullValue == null ? 0 : 1);
-  }
-
-  @Override
   void clear() {
     clearEntries();
-    nullValue = null;
     assert checkInvariants();
   }
 
@@ -204,12 +197,10 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
   @Override
   protected void resetKeyStorage() {
     keys = new long[values.length];
-    nullValue = null;
   }
 
   @Override
   protected void rehash() {
-    resizeBuckets();
     int mask = buckets.length - 1;
     int copiedEntries = 0;
     for (int slot = 0; slot < numUsed; ++slot) {
@@ -223,6 +214,17 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
     }
     assert copiedEntries == numEntries;
     assert checkInvariants();
+  }
+
+  @Override
+  long getBucketFixedMemorySize() {
+    return getBucketBaseMemorySize()
+        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys.length);
+  }
+
+  @Override
+  long getTotalMemorySize() {
+    return getBucketFixedMemorySize();
   }
 
   /**
@@ -240,11 +242,5 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
       }
     }
     return true;
-  }
-
-  @Override
-  long getEstimatedFixedMemorySize() {
-    return getEstimatedArrayMemorySize()
-        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys.length);
   }
 }
