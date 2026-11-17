@@ -364,6 +364,8 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
      * Max number of entries in the vector group by aggregation hashtables.
      * Exceeding this will trigger a flush irrelevant of memory pressure condition.
      */
+    private static final double HASH_MAP_FLUSH_MEMORY_FACTOR = 0.3;
+    private static final double SPECIALIZED_HASH_TABLE_FLUSH_MEMORY_FACTOR = 0.5;
     private int maxHtEntries = 1000000;
 
     /**
@@ -840,8 +842,12 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
         numEntriesSinceCheck = 0;
       }
       long currMemUsed = getEstimatedHashTableMemory();
+
       // Protect against low maxHtEntries setting: if memory usage is below 30% avoid flushing
-      if ( ((numEntriesHashTable > this.maxHtEntries) && (currMemUsed > 0.3 * maxHashTblMemory))  ||
+      double flushMemoryFactor = hashTable == null ? HASH_MAP_FLUSH_MEMORY_FACTOR
+          : SPECIALIZED_HASH_TABLE_FLUSH_MEMORY_FACTOR;
+      if (((numEntriesHashTable > maxHtEntries) &&
+           (currMemUsed > flushMemoryFactor * maxHashTblMemory)) ||
           currMemUsed > maxHashTblMemory) {
         return true;
       }
