@@ -294,7 +294,6 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
 
   @Override
   protected void rehash() {
-    resizeBuckets();
     int mask = buckets.length - 1;
     int copiedEntries = 0;
     for (int slot = 0; slot < numUsed; ++slot) {
