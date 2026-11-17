@@ -31,6 +31,8 @@ import org.apache.hadoop.hive.ql.util.JavaDataModel;
 abstract class VectorGroupByHashTable {
   protected static final JavaDataModel JAVA_DATA_MODEL = JavaDataModel.get();
   protected static final double MAX_LOAD_FACTOR = 0.75;
+  // Maximum payload bytes in an individual key array, excluding its header.
+  protected static final int MAX_COMPONENT_CHUNK_BYTES = 16 * 1024 * 1024;
   private static final int INITIAL_CAPACITY = 16;
 
   // Bucket heads and next links store slot + 1; zero terminates a chain or the free list.
@@ -88,11 +90,31 @@ abstract class VectorGroupByHashTable {
   abstract boolean checkInvariants();
 
   // Storage hooks are called only when arrays are allocated or resized.
+  // capacity is the entry-slot capacity, doubled from the previous allocation.
   protected abstract void growKeyStorage(int capacity);
 
   protected abstract void resetKeyStorage();
 
   protected abstract void rehash();
+
+  // Select a fixed chunk size in slots on the requested capacity's doubling sequence.
+  protected static int componentChunkSize(int capacity) {
+    return componentChunkSize(capacity, 1);
+  }
+
+  protected static int componentChunkSize(int capacity, int componentsPerSlot) {
+    return keySlotsPerChunk(capacity, componentsPerSlot * Long.BYTES);
+  }
+
+  static int keySlotsPerChunk(int capacity, int bytesPerSlot) {
+    assert capacity > 0 && bytesPerSlot > 0;
+    int slotsPerChunk = capacity;
+    while ((long) slotsPerChunk * bytesPerSlot > MAX_COMPONENT_CHUNK_BYTES) {
+      slotsPerChunk /= 2;
+    }
+    assert slotsPerChunk > 0 && capacity % slotsPerChunk == 0;
+    return slotsPerChunk;
+  }
 
   protected final void allocateSlot(int insertionSlot) {
     if (numEntries + 1 > resizeThreshold) {

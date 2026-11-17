@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.vector;
 
 import java.util.Arrays;
 
+import org.apache.hadoop.hive.ql.exec.vector.VectorGroupByKeyStorage.StringKeys;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.StringExpr;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperThreeString;
@@ -30,7 +31,7 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
  */
 final class VectorGroupByThreeStringHashTable extends VectorGroupByHashTable {
   // Each slot stores its three string references consecutively.
-  private byte[][] keys;
+  private final StringKeys keys = new StringKeys(3);
   // Cached spread hashes used for lookup and bucket selection.
   private int[] hashCodes;
   private VectorAggregationBufferRow nullValue;
@@ -105,21 +106,32 @@ final class VectorGroupByThreeStringHashTable extends VectorGroupByHashTable {
         }
 
         keyWrapper.clearIsNull();
-        int keyOffset = 3 * slot;
-        if (bucket == -1 || keys[keyOffset] == null) {
+        if (bucket == -1) {
           keyWrapper.assignNullString(0, 0);
-        } else {
-          keyWrapper.assignString(0, keys[keyOffset], 0, keys[keyOffset].length);
-        }
-        if (bucket == -1 || keys[keyOffset + 1] == null) {
           keyWrapper.assignNullString(1, 1);
-        } else {
-          keyWrapper.assignString(1, keys[keyOffset + 1], 0, keys[keyOffset + 1].length);
-        }
-        if (bucket == -1 || keys[keyOffset + 2] == null) {
           keyWrapper.assignNullString(2, 2);
         } else {
-          keyWrapper.assignString(2, keys[keyOffset + 2], 0, keys[keyOffset + 2].length);
+          int chunk = keys.chunkIndex(slot);
+          int keyOffset = keys.offsetInChunk(slot, chunk);
+          byte[][] chunkKeys = keys.arrayForChunk(chunk);
+          byte[] key0 = chunkKeys[keyOffset];
+          if (key0 == null) {
+            keyWrapper.assignNullString(0, 0);
+          } else {
+            keyWrapper.assignString(0, key0, 0, key0.length);
+          }
+          byte[] key1 = chunkKeys[keyOffset + 1];
+          if (key1 == null) {
+            keyWrapper.assignNullString(1, 1);
+          } else {
+            keyWrapper.assignString(1, key1, 0, key1.length);
+          }
+          byte[] key2 = chunkKeys[keyOffset + 2];
+          if (key2 == null) {
+            keyWrapper.assignNullString(2, 2);
+          } else {
+            keyWrapper.assignString(2, key2, 0, key2.length);
+          }
         }
         // writeSingleRow copies key bytes into outputBatch before storage is released.
         context.writeHashTableRow(keyWrapper, bufferRow);
@@ -159,7 +171,7 @@ final class VectorGroupByThreeStringHashTable extends VectorGroupByHashTable {
   int findSlot(byte[] key0, int start0, int length0,
       byte[] key1, int start1, int length1,
       byte[] key2, int start2, int length2, int hashCode) {
-    assert keys.length == 3L * values.length &&
+    assert keys.checkShape(values.length) &&
         hashCodes.length == values.length && next.length == values.length;
     assert Integer.bitCount(buckets.length) == 1;
     assert numEntries >= 0 && numEntries <= numUsed && numUsed <= values.length &&
@@ -171,17 +183,21 @@ final class VectorGroupByThreeStringHashTable extends VectorGroupByHashTable {
     int bucket = hashCode & (buckets.length - 1);
     for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
       int slot = ref - 1;
-      int keyOffset = 3 * slot;
-      if (hashCodes[slot] == hashCode &&
-          ((key0 == null && keys[keyOffset] == null) ||
-          (key0 != null && keys[keyOffset] != null && StringExpr.equal(
-              key0, start0, length0, keys[keyOffset], 0, keys[keyOffset].length))) &&
-          ((key1 == null && keys[keyOffset + 1] == null) ||
-          (key1 != null && keys[keyOffset + 1] != null && StringExpr.equal(
-              key1, start1, length1, keys[keyOffset + 1], 0, keys[keyOffset + 1].length))) &&
-          ((key2 == null && keys[keyOffset + 2] == null) ||
-          (key2 != null && keys[keyOffset + 2] != null && StringExpr.equal(
-              key2, start2, length2, keys[keyOffset + 2], 0, keys[keyOffset + 2].length)))) {
+      if (hashCodes[slot] != hashCode) {
+        continue;
+      }
+      int chunk = keys.chunkIndex(slot);
+      int keyOffset = keys.offsetInChunk(slot, chunk);
+      byte[][] chunkKeys = keys.arrayForChunk(chunk);
+      byte[] storedKey0 = chunkKeys[keyOffset];
+      byte[] storedKey1 = chunkKeys[keyOffset + 1];
+      byte[] storedKey2 = chunkKeys[keyOffset + 2];
+      if ((key0 == null ? storedKey0 == null : storedKey0 != null &&
+              StringExpr.equal(key0, start0, length0, storedKey0, 0, storedKey0.length)) &&
+          (key1 == null ? storedKey1 == null : storedKey1 != null &&
+              StringExpr.equal(key1, start1, length1, storedKey1, 0, storedKey1.length)) &&
+          (key2 == null ? storedKey2 == null : storedKey2 != null &&
+              StringExpr.equal(key2, start2, length2, storedKey2, 0, storedKey2.length))) {
         return slot;
       }
     }
@@ -196,20 +212,22 @@ final class VectorGroupByThreeStringHashTable extends VectorGroupByHashTable {
     assert insertionSlot == ~findSlot(key0, start0, length0, key1, start1, length1,
         key2, start2, length2, hashCode);
     allocateSlot(insertionSlot);
-    int keyOffset = 3 * insertionSlot;
-    assert keys[keyOffset] == null && keys[keyOffset + 1] == null &&
-        keys[keyOffset + 2] == null;
+    int chunk = keys.chunkIndex(insertionSlot);
+    int keyOffset = keys.offsetInChunk(insertionSlot, chunk);
+    byte[][] chunkKeys = keys.arrayForChunk(chunk);
+    assert chunkKeys[keyOffset] == null && chunkKeys[keyOffset + 1] == null &&
+        chunkKeys[keyOffset + 2] == null;
     hashCodes[insertionSlot] = hashCode;
     if (length0 != -1) {
-      keys[keyOffset] = Arrays.copyOfRange(key0, start0, start0 + length0);
+      chunkKeys[keyOffset] = Arrays.copyOfRange(key0, start0, start0 + length0);
       keyMemorySize += JAVA_DATA_MODEL.lengthForByteArrayOfSize(length0);
     }
     if (length1 != -1) {
-      keys[keyOffset + 1] = Arrays.copyOfRange(key1, start1, start1 + length1);
+      chunkKeys[keyOffset + 1] = Arrays.copyOfRange(key1, start1, start1 + length1);
       keyMemorySize += JAVA_DATA_MODEL.lengthForByteArrayOfSize(length1);
     }
     if (length2 != -1) {
-      keys[keyOffset + 2] = Arrays.copyOfRange(key2, start2, start2 + length2);
+      chunkKeys[keyOffset + 2] = Arrays.copyOfRange(key2, start2, start2 + length2);
       keyMemorySize += JAVA_DATA_MODEL.lengthForByteArrayOfSize(length2);
     }
     linkEntryWithSpreadHash(insertionSlot, hashCode, value);
@@ -218,27 +236,16 @@ final class VectorGroupByThreeStringHashTable extends VectorGroupByHashTable {
     assert getValue(insertionSlot) == value;
   }
 
-  private int hashCode(int slot) {
-    assert values[slot] != null;
-    int keyOffset = 3 * slot;
-    byte[] key0 = keys[keyOffset];
-    byte[] key1 = keys[keyOffset + 1];
-    byte[] key2 = keys[keyOffset + 2];
-    return VectorHashKeyWrapperThreeString.calculateHashCode(
-        (key0 == null ? 1 : 0) | (key1 == null ? 2 : 0) | (key2 == null ? 4 : 0),
-        key0, 0, key0 == null ? -1 : key0.length,
-        key1, 0, key1 == null ? -1 : key1.length,
-        key2, 0, key2 == null ? -1 : key2.length, null);
-  }
-
   void remove(int bucket, int previousSlot, int slot) {
     assert values[slot] != null;
     assert bucket == (hashCodes[slot] & (buckets.length - 1));
     unlinkEntry(bucket, previousSlot, slot);
-    int keyOffset = 3 * slot;
-    byte[] key0 = keys[keyOffset];
-    byte[] key1 = keys[keyOffset + 1];
-    byte[] key2 = keys[keyOffset + 2];
+    int chunk = keys.chunkIndex(slot);
+    int keyOffset = keys.offsetInChunk(slot, chunk);
+    byte[][] chunkKeys = keys.arrayForChunk(chunk);
+    byte[] key0 = chunkKeys[keyOffset];
+    byte[] key1 = chunkKeys[keyOffset + 1];
+    byte[] key2 = chunkKeys[keyOffset + 2];
     assert findSlot(key0, 0, key0 == null ? -1 : key0.length,
         key1, 0, key1 == null ? -1 : key1.length,
         key2, 0, key2 == null ? -1 : key2.length, hashCodes[slot]) == ~slot;
@@ -251,9 +258,9 @@ final class VectorGroupByThreeStringHashTable extends VectorGroupByHashTable {
     if (key2 != null) {
       keyMemorySize -= JAVA_DATA_MODEL.lengthForByteArrayOfSize(key2.length);
     }
-    keys[keyOffset] = null;
-    keys[keyOffset + 1] = null;
-    keys[keyOffset + 2] = null;
+    chunkKeys[keyOffset] = null;
+    chunkKeys[keyOffset + 1] = null;
+    chunkKeys[keyOffset + 2] = null;
   }
 
   @Override
@@ -263,7 +270,7 @@ final class VectorGroupByThreeStringHashTable extends VectorGroupByHashTable {
 
   @Override
   void clear() {
-    Arrays.fill(keys, 0, 3 * numUsed, null);
+    keys.clear(numUsed);
     clearEntries();
     nullValue = null;
     keyMemorySize = 0;
@@ -272,13 +279,13 @@ final class VectorGroupByThreeStringHashTable extends VectorGroupByHashTable {
 
   @Override
   protected void growKeyStorage(int capacity) {
-    keys = Arrays.copyOf(keys, Math.multiplyExact(capacity, 3));
+    keys.grow(capacity);
     hashCodes = Arrays.copyOf(hashCodes, capacity);
   }
 
   @Override
   protected void resetKeyStorage() {
-    keys = new byte[Math.multiplyExact(values.length, 3)][];
+    keys.reset(values.length);
     hashCodes = new int[values.length];
     nullValue = null;
     keyMemorySize = 0;
@@ -302,21 +309,28 @@ final class VectorGroupByThreeStringHashTable extends VectorGroupByHashTable {
 
   @Override
   boolean checkInvariants() {
-    if (!checkStructure() || keys.length != 3L * values.length ||
+    if (!checkStructure() || !keys.checkInvariants(values.length) ||
         hashCodes.length != values.length) {
       return false;
     }
     long memorySize = 0;
     for (int slot = 0; slot < values.length; ++slot) {
-      int keyOffset = 3 * slot;
-      byte[] key0 = keys[keyOffset];
-      byte[] key1 = keys[keyOffset + 1];
-      byte[] key2 = keys[keyOffset + 2];
+      int chunk = keys.chunkIndex(slot);
+      int keyOffset = keys.offsetInChunk(slot, chunk);
+      byte[][] chunkKeys = keys.arrayForChunk(chunk);
+      byte[] key0 = chunkKeys[keyOffset];
+      byte[] key1 = chunkKeys[keyOffset + 1];
+      byte[] key2 = chunkKeys[keyOffset + 2];
       if (values[slot] != null) {
         if (key0 == null && key1 == null && key2 == null) {
           return false;
         }
-        if (hashCodes[slot] != spreadHash(hashCode(slot)) ||
+        int hash = VectorHashKeyWrapperThreeString.calculateHashCode(
+            (key0 == null ? 1 : 0) | (key1 == null ? 2 : 0) | (key2 == null ? 4 : 0),
+            key0, 0, key0 == null ? -1 : key0.length,
+            key1, 0, key1 == null ? -1 : key1.length,
+            key2, 0, key2 == null ? -1 : key2.length, null);
+        if (hashCodes[slot] != spreadHash(hash) ||
             findSlot(key0, 0, key0 == null ? -1 : key0.length,
                 key1, 0, key1 == null ? -1 : key1.length,
                 key2, 0, key2 == null ? -1 : key2.length, hashCodes[slot]) != slot) {
@@ -341,7 +355,7 @@ final class VectorGroupByThreeStringHashTable extends VectorGroupByHashTable {
   @Override
   long getEstimatedFixedMemorySize() {
     return getEstimatedArrayMemorySize()
-        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(keys.length)
+        + keys.estimatedMemorySize()
         + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes.length);
   }
 

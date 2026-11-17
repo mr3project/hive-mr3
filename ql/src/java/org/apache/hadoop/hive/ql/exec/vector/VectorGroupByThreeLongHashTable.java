@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.vector;
 
 import java.util.Arrays;
 
+import org.apache.hadoop.hive.ql.exec.vector.VectorGroupByKeyStorage.LongKeys;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperThreeLong;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -29,7 +30,7 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
  */
 final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
   // The three long components of each slot are stored consecutively.
-  private long[] keys;
+  private final LongKeys keys = new LongKeys(3);
   private byte[] nullMasks;
   // Cached spread hashes used for lookup and bucket selection.
   private int[] hashCodes;
@@ -107,21 +108,23 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
           keyWrapper.assignNullLong(1, 1);
           keyWrapper.assignNullLong(2, 2);
         } else {
-          int keyOffset = 3 * slot;
+          int chunk = keys.chunkIndex(slot);
+          long[] chunkKeys = keys.arrayForChunk(chunk);
+          int keyOffset = keys.offsetInChunk(slot, chunk);
           if ((nullMasks[slot] & 1) != 0) {
             keyWrapper.assignNullLong(0, 0);
           } else {
-            keyWrapper.assignLong(0, 0, keys[keyOffset]);
+            keyWrapper.assignLong(0, 0, chunkKeys[keyOffset]);
           }
           if ((nullMasks[slot] & 2) != 0) {
             keyWrapper.assignNullLong(1, 1);
           } else {
-            keyWrapper.assignLong(1, 1, keys[keyOffset + 1]);
+            keyWrapper.assignLong(1, 1, chunkKeys[keyOffset + 1]);
           }
           if ((nullMasks[slot] & 4) != 0) {
             keyWrapper.assignNullLong(2, 2);
           } else {
-            keyWrapper.assignLong(2, 2, keys[keyOffset + 2]);
+            keyWrapper.assignLong(2, 2, chunkKeys[keyOffset + 2]);
           }
         }
         // writeSingleRow copies the key into outputBatch before this wrapper is reused.
@@ -156,7 +159,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
    * The supplied hash code has already been spread for bucket selection.
    */
   int findSlot(long key0, long key1, long key2, int nullMask, int hashCode) {
-    assert keys.length == 3L * values.length && nullMasks.length == values.length &&
+    assert keys.checkShape(values.length) && nullMasks.length == values.length &&
         next.length == values.length && hashCodes.length == values.length;
     assert Integer.bitCount(buckets.length) == 1;
     assert numEntries >= 0 && numEntries <= numUsed && numUsed <= values.length &&
@@ -168,10 +171,14 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
     int bucket = hashCode & (buckets.length - 1);
     for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
       int slot = ref - 1;
-      int keyOffset = 3 * slot;
-      if (hashCodes[slot] == hashCode && nullMasks[slot] == nullMask &&
-          keys[keyOffset] == key0 && keys[keyOffset + 1] == key1 && keys[keyOffset + 2] == key2) {
-        return slot;
+      if (hashCodes[slot] == hashCode && nullMasks[slot] == nullMask) {
+        int chunk = keys.chunkIndex(slot);
+        long[] chunkKeys = keys.arrayForChunk(chunk);
+        int keyOffset = keys.offsetInChunk(slot, chunk);
+        if (chunkKeys[keyOffset] == key0 && chunkKeys[keyOffset + 1] == key1 &&
+            chunkKeys[keyOffset + 2] == key2) {
+          return slot;
+        }
       }
     }
     return ~(freeList == 0 ? numUsed : freeList - 1);
@@ -182,10 +189,12 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
     assert value != null;
     assert insertionSlot == ~findSlot(key0, key1, key2, nullMask, hashCode);
     allocateSlot(insertionSlot);
-    int keyOffset = 3 * insertionSlot;
-    keys[keyOffset] = key0;
-    keys[keyOffset + 1] = key1;
-    keys[keyOffset + 2] = key2;
+    int chunk = keys.chunkIndex(insertionSlot);
+    long[] chunkKeys = keys.arrayForChunk(chunk);
+    int keyOffset = keys.offsetInChunk(insertionSlot, chunk);
+    chunkKeys[keyOffset] = key0;
+    chunkKeys[keyOffset + 1] = key1;
+    chunkKeys[keyOffset + 2] = key2;
     nullMasks[insertionSlot] = (byte) nullMask;
     hashCodes[insertionSlot] = hashCode;
     linkEntryWithSpreadHash(insertionSlot, hashCode, value);
@@ -207,18 +216,19 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
     nullValue = null;
   }
 
-  private int calculateHashCode(int slot) {
-    int keyOffset = 3 * slot;
-    return VectorHashKeyWrapperThreeLong.calculateHashCode(
-        keys[keyOffset], keys[keyOffset + 1], keys[keyOffset + 2], nullMasks[slot]);
-  }
-
   void remove(int bucket, int previousSlot, int slot) {
     assert values[slot] != null;
     assert bucket == (hashCodes[slot] & (buckets.length - 1));
     unlinkEntry(bucket, previousSlot, slot);
-    assert findSlot(keys[3 * slot], keys[3 * slot + 1], keys[3 * slot + 2], nullMasks[slot],
-        hashCodes[slot]) == ~slot;
+    assert findStoredSlot(slot) == ~slot;
+  }
+
+  private int findStoredSlot(int slot) {
+    int chunk = keys.chunkIndex(slot);
+    long[] chunkKeys = keys.arrayForChunk(chunk);
+    int keyOffset = keys.offsetInChunk(slot, chunk);
+    return findSlot(chunkKeys[keyOffset], chunkKeys[keyOffset + 1], chunkKeys[keyOffset + 2],
+        nullMasks[slot], hashCodes[slot]);
   }
 
   @Override
@@ -235,14 +245,14 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
 
   @Override
   protected void growKeyStorage(int capacity) {
-    keys = Arrays.copyOf(keys, Math.multiplyExact(capacity, 3));
+    keys.grow(capacity);
     nullMasks = Arrays.copyOf(nullMasks, capacity);
     hashCodes = Arrays.copyOf(hashCodes, capacity);
   }
 
   @Override
   protected void resetKeyStorage() {
-    keys = new long[Math.multiplyExact(values.length, 3)];
+    keys.reset(values.length);
     nullMasks = new byte[values.length];
     hashCodes = new int[values.length];
     nullValue = null;
@@ -269,17 +279,24 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
    */
   @Override
   boolean checkInvariants() {
-    if (!checkStructure() || keys.length != 3L * values.length || nullMasks.length != values.length ||
-        hashCodes.length != values.length) {
+    if (!checkStructure() || !keys.checkInvariants(values.length) ||
+        nullMasks.length != values.length || hashCodes.length != values.length) {
       return false;
     }
     for (int slot = 0; slot < numUsed; ++slot) {
-      int keyOffset = 3 * slot;
-      if (values[slot] != null &&
-          (hashCodes[slot] != spreadHash(calculateHashCode(slot)) ||
-              findSlot(keys[keyOffset], keys[keyOffset + 1], keys[keyOffset + 2], nullMasks[slot],
-                  hashCodes[slot]) != slot)) {
-        return false;
+      if (values[slot] != null) {
+        int chunk = keys.chunkIndex(slot);
+        long[] chunkKeys = keys.arrayForChunk(chunk);
+        int keyOffset = keys.offsetInChunk(slot, chunk);
+        long key0 = chunkKeys[keyOffset];
+        long key1 = chunkKeys[keyOffset + 1];
+        long key2 = chunkKeys[keyOffset + 2];
+        int nullMask = nullMasks[slot];
+        int hashCode = spreadHash(
+            VectorHashKeyWrapperThreeLong.calculateHashCode(key0, key1, key2, nullMask));
+        if (hashCodes[slot] != hashCode || findSlot(key0, key1, key2, nullMask, hashCode) != slot) {
+          return false;
+        }
       }
     }
     return true;
@@ -288,7 +305,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
   @Override
   long getEstimatedFixedMemorySize() {
     return getEstimatedArrayMemorySize()
-        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys.length)
+        + keys.estimatedMemorySize()
         + JAVA_DATA_MODEL.lengthForByteArrayOfSize(nullMasks.length)
         + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes.length);
   }

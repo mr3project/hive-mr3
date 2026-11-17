@@ -29,7 +29,11 @@ import org.apache.hive.common.util.HashCodeUtil;
  * Array-backed, separate-chaining aggregation hash table for a single long grouping key.
  */
 final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
+  // Exactly one of keys and keyChunks stores the slot keys.
   private long[] keys;
+  private long[][] keyChunks;
+  // Zero for flat storage; otherwise the fixed number of slots in each chunk.
+  private int chunkSize;
   private VectorAggregationBufferRow nullValue;
 
   VectorGroupByLongHashTable(int expectedEntries) {
@@ -131,17 +135,28 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
    * Returns the matching slot, or the bitwise complement of an insertion slot.
    */
   int findSlot(long key, int hashCode) {
-    assert keys.length == values.length && next.length == values.length;
+    assert next.length == values.length;
+    assert keys != null ? keyChunks == null && chunkSize == 0 && keys.length == values.length :
+        keyChunks != null && chunkSize > 0 && (long) keyChunks.length * chunkSize == values.length;
     assert Integer.bitCount(buckets.length) == 1;
     assert numEntries >= 0 && numEntries <= numUsed && numUsed <= values.length &&
         numEntries <= resizeThreshold && resizeThreshold < buckets.length;
     assert (freeList == 0) == (numEntries == numUsed);
     assert hashCode == HashCodeUtil.calculateLongHashCode(key);
     int bucket = (hashCode ^ (hashCode >>> 16)) & (buckets.length - 1);
-    for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
-      int slot = ref - 1;
-      if (keys[slot] == key) {
-        return slot;
+    if (keys != null) {
+      for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
+        int slot = ref - 1;
+        if (keys[slot] == key) {
+          return slot;
+        }
+      }
+    } else {
+      for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
+        int slot = ref - 1;
+        if (keyChunks[slot / chunkSize][slot % chunkSize] == key) {
+          return slot;
+        }
       }
     }
     return ~(freeList == 0 ? numUsed : freeList - 1);
@@ -151,7 +166,11 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
     assert value != null;
     assert insertionSlot == ~findSlot(key, hashCode);
     allocateSlot(insertionSlot);
-    keys[insertionSlot] = key;
+    if (keys != null) {
+      keys[insertionSlot] = key;
+    } else {
+      keyChunks[insertionSlot / chunkSize][insertionSlot % chunkSize] = key;
+    }
     linkEntryWithSpreadHash(insertionSlot, spreadHash(hashCode), value);
     assert findSlot(key, hashCode) == insertionSlot;
     assert getValue(insertionSlot) == value;
@@ -159,7 +178,11 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
 
   long getKey(int slot) {
     assert values[slot] != null;
-    return keys[slot];
+    return keyAt(slot);
+  }
+
+  private long keyAt(int slot) {
+    return keys != null ? keys[slot] : keyChunks[slot / chunkSize][slot % chunkSize];
   }
 
   VectorAggregationBufferRow getNullValue() {
@@ -178,10 +201,10 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
 
   void remove(int bucket, int previousSlot, int slot) {
     assert values[slot] != null;
-    assert bucket == ((HashCodeUtil.calculateLongHashCode(keys[slot]) ^
-        (HashCodeUtil.calculateLongHashCode(keys[slot]) >>> 16)) & (buckets.length - 1));
+    assert bucket == (spreadHash(HashCodeUtil.calculateLongHashCode(keyAt(slot))) &
+        (buckets.length - 1));
     unlinkEntry(bucket, previousSlot, slot);
-    assert findSlot(keys[slot], HashCodeUtil.calculateLongHashCode(keys[slot])) == ~slot;
+    assert findSlot(keyAt(slot), HashCodeUtil.calculateLongHashCode(keyAt(slot))) == ~slot;
   }
 
   @Override
@@ -198,12 +221,39 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
 
   @Override
   protected void growKeyStorage(int capacity) {
-    keys = Arrays.copyOf(keys, capacity);
+    if ((long) capacity * Long.BYTES <= MAX_COMPONENT_CHUNK_BYTES) {
+      assert keyChunks == null && chunkSize == 0;
+      keys = Arrays.copyOf(keys, capacity);
+    } else if (keys != null) {
+      chunkSize = keys.length;
+      assert chunkSize == componentChunkSize(capacity) && capacity == 2L * chunkSize;
+      keyChunks = new long[][] {keys, new long[chunkSize]};
+      keys = null;
+    } else {
+      assert chunkSize == componentChunkSize(capacity) &&
+          capacity == 2L * keyChunks.length * chunkSize;
+      int oldChunkCount = keyChunks.length;
+      keyChunks = Arrays.copyOf(keyChunks, capacity / chunkSize);
+      for (int chunk = oldChunkCount; chunk < keyChunks.length; ++chunk) {
+        keyChunks[chunk] = new long[chunkSize];
+      }
+    }
   }
 
   @Override
   protected void resetKeyStorage() {
-    keys = new long[values.length];
+    if ((long) values.length * Long.BYTES <= MAX_COMPONENT_CHUNK_BYTES) {
+      keys = new long[values.length];
+      keyChunks = null;
+      chunkSize = 0;
+    } else {
+      keys = null;
+      chunkSize = componentChunkSize(values.length);
+      keyChunks = new long[values.length / chunkSize][];
+      for (int chunk = 0; chunk < keyChunks.length; ++chunk) {
+        keyChunks[chunk] = new long[chunkSize];
+      }
+    }
     nullValue = null;
   }
 
@@ -213,7 +263,7 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
     int copiedEntries = 0;
     for (int slot = 0; slot < numUsed; ++slot) {
       if (values[slot] != null) {
-        int hashCode = HashCodeUtil.calculateLongHashCode(keys[slot]);
+        int hashCode = HashCodeUtil.calculateLongHashCode(keyAt(slot));
         int bucket = (hashCode ^ (hashCode >>> 16)) & mask;
         next[slot] = buckets[bucket];
         buckets[bucket] = slot + 1;
@@ -229,12 +279,31 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
    */
   @Override
   boolean checkInvariants() {
-    if (!checkStructure() || keys.length != values.length) {
+    if (!checkStructure() || !checkKeyStorage()) {
       return false;
     }
     for (int slot = 0; slot < numUsed; ++slot) {
       if (values[slot] != null &&
-          findSlot(keys[slot], HashCodeUtil.calculateLongHashCode(keys[slot])) != slot) {
+          findSlot(keyAt(slot), HashCodeUtil.calculateLongHashCode(keyAt(slot))) != slot) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private boolean checkKeyStorage() {
+    if (keys != null) {
+      return keyChunks == null && chunkSize == 0 && keys.length == values.length &&
+          (long) keys.length * Long.BYTES <= MAX_COMPONENT_CHUNK_BYTES;
+    }
+    if (keyChunks == null || chunkSize != componentChunkSize(values.length) ||
+        (long) keyChunks.length * chunkSize != values.length ||
+        (long) values.length * Long.BYTES <= MAX_COMPONENT_CHUNK_BYTES) {
+      return false;
+    }
+    for (long[] chunk : keyChunks) {
+      if (chunk == null || chunk.length != chunkSize ||
+          (long) chunk.length * Long.BYTES > MAX_COMPONENT_CHUNK_BYTES) {
         return false;
       }
     }
@@ -243,7 +312,14 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
 
   @Override
   long getEstimatedFixedMemorySize() {
-    return getEstimatedArrayMemorySize()
-        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys.length);
+    long memory = getEstimatedArrayMemorySize();
+    if (keys != null) {
+      return memory + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys.length);
+    }
+    memory += JAVA_DATA_MODEL.lengthForObjectArrayOfSize(keyChunks.length);
+    for (long[] chunk : keyChunks) {
+      memory += JAVA_DATA_MODEL.lengthForLongArrayOfSize(chunk.length);
+    }
+    return memory;
   }
 }
