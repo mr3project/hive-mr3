@@ -96,16 +96,15 @@ abstract class VectorGroupByHashTable {
 
   protected final void allocateSlot(int insertionSlot) {
     if (numEntries + 1 > resizeThreshold) {
+      assert freeList == 0 && numUsed == values.length;
       rehash();
+      growEntries();
     }
     if (freeList != 0) {
       assert insertionSlot == freeList - 1 && values[insertionSlot] == null;
       freeList = next[insertionSlot];
     } else {
-      assert insertionSlot == numUsed;
-      if (numUsed == values.length) {
-        growEntries();
-      }
+      assert insertionSlot == numUsed && numUsed < values.length;
       ++numUsed;
     }
   }
