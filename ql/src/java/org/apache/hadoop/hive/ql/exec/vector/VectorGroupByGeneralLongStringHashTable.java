@@ -40,11 +40,11 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
   private final byte[] lookupNullMask;
 
   // Components belonging to a slot are stored consecutively.
-  private long[] longKeys;
-  private byte[][] stringKeys;
-  private byte[] nullMasks;
+  private long[][] longKeys;
+  private byte[][][] stringKeys;
+  private byte[][] nullMasks;
   // Cached spread hashes used for lookup and bucket selection.
-  private int[] hashCodes;
+  private int[][] hashCodes;
   private VectorAggregationBufferRow nullValue;
   private long keyMemorySize;
 
@@ -136,23 +136,25 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
           continue;
         }
         outputKey.clearIsNull();
-        int maskOffset = slot * nullMaskBytes;
-        int longOffset = slot * longCount;
-        int stringOffset = slot * stringCount;
+        int segment = entrySegment(slot);
+        int offset = entryOffset(slot, segment);
+        int maskOffset = offset * nullMaskBytes;
+        int longOffset = offset * longCount;
+        int stringOffset = offset * stringCount;
         for (int i = 0; i < longCount; ++i) {
           int keyIndex = longKeyIndices[i];
-          if (bucket == -1 || isNull(nullMasks, maskOffset, keyIndex)) {
+          if (bucket == -1 || isNull(nullMasks[segment], maskOffset, keyIndex)) {
             outputKey.assignNullLong(keyIndex, i);
           } else {
-            outputKey.assignLong(keyIndex, i, longKeys[longOffset + i]);
+            outputKey.assignLong(keyIndex, i, longKeys[segment][longOffset + i]);
           }
         }
         for (int i = 0; i < stringCount; ++i) {
           int keyIndex = stringKeyIndices[i];
-          if (bucket == -1 || isNull(nullMasks, maskOffset, keyIndex)) {
+          if (bucket == -1 || isNull(nullMasks[segment], maskOffset, keyIndex)) {
             outputKey.assignNullString(keyIndex, i);
           } else {
-            byte[] bytes = stringKeys[stringOffset + i];
+            byte[] bytes = stringKeys[segment][stringOffset + i];
             outputKey.assignString(i, bytes, 0, bytes.length);
           }
         }
@@ -192,25 +194,27 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
    * The supplied hash code has already been spread for bucket selection.
    */
   private int findSlot(VectorHashKeyWrapperBase key, byte[] mask, int hashCode) {
-    assert longKeys.length == (long) values.length * longCount &&
-        stringKeys.length == (long) values.length * stringCount &&
-        nullMasks.length == (long) values.length * nullMaskBytes &&
+    assert longKeys.length == values.length && stringKeys.length == values.length &&
+        nullMasks.length == values.length &&
         hashCodes.length == values.length && next.length == values.length;
-    assert Integer.bitCount(buckets.length) == 1;
-    assert numEntries >= 0 && numEntries <= numUsed && numUsed <= values.length &&
-        numEntries <= resizeThreshold && resizeThreshold < buckets.length;
+    assert Integer.bitCount(bucketCapacity) == 1;
+    assert numEntries >= 0 && numEntries <= numUsed && numUsed <= entryCapacity &&
+        numEntries <= resizeThreshold && resizeThreshold < bucketCapacity;
     assert (freeList == 0) == (numEntries == numUsed);
     assert hashCode == spreadHash(key.hashCode());
-    int bucket = hashCode & (buckets.length - 1);
-    for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
+    int bucket = hashCode & (bucketCapacity - 1);
+    for (int ref = bucketHead(bucket); ref != 0;) {
       int slot = ref - 1;
-      if (hashCodes[slot] != hashCode) {
+      int segment = entrySegment(slot);
+      int offset = entryOffset(slot, segment);
+      ref = next[segment][offset];
+      if (hashCodes[segment][offset] != hashCode) {
         continue;
       }
-      int maskOffset = slot * nullMaskBytes;
+      int maskOffset = offset * nullMaskBytes;
       boolean equal = true;
       for (int i = 0; i < nullMaskBytes; ++i) {
-        if (nullMasks[maskOffset + i] != mask[i]) {
+        if (nullMasks[segment][maskOffset + i] != mask[i]) {
           equal = false;
           break;
         }
@@ -218,9 +222,9 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
       if (!equal) {
         continue;
       }
-      int longOffset = slot * longCount;
+      int longOffset = offset * longCount;
       for (int i = 0; i < longCount; ++i) {
-        if (longKeys[longOffset + i] != key.getLongValue(i)) {
+        if (longKeys[segment][longOffset + i] != key.getLongValue(i)) {
           equal = false;
           break;
         }
@@ -228,10 +232,10 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
       if (!equal) {
         continue;
       }
-      int stringOffset = slot * stringCount;
+      int stringOffset = offset * stringCount;
       for (int i = 0; i < stringCount; ++i) {
         if (!isNull(mask, 0, stringKeyIndices[i])) {
-          byte[] bytes = stringKeys[stringOffset + i];
+          byte[] bytes = stringKeys[segment][stringOffset + i];
           if (!StringExpr.equal(key.getBytes(i), key.getByteStart(i),
               key.getByteLength(i), bytes, 0, bytes.length)) {
             equal = false;
@@ -251,39 +255,43 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
     assert value != null;
     assert insertionSlot == ~findSlot(key, mask, hashCode);
     allocateSlot(insertionSlot);
-    int maskOffset = insertionSlot * nullMaskBytes;
-    System.arraycopy(mask, 0, nullMasks, maskOffset, nullMaskBytes);
-    int longOffset = insertionSlot * longCount;
+    int segment = entrySegment(insertionSlot);
+    int offset = entryOffset(insertionSlot, segment);
+    int maskOffset = offset * nullMaskBytes;
+    System.arraycopy(mask, 0, nullMasks[segment], maskOffset, nullMaskBytes);
+    int longOffset = offset * longCount;
     for (int i = 0; i < longCount; ++i) {
-      longKeys[longOffset + i] = isNull(mask, 0, longKeyIndices[i]) ?
+      longKeys[segment][longOffset + i] = isNull(mask, 0, longKeyIndices[i]) ?
           0 : key.getLongValue(i);
     }
-    int stringOffset = insertionSlot * stringCount;
+    int stringOffset = offset * stringCount;
     for (int i = 0; i < stringCount; ++i) {
-      assert stringKeys[stringOffset + i] == null;
+      assert stringKeys[segment][stringOffset + i] == null;
       if (!isNull(mask, 0, stringKeyIndices[i])) {
         int length = key.getByteLength(i);
-        stringKeys[stringOffset + i] = Arrays.copyOfRange(
+        stringKeys[segment][stringOffset + i] = Arrays.copyOfRange(
             key.getBytes(i), key.getByteStart(i), key.getByteStart(i) + length);
         keyMemorySize += JAVA_DATA_MODEL.lengthForByteArrayOfSize(length);
       }
     }
-    hashCodes[insertionSlot] = hashCode;
+    hashCodes[segment][offset] = hashCode;
     linkEntryWithSpreadHash(insertionSlot, hashCode, value);
     assert findSlot(key, mask, hashCode) == insertionSlot;
     assert getValue(insertionSlot) == value;
   }
 
   private void remove(int bucket, int previousSlot, int slot) {
-    assert values[slot] != null;
-    assert bucket == (hashCodes[slot] & (buckets.length - 1));
+    int segment = entrySegment(slot);
+    int offset = entryOffset(slot, segment);
+    assert values[segment][offset] != null;
+    assert bucket == (hashCodes[segment][offset] & (bucketCapacity - 1));
     unlinkEntry(bucket, previousSlot, slot);
-    int stringOffset = slot * stringCount;
+    int stringOffset = offset * stringCount;
     for (int i = 0; i < stringCount; ++i) {
-      byte[] bytes = stringKeys[stringOffset + i];
+      byte[] bytes = stringKeys[segment][stringOffset + i];
       if (bytes != null) {
         keyMemorySize -= JAVA_DATA_MODEL.lengthForByteArrayOfSize(bytes.length);
-        stringKeys[stringOffset + i] = null;
+        stringKeys[segment][stringOffset + i] = null;
       }
     }
   }
@@ -295,7 +303,12 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
 
   @Override
   void clear() {
-    Arrays.fill(stringKeys, 0, numUsed * stringCount, null);
+    int remaining = numUsed;
+    for (int segment = 0; segment < values.length && remaining > 0; ++segment) {
+      int used = Math.min(remaining, values[segment].length);
+      Arrays.fill(stringKeys[segment], 0, used * stringCount, null);
+      remaining -= used;
+    }
     clearEntries();
     nullValue = null;
     keyMemorySize = 0;
@@ -303,32 +316,45 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
   }
 
   @Override
-  protected void growKeyStorage(int capacity) {
-    longKeys = Arrays.copyOf(longKeys, Math.multiplyExact(capacity, longCount));
-    stringKeys = Arrays.copyOf(stringKeys, Math.multiplyExact(capacity, stringCount));
-    nullMasks = Arrays.copyOf(nullMasks, Math.multiplyExact(capacity, nullMaskBytes));
-    hashCodes = Arrays.copyOf(hashCodes, capacity);
+  protected void growKeyStorage(int segment, int capacity) {
+    longKeys = Arrays.copyOf(longKeys, segment + 1);
+    stringKeys = Arrays.copyOf(stringKeys, segment + 1);
+    nullMasks = Arrays.copyOf(nullMasks, segment + 1);
+    hashCodes = Arrays.copyOf(hashCodes, segment + 1);
+    longKeys[segment] = new long[Math.multiplyExact(capacity, longCount)];
+    stringKeys[segment] = new byte[Math.multiplyExact(capacity, stringCount)][];
+    nullMasks[segment] = new byte[Math.multiplyExact(capacity, nullMaskBytes)];
+    hashCodes[segment] = new int[capacity];
   }
 
   @Override
   protected void resetKeyStorage() {
-    longKeys = new long[Math.multiplyExact(values.length, longCount)];
-    stringKeys = new byte[Math.multiplyExact(values.length, stringCount)][];
-    nullMasks = new byte[Math.multiplyExact(values.length, nullMaskBytes)];
-    hashCodes = new int[values.length];
+    longKeys = new long[values.length][];
+    stringKeys = new byte[values.length][][];
+    nullMasks = new byte[values.length][];
+    hashCodes = new int[values.length][];
+    for (int segment = 0; segment < values.length; ++segment) {
+      int capacity = values[segment].length;
+      longKeys[segment] = new long[Math.multiplyExact(capacity, longCount)];
+      stringKeys[segment] = new byte[Math.multiplyExact(capacity, stringCount)][];
+      nullMasks[segment] = new byte[Math.multiplyExact(capacity, nullMaskBytes)];
+      hashCodes[segment] = new int[capacity];
+    }
     nullValue = null;
     keyMemorySize = 0;
   }
 
   @Override
   protected void rehash() {
-    int mask = buckets.length - 1;
+    int mask = bucketCapacity - 1;
     int copiedEntries = 0;
     for (int slot = 0; slot < numUsed; ++slot) {
-      if (values[slot] != null) {
-        int bucket = hashCodes[slot] & mask;
-        next[slot] = buckets[bucket];
-        buckets[bucket] = slot + 1;
+      int segment = entrySegment(slot);
+      int offset = entryOffset(slot, segment);
+      if (values[segment][offset] != null) {
+        int bucket = hashCodes[segment][offset] & mask;
+        next[segment][offset] = bucketHead(bucket);
+        setBucketHead(bucket, slot + 1);
         ++copiedEntries;
       }
     }
@@ -339,39 +365,49 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
   @Override
   boolean checkInvariants() {
     if (!checkStructure() ||
-        longKeys.length != (long) values.length * longCount ||
-        stringKeys.length != (long) values.length * stringCount ||
-        nullMasks.length != (long) values.length * nullMaskBytes ||
+        longKeys.length != values.length || stringKeys.length != values.length ||
+        nullMasks.length != values.length ||
         hashCodes.length != values.length) {
       return false;
+    }
+    for (int segment = 0; segment < values.length; ++segment) {
+      int capacity = values[segment].length;
+      if (longKeys[segment].length != (long) capacity * longCount ||
+          stringKeys[segment].length != (long) capacity * stringCount ||
+          nullMasks[segment].length != (long) capacity * nullMaskBytes ||
+          hashCodes[segment].length != capacity) {
+        return false;
+      }
     }
     VectorHashKeyWrapperGeneralLongString key =
         new VectorHashKeyWrapperGeneralLongString(null, longCount, stringCount, keyCount);
     byte[] mask = new byte[nullMaskBytes];
     long memorySize = 0;
-    for (int slot = 0; slot < values.length; ++slot) {
-      int maskOffset = slot * nullMaskBytes;
-      int longOffset = slot * longCount;
-      int stringOffset = slot * stringCount;
-      if (values[slot] != null) {
-        System.arraycopy(nullMasks, maskOffset, mask, 0, nullMaskBytes);
+    for (int slot = 0; slot < entryCapacity; ++slot) {
+      int segment = entrySegment(slot);
+      int offset = entryOffset(slot, segment);
+      int maskOffset = offset * nullMaskBytes;
+      int longOffset = offset * longCount;
+      int stringOffset = offset * stringCount;
+      if (values[segment][offset] != null) {
+        System.arraycopy(nullMasks[segment], maskOffset, mask, 0, nullMaskBytes);
         key.clearIsNull();
         boolean allNull = true;
         for (int i = 0; i < longCount; ++i) {
           int keyIndex = longKeyIndices[i];
           if (isNull(mask, 0, keyIndex)) {
-            if (longKeys[longOffset + i] != 0) {
+            if (longKeys[segment][longOffset + i] != 0) {
               return false;
             }
             key.assignNullLong(keyIndex, i);
           } else {
-            key.assignLong(keyIndex, i, longKeys[longOffset + i]);
+            key.assignLong(keyIndex, i, longKeys[segment][longOffset + i]);
             allNull = false;
           }
         }
         for (int i = 0; i < stringCount; ++i) {
           int keyIndex = stringKeyIndices[i];
-          byte[] bytes = stringKeys[stringOffset + i];
+          byte[] bytes = stringKeys[segment][stringOffset + i];
           if (isNull(mask, 0, keyIndex)) {
             if (bytes != null) {
               return false;
@@ -392,13 +428,13 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
           return false;
         }
         key.setHashKey();
-        if (hashCodes[slot] != spreadHash(key.hashCode()) ||
-            findSlot(key, mask, hashCodes[slot]) != slot) {
+        if (hashCodes[segment][offset] != spreadHash(key.hashCode()) ||
+            findSlot(key, mask, hashCodes[segment][offset]) != slot) {
           return false;
         }
       } else {
         for (int i = 0; i < stringCount; ++i) {
-          if (stringKeys[stringOffset + i] != null) {
+          if (stringKeys[segment][stringOffset + i] != null) {
             return false;
           }
         }
@@ -409,11 +445,18 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
 
   @Override
   long getEstimatedFixedMemorySize() {
-    return getEstimatedArrayMemorySize()
-        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(longKeys.length)
+    long memory = getEstimatedArrayMemorySize()
+        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(longKeys.length)
         + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(stringKeys.length)
-        + JAVA_DATA_MODEL.lengthForByteArrayOfSize(nullMasks.length)
-        + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes.length);
+        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(nullMasks.length)
+        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(hashCodes.length);
+    for (int segment = 0; segment < values.length; ++segment) {
+      memory += JAVA_DATA_MODEL.lengthForLongArrayOfSize(longKeys[segment].length)
+          + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(stringKeys[segment].length)
+          + JAVA_DATA_MODEL.lengthForByteArrayOfSize(nullMasks[segment].length)
+          + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes[segment].length);
+    }
+    return memory;
   }
 
   @Override

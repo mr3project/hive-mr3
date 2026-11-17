@@ -29,7 +29,7 @@ import org.apache.hive.common.util.HashCodeUtil;
  * Array-backed, separate-chaining aggregation hash table for a single long grouping key.
  */
 final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
-  private long[] keys;
+  private long[][] keys;
   private VectorAggregationBufferRow nullValue;
 
   VectorGroupByLongHashTable(int expectedEntries) {
@@ -132,17 +132,20 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
    */
   int findSlot(long key, int hashCode) {
     assert keys.length == values.length && next.length == values.length;
-    assert Integer.bitCount(buckets.length) == 1;
-    assert numEntries >= 0 && numEntries <= numUsed && numUsed <= values.length &&
-        numEntries <= resizeThreshold && resizeThreshold < buckets.length;
+    assert Integer.bitCount(bucketCapacity) == 1;
+    assert numEntries >= 0 && numEntries <= numUsed && numUsed <= entryCapacity &&
+        numEntries <= resizeThreshold && resizeThreshold < bucketCapacity;
     assert (freeList == 0) == (numEntries == numUsed);
     assert hashCode == HashCodeUtil.calculateLongHashCode(key);
-    int bucket = (hashCode ^ (hashCode >>> 16)) & (buckets.length - 1);
-    for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
+    int bucket = spreadHash(hashCode) & (bucketCapacity - 1);
+    for (int ref = bucketHead(bucket); ref != 0;) {
       int slot = ref - 1;
-      if (keys[slot] == key) {
+      int segment = entrySegment(slot);
+      int offset = entryOffset(slot, segment);
+      if (keys[segment][offset] == key) {
         return slot;
       }
+      ref = next[segment][offset];
     }
     return ~(freeList == 0 ? numUsed : freeList - 1);
   }
@@ -151,15 +154,19 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
     assert value != null;
     assert insertionSlot == ~findSlot(key, hashCode);
     allocateSlot(insertionSlot);
-    keys[insertionSlot] = key;
+    int segment = entrySegment(insertionSlot);
+    int offset = entryOffset(insertionSlot, segment);
+    keys[segment][offset] = key;
     linkEntryWithSpreadHash(insertionSlot, spreadHash(hashCode), value);
     assert findSlot(key, hashCode) == insertionSlot;
     assert getValue(insertionSlot) == value;
   }
 
   long getKey(int slot) {
-    assert values[slot] != null;
-    return keys[slot];
+    int segment = entrySegment(slot);
+    int offset = entryOffset(slot, segment);
+    assert values[segment][offset] != null;
+    return keys[segment][offset];
   }
 
   VectorAggregationBufferRow getNullValue() {
@@ -177,11 +184,14 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
   }
 
   void remove(int bucket, int previousSlot, int slot) {
-    assert values[slot] != null;
-    assert bucket == ((HashCodeUtil.calculateLongHashCode(keys[slot]) ^
-        (HashCodeUtil.calculateLongHashCode(keys[slot]) >>> 16)) & (buckets.length - 1));
+    int segment = entrySegment(slot);
+    int offset = entryOffset(slot, segment);
+    assert values[segment][offset] != null;
+    assert bucket == (spreadHash(HashCodeUtil.calculateLongHashCode(keys[segment][offset])) &
+        (bucketCapacity - 1));
     unlinkEntry(bucket, previousSlot, slot);
-    assert findSlot(keys[slot], HashCodeUtil.calculateLongHashCode(keys[slot])) == ~slot;
+    assert findSlot(keys[segment][offset],
+        HashCodeUtil.calculateLongHashCode(keys[segment][offset])) == ~slot;
   }
 
   @Override
@@ -197,26 +207,32 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
   }
 
   @Override
-  protected void growKeyStorage(int capacity) {
-    keys = Arrays.copyOf(keys, capacity);
+  protected void growKeyStorage(int segment, int capacity) {
+    keys = Arrays.copyOf(keys, segment + 1);
+    keys[segment] = new long[capacity];
   }
 
   @Override
   protected void resetKeyStorage() {
-    keys = new long[values.length];
+    keys = new long[values.length][];
+    for (int segment = 0; segment < values.length; ++segment) {
+      keys[segment] = new long[values[segment].length];
+    }
     nullValue = null;
   }
 
   @Override
   protected void rehash() {
-    int mask = buckets.length - 1;
+    int mask = bucketCapacity - 1;
     int copiedEntries = 0;
     for (int slot = 0; slot < numUsed; ++slot) {
-      if (values[slot] != null) {
-        int hashCode = HashCodeUtil.calculateLongHashCode(keys[slot]);
-        int bucket = (hashCode ^ (hashCode >>> 16)) & mask;
-        next[slot] = buckets[bucket];
-        buckets[bucket] = slot + 1;
+      int segment = entrySegment(slot);
+      int offset = entryOffset(slot, segment);
+      if (values[segment][offset] != null) {
+        int hashCode = HashCodeUtil.calculateLongHashCode(keys[segment][offset]);
+        int bucket = spreadHash(hashCode) & mask;
+        next[segment][offset] = bucketHead(bucket);
+        setBucketHead(bucket, slot + 1);
         ++copiedEntries;
       }
     }
@@ -232,9 +248,16 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
     if (!checkStructure() || keys.length != values.length) {
       return false;
     }
+    for (int segment = 0; segment < values.length; ++segment) {
+      if (keys[segment].length != values[segment].length) {
+        return false;
+      }
+    }
     for (int slot = 0; slot < numUsed; ++slot) {
-      if (values[slot] != null &&
-          findSlot(keys[slot], HashCodeUtil.calculateLongHashCode(keys[slot])) != slot) {
+      int segment = entrySegment(slot);
+      int offset = entryOffset(slot, segment);
+      if (values[segment][offset] != null && findSlot(keys[segment][offset],
+          HashCodeUtil.calculateLongHashCode(keys[segment][offset])) != slot) {
         return false;
       }
     }
@@ -243,7 +266,11 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
 
   @Override
   long getEstimatedFixedMemorySize() {
-    return getEstimatedArrayMemorySize()
-        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys.length);
+    long memorySize = getEstimatedArrayMemorySize()
+        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(keys.length);
+    for (long[] segment : keys) {
+      memorySize += JAVA_DATA_MODEL.lengthForLongArrayOfSize(segment.length);
+    }
+    return memorySize;
   }
 }

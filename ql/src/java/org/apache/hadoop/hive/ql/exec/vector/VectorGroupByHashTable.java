@@ -25,18 +25,21 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.util.JavaDataModel;
 
 /**
- * Shared array-backed bucket chains and entry allocation for specialized aggregation tables.
+ * Shared segmented bucket chains and entry allocation for specialized aggregation tables.
  * Key lookup, batch preparation, and flushing remain in the concrete implementations.
  */
 abstract class VectorGroupByHashTable {
   protected static final JavaDataModel JAVA_DATA_MODEL = JavaDataModel.get();
   protected static final double MAX_LOAD_FACTOR = 0.75;
   private static final int INITIAL_CAPACITY = 16;
+  private static final int INITIAL_ENTRY_CAPACITY = (int) (INITIAL_CAPACITY * MAX_LOAD_FACTOR);
 
   // Bucket heads and next links store slot + 1; zero terminates a chain or the free list.
-  protected int[] buckets;
-  protected int[] next;
-  protected VectorAggregationBufferRow[] values;
+  protected int[][] buckets;
+  protected int[][] next;
+  protected VectorAggregationBufferRow[][] values;
+  protected int bucketCapacity;
+  protected int entryCapacity;
   protected int numEntries;
   protected int numUsed;
   protected int freeList;
@@ -51,13 +54,64 @@ abstract class VectorGroupByHashTable {
   }
 
   private void initializeEntries(int capacity) {
-    buckets = new int[capacity];
+    bucketCapacity = capacity;
     resizeThreshold = (int) (capacity * MAX_LOAD_FACTOR);
-    next = new int[resizeThreshold];
-    values = new VectorAggregationBufferRow[resizeThreshold];
+    entryCapacity = resizeThreshold;
+    int segmentCount = bucketSegment(capacity - 1) + 1;
+    buckets = new int[segmentCount][];
+    next = new int[segmentCount][];
+    values = new VectorAggregationBufferRow[segmentCount][];
+    for (int segment = 0; segment < segmentCount; ++segment) {
+      buckets[segment] = new int[bucketSegmentSize(segment)];
+      int entries = entrySegmentSize(segment);
+      next[segment] = new int[entries];
+      values[segment] = new VectorAggregationBufferRow[entries];
+    }
     numEntries = 0;
     numUsed = 0;
     freeList = 0;
+  }
+
+  // Segment lengths are base, base, 2 * base, 4 * base, and so on.
+  protected static int bucketSegment(int bucket) {
+    int quotient = bucket / INITIAL_CAPACITY;
+    return quotient == 0 ? 0 : Integer.SIZE - Integer.numberOfLeadingZeros(quotient);
+  }
+
+  protected static int bucketOffset(int bucket, int segment) {
+    return bucket - (segment == 0 ? 0 : INITIAL_CAPACITY << (segment - 1));
+  }
+
+  private static int bucketSegmentSize(int segment) {
+    return INITIAL_CAPACITY << (segment == 0 ? 0 : segment - 1);
+  }
+
+  protected static int entrySegment(int slot) {
+    int quotient = slot / INITIAL_ENTRY_CAPACITY;
+    return quotient == 0 ? 0 : Integer.SIZE - Integer.numberOfLeadingZeros(quotient);
+  }
+
+  protected static int entryOffset(int slot, int segment) {
+    return slot - (segment == 0 ? 0 : INITIAL_ENTRY_CAPACITY << (segment - 1));
+  }
+
+  protected static int entrySegmentSize(int segment) {
+    return INITIAL_ENTRY_CAPACITY << (segment == 0 ? 0 : segment - 1);
+  }
+
+  protected final int bucketHead(int bucket) {
+    int segment = bucketSegment(bucket);
+    return buckets[segment][bucketOffset(bucket, segment)];
+  }
+
+  protected final void setBucketHead(int bucket, int reference) {
+    int segment = bucketSegment(bucket);
+    buckets[segment][bucketOffset(bucket, segment)] = reference;
+  }
+
+  protected final int nextReference(int slot) {
+    int segment = entrySegment(slot);
+    return next[segment][entryOffset(slot, segment)];
   }
 
   abstract int prepareBatch(VectorGroupByOperator.ProcessingModeHashAggregate context,
@@ -87,8 +141,8 @@ abstract class VectorGroupByHashTable {
 
   abstract boolean checkInvariants();
 
-  // Storage hooks are called only when arrays are allocated or resized.
-  protected abstract void growKeyStorage(int capacity);
+  // Storage hooks are called only when segments are allocated.
+  protected abstract void growKeyStorage(int segment, int capacity);
 
   protected abstract void resetKeyStorage();
 
@@ -96,23 +150,34 @@ abstract class VectorGroupByHashTable {
 
   protected final void allocateSlot(int insertionSlot) {
     if (numEntries + 1 > resizeThreshold) {
-      assert freeList == 0 && numUsed == values.length;
-      int bucketCapacity = Math.multiplyExact(buckets.length, 2);
-      buckets = new int[bucketCapacity];
+      assert freeList == 0 && numUsed == entryCapacity;
+      int newBucketCapacity = Math.multiplyExact(bucketCapacity, 2);
+      int newEntryCapacity = Math.multiplyExact(entryCapacity, 2);
+      int segment = buckets.length;
+      buckets = Arrays.copyOf(buckets, segment + 1);
+      next = Arrays.copyOf(next, segment + 1);
+      values = Arrays.copyOf(values, segment + 1);
+      buckets[segment] = new int[bucketCapacity];
+      next[segment] = new int[entryCapacity];
+      values[segment] = new VectorAggregationBufferRow[entryCapacity];
+      growKeyStorage(segment, entryCapacity);
+      bucketCapacity = newBucketCapacity;
+      entryCapacity = newEntryCapacity;
       resizeThreshold = (int) (bucketCapacity * MAX_LOAD_FACTOR);
-      int capacity = Math.multiplyExact(values.length, 2);
-      // Every allocated slot is live; rehash() rebuilds all next[] links.
-      next = new int[capacity];
-      values = Arrays.copyOf(values, capacity);
-      growKeyStorage(capacity);
+      // Rehash scans slots and overwrites retained next links without reading old chains.
+      for (int oldSegment = 0; oldSegment < segment; ++oldSegment) {
+        Arrays.fill(buckets[oldSegment], 0);
+      }
       rehash();
       assert checkInvariants();
     }
+    int segment = entrySegment(insertionSlot);
+    int offset = entryOffset(insertionSlot, segment);
     if (freeList != 0) {
-      assert insertionSlot == freeList - 1 && values[insertionSlot] == null;
-      freeList = next[insertionSlot];
+      assert insertionSlot == freeList - 1 && values[segment][offset] == null;
+      freeList = next[segment][offset];
     } else {
-      assert insertionSlot == numUsed && numUsed < values.length;
+      assert insertionSlot == numUsed && numUsed < entryCapacity;
       ++numUsed;
     }
   }
@@ -123,27 +188,32 @@ abstract class VectorGroupByHashTable {
 
   protected final void linkEntryWithSpreadHash(int slot, int spreadHashCode,
       VectorAggregationBufferRow value) {
-    assert value != null && values[slot] == null;
-    int bucket = spreadHashCode & (buckets.length - 1);
-    values[slot] = value;
-    next[slot] = buckets[bucket];
-    buckets[bucket] = slot + 1;
+    int segment = entrySegment(slot);
+    int offset = entryOffset(slot, segment);
+    assert value != null && values[segment][offset] == null;
+    int bucket = spreadHashCode & (bucketCapacity - 1);
+    values[segment][offset] = value;
+    next[segment][offset] = bucketHead(bucket);
+    setBucketHead(bucket, slot + 1);
     ++numEntries;
     assert numEntries <= resizeThreshold;
     assert (freeList == 0) == (numEntries == numUsed);
   }
 
   protected final void unlinkEntry(int bucket, int previousSlot, int slot) {
-    assert values[slot] != null;
-    assert previousSlot == -1 ? buckets[bucket] == slot + 1 :
-        values[previousSlot] != null && next[previousSlot] == slot + 1;
+    int segment = entrySegment(slot);
+    int offset = entryOffset(slot, segment);
+    assert values[segment][offset] != null;
+    assert previousSlot == -1 ? bucketHead(bucket) == slot + 1 :
+        getValue(previousSlot) != null && nextReference(previousSlot) == slot + 1;
     if (previousSlot == -1) {
-      buckets[bucket] = next[slot];
+      setBucketHead(bucket, next[segment][offset]);
     } else {
-      next[previousSlot] = next[slot];
+      int previousSegment = entrySegment(previousSlot);
+      next[previousSegment][entryOffset(previousSlot, previousSegment)] = next[segment][offset];
     }
-    values[slot] = null;
-    next[slot] = freeList;
+    values[segment][offset] = null;
+    next[segment][offset] = freeList;
     freeList = slot + 1;
     --numEntries;
     assert numEntries >= 0 && numEntries <= resizeThreshold;
@@ -151,8 +221,10 @@ abstract class VectorGroupByHashTable {
   }
 
   final VectorAggregationBufferRow getValue(int slot) {
-    assert values[slot] != null;
-    return values[slot];
+    int segment = entrySegment(slot);
+    int offset = entryOffset(slot, segment);
+    assert values[segment][offset] != null;
+    return values[segment][offset];
   }
 
   int size() {
@@ -160,21 +232,27 @@ abstract class VectorGroupByHashTable {
   }
 
   final int bucketCount() {
-    return buckets.length;
+    return bucketCapacity;
   }
 
   final int firstSlot(int bucket) {
-    return buckets[bucket] - 1;
+    return bucketHead(bucket) - 1;
   }
 
   final int nextSlot(int slot) {
-    assert values[slot] != null;
-    return next[slot] - 1;
+    assert getValue(slot) != null;
+    return nextReference(slot) - 1;
   }
 
   protected final void clearEntries() {
-    Arrays.fill(buckets, 0);
-    Arrays.fill(values, 0, numUsed, null);
+    int remaining = numUsed;
+    for (int segment = 0; segment < buckets.length; ++segment) {
+      Arrays.fill(buckets[segment], 0);
+      int used = Math.min(values[segment].length, remaining);
+      Arrays.fill(values[segment], 0, used, null);
+      remaining -= used;
+    }
+    assert remaining == 0;
     numEntries = 0;
     numUsed = 0;
     freeList = 0;
@@ -184,18 +262,33 @@ abstract class VectorGroupByHashTable {
    * Checks unique chain/free-list membership and the live and allocated slot counts.
    */
   protected final boolean checkStructure() {
-    if (next.length != values.length || Integer.bitCount(buckets.length) != 1 ||
-        resizeThreshold != (int) (buckets.length * MAX_LOAD_FACTOR) ||
+    if (next.length != values.length || buckets.length != values.length ||
+        Integer.bitCount(bucketCapacity) != 1 ||
+        buckets.length != bucketSegment(bucketCapacity - 1) + 1 ||
+        values.length != entrySegment(entryCapacity - 1) + 1 ||
+        resizeThreshold != (int) (bucketCapacity * MAX_LOAD_FACTOR) ||
+        entryCapacity != resizeThreshold ||
         numEntries < 0 || numEntries > resizeThreshold ||
-        numEntries > numUsed || numUsed > values.length) {
+        numEntries > numUsed || numUsed > entryCapacity) {
       return false;
+    }
+    for (int segment = 0; segment < buckets.length; ++segment) {
+      if (buckets[segment].length != bucketSegmentSize(segment) ||
+          next[segment].length != entrySegmentSize(segment) ||
+          values[segment].length != next[segment].length) {
+        return false;
+      }
     }
     boolean[] visited = new boolean[numUsed];
     int liveEntries = 0;
-    for (int bucket = 0; bucket < buckets.length; ++bucket) {
-      for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
+    for (int bucket = 0; bucket < bucketCapacity; ++bucket) {
+      for (int ref = bucketHead(bucket); ref != 0; ref = nextReference(ref - 1)) {
         int slot = ref - 1;
-        if (slot < 0 || slot >= numUsed || visited[slot] || values[slot] == null) {
+        if (slot < 0 || slot >= numUsed || visited[slot]) {
+          return false;
+        }
+        int segment = entrySegment(slot);
+        if (values[segment][entryOffset(slot, segment)] == null) {
           return false;
         }
         visited[slot] = true;
@@ -203,16 +296,21 @@ abstract class VectorGroupByHashTable {
       }
     }
     int freeEntries = 0;
-    for (int ref = freeList; ref != 0; ref = next[ref - 1]) {
+    for (int ref = freeList; ref != 0; ref = nextReference(ref - 1)) {
       int slot = ref - 1;
-      if (slot < 0 || slot >= numUsed || visited[slot] || values[slot] != null) {
+      if (slot < 0 || slot >= numUsed || visited[slot]) {
+        return false;
+      }
+      int segment = entrySegment(slot);
+      if (values[segment][entryOffset(slot, segment)] != null) {
         return false;
       }
       visited[slot] = true;
       ++freeEntries;
     }
-    for (int slot = numUsed; slot < values.length; ++slot) {
-      if (values[slot] != null) {
+    for (int slot = numUsed; slot < entryCapacity; ++slot) {
+      int segment = entrySegment(slot);
+      if (values[segment][entryOffset(slot, segment)] != null) {
         return false;
       }
     }
@@ -220,8 +318,14 @@ abstract class VectorGroupByHashTable {
   }
 
   protected final long getEstimatedArrayMemorySize() {
-    return JAVA_DATA_MODEL.lengthForIntArrayOfSize(buckets.length)
-        + JAVA_DATA_MODEL.lengthForIntArrayOfSize(next.length)
+    long memory = JAVA_DATA_MODEL.lengthForObjectArrayOfSize(buckets.length)
+        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(next.length)
         + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(values.length);
+    for (int segment = 0; segment < buckets.length; ++segment) {
+      memory += JAVA_DATA_MODEL.lengthForIntArrayOfSize(buckets[segment].length)
+          + JAVA_DATA_MODEL.lengthForIntArrayOfSize(next[segment].length)
+          + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(values[segment].length);
+    }
+    return memory;
   }
 }

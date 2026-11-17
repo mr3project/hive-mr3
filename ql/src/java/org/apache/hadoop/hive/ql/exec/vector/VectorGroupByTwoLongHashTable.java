@@ -29,10 +29,10 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
  */
 final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
   // The two long components of each slot are stored consecutively.
-  private long[] keys;
-  private byte[] nullMasks;
+  private long[][] keys;
+  private byte[][] nullMasks;
   // Cached spread hashes used for lookup and bucket selection.
-  private int[] hashCodes;
+  private int[][] hashCodes;
   private VectorAggregationBufferRow nullValue;
 
   VectorGroupByTwoLongHashTable(int expectedEntries) {
@@ -104,16 +104,18 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
           keyWrapper.assignNullLong(0, 0);
           keyWrapper.assignNullLong(1, 1);
         } else {
-          int keyOffset = 2 * slot;
-          if ((nullMasks[slot] & 1) != 0) {
+          int segment = entrySegment(slot);
+          int offset = entryOffset(slot, segment);
+          int keyOffset = 2 * offset;
+          if ((nullMasks[segment][offset] & 1) != 0) {
             keyWrapper.assignNullLong(0, 0);
           } else {
-            keyWrapper.assignLong(0, 0, keys[keyOffset]);
+            keyWrapper.assignLong(0, 0, keys[segment][keyOffset]);
           }
-          if ((nullMasks[slot] & 2) != 0) {
+          if ((nullMasks[segment][offset] & 2) != 0) {
             keyWrapper.assignNullLong(1, 1);
           } else {
-            keyWrapper.assignLong(1, 1, keys[keyOffset + 1]);
+            keyWrapper.assignLong(1, 1, keys[segment][keyOffset + 1]);
           }
         }
         // writeSingleRow copies the key into outputBatch before this wrapper is reused.
@@ -148,23 +150,26 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
    * The supplied hash code has already been spread for bucket selection.
    */
   int findSlot(long key0, long key1, int nullMask, int hashCode) {
-    assert keys.length == 2L * values.length &&
-        nullMasks.length == values.length && next.length == values.length &&
-        hashCodes.length == values.length;
-    assert Integer.bitCount(buckets.length) == 1;
-    assert numEntries >= 0 && numEntries <= numUsed && numUsed <= values.length &&
-        numEntries <= resizeThreshold && resizeThreshold < buckets.length;
+    assert keys.length == values.length && nullMasks.length == values.length &&
+        next.length == values.length && hashCodes.length == values.length;
+    assert Integer.bitCount(bucketCapacity) == 1;
+    assert numEntries >= 0 && numEntries <= numUsed && numUsed <= entryCapacity &&
+        numEntries <= resizeThreshold && resizeThreshold < bucketCapacity;
     assert (freeList == 0) == (numEntries == numUsed);
     assert nullMask >= 0 && nullMask < 3;
-    assert hashCode == spreadHash(VectorHashKeyWrapperTwoLong.calculateHashCode(key0, key1, nullMask));
-    int bucket = hashCode & (buckets.length - 1);
-    for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
+    assert hashCode == spreadHash(
+        VectorHashKeyWrapperTwoLong.calculateHashCode(key0, key1, nullMask));
+    int bucket = hashCode & (bucketCapacity - 1);
+    for (int ref = bucketHead(bucket); ref != 0;) {
       int slot = ref - 1;
-      int keyOffset = 2 * slot;
-      if (hashCodes[slot] == hashCode && nullMasks[slot] == nullMask &&
-          keys[keyOffset] == key0 && keys[keyOffset + 1] == key1) {
+      int segment = entrySegment(slot);
+      int offset = entryOffset(slot, segment);
+      int keyOffset = 2 * offset;
+      if (hashCodes[segment][offset] == hashCode && nullMasks[segment][offset] == nullMask &&
+          keys[segment][keyOffset] == key0 && keys[segment][keyOffset + 1] == key1) {
         return slot;
       }
+      ref = next[segment][offset];
     }
     return ~(freeList == 0 ? numUsed : freeList - 1);
   }
@@ -174,11 +179,13 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
     assert value != null;
     assert insertionSlot == ~findSlot(key0, key1, nullMask, hashCode);
     allocateSlot(insertionSlot);
-    int keyOffset = 2 * insertionSlot;
-    keys[keyOffset] = key0;
-    keys[keyOffset + 1] = key1;
-    nullMasks[insertionSlot] = (byte) nullMask;
-    hashCodes[insertionSlot] = hashCode;
+    int segment = entrySegment(insertionSlot);
+    int offset = entryOffset(insertionSlot, segment);
+    int keyOffset = 2 * offset;
+    keys[segment][keyOffset] = key0;
+    keys[segment][keyOffset + 1] = key1;
+    nullMasks[segment][offset] = (byte) nullMask;
+    hashCodes[segment][offset] = hashCode;
     linkEntryWithSpreadHash(insertionSlot, hashCode, value);
     assert findSlot(key0, key1, nullMask, hashCode) == insertionSlot;
     assert getValue(insertionSlot) == value;
@@ -199,16 +206,22 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
   }
 
   private int calculateHashCode(int slot) {
-    int keyOffset = 2 * slot;
+    int segment = entrySegment(slot);
+    int offset = entryOffset(slot, segment);
+    int keyOffset = 2 * offset;
     return VectorHashKeyWrapperTwoLong.calculateHashCode(
-        keys[keyOffset], keys[keyOffset + 1], nullMasks[slot]);
+        keys[segment][keyOffset], keys[segment][keyOffset + 1], nullMasks[segment][offset]);
   }
 
   void remove(int bucket, int previousSlot, int slot) {
-    assert values[slot] != null;
-    assert bucket == (hashCodes[slot] & (buckets.length - 1));
+    int segment = entrySegment(slot);
+    int offset = entryOffset(slot, segment);
+    int keyOffset = 2 * offset;
+    assert values[segment][offset] != null;
+    assert bucket == (hashCodes[segment][offset] & (bucketCapacity - 1));
     unlinkEntry(bucket, previousSlot, slot);
-    assert findSlot(keys[2 * slot], keys[2 * slot + 1], nullMasks[slot], hashCodes[slot]) == ~slot;
+    assert findSlot(keys[segment][keyOffset], keys[segment][keyOffset + 1], nullMasks[segment][offset],
+        hashCodes[segment][offset]) == ~slot;
   }
 
   @Override
@@ -224,29 +237,40 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
   }
 
   @Override
-  protected void growKeyStorage(int capacity) {
-    keys = Arrays.copyOf(keys, Math.multiplyExact(capacity, 2));
-    nullMasks = Arrays.copyOf(nullMasks, capacity);
-    hashCodes = Arrays.copyOf(hashCodes, capacity);
+  protected void growKeyStorage(int segment, int capacity) {
+    keys = Arrays.copyOf(keys, segment + 1);
+    keys[segment] = new long[Math.multiplyExact(capacity, 2)];
+    nullMasks = Arrays.copyOf(nullMasks, segment + 1);
+    nullMasks[segment] = new byte[capacity];
+    hashCodes = Arrays.copyOf(hashCodes, segment + 1);
+    hashCodes[segment] = new int[capacity];
   }
 
   @Override
   protected void resetKeyStorage() {
-    keys = new long[Math.multiplyExact(values.length, 2)];
-    nullMasks = new byte[values.length];
-    hashCodes = new int[values.length];
+    keys = new long[values.length][];
+    nullMasks = new byte[values.length][];
+    hashCodes = new int[values.length][];
+    for (int segment = 0; segment < values.length; ++segment) {
+      int capacity = values[segment].length;
+      keys[segment] = new long[Math.multiplyExact(capacity, 2)];
+      nullMasks[segment] = new byte[capacity];
+      hashCodes[segment] = new int[capacity];
+    }
     nullValue = null;
   }
 
   @Override
   protected void rehash() {
-    int mask = buckets.length - 1;
+    int mask = bucketCapacity - 1;
     int copiedEntries = 0;
     for (int slot = 0; slot < numUsed; ++slot) {
-      if (values[slot] != null) {
-        int bucket = hashCodes[slot] & mask;
-        next[slot] = buckets[bucket];
-        buckets[bucket] = slot + 1;
+      int segment = entrySegment(slot);
+      int offset = entryOffset(slot, segment);
+      if (values[segment][offset] != null) {
+        int bucket = hashCodes[segment][offset] & mask;
+        next[segment][offset] = bucketHead(bucket);
+        setBucketHead(bucket, slot + 1);
         ++copiedEntries;
       }
     }
@@ -259,15 +283,25 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
    */
   @Override
   boolean checkInvariants() {
-    if (!checkStructure() || keys.length != 2L * values.length ||
-        nullMasks.length != values.length || hashCodes.length != values.length) {
+    if (!checkStructure() || keys.length != values.length || nullMasks.length != values.length ||
+        hashCodes.length != values.length) {
       return false;
     }
+    for (int segment = 0; segment < values.length; ++segment) {
+      if (keys[segment].length != 2L * values[segment].length ||
+          nullMasks[segment].length != values[segment].length ||
+          hashCodes[segment].length != values[segment].length) {
+        return false;
+      }
+    }
     for (int slot = 0; slot < numUsed; ++slot) {
-      int keyOffset = 2 * slot;
-      if (values[slot] != null &&
-          (hashCodes[slot] != spreadHash(calculateHashCode(slot)) ||
-              findSlot(keys[keyOffset], keys[keyOffset + 1], nullMasks[slot], hashCodes[slot]) != slot)) {
+      int segment = entrySegment(slot);
+      int offset = entryOffset(slot, segment);
+      int keyOffset = 2 * offset;
+      if (values[segment][offset] != null &&
+          (hashCodes[segment][offset] != spreadHash(calculateHashCode(slot)) ||
+              findSlot(keys[segment][keyOffset], keys[segment][keyOffset + 1],
+                  nullMasks[segment][offset], hashCodes[segment][offset]) != slot)) {
         return false;
       }
     }
@@ -276,9 +310,15 @@ final class VectorGroupByTwoLongHashTable extends VectorGroupByHashTable {
 
   @Override
   long getEstimatedFixedMemorySize() {
-    return getEstimatedArrayMemorySize()
-        + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys.length)
-        + JAVA_DATA_MODEL.lengthForByteArrayOfSize(nullMasks.length)
-        + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes.length);
+    long memorySize = getEstimatedArrayMemorySize()
+        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(keys.length)
+        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(nullMasks.length)
+        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(hashCodes.length);
+    for (int segment = 0; segment < values.length; ++segment) {
+      memorySize += JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys[segment].length)
+          + JAVA_DATA_MODEL.lengthForByteArrayOfSize(nullMasks[segment].length)
+          + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes[segment].length);
+    }
+    return memorySize;
   }
 }
