@@ -130,8 +130,6 @@ public class VectorCopyRow {
         if (inColVector.noNulls || !inColVector.isNull[0]) {
           outColVector.setVal(outBatchIndex, inColVector.vector[0], inColVector.start[0], inColVector.length[0]);
           outColVector.isNull[outBatchIndex] = false;
-          numSetVal++;
-          bytesSetVal += inColVector.length[0];
         } else {
           VectorizedBatchUtil.setNullColIsNullValue(outColVector, outBatchIndex);
         }
@@ -139,8 +137,6 @@ public class VectorCopyRow {
         if (inColVector.noNulls || !inColVector.isNull[inBatchIndex]) {
           outColVector.setVal(outBatchIndex, inColVector.vector[inBatchIndex], inColVector.start[inBatchIndex], inColVector.length[inBatchIndex]);
           outColVector.isNull[outBatchIndex] = false;
-          numSetVal++;
-          bytesSetVal += inColVector.length[inBatchIndex];
         } else {
           VectorizedBatchUtil.setNullColIsNullValue(outColVector, outBatchIndex);
         }
@@ -353,25 +349,6 @@ public class VectorCopyRow {
   private CopyRow[] columnMajorCopiersByReference;
   private CopyRow[] rowMajorCopiersByReference;
 
-  private long numSetVal;
-  private long bytesSetVal;
-  private long numReusedRef;
-  private long bytesReusedRef;
-
-  public static final class CopyStatistics {
-    public long numSetVal;
-    public long bytesSetVal;
-    public long numReusedRef;
-    public long bytesReusedRef;
-  }
-
-  public void addCopyStatistics(CopyStatistics statistics) {
-    statistics.numSetVal += numSetVal;
-    statistics.bytesSetVal += bytesSetVal;
-    statistics.numReusedRef += numReusedRef;
-    statistics.bytesReusedRef += bytesReusedRef;
-  }
-
   public void init(VectorColumnMapping columnMapping) throws HiveException {
     init(
         columnMapping.getInputColumns(),
@@ -495,8 +472,6 @@ public class VectorCopyRow {
         bytes.setRef(outBatchIndex, bytes.vector[ownedSourceIndex],
             bytes.start[ownedSourceIndex], bytes.length[ownedSourceIndex]);
         bytes.isNull[outBatchIndex] = false;
-        numReusedRef++;
-        bytesReusedRef += bytes.length[ownedSourceIndex];
       } else {
         VectorizedBatchUtil.setNullColIsNullValue(bytes, outBatchIndex);
       }
