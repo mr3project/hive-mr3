@@ -339,14 +339,14 @@ final class VectorGroupByThreeStringHashTable extends VectorGroupByHashTable {
   }
 
   @Override
-  long getEstimatedFixedMemorySize() {
-    return getEstimatedArrayMemorySize()
+  long getBucketFixedMemorySize() {
+    return getBucketBaseMemorySize()
         + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(keys.length)
         + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes.length);
   }
 
   @Override
-  long getEstimatedMemorySize() {
-    return getEstimatedFixedMemorySize() + keyMemorySize;
+  long getTotalMemorySize() {
+    return getBucketFixedMemorySize() + keyMemorySize;
   }
 }

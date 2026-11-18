@@ -353,8 +353,8 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
   }
 
   @Override
-  long getEstimatedFixedMemorySize() {
-    return getEstimatedArrayMemorySize()
+  long getBucketFixedMemorySize() {
+    return getBucketBaseMemorySize()
         + JAVA_DATA_MODEL.lengthForLongArrayOfSize(keys.length)
         + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes.length)
         + JAVA_DATA_MODEL.lengthForByteArrayOfSize(nullMasks.length)
@@ -362,7 +362,7 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
   }
 
   @Override
-  long getEstimatedMemorySize() {
-    return getEstimatedFixedMemorySize() + keyMemorySize;
+  long getTotalMemorySize() {
+    return getBucketFixedMemorySize() + keyMemorySize;
   }
 }
