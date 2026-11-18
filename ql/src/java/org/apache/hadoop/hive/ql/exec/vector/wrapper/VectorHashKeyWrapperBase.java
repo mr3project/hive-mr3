@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.hive.ql.exec.vector.wrapper;
 
+import static org.apache.tez.util.FastByteComparisons.BYTE_ARRAY_BASE_OFFSET;
+import static org.apache.tez.util.FastByteComparisons.theUnsafe;
+
 import org.apache.hive.common.util.Murmur3;
 
 import java.sql.Timestamp;
@@ -57,12 +60,9 @@ public abstract class VectorHashKeyWrapperBase extends KeyWrapper {
       return ctx == null ? new byte[STRING_LENGTH_BUFFER_SIZE] : ctx.stringLengthBuffer;
     }
 
-    // Encode each field length in little-endian order. Null fields have length -1.
+    // The native byte order is assumed to be little-endian. Null fields have length -1.
     static void writeStringLength(byte[] buffer, int offset, int length) {
-      buffer[offset] = (byte) length;
-      buffer[offset + 1] = (byte) (length >>> 8);
-      buffer[offset + 2] = (byte) (length >>> 16);
-      buffer[offset + 3] = (byte) (length >>> 24);
+      theUnsafe.putInt(buffer, BYTE_ARRAY_BASE_OFFSET + offset, length);
     }
   }
 
