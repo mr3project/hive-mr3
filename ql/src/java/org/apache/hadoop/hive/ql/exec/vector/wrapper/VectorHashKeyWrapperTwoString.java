@@ -85,6 +85,12 @@ public class VectorHashKeyWrapperTwoString extends VectorHashKeyWrapperTwoBase {
       }
       bytesHash.add(bytes1, start1, length1);
     }
+    if (nullMask == 0) {
+      byte[] lengths = HashContext.getStringLengthBuffer(hashCtx);
+      HashContext.writeStringLength(lengths, 0, length0);
+      HashContext.writeStringLength(lengths, Integer.BYTES, length1);
+      return bytesHash.addAndEnd(lengths, 0, 2 * Integer.BYTES);
+    }
     return bytesHash == null ? hash : bytesHash.end();
   }
 

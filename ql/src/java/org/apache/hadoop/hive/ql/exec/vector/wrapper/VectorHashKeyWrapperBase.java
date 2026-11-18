@@ -41,13 +41,28 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 public abstract class VectorHashKeyWrapperBase extends KeyWrapper {
 
   public static final class HashContext {
+    private static final int STRING_LENGTH_BUFFER_SIZE = 3 * Integer.BYTES;
+
     private final Murmur3.IncrementalHash32 bytesHash = new Murmur3.IncrementalHash32();
+    private final byte[] stringLengthBuffer = new byte[STRING_LENGTH_BUFFER_SIZE];
 
     public static Murmur3.IncrementalHash32 getBytesHash(HashContext ctx) {
       if (ctx == null) {
         return new Murmur3.IncrementalHash32();
       }
       return ctx.bytesHash;
+    }
+
+    static byte[] getStringLengthBuffer(HashContext ctx) {
+      return ctx == null ? new byte[STRING_LENGTH_BUFFER_SIZE] : ctx.stringLengthBuffer;
+    }
+
+    // Encode each field length in little-endian order. Null fields have length -1.
+    static void writeStringLength(byte[] buffer, int offset, int length) {
+      buffer[offset] = (byte) length;
+      buffer[offset + 1] = (byte) (length >>> 8);
+      buffer[offset + 2] = (byte) (length >>> 16);
+      buffer[offset + 3] = (byte) (length >>> 24);
     }
   }
 

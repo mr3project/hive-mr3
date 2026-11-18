@@ -20,9 +20,13 @@ package org.apache.hadoop.hive.ql.exec.vector;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.sql.Timestamp;
+import java.util.Arrays;
 
 import org.junit.Test;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.IdentityExpression;
@@ -484,7 +488,10 @@ public class TestVectorHashKeyWrapperBatch {
     firstColumnVector.isNull[5] = true;
     secondColumnVector.isNull[5] = true;
     thirdColumnVector.isNull[5] = true;
-    batch.size = 6;
+    firstColumnVector.isNull[6] = true;
+    secondColumnVector.setVal(6, new byte[0]);
+    thirdColumnVector.isNull[6] = true;
+    batch.size = 7;
 
     vhkwb.evaluateBatch(batch);
     VectorHashKeyWrapperBase[] vhkwArray = vhkwb.getVectorHashKeyWrappers();
@@ -509,6 +516,34 @@ public class TestVectorHashKeyWrapperBatch {
     assertFalse(vhkwArray[0].equals(vhkwArray[2]));
     assertFalse(vhkwArray[0].equals(vhkwArray[3]));
     assertFalse(vhkwArray[0].equals(vhkwArray[5]));
+    assertEquals(0, vhkwArray[6].getByteLength(1));
+  }
+
+  @Test
+  public void testMultiStringHashIncludesFieldLengths() {
+    byte[] bytes = {'a', 'b', 'c', 'd'};
+    VectorHashKeyWrapperBase.HashContext hashCtx = new VectorHashKeyWrapperBase.HashContext();
+
+    int twoStringHash = VectorHashKeyWrapperTwoString.calculateHashCode(0,
+        bytes, 0, 2, bytes, 2, 1, hashCtx);
+    assertNotEquals(twoStringHash, VectorHashKeyWrapperTwoString.calculateHashCode(0,
+        bytes, 0, 1, bytes, 1, 2, hashCtx));
+    assertNotEquals(twoStringHash, VectorHashKeyWrapperTwoString.calculateHashCode(0,
+        bytes, 0, 0, bytes, 0, 3, hashCtx));
+    assertEquals(twoStringHash, VectorHashKeyWrapperTwoString.calculateHashCode(0,
+        bytes, 0, 2, bytes, 2, 1, null));
+
+    int threeStringHash = VectorHashKeyWrapperThreeString.calculateHashCode(0,
+        bytes, 0, 2, bytes, 2, 1, bytes, 3, 1, hashCtx);
+    assertNotEquals(threeStringHash, VectorHashKeyWrapperThreeString.calculateHashCode(0,
+        bytes, 0, 1, bytes, 1, 2, bytes, 3, 1, hashCtx));
+    assertEquals(threeStringHash, VectorHashKeyWrapperThreeString.calculateHashCode(0,
+        bytes, 0, 2, bytes, 2, 1, bytes, 3, 1, null));
+
+    int nullableThreeStringHash = VectorHashKeyWrapperThreeString.calculateHashCode(2,
+        bytes, 0, 2, null, 0, -1, bytes, 2, 1, hashCtx);
+    assertNotEquals(nullableThreeStringHash, VectorHashKeyWrapperThreeString.calculateHashCode(2,
+        bytes, 0, 0, null, 0, -1, bytes, 0, 3, hashCtx));
   }
 
   @Test
@@ -1222,18 +1257,38 @@ public class TestVectorHashKeyWrapperBatch {
       VectorHashKeyWrapperBase stringWrapper, VectorHashKeyWrapperBatch vhkwb, int stringCount) {
     VectorHashKeyWrapperGeneral generalWrapper = new VectorHashKeyWrapperGeneral(
         new VectorHashKeyWrapperBase.HashContext(), 0, 0, stringCount, 0, 0, 0, stringCount);
+    int nonNullCount = 0;
+    int totalLength = 0;
     for (int i = 0; i < stringCount; i++) {
       if (stringWrapper.isNull(i)) {
         generalWrapper.assignNullString(i, i);
       } else {
-        generalWrapper.assignString(i, stringWrapper.getBytes(i), stringWrapper.getByteStart(i),
-            stringWrapper.getByteLength(i));
+        int length = stringWrapper.getByteLength(i);
+        generalWrapper.assignString(i, stringWrapper.getBytes(i), stringWrapper.getByteStart(i), length);
+        ++nonNullCount;
+        totalLength += length;
       }
     }
-    generalWrapper.setHashKey();
-
-    if (!(stringWrapper instanceof VectorHashKeyWrapperGeneralLongString) &&
+    if (nonNullCount >= 2 && (stringWrapper instanceof VectorHashKeyWrapperTwoString ||
+        stringWrapper instanceof VectorHashKeyWrapperThreeString)) {
+      ByteBuffer encoded = ByteBuffer.allocate(totalLength + stringCount * Integer.BYTES)
+          .order(ByteOrder.LITTLE_ENDIAN);
+      boolean[] nulls = new boolean[stringCount];
+      for (int i = 0; i < stringCount; i++) {
+        nulls[i] = generalWrapper.isNull(i);
+        if (!nulls[i]) {
+          encoded.put(generalWrapper.getBytes(i), generalWrapper.getByteStart(i),
+              generalWrapper.getByteLength(i));
+        }
+      }
+      for (int i = 0; i < stringCount; i++) {
+        encoded.putInt(generalWrapper.getByteLength(i));
+      }
+      assertEquals(Murmur3.xxHash32(encoded.array(), 0, encoded.position(), Arrays.hashCode(nulls)),
+          stringWrapper.hashCode());
+    } else if (!(stringWrapper instanceof VectorHashKeyWrapperGeneralLongString) &&
         !(stringWrapper instanceof VectorHashKeyWrapperLongStringRowView)) {
+      generalWrapper.setHashKey();
       assertEquals(generalWrapper.hashCode(), stringWrapper.hashCode());
     }
     for (int i = 0; i < stringCount; i++) {

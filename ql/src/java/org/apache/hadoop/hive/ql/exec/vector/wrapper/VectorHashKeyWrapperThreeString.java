@@ -103,6 +103,13 @@ public final class VectorHashKeyWrapperThreeString extends VectorHashKeyWrapperB
       }
       bytesHash.add(bytes2, start2, length2);
     }
+    if (Integer.bitCount(nullMask) <= 1) {
+      byte[] lengths = HashContext.getStringLengthBuffer(hashCtx);
+      HashContext.writeStringLength(lengths, 0, length0);
+      HashContext.writeStringLength(lengths, Integer.BYTES, length1);
+      HashContext.writeStringLength(lengths, 2 * Integer.BYTES, length2);
+      return bytesHash.addAndEnd(lengths, 0, 3 * Integer.BYTES);
+    }
     return bytesHash == null ? hash : bytesHash.end();
   }
 
