@@ -150,6 +150,10 @@ final class VectorGroupByLongStringHashTable extends VectorGroupByHashTable {
     return entriesFlushed;
   }
 
+  private static int spreadHash(int hashCode) {
+    return hashCode ^ (hashCode >>> 16);
+  }
+
   /**
    * Returns the matching slot, or the bitwise complement of an insertion slot.
    * The supplied hash code has already been spread for bucket selection.
@@ -192,7 +196,7 @@ final class VectorGroupByLongStringHashTable extends VectorGroupByHashTable {
       stringKeys[insertionSlot] = Arrays.copyOfRange(bytes, start, start + length);
       keyMemorySize += JAVA_DATA_MODEL.lengthForByteArrayOfSize(length);
     }
-    linkEntryWithSpreadHash(insertionSlot, hashCode, value);
+    linkEntry(insertionSlot, hashCode, value);
     assert findSlot(key0, nullMask, bytes, start, length, hashCode) == insertionSlot;
     assert values[insertionSlot] == value;
   }

@@ -167,6 +167,10 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
     return entriesFlushed;
   }
 
+  private static int spreadHash(int hashCode) {
+    return hashCode ^ (hashCode >>> 16);
+  }
+
   /**
    * Returns the matching slot, or the bitwise complement of an insertion slot.
    * The supplied hash code has already been spread for bucket selection.
@@ -223,7 +227,7 @@ final class VectorGroupByLongTwoStringHashTable extends VectorGroupByHashTable {
       stringKeys[stringOffset + 1] = Arrays.copyOfRange(bytes1, start1, start1 + length1);
       keyMemorySize += JAVA_DATA_MODEL.lengthForByteArrayOfSize(length1);
     }
-    linkEntryWithSpreadHash(insertionSlot, hashCode, value);
+    linkEntry(insertionSlot, hashCode, value);
     assert findSlot(key, nullMask,
         bytes0, start0, length0, bytes1, start1, length1, hashCode) == insertionSlot;
     assert values[insertionSlot] == value;

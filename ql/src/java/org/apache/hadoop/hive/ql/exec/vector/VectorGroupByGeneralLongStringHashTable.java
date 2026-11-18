@@ -186,6 +186,10 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
     return entriesFlushed;
   }
 
+  private static int spreadHash(int hashCode) {
+    return hashCode ^ (hashCode >>> 16);
+  }
+
   /**
    * Returns the matching slot, or the bitwise complement of an insertion slot.
    * The supplied hash code has already been spread for bucket selection.
@@ -268,7 +272,7 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
       }
     }
     hashCodes[insertionSlot] = hashCode;
-    linkEntryWithSpreadHash(insertionSlot, hashCode, value);
+    linkEntry(insertionSlot, hashCode, value);
     assert findSlot(key, mask, hashCode) == insertionSlot;
     assert values[insertionSlot] == value;
   }
