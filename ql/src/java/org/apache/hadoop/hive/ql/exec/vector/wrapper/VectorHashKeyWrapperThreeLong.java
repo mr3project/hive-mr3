@@ -25,6 +25,7 @@ import org.apache.hadoop.hive.ql.exec.KeyWrapper;
 import org.apache.hadoop.hive.ql.exec.vector.VectorColumnSetInfo;
 import org.apache.hadoop.hive.serde2.io.DateWritableV2;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
+import org.apache.hive.common.util.Murmur3;
 
 public final class VectorHashKeyWrapperThreeLong extends VectorHashKeyWrapperBase {
 
@@ -46,8 +47,6 @@ public final class VectorHashKeyWrapperThreeLong extends VectorHashKeyWrapperBas
     isNull2 = false;
   }
 
-  private static final int EMPTY_DOUBLE_ARRAY_HASH = 1;
-
   @Override
   public void setHashKey() {
     hashcode = calculateHashCode(longValue0, longValue1, longValue2,
@@ -56,15 +55,7 @@ public final class VectorHashKeyWrapperThreeLong extends VectorHashKeyWrapperBas
 
   public static int calculateHashCode(long longValue0, long longValue1, long longValue2,
       int nullMask) {
-    int result = 1;
-    result = 31 * result + (int) (longValue0 ^ (longValue0 >>> 32));
-    result = 31 * result + (int) (longValue1 ^ (longValue1 >>> 32));
-    result = 31 * result + (int) (longValue2 ^ (longValue2 >>> 32));
-    int nullsHash = 1;
-    nullsHash = 31 * nullsHash + ((nullMask & 1) != 0 ? 1231 : 1237);
-    nullsHash = 31 * nullsHash + ((nullMask & 2) != 0 ? 1231 : 1237);
-    nullsHash = 31 * nullsHash + ((nullMask & 4) != 0 ? 1231 : 1237);
-    return result ^ EMPTY_DOUBLE_ARRAY_HASH ^ nullsHash;
+    return Murmur3.hash32(longValue0, longValue1, longValue2, Murmur3.DEFAULT_SEED ^ nullMask);
   }
 
   @Override

@@ -58,6 +58,7 @@ import org.apache.hadoop.hive.ql.exec.vector.util.FakeVectorRowBatchFromConcat;
 import org.apache.hadoop.hive.ql.exec.vector.util.FakeVectorRowBatchFromLongIterables;
 import org.apache.hadoop.hive.ql.exec.vector.util.FakeVectorRowBatchFromObjectIterables;
 import org.apache.hadoop.hive.ql.exec.vector.util.FakeVectorRowBatchFromRepeats;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperThreeLong;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.optimizer.physical.Vectorizer;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
@@ -102,6 +103,47 @@ import org.mockito.Mockito;
 public class TestVectorGroupByOperator {
 
   HiveConf hconf = new HiveConf();
+
+  @Test
+  public void testThreeLongHashTableRepeatedHalvesAfterResize() {
+    int keyCount = 4096;
+    VectorGroupByThreeLongHashTable table = new VectorGroupByThreeLongHashTable(0);
+    VectorAggregateExpression.AggregationBuffer[] aggregations =
+        new VectorAggregateExpression.AggregationBuffer[0];
+    int[] slots = new int[keyCount];
+    for (int i = 0; i < keyCount; ++i) {
+      long key = ((long) i << 32) | i;
+      int hash = VectorHashKeyWrapperThreeLong.calculateHashCode(key, 7, 11, 0);
+      int slot = table.findSlot(key, 7, 11, 0, hash);
+      assertTrue(slot < 0);
+      slots[i] = ~slot;
+      table.put(key, 7, 11, 0, hash, slots[i], new VectorAggregationBufferRow(aggregations));
+    }
+
+    assertEquals(keyCount, table.size());
+    assertEquals(8192, table.buckets.length);
+    assertTrue(table.checkInvariants());
+    for (int i = 0; i < keyCount; ++i) {
+      long key = ((long) i << 32) | i;
+      int hash = VectorHashKeyWrapperThreeLong.calculateHashCode(key, 7, 11, 0);
+      assertEquals(slots[i], table.findSlot(key, 7, 11, 0, hash));
+    }
+
+    int occupiedBuckets = 0;
+    int longestChain = 0;
+    for (int bucket = 0; bucket < table.buckets.length; ++bucket) {
+      int chainLength = 0;
+      for (int slot = table.firstSlot(bucket); slot != -1; slot = table.nextSlot(slot)) {
+        ++chainLength;
+      }
+      if (chainLength > 0) {
+        ++occupiedBuckets;
+        longestChain = Math.max(longestChain, chainLength);
+      }
+    }
+    assertEquals(3219, occupiedBuckets);
+    assertEquals(4, longestChain);
+  }
 
   private static void setupMaxMemory(GroupByDesc desc) {
     desc.setMaxMemoryAvailable(ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getMax());

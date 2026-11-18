@@ -45,6 +45,7 @@ import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperTwoStri
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
+import org.apache.hive.common.util.Murmur3;
 
 /**
  * Unit test for VectorHashKeyWrapperBatch class.
@@ -637,60 +638,41 @@ public class TestVectorHashKeyWrapperBatch {
         typeInfos);
 
     VectorizedRowBatch batch = new VectorizedRowBatch(3);
-    batch.selectedInUse = false;
-    LongColumnVector firstColumnVector = new LongColumnVector();
-    firstColumnVector.noNulls = false;
-    LongColumnVector secondColumnVector = new LongColumnVector();
-    secondColumnVector.noNulls = false;
-    LongColumnVector thirdColumnVector = new LongColumnVector();
-    thirdColumnVector.noNulls = false;
-    batch.cols[0] = firstColumnVector;
-    batch.cols[1] = secondColumnVector;
-    batch.cols[2] = thirdColumnVector;
-
-    firstColumnVector.vector[0] = 10;
-    secondColumnVector.vector[0] = 20;
-    thirdColumnVector.vector[0] = 30;
-    firstColumnVector.isNull[1] = true;
-    secondColumnVector.vector[1] = 20;
-    thirdColumnVector.vector[1] = 30;
-    firstColumnVector.vector[2] = 10;
-    secondColumnVector.isNull[2] = true;
-    thirdColumnVector.vector[2] = 30;
-    firstColumnVector.vector[3] = 10;
-    secondColumnVector.vector[3] = 20;
-    thirdColumnVector.isNull[3] = true;
-    firstColumnVector.isNull[4] = true;
-    secondColumnVector.vector[4] = 20;
-    thirdColumnVector.vector[4] = 30;
-    firstColumnVector.isNull[5] = true;
-    secondColumnVector.isNull[5] = true;
-    thirdColumnVector.isNull[5] = true;
-    batch.size = 6;
+    long[] values = {0x1234567856781234L, -20L, 30L};
+    int maskCount = 1 << values.length;
+    for (int keyIndex = 0; keyIndex < values.length; keyIndex++) {
+      LongColumnVector columnVector = new LongColumnVector();
+      columnVector.noNulls = false;
+      batch.cols[keyIndex] = columnVector;
+      for (int mask = 0; mask < maskCount; mask++) {
+        boolean isNull = (mask & (1 << keyIndex)) != 0;
+        int duplicateRow = mask + maskCount;
+        columnVector.isNull[mask] = isNull;
+        columnVector.isNull[duplicateRow] = isNull;
+        columnVector.vector[mask] = values[keyIndex];
+        columnVector.vector[duplicateRow] = isNull ? -values[keyIndex] : values[keyIndex];
+      }
+    }
+    batch.size = 2 * maskCount;
 
     vhkwb.evaluateBatch(batch);
     VectorHashKeyWrapperBase[] vhkwArray = vhkwb.getVectorHashKeyWrappers();
-    for (int i = 0; i < batch.size; i++) {
-      assertTrue(vhkwArray[i] instanceof VectorHashKeyWrapperThreeLong);
-      assertLongWrapperConsistentWithGeneral(vhkwArray[i], vhkwb, 3);
+    for (int mask = 0; mask < maskCount; mask++) {
+      VectorHashKeyWrapperBase wrapper = vhkwArray[mask];
+      VectorHashKeyWrapperBase duplicate = vhkwArray[mask + maskCount];
+      assertTrue(wrapper instanceof VectorHashKeyWrapperThreeLong);
+      for (int keyIndex = 0; keyIndex < values.length; keyIndex++) {
+        boolean isNull = (mask & (1 << keyIndex)) != 0;
+        assertEquals(isNull, wrapper.isNull(keyIndex));
+        assertEquals(isNull ? 0L : values[keyIndex], wrapper.getLongValue(keyIndex));
+      }
+      assertLongWrapperConsistentWithGeneral(wrapper, vhkwb, 3);
+      assertEquals(wrapper, duplicate);
+      assertEquals(wrapper.hashCode(), duplicate.hashCode());
+      if (mask != 0) {
+        assertFalse(wrapper.equals(vhkwArray[0]));
+      }
     }
-    assertFalse(vhkwArray[0].isNull(0));
-    assertFalse(vhkwArray[0].isNull(1));
-    assertFalse(vhkwArray[0].isNull(2));
-    assertTrue(vhkwArray[1].isNull(0));
-    assertFalse(vhkwArray[1].isNull(1));
-    assertFalse(vhkwArray[1].isNull(2));
-    assertFalse(vhkwArray[2].isNull(0));
-    assertTrue(vhkwArray[2].isNull(1));
-    assertFalse(vhkwArray[2].isNull(2));
-    assertFalse(vhkwArray[3].isNull(0));
-    assertFalse(vhkwArray[3].isNull(1));
-    assertTrue(vhkwArray[3].isNull(2));
-    assertEquals(vhkwArray[1], vhkwArray[4]);
-    assertFalse(vhkwArray[0].equals(vhkwArray[1]));
-    assertFalse(vhkwArray[0].equals(vhkwArray[2]));
-    assertFalse(vhkwArray[0].equals(vhkwArray[3]));
-    assertFalse(vhkwArray[0].equals(vhkwArray[5]));
   }
 
   @Test
@@ -1217,10 +1199,14 @@ public class TestVectorHashKeyWrapperBatch {
         generalWrapper.assignLong(i, i, longWrapper.getLongValue(i));
       }
     }
-    generalWrapper.setHashKey();
-
-    if (!(longWrapper instanceof VectorHashKeyWrapperGeneralLongString) &&
+    if (longWrapper instanceof VectorHashKeyWrapperThreeLong) {
+      int nullMask = (generalWrapper.isNull(0) ? 1 : 0) | (generalWrapper.isNull(1) ? 2 : 0) |
+          (generalWrapper.isNull(2) ? 4 : 0);
+      assertEquals(Murmur3.hash32(generalWrapper.getLongValue(0), generalWrapper.getLongValue(1),
+          generalWrapper.getLongValue(2), Murmur3.DEFAULT_SEED ^ nullMask), longWrapper.hashCode());
+    } else if (!(longWrapper instanceof VectorHashKeyWrapperGeneralLongString) &&
         !(longWrapper instanceof VectorHashKeyWrapperLongStringRowView)) {
+      generalWrapper.setHashKey();
       assertEquals(generalWrapper.hashCode(), longWrapper.hashCode());
     }
     for (int i = 0; i < longCount; i++) {

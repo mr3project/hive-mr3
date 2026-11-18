@@ -81,6 +81,22 @@ public class TestMurmur3 {
   }
 
   @Test
+  public void testHashCodesM3_32_threeLongs() {
+    Random rand = new Random(123);
+    ByteBuffer buffer = ByteBuffer.allocate(3 * Long.BYTES).order(ByteOrder.BIG_ENDIAN);
+    for (int i = 0; i < 1000; i++) {
+      long first = rand.nextLong();
+      long second = rand.nextLong();
+      long third = rand.nextLong();
+      int seed = rand.nextInt();
+      buffer.clear();
+      buffer.putLong(first).putLong(second).putLong(third);
+      byte[] data = buffer.array();
+      assertEquals(Murmur3.hash32(data, data.length, seed), Murmur3.hash32(first, second, third, seed));
+    }
+  }
+
+  @Test
   public void testHashCodesM3_32_double() {
     int seed = 123;
     Random rand = new Random(seed);

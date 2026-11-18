@@ -109,6 +109,25 @@ public class Murmur3 {
   }
 
   /**
+   * Hashes three longs encoded in big-endian byte order with Murmur3-32.
+   */
+  public static int hash32(long l0, long l1, long l2, int seed) {
+    int hash = seed;
+    final long r0 = Long.reverseBytes(l0);
+    final long r1 = Long.reverseBytes(l1);
+    final long r2 = Long.reverseBytes(l2);
+
+    hash = mix32((int) r0, hash);
+    hash = mix32((int) (r0 >>> 32), hash);
+    hash = mix32((int) r1, hash);
+    hash = mix32((int) (r1 >>> 32), hash);
+    hash = mix32((int) r2, hash);
+    hash = mix32((int) (r2 >>> 32), hash);
+
+    return fmix32(Long.BYTES * 3, hash);
+  }
+
+  /**
    * Murmur3 32-bit variant.
    *
    * @param data - input byte array

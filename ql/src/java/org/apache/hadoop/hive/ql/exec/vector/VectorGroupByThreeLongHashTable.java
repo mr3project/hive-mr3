@@ -31,7 +31,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
   // The three long components of each slot are stored consecutively.
   private long[] keys;
   private byte[] nullMasks;
-  // Cached spread hashes used for lookup and bucket selection.
+  // Cached wrapper hashes used for lookup and bucket selection.
   private int[] hashCodes;
 
   VectorGroupByThreeLongHashTable(int expectedEntries) {
@@ -49,7 +49,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
       VectorHashKeyWrapperThreeLong kw = (VectorHashKeyWrapperThreeLong) keyWrappers[i];
       int nullMask = (kw.isNull(0) ? 1 : 0) | (kw.isNull(1) ? 2 : 0) | (kw.isNull(2) ? 4 : 0);
       boolean isNull = nullMask == 7;
-      int hashCode = isNull ? 0 : spreadHash(kw.hashCode());
+      int hashCode = isNull ? 0 : kw.hashCode();
       int slot = isNull ? 0 : findSlot(kw.getLongValue(0), kw.getLongValue(1),
           kw.getLongValue(2), nullMask, hashCode);
       VectorAggregationBufferRow aggregationBuffer = isNull ? getNullValue() :
@@ -150,13 +150,8 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
     return entriesFlushed;
   }
 
-  private static int spreadHash(int hashCode) {
-    return hashCode ^ (hashCode >>> 16);
-  }
-
   /**
    * Returns the matching slot, or the bitwise complement of an insertion slot.
-   * The supplied hash code has already been spread for bucket selection.
    */
   int findSlot(long key0, long key1, long key2, int nullMask, int hashCode) {
     assert keys.length == 3L * values.length && nullMasks.length == values.length &&
@@ -166,8 +161,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
         numEntries <= resizeThreshold && resizeThreshold < buckets.length;
     assert (freeList == 0) == (numEntries == numUsed);
     assert nullMask >= 0 && nullMask < 7;
-    assert hashCode == spreadHash(
-        VectorHashKeyWrapperThreeLong.calculateHashCode(key0, key1, key2, nullMask));
+    assert hashCode == VectorHashKeyWrapperThreeLong.calculateHashCode(key0, key1, key2, nullMask);
     int bucket = hashCode & (buckets.length - 1);
     for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
       int slot = ref - 1;
@@ -285,7 +279,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
     for (int slot = 0; slot < numUsed; ++slot) {
       int keyOffset = 3 * slot;
       if (values[slot] != null &&
-          (hashCodes[slot] != spreadHash(calculateHashCode(slot)) ||
+          (hashCodes[slot] != calculateHashCode(slot) ||
               findSlot(keys[keyOffset], keys[keyOffset + 1], keys[keyOffset + 2], nullMasks[slot],
                   hashCodes[slot]) != slot)) {
         return false;
