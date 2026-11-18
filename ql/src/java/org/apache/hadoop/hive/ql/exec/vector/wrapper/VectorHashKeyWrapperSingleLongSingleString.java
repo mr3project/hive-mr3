@@ -61,16 +61,8 @@ public class VectorHashKeyWrapperSingleLongSingleString extends VectorHashKeyWra
 
   public static int calculateHashCode(long longValue0, int nullMask,
       byte[] bytes, int start, int length) {
-    int longHash = 1;
-    longHash = 31 * longHash + (int) (longValue0 ^ (longValue0 >>> 32));
-    int nullHash = 1;
-    nullHash = 31 * nullHash + ((nullMask & 1) != 0 ? 1231 : 1237);
-    nullHash = 31 * nullHash + ((nullMask & 2) != 0 ? 1231 : 1237);
-    int hash = 31 * longHash + nullHash;
-    if (length != -1) {
-      hash = Murmur3.IncrementalHash32.hash32(bytes, start, length, hash);
-    }
-    return hash;
+    int hash = Murmur3.hash32(longValue0, Murmur3.DEFAULT_SEED ^ nullMask);
+    return length == -1 ? hash : Murmur3.xxHash32(bytes, start, length, hash);
   }
 
   @Override

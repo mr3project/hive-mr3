@@ -74,26 +74,22 @@ public class VectorHashKeyWrapperSingleLongTwoString extends VectorHashKeyWrappe
   public static int calculateHashCode(long longValue, int nullMask,
       byte[] bytes0, int start0, int length0, byte[] bytes1, int start1, int length1,
       HashContext hashCtx) {
-    int hash = 31 + (int) (longValue ^ (longValue >>> 32));
-    int nullsHash = 1;
-    nullsHash = 31 * nullsHash + ((nullMask & 1) != 0 ? 1231 : 1237);
-    nullsHash = 31 * nullsHash + ((nullMask & 2) != 0 ? 1231 : 1237);
-    nullsHash = 31 * nullsHash + ((nullMask & 4) != 0 ? 1231 : 1237);
-    hash = 31 * hash + nullsHash;
-    Murmur3.IncrementalHash32 bytesHash = null;
-    if (length0 != -1) {
-      bytesHash = HashContext.getBytesHash(hashCtx);
-      bytesHash.start(hash);
-      bytesHash.add(bytes0, start0, length0);
+    int hash = Murmur3.hash32(longValue, Murmur3.DEFAULT_SEED ^ nullMask);
+    if (length0 == -1) {
+      return length1 == -1 ? hash : Murmur3.xxHash32(bytes1, start1, length1, hash);
     }
-    if (length1 != -1) {
-      if (bytesHash == null) {
-        bytesHash = HashContext.getBytesHash(hashCtx);
-        bytesHash.start(hash);
-      }
-      bytesHash.add(bytes1, start1, length1);
+    if (length1 == -1) {
+      return Murmur3.xxHash32(bytes0, start0, length0, hash);
     }
-    return bytesHash == null ? hash : bytesHash.end();
+
+    Murmur3.IncrementalHash32 bytesHash = HashContext.getBytesHash(hashCtx);
+    bytesHash.start(hash);
+    bytesHash.add(bytes0, start0, length0);
+    bytesHash.add(bytes1, start1, length1);
+    byte[] lengths = HashContext.getStringLengthBuffer(hashCtx);
+    HashContext.writeStringLength(lengths, 0, length0);
+    HashContext.writeStringLength(lengths, Integer.BYTES, length1);
+    return bytesHash.addAndEnd(lengths, 0, 2 * Integer.BYTES);
   }
 
   @Override

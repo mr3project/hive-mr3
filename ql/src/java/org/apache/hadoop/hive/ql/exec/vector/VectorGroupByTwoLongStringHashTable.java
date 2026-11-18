@@ -34,7 +34,7 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
   private long[] keys;
   private byte[][] stringKeys;
   private byte[] nullMasks;
-  // Cached spread hashes used for lookup and bucket selection.
+  // Cached wrapper hashes used for lookup and bucket selection.
   private int[] hashCodes;
   private final int longKeyIndex0;
   private final int longKeyIndex1;
@@ -60,7 +60,7 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
           (VectorHashKeyWrapperTwoLongSingleString) keyWrappers[i];
       int nullMask = (kw.isNull(0) ? 1 : 0) | (kw.isNull(1) ? 2 : 0) | (kw.isNull(2) ? 4 : 0);
       boolean isNull = nullMask == 7;
-      int hashCode = isNull ? 0 : spreadHash(kw.hashCode());
+      int hashCode = isNull ? 0 : kw.hashCode();
       int slot = isNull ? 0 : findSlot(kw.getLongValue(0), kw.getLongValue(1), nullMask,
           kw.getBytes(0), kw.getByteStart(0), kw.getByteLength(0), hashCode);
       VectorAggregationBufferRow aggregationBuffer = isNull ? nullValue :
@@ -159,13 +159,8 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
     return entriesFlushed;
   }
 
-  private static int spreadHash(int hashCode) {
-    return hashCode ^ (hashCode >>> 16);
-  }
-
   /**
    * Returns the matching slot, or the bitwise complement of an insertion slot.
-   * The supplied hash code has already been spread for bucket selection.
    */
   int findSlot(long key0, long key1, int nullMask, byte[] bytes, int start, int length,
       int hashCode) {
@@ -178,8 +173,8 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
     assert (freeList == 0) == (numEntries == numUsed);
     assert nullMask >= 0 && nullMask < 7;
     assert ((nullMask & (1 << stringKeyIndex)) != 0) == (length == -1);
-    assert hashCode == spreadHash(VectorHashKeyWrapperTwoLongSingleString.calculateHashCode(
-        key0, key1, nullMask, bytes, start, length));
+    assert hashCode == VectorHashKeyWrapperTwoLongSingleString.calculateHashCode(
+        key0, key1, nullMask, bytes, start, length);
     int bucket = hashCode & (buckets.length - 1);
     for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
       int slot = ref - 1;
@@ -315,7 +310,7 @@ final class VectorGroupByTwoLongStringHashTable extends VectorGroupByHashTable {
         if ((nullMasks[slot] & (1 << longKeyIndex1)) != 0 && keys[keyOffset + 1] != 0) {
           return false;
         }
-        if (hashCodes[slot] != spreadHash(hashCode(slot)) ||
+        if (hashCodes[slot] != hashCode(slot) ||
             findSlot(keys[keyOffset], keys[keyOffset + 1], nullMasks[slot], bytes, 0,
                 bytes == null ? -1 : bytes.length, hashCodes[slot]) != slot) {
           return false;

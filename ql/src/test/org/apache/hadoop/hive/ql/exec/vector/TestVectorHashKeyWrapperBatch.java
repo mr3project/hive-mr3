@@ -547,6 +547,46 @@ public class TestVectorHashKeyWrapperBatch {
   }
 
   @Test
+  public void testMixedHashUsesFullLongValues() {
+    byte[] bytes = {'x', 'a', 'b', 'c', 'y'};
+    long repeatedHalves = 0x0000000100000001L;
+    assertNotEquals(VectorHashKeyWrapperSingleLongSingleString.calculateHashCode(0L, 0, bytes, 1, 3),
+        VectorHashKeyWrapperSingleLongSingleString.calculateHashCode(repeatedHalves, 0, bytes, 1, 3));
+    assertNotEquals(VectorHashKeyWrapperTwoLongSingleString.calculateHashCode(0L, 31L, 0, bytes, 1, 3),
+        VectorHashKeyWrapperTwoLongSingleString.calculateHashCode(1L, 0L, 0, bytes, 1, 3));
+
+    VectorHashKeyWrapperBase.HashContext hashCtx = new VectorHashKeyWrapperBase.HashContext();
+    assertNotEquals(VectorHashKeyWrapperSingleLongTwoString.calculateHashCode(0L, 0,
+            bytes, 1, 2, bytes, 3, 1, hashCtx),
+        VectorHashKeyWrapperSingleLongTwoString.calculateHashCode(repeatedHalves, 0,
+            bytes, 1, 2, bytes, 3, 1, hashCtx));
+  }
+
+  @Test
+  public void testLongTwoStringHashIncludesFieldLengths() {
+    byte[] bytes = {'x', 'a', 'b', 'c', 'y'};
+    long value = 42L;
+    VectorHashKeyWrapperBase.HashContext hashCtx = new VectorHashKeyWrapperBase.HashContext();
+
+    int hash = VectorHashKeyWrapperSingleLongTwoString.calculateHashCode(value, 0,
+        bytes, 1, 2, bytes, 3, 1, hashCtx);
+    assertNotEquals(hash, VectorHashKeyWrapperSingleLongTwoString.calculateHashCode(value, 0,
+        bytes, 1, 1, bytes, 2, 2, hashCtx));
+    assertNotEquals(hash, VectorHashKeyWrapperSingleLongTwoString.calculateHashCode(value, 0,
+        bytes, 1, 0, bytes, 1, 3, hashCtx));
+    assertEquals(hash, VectorHashKeyWrapperSingleLongTwoString.calculateHashCode(value, 0,
+        bytes, 1, 2, bytes, 3, 1, null));
+
+    assertEquals(Murmur3.hash32(value, Murmur3.DEFAULT_SEED ^ 6),
+        VectorHashKeyWrapperSingleLongTwoString.calculateHashCode(value, 6,
+            null, 0, -1, null, 0, -1, hashCtx));
+    int emptyStringSeed = Murmur3.hash32(value, Murmur3.DEFAULT_SEED ^ 4);
+    assertEquals(Murmur3.xxHash32(bytes, 1, 0, emptyStringSeed),
+        VectorHashKeyWrapperSingleLongTwoString.calculateHashCode(value, 4,
+            bytes, 1, 0, null, 0, -1, hashCtx));
+  }
+
+  @Test
   public void testVectorHashKeyWrapperSingleLongCopyKey() throws HiveException {
     VectorExpression[] keyExpressions = new VectorExpression[] { new IdentityExpression(0) };
     TypeInfo[] typeInfos = new TypeInfo[] {TypeInfoFactory.longTypeInfo};
@@ -1171,7 +1211,11 @@ public class TestVectorHashKeyWrapperBatch {
     VectorHashKeyWrapperGeneral generalWrapper = new VectorHashKeyWrapperGeneral(
         new VectorHashKeyWrapperBase.HashContext(), longCount, 0, stringCount, 0, 0, 0,
         longCount + stringCount);
+    int nullMask = 0;
     for (int keyIndex = 0; keyIndex < vhkwb.keyCount; keyIndex++) {
+      if (wrapper.isNull(keyIndex)) {
+        nullMask |= 1 << keyIndex;
+      }
       int typeSpecificIndex = vhkwb.columnTypeSpecificIndices[keyIndex];
       switch (vhkwb.columnVectorTypes[keyIndex]) {
       case LONG:
@@ -1193,7 +1237,11 @@ public class TestVectorHashKeyWrapperBatch {
         throw new RuntimeException("Unexpected column vector type " + vhkwb.columnVectorTypes[keyIndex]);
       }
     }
-    generalWrapper.setHashKey();
+    if (wrapper instanceof VectorHashKeyWrapperSingleLongSingleString ||
+        wrapper instanceof VectorHashKeyWrapperTwoLongSingleString ||
+        wrapper instanceof VectorHashKeyWrapperSingleLongTwoString) {
+      assertEquals(expectedMixedHash(generalWrapper, longCount, stringCount, nullMask), wrapper.hashCode());
+    }
 
     for (int keyIndex = 0; keyIndex < vhkwb.keyCount; keyIndex++) {
       assertEquals(generalWrapper.isNull(keyIndex), wrapper.isNull(keyIndex));
@@ -1221,6 +1269,27 @@ public class TestVectorHashKeyWrapperBatch {
     assertEquals(generalWrapper.stringifyKeys(vhkwb), wrapper.stringifyKeys(vhkwb));
     assertEquals(generalWrapper.toString(), wrapper.toString());
     assertEquals(generalWrapper.getVariableSize(), wrapper.getVariableSize());
+  }
+
+  private int expectedMixedHash(VectorHashKeyWrapperGeneral key, int longCount, int stringCount, int nullMask) {
+    int seed = Murmur3.DEFAULT_SEED ^ nullMask;
+    int longHash = longCount == 1 ? Murmur3.hash32(key.getLongValue(0), seed) :
+        Murmur3.hash32(key.getLongValue(0), key.getLongValue(1), seed);
+    int firstLength = key.getByteLength(0);
+    int secondLength = stringCount == 2 ? key.getByteLength(1) : -1;
+    if (firstLength == -1 && secondLength == -1) {
+      return longHash;
+    }
+    if (firstLength == -1 || secondLength == -1) {
+      int index = firstLength == -1 ? 1 : 0;
+      return Murmur3.xxHash32(key.getBytes(index), key.getByteStart(index), key.getByteLength(index), longHash);
+    }
+    ByteBuffer encoded = ByteBuffer.allocate(firstLength + secondLength + 2 * Integer.BYTES)
+        .order(ByteOrder.LITTLE_ENDIAN);
+    encoded.put(key.getBytes(0), key.getByteStart(0), firstLength);
+    encoded.put(key.getBytes(1), key.getByteStart(1), secondLength);
+    encoded.putInt(firstLength).putInt(secondLength);
+    return Murmur3.xxHash32(encoded.array(), 0, encoded.position(), longHash);
   }
 
   private void assertLongWrapperConsistentWithGeneral(

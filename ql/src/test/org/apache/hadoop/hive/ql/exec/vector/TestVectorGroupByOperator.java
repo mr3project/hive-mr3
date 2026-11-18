@@ -20,6 +20,7 @@ package org.apache.hadoop.hive.ql.exec.vector;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.spy;
@@ -35,10 +36,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
 
 import org.apache.calcite.util.Pair;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
@@ -49,6 +52,8 @@ import org.apache.hadoop.hive.ql.exec.KeyWrapper;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorFactory;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.ConstantVectorExpression;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.IdentityExpression;
+import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates.VectorAggregateExpression;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates.VectorUDAFBloomFilterMerge;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.aggregates.VectorUDAFCount;
@@ -58,6 +63,8 @@ import org.apache.hadoop.hive.ql.exec.vector.util.FakeVectorRowBatchFromConcat;
 import org.apache.hadoop.hive.ql.exec.vector.util.FakeVectorRowBatchFromLongIterables;
 import org.apache.hadoop.hive.ql.exec.vector.util.FakeVectorRowBatchFromObjectIterables;
 import org.apache.hadoop.hive.ql.exec.vector.util.FakeVectorRowBatchFromRepeats;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperThreeLong;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.optimizer.physical.Vectorizer;
@@ -143,6 +150,70 @@ public class TestVectorGroupByOperator {
     }
     assertEquals(3219, occupiedBuckets);
     assertEquals(4, longestChain);
+  }
+
+  @Test
+  public void testMixedHashTablesUseWrapperHashesAfterResize() throws HiveException {
+    assertMixedHashTableAfterResize(1, 1, VectorGroupByLongStringHashTable::new);
+    assertMixedHashTableAfterResize(2, 1, VectorGroupByTwoLongStringHashTable::new);
+    assertMixedHashTableAfterResize(1, 2, VectorGroupByLongTwoStringHashTable::new);
+  }
+
+  private static void assertMixedHashTableAfterResize(int longCount, int stringCount,
+      BiFunction<Integer, VectorHashKeyWrapperBatch, VectorGroupByHashTable> tableFactory)
+      throws HiveException {
+    int columnCount = longCount + stringCount;
+    VectorExpression[] expressions = new VectorExpression[columnCount];
+    TypeInfo[] types = new TypeInfo[columnCount];
+    for (int column = 0; column < columnCount; ++column) {
+      expressions[column] = new IdentityExpression(column);
+      types[column] = column < longCount ? TypeInfoFactory.longTypeInfo : TypeInfoFactory.stringTypeInfo;
+    }
+    VectorHashKeyWrapperBatch keyLayout = VectorHashKeyWrapperBatch.compileKeyWrapperBatch(expressions, types);
+    VectorGroupByHashTable table = tableFactory.apply(0, keyLayout);
+    int initialBucketCount = table.buckets.length;
+    int keyCount = table.resizeThreshold + 1;
+    VectorHashKeyWrapperBase[] keys = keyLayout.getVectorHashKeyWrappers();
+    byte[] bytes = {'?', 'a', 'b', 'c', '?'};
+    for (int row = 0; row < keyCount; ++row) {
+      VectorHashKeyWrapperBase key = keys[row];
+      key.assignLong(0, 0, ((long) row << 32) | row);
+      if (longCount == 2) {
+        key.assignLong(1, 1, row);
+      }
+      for (int index = 0; index < stringCount; ++index) {
+        if (row % 3 == 0) {
+          key.assignNullString(longCount + index, index);
+        } else {
+          key.assignString(index, bytes, 1 + index, 2);
+        }
+      }
+      key.setHashKey();
+      keys[keyCount + row] = key;
+    }
+
+    VectorGroupByOperator operator = new VectorGroupByOperator();
+    operator.setAggregators(new VectorAggregateExpression[0]);
+    VectorAggregationBufferBatch batchInfo = new VectorAggregationBufferBatch();
+    batchInfo.startBatch();
+    assertEquals(keyCount,
+        table.prepareBatch(operator.new ProcessingModeHashAggregate(), keys, 2 * keyCount, batchInfo));
+    assertTrue(table.buckets.length > initialBucketCount);
+    assertEquals(keyCount, table.size());
+    assertTrue(table.checkInvariants());
+
+    VectorAggregationBufferRow[] buffers = batchInfo.getAggregationBuffers();
+    Map<VectorAggregationBufferRow, Integer> expectedBuckets = new IdentityHashMap<>();
+    for (int row = 0; row < keyCount; ++row) {
+      assertSame(buffers[row], buffers[keyCount + row]);
+      expectedBuckets.put(buffers[row], keys[row].hashCode() & (table.buckets.length - 1));
+    }
+    for (int bucket = 0; bucket < table.buckets.length; ++bucket) {
+      for (int slot = table.firstSlot(bucket); slot != -1; slot = table.nextSlot(slot)) {
+        assertEquals(Integer.valueOf(bucket), expectedBuckets.remove(table.values[slot]));
+      }
+    }
+    assertTrue(expectedBuckets.isEmpty());
   }
 
   private static void setupMaxMemory(GroupByDesc desc) {
