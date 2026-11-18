@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.ql.util.JavaDataModel;
  * Key lookup, batch preparation, and flushing remain in the concrete implementations.
  */
 abstract class VectorGroupByHashTable {
+
   protected static final JavaDataModel JAVA_DATA_MODEL = JavaDataModel.get();
   protected static final double MAX_LOAD_FACTOR = 0.75;
   private static final int INITIAL_CAPACITY = 16;
@@ -78,14 +79,6 @@ abstract class VectorGroupByHashTable {
     assert size() == 0;
     assert checkInvariants();
   }
-
-  abstract long getEstimatedFixedMemorySize();
-
-  long getEstimatedMemorySize() {
-    return getEstimatedFixedMemorySize();
-  }
-
-  abstract boolean checkInvariants();
 
   // Storage hooks are called only when arrays are allocated or resized.
   protected abstract void growKeyStorage(int capacity);
@@ -155,9 +148,7 @@ abstract class VectorGroupByHashTable {
     return values[slot];
   }
 
-  int size() {
-    return numEntries;
-  }
+  abstract int size();
 
   final int bucketCount() {
     return buckets.length;
@@ -219,9 +210,13 @@ abstract class VectorGroupByHashTable {
     return liveEntries == numEntries && liveEntries + freeEntries == numUsed;
   }
 
-  protected final long getEstimatedArrayMemorySize() {
+  protected final long getBucketBaseMemorySize() {
     return JAVA_DATA_MODEL.lengthForIntArrayOfSize(buckets.length)
-        + JAVA_DATA_MODEL.lengthForIntArrayOfSize(next.length)
-        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(values.length);
+      + JAVA_DATA_MODEL.lengthForIntArrayOfSize(next.length)
+      + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(values.length);
   }
+
+  abstract boolean checkInvariants();
+  abstract long getBucketFixedMemorySize();
+  abstract long getTotalMemorySize();
 }
