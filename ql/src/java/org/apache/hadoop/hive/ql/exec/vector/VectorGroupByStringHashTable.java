@@ -32,7 +32,6 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
   private byte[][] keys0;
   // Cached spread hashes used for lookup and bucket selection.
   private int[] hashCodes;
-  private VectorAggregationBufferRow nullValue;
   private long keyMemorySize;
 
   VectorGroupByStringHashTable(int expectedEntries) {
@@ -53,7 +52,7 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
       int slot = isNull ? 0 : findSlot(
           kw.getBytes(0), kw.getByteStart(0), kw.getByteLength(0), hashCode);
       VectorAggregationBufferRow aggregationBuffer = isNull ? nullValue :
-          (slot >= 0 ? getValue(slot) : null);
+          (slot >= 0 ? values[slot] : null);
       if (aggregationBuffer == null) {
         aggregationBuffer = context.allocateAggregationBuffer();
         if (isNull) {
@@ -83,7 +82,7 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
     int rowsEmitted = 0;
     // Visit the separate all-NULL group before the bucket chains.
     flushEntries:
-    for (int bucket = -1; bucket < bucketCount(); ++bucket) {
+    for (int bucket = -1; bucket < buckets.length; ++bucket) {
       if (bucket == -1 && nullValue == null) {
         continue;
       }
@@ -91,7 +90,7 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
       int slot = bucket == -1 ? 0 : firstSlot(bucket);
       while (slot != -1) {
         int nextSlot = bucket == -1 ? -1 : nextSlot(slot);
-        VectorAggregationBufferRow bufferRow = bucket == -1 ? nullValue : getValue(slot);
+        VectorAggregationBufferRow bufferRow = bucket == -1 ? nullValue : values[slot];
         assert bufferRow != null;
         if (!all && avgAccess >= 1 && bufferRow.getAccessCount() > avgAccess) {
           context.resetHashTableAccess(bufferRow);
@@ -169,7 +168,7 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
     keyMemorySize += JAVA_DATA_MODEL.lengthForByteArrayOfSize(length0);
     linkEntryWithSpreadHash(insertionSlot, hashCode, value);
     assert findSlot(key0, start0, length0, hashCode) == insertionSlot;
-    assert getValue(insertionSlot) == value;
+    assert values[insertionSlot] == value;
   }
 
   private int hashCode(int slot) {
@@ -188,15 +187,9 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
   }
 
   @Override
-  int size() {
-    return numEntries + (nullValue == null ? 0 : 1);
-  }
-
-  @Override
   void clear() {
     Arrays.fill(keys0, 0, numUsed, null);
     clearEntries();
-    nullValue = null;
     keyMemorySize = 0;
     assert checkInvariants();
   }
@@ -211,7 +204,6 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
   protected void resetKeyStorage() {
     keys0 = new byte[values.length][];
     hashCodes = new int[values.length];
-    nullValue = null;
     keyMemorySize = 0;
   }
 
@@ -229,6 +221,18 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
     }
     assert copiedEntries == numEntries;
     assert checkInvariants();
+  }
+
+  @Override
+  long getBucketFixedMemorySize() {
+    return getBucketBaseMemorySize()
+        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(keys0.length)
+        + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes.length);
+  }
+
+  @Override
+  long getTotalMemorySize() {
+    return getBucketFixedMemorySize() + keyMemorySize;
   }
 
   @Override
@@ -252,17 +256,5 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
       }
     }
     return memorySize == keyMemorySize;
-  }
-
-  @Override
-  long getBucketFixedMemorySize() {
-    return getBucketBaseMemorySize()
-        + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(keys0.length)
-        + JAVA_DATA_MODEL.lengthForIntArrayOfSize(hashCodes.length);
-  }
-
-  @Override
-  long getTotalMemorySize() {
-    return getBucketFixedMemorySize() + keyMemorySize;
   }
 }

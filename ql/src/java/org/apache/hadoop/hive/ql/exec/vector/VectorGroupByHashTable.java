@@ -43,6 +43,9 @@ abstract class VectorGroupByHashTable {
   protected int freeList;
   protected int resizeThreshold;
 
+  // The all-null group is stored separately from the bucket chains.
+  protected VectorAggregationBufferRow nullValue;
+
   VectorGroupByHashTable(int expectedEntries) {
     int capacity = INITIAL_CAPACITY;
     while (expectedEntries > (int) (capacity * MAX_LOAD_FACTOR)) {
@@ -76,6 +79,7 @@ abstract class VectorGroupByHashTable {
   final void reset() {
     initializeEntries(INITIAL_CAPACITY);
     resetKeyStorage();
+    nullValue = null;
     assert size() == 0;
     assert checkInvariants();
   }
@@ -143,15 +147,8 @@ abstract class VectorGroupByHashTable {
     assert (freeList == 0) == (numEntries == numUsed);
   }
 
-  final VectorAggregationBufferRow getValue(int slot) {
-    assert values[slot] != null;
-    return values[slot];
-  }
-
-  abstract int size();
-
-  final int bucketCount() {
-    return buckets.length;
+  protected final int size() {
+    return numEntries + (nullValue == null ? 0 : 1);
   }
 
   final int firstSlot(int bucket) {
@@ -169,6 +166,7 @@ abstract class VectorGroupByHashTable {
     numEntries = 0;
     numUsed = 0;
     freeList = 0;
+    nullValue = null;
   }
 
   /**
@@ -216,7 +214,7 @@ abstract class VectorGroupByHashTable {
       + JAVA_DATA_MODEL.lengthForObjectArrayOfSize(values.length);
   }
 
-  abstract boolean checkInvariants();
   abstract long getBucketFixedMemorySize();
   abstract long getTotalMemorySize();
+  abstract boolean checkInvariants();
 }
