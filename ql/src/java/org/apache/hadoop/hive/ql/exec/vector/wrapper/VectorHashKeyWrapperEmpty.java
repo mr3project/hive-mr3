@@ -46,11 +46,7 @@ public final class VectorHashKeyWrapperEmpty extends VectorHashKeyWrapperBase {
 
   @Override
   public boolean equals(Object that) {
-    if (that == this) {
-      // should only be one object
-      return true;
-    }
-    return super.equals(that);
+    return this == that;
   }
 
   public String stringifyKeys(VectorColumnSetInfo columnSetInfo)
@@ -77,5 +73,10 @@ public final class VectorHashKeyWrapperEmpty extends VectorHashKeyWrapperBase {
   @Override
   public void setNull() {
     // Nothing to do.
+  }
+
+  @Override
+  public boolean isNull(int keyIndex) {
+    throw new ArrayIndexOutOfBoundsException(keyIndex);
   }
 }
