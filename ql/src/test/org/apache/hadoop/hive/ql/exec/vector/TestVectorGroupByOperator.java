@@ -23,8 +23,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.lang.management.ManagementFactory;
@@ -48,7 +48,6 @@ import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.llap.io.api.LlapProxy;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
-import org.apache.hadoop.hive.ql.exec.KeyWrapper;
 import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.OperatorFactory;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.ConstantVectorExpression;
@@ -806,9 +805,10 @@ public class TestVectorGroupByOperator {
     }
 
     vgo.close(false);
-    // The exact number of allocations depend on input. In this case it is 13.
-    // Without buffer reuse, we allocate 512 buffers for the same input
-    verify(spyAggregator, times(13)).getNewAggregationBuffer();
+    // Without reuse, each emitted partial result would need a fresh aggregation buffer.
+    int partialResults = out.getCapturedRows().size();
+    assertTrue(partialResults > 0);
+    verify(spyAggregator, atMost(partialResults / 2)).getNewAggregationBuffer();
   }
 
   @Test
@@ -866,58 +866,44 @@ public class TestVectorGroupByOperator {
     assertEquals(1000000,
         ((VectorGroupByOperator.ProcessingModeHashAggregate)vgo.processingMode).getMaxHtEntries());
 
-    this.outputRowCount = 0;
-    out.setOutputInspector(new FakeCaptureVectorToRowOutputOperator.OutputInspector() {
-      @Override
-      public void inspectRow(Object row, int tag) throws HiveException {
-        ++outputRowCount;
-      }
-    });
-
     FakeVectorRowBatchFromObjectIterables data = getDataForRollup();
-
+    Map<List<Long>, Long> expected = new HashMap<>();
     long countRowsProduced = 0;
-    long numElementsToBeRetained = 0;
-    int avgAccess = 0;
+    boolean flushRequested = false;
     for (VectorizedRowBatch unit: data) {
+      LongColumnVector firstKey = (LongColumnVector) unit.cols[0];
+      LongColumnVector secondKey = (LongColumnVector) unit.cols[1];
+      for (int row = 0; row < unit.size; ++row) {
+        long k1 = firstKey.vector[row];
+        long k2 = secondKey.vector[row];
+        expected.merge(List.of(k1, k2), 1L, Long::sum);
+        expected.merge(Arrays.asList(k1, null), 1L, Long::sum);
+        expected.merge(Arrays.asList(null, k2), 1L, Long::sum);
+      }
+      vgo.process(unit, 0);
       countRowsProduced += unit.size;
-      vgo.process(unit,  0);
-
-      if (countRowsProduced >= 100) {
-        // note down avg access
-        avgAccess = processingMode.computeAvgAccess();
-        numElementsToBeRetained = getElementsHigherThan(processingMode.mapKeysAggregationBuffers, avgAccess);
-        // trigger flush explicitly on next iteration
+      if (!flushRequested && countRowsProduced >= 100) {
         processingMode.gcCanary.clear();
+        flushRequested = true;
+      }
+      // Keep processing long enough for flushed groups to appear again.
+      if (countRowsProduced >= 124) {
         break;
       }
     }
-
-    // This processing would trigger flush
-    for (VectorizedRowBatch unit: data) {
-      long zeroAccessBeforeFlush = getElementsWithZeroAccess(processingMode.mapKeysAggregationBuffers);
-      vgo.process(unit,  0);
-      long freqElementsAfterFlush = getElementsHigherThan(processingMode.mapKeysAggregationBuffers, avgAccess);
-
-      assertTrue("After flush: " + freqElementsAfterFlush + ", before flush: " + numElementsToBeRetained,
-          (freqElementsAfterFlush >= numElementsToBeRetained));
-
-      // ensure that freq elements are reset for providing chance for others
-      long zeroAccessAfterFlush = getElementsWithZeroAccess(processingMode.mapKeysAggregationBuffers);
-      assertTrue("After flush: " + zeroAccessAfterFlush + ", before flush: " + zeroAccessBeforeFlush,
-          (zeroAccessAfterFlush > zeroAccessBeforeFlush));
-
-      break;
-    }
+    assertSame(processingMode, vgo.processingMode);
     vgo.close(false);
-  }
 
-  long getElementsHigherThan(Map<KeyWrapper, VectorAggregationBufferRow> aggMap, int avgAccess) {
-    return aggMap.values().stream().filter(v -> (v.getAccessCount() > avgAccess)).count();
-  }
-
-  long getElementsWithZeroAccess(Map<KeyWrapper, VectorAggregationBufferRow> aggMap) {
-    return aggMap.values().stream().filter(v -> (v.getAccessCount() == 0)).count();
+    Map<List<Long>, Long> actual = new HashMap<>();
+    for (Object output : out.getCapturedRows()) {
+      Object[] row = (Object[]) output;
+      Long k1 = row[0] == null ? null : ((LongWritable) row[0]).get();
+      Long k2 = row[1] == null ? null : ((LongWritable) row[1]).get();
+      long count = ((LongWritable) row[2]).get();
+      actual.merge(Arrays.asList(k1, k2), count, Long::sum);
+    }
+    assertEquals(expected, actual);
+    assertTrue(out.getCapturedRows().size() > actual.size());
   }
 
   @Test

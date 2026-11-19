@@ -324,13 +324,10 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     private Queue<KeyWrapper> reusableKeyWrapperBuffer;
 
     /**
-     * The global aggregation hash map for generic keys.
+     * The global aggregation hash map.
      */
     @VisibleForTesting
     Map<KeyWrapper, VectorAggregationBufferRow> mapKeysAggregationBuffers;
-
-    private VectorGroupByHashTable hashTable;
-    private VectorHashKeyWrapperBase hashTableOutputKey;
 
     private Queue<VectorAggregationBufferRow> reusableAggregationBufferRows =
         new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
@@ -360,7 +357,6 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
      * Exceeding this will trigger a flush irrelevant of memory pressure condition.
      */
     private static final double HASH_MAP_FLUSH_MEMORY_FACTOR = 0.3;
-    private static final double SPECIALIZED_HASH_TABLE_FLUSH_MEMORY_FACTOR = 0.5;
     private int maxHtEntries = 1000000;
 
     /**
@@ -431,50 +427,11 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
 
       assert peakEntriesHintAtStart == null ||
           peakEntriesHintAtStart > INITIAL_HASH_MAP_ENTRY_THRESHOLD;
-      KeyWrapperType keyWrapperType = keyWrappersBatch.getKeyWrapperType();
-      int expectedEntries = peakEntriesHintAtStart == null ? 0 : peakEntriesHintAtStart;
-      switch (keyWrapperType) {
-      case SINGLE_LONG:
-        hashTable = new VectorGroupByLongHashTable(expectedEntries);
-        break;
-      case TWO_LONG:
-        hashTable = new VectorGroupByTwoLongHashTable(expectedEntries);
-        break;
-      case THREE_LONG:
-        hashTable = new VectorGroupByThreeLongHashTable(expectedEntries);
-        break;
-      case SINGLE_STRING:
-        hashTable = new VectorGroupByStringHashTable(expectedEntries);
-        break;
-      case SINGLE_LONG_SINGLE_STRING:
-        hashTable = new VectorGroupByLongStringHashTable(expectedEntries, keyWrappersBatch);
-        break;
-      case TWO_STRING:
-        hashTable = new VectorGroupByTwoStringHashTable(expectedEntries);
-        break;
-      case THREE_STRING:
-        hashTable = new VectorGroupByThreeStringHashTable(expectedEntries);
-        break;
-      case TWO_LONG_SINGLE_STRING:
-        hashTable = new VectorGroupByTwoLongStringHashTable(expectedEntries, keyWrappersBatch);
-        break;
-      case SINGLE_LONG_TWO_STRING:
-        hashTable = new VectorGroupByLongTwoStringHashTable(expectedEntries, keyWrappersBatch);
-        break;
-      case GENERAL_LONG_STRING:
-        hashTable = new VectorGroupByGeneralLongStringHashTable(expectedEntries, keyWrappersBatch);
-        break;
-      default:
-        if (peakEntriesHintAtStart == null) {
-          mapKeysAggregationBuffers = new HashMap<KeyWrapper, VectorAggregationBufferRow>();
-        } else {
-          // do not consider memory limits which the previous VectorGroupByOperator already took care of
-          mapKeysAggregationBuffers = HashMap.newHashMap(peakEntriesHintAtStart);
-        }
-        break;
-      }
-      if (hashTable != null) {
-        hashTableOutputKey = keyWrappersBatch.getVectorHashKeyWrappers()[0];
+      if (peakEntriesHintAtStart == null) {
+        mapKeysAggregationBuffers = new HashMap<>();
+      } else {
+        // The previous VectorGroupByOperator already applied the memory limits.
+        mapKeysAggregationBuffers = HashMap.newHashMap(peakEntriesHintAtStart);
       }
       /*
        * The grouping sets expand the hash sizes by producing intermediate keys. 3 grouping sets
@@ -506,7 +463,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       computeMemoryLimits();
       LOG.debug("using hash aggregation processing mode");
 
-      if (keyWrapperType == KeyWrapperType.GENERAL) {
+      if (keyWrappersBatch.getKeyWrapperType() != KeyWrapperType.EMPTY) {
         reusableKeyWrapperBuffer = new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
       }
     }
@@ -637,15 +594,6 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       final int n = keyExpressions.length == 0 ? 1 : batch.size;
       // note - the row mapping is not relevant when aggregationBatchInfo::getDistinctBufferSetCount() == 1
 
-      if (hashTable != null) {
-        int newEntries = hashTable.prepareBatch(this, keyWrappers, n, aggregationBatchInfo);
-        numEntriesHashTable += newEntries;
-        numEntriesSinceCheck += newEntries;
-        totalAccessCount += n - newEntries;
-        assert hashTable.size() == numEntriesHashTable;
-        return;
-      }
-
       for (int i=0; i < n; ++i) {
         VectorHashKeyWrapperBase kw = keyWrappers[i];
         VectorAggregationBufferRow aggregationBuffer = mapKeysAggregationBuffers.get(kw);
@@ -684,10 +632,8 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     private void computeMemoryLimits() {
       JavaDataModel model = JavaDataModel.get();
 
-      fixedHashEntrySize = aggregationBatchInfo.getAggregatorsFixedSize();
-      if (hashTable == null) {
-        fixedHashEntrySize += model.hashMapEntry() + keyWrappersBatch.getKeysFixedSize();
-      }
+      fixedHashEntrySize = aggregationBatchInfo.getAggregatorsFixedSize()
+          + model.hashMapEntry() + keyWrappersBatch.getKeysFixedSize();
 
       maxMemory = getConf().getMaxMemoryAvailable();    // assume MR3, so do not use MemoryMXBean. Cf. HIVE-20648
       hashTableMemoryPercentage = conf.getGroupByMemoryUsage();
@@ -720,39 +666,29 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     }
 
     /**
-     * Flushes the entries in the hash table by emiting output (forward).
-     * A final flush emits all entries before hash aggregation ends. During processing,
-     * oversized specialized storage is fully flushed and reset to its initial capacity.
+     * Emits entries from the hash map. A final flush emits all remaining entries.
      * @param finalFlush
      * @throws HiveException
      */
     private void flush(boolean finalFlush) throws HiveException {
 
-      boolean resetTable = !finalFlush && hashTable != null &&
-          hashTable.getBucketFixedMemorySize() >= maxHashTblMemory;
-      // TODO: Support partial flushing and rebuilding into smaller arrays for oversized storage.
-      boolean all = finalFlush || resetTable;
-      int entriesToFlush = all ? numEntriesHashTable :
+      int entriesToFlush = finalFlush ? numEntriesHashTable :
         (int)(numEntriesHashTable * this.percentEntriesToFlush);
       int entriesFlushed = 0;
 
       if (LOG.isDebugEnabled()) {
         LOG.debug(String.format(
             "Flush %d %s entries:%d fixed:%d variable:%d (used:%dMb max:%dMb) gcCanary:%s",
-            entriesToFlush, all ? "(all)" : "",
+            entriesToFlush, finalFlush ? "(all)" : "",
             numEntriesHashTable, fixedHashEntrySize, avgVariableSize,
             getEstimatedHashTableMemory()/1024/1024,
             maxHashTblMemory/1024/1024,
             gcCanary.get() == null ? "dead" : "alive"));
       }
-      if (hashTable != null) {
-        entriesFlushed = hashTable.flush(this, all, entriesToFlush,
-            all ? 0 : computeAvgAccess(), hashTableOutputKey);
-      } else if (all) {
+      if (finalFlush) {
         for (Map.Entry<KeyWrapper, VectorAggregationBufferRow> pair :
             mapKeysAggregationBuffers.entrySet()) {
-          finishAggregators(pair.getValue(), false);
-          writeSingleRow((VectorHashKeyWrapperBase) pair.getKey(), pair.getValue());
+          writeHashTableRow((VectorHashKeyWrapperBase) pair.getKey(), pair.getValue());
         }
       } else {
         int avgAccess = computeAvgAccess();
@@ -765,63 +701,38 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
           Map.Entry<KeyWrapper, VectorAggregationBufferRow> pair = iter.next();
           KeyWrapper keyWrapper = pair.getKey();
           VectorAggregationBufferRow bufferRow = pair.getValue();
-          if (avgAccess >= 1) {
-            if (bufferRow.getAccessCount() > avgAccess) {
-              // resetting to give chance for other entries
-              totalAccessCount -= bufferRow.getAccessCount();
-              bufferRow.resetAccessCount();
-              continue;
-            }
+          if (avgAccess >= 1 && bufferRow.getAccessCount() > avgAccess) {
+            // Reset the access count so this entry can be flushed on a later pass.
+            resetHashTableAccess(bufferRow);
+            continue;
           }
 
-          finishAggregators(bufferRow, false);
-          writeSingleRow((VectorHashKeyWrapperBase) keyWrapper, bufferRow);
+          writeHashTableRow((VectorHashKeyWrapperBase) keyWrapper, bufferRow);
 
-          totalAccessCount -= bufferRow.getAccessCount();
-          reusableAggregationBufferRows.add(bufferRow);
-          bufferRow.resetAccessCount();
-          if (reusableKeyWrapperBuffer != null) {
-            reusableKeyWrapperBuffer.add(pair.getKey());
-          }
           iter.remove();
-          --numEntriesHashTable;
+          recycleHashTableBuffer(bufferRow);
+          if (reusableKeyWrapperBuffer != null) {
+            reusableKeyWrapperBuffer.add(keyWrapper);
+          }
           if (++entriesFlushed >= entriesToFlush) {
             break;
           }
         }
       }
 
-      if (all) {
-        entriesFlushed = entriesToFlush;
-      }
-      if (!finalFlush) {
-        numFlushedOutEntriesBeforeFinalFlush += entriesFlushed;
-      }
-
-      if (all) {
-        if (hashTable != null) {
-          if (resetTable) {
-            hashTable.reset();
-          } else {
-            hashTable.clear();
-          }
-          assert hashTable.size() == 0;
-        } else {
-          mapKeysAggregationBuffers.clear();
-        }
+      if (finalFlush) {
+        mapKeysAggregationBuffers.clear();
         totalAccessCount = 0;
         numEntriesHashTable = 0;
-      }
-
-      if (finalFlush) {
         numFlushedOutEntriesBeforeFinalFlush = 0;
         if (LOG.isDebugEnabled()) {
           LOG.debug(String.format("GC canary caused %d flushes", gcCanaryFlushes));
         }
+      } else {
+        numFlushedOutEntriesBeforeFinalFlush += entriesFlushed;
       }
     }
 
-    // Concrete context methods keep table-specific loops out of the operator.
     final int getHashTableSize() {
       return numEntriesHashTable;
     }
@@ -845,13 +756,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     }
 
     private long getEstimatedHashTableMemory() {
-      // Keep the existing active-aggregation estimate; charge allocated specialized-table storage
-      // separately because partial flushing does not release its arrays.
-      long memory = numEntriesHashTable * (fixedHashEntrySize + avgVariableSize);
-      if (hashTable != null) {
-        memory += hashTable.getTotalMemorySize();
-      }
-      return memory;
+      return numEntriesHashTable * (fixedHashEntrySize + avgVariableSize);
     }
 
     /**
@@ -872,10 +777,8 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       long currMemUsed = getEstimatedHashTableMemory();
 
       // Protect against low maxHtEntries setting: if memory usage is below 30% avoid flushing
-      double flushMemoryFactor = hashTable == null ? HASH_MAP_FLUSH_MEMORY_FACTOR
-          : SPECIALIZED_HASH_TABLE_FLUSH_MEMORY_FACTOR;
       if (((numEntriesHashTable > maxHtEntries) &&
-           (currMemUsed > flushMemoryFactor * maxHashTblMemory)) ||
+           (currMemUsed > HASH_MAP_FLUSH_MEMORY_FACTOR * maxHashTblMemory)) ||
           currMemUsed > maxHashTblMemory) {
         return true;
       }
@@ -892,9 +795,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
      * that caused the check threshold to be reached.
      */
     private void updateAvgVariableSize(VectorizedRowBatch batch) {
-      // Specialized tables already account for their owned key bytes.
-      int keyVariableSize = hashTable == null ?
-          keyWrappersBatch.getVariableSize(batch.size) : 0;
+      int keyVariableSize = keyWrappersBatch.getVariableSize(batch.size);
       int aggVariableSize = aggregationBatchInfo.getVariableSize(batch.size);
 
       // This assumes the distribution of variable size keys/aggregates in the input
