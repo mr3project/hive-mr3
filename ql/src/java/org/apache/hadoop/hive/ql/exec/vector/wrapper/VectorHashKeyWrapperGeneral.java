@@ -523,6 +523,7 @@ public final class VectorHashKeyWrapperGeneral extends VectorHashKeyWrapperBase 
           // branch instead.
           if (byteLengths[i] != -1) {
             if (clone.byteValues[i] != null && clone.byteValues[i].length >= byteLengths[i]) {
+              assert clone.byteValues[i] != byteValues[i];
               System.arraycopy(byteValues[i], byteStarts[i], clone.byteValues[i], 0, byteLengths[i]);
             } else {
               clone.byteValues[i] = Arrays.copyOfRange(byteValues[i],
