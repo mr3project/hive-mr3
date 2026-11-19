@@ -287,9 +287,34 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
           (VectorHashKeyWrapperThreeLong[]) vectorHashKeyWrappers,
           size);
       return;
+    case SINGLE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.clearIsNull(
+          (VectorHashKeyWrapperSingleString[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case TWO_STRING:
+      VectorHashKeyWrapperBatchSpecializations.clearIsNull(
+          (VectorHashKeyWrapperTwoString[]) vectorHashKeyWrappers,
+          size);
+      return;
     case THREE_STRING:
       VectorHashKeyWrapperBatchSpecializations.clearIsNull(
           (VectorHashKeyWrapperThreeString[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case SINGLE_LONG_SINGLE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.clearIsNull(
+          (VectorHashKeyWrapperSingleLongSingleString[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case SINGLE_LONG_TWO_STRING:
+      VectorHashKeyWrapperBatchSpecializations.clearIsNull(
+          (VectorHashKeyWrapperSingleLongTwoString[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case TWO_LONG_SINGLE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.clearIsNull(
+          (VectorHashKeyWrapperTwoLongSingleString[]) vectorHashKeyWrappers,
           size);
       return;
     default:
@@ -327,9 +352,34 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
           (VectorHashKeyWrapperThreeLong[]) vectorHashKeyWrappers,
           size);
       return;
+    case SINGLE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.setHashKeys(
+          (VectorHashKeyWrapperSingleString[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case TWO_STRING:
+      VectorHashKeyWrapperBatchSpecializations.setHashKeys(
+          (VectorHashKeyWrapperTwoString[]) vectorHashKeyWrappers,
+          size);
+      return;
     case THREE_STRING:
       VectorHashKeyWrapperBatchSpecializations.setHashKeys(
           (VectorHashKeyWrapperThreeString[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case SINGLE_LONG_SINGLE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.setHashKeys(
+          (VectorHashKeyWrapperSingleLongSingleString[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case SINGLE_LONG_TWO_STRING:
+      VectorHashKeyWrapperBatchSpecializations.setHashKeys(
+          (VectorHashKeyWrapperSingleLongTwoString[]) vectorHashKeyWrappers,
+          size);
+      return;
+    case TWO_LONG_SINGLE_STRING:
+      VectorHashKeyWrapperBatchSpecializations.setHashKeys(
+          (VectorHashKeyWrapperTwoLongSingleString[]) vectorHashKeyWrappers,
           size);
       return;
     default:
@@ -1478,11 +1528,56 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
       vectorHashKeyWrappers = wrappers;
       break;
     }
+    case SINGLE_STRING: {
+      VectorHashKeyWrapperSingleString[] wrappers =
+          new VectorHashKeyWrapperSingleString[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperSingleString(hashCtx);
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
+    case TWO_STRING: {
+      VectorHashKeyWrapperTwoString[] wrappers =
+          new VectorHashKeyWrapperTwoString[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperTwoString(hashCtx);
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
     case THREE_STRING: {
       VectorHashKeyWrapperThreeString[] wrappers =
           new VectorHashKeyWrapperThreeString[VectorizedRowBatch.DEFAULT_SIZE];
       for (int i = 0; i < wrappers.length; ++i) {
         wrappers[i] = new VectorHashKeyWrapperThreeString(hashCtx);
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
+    case SINGLE_LONG_SINGLE_STRING: {
+      VectorHashKeyWrapperSingleLongSingleString[] wrappers =
+          new VectorHashKeyWrapperSingleLongSingleString[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperSingleLongSingleString(hashCtx);
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
+    case SINGLE_LONG_TWO_STRING: {
+      VectorHashKeyWrapperSingleLongTwoString[] wrappers =
+          new VectorHashKeyWrapperSingleLongTwoString[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperSingleLongTwoString(hashCtx);
+      }
+      vectorHashKeyWrappers = wrappers;
+      break;
+    }
+    case TWO_LONG_SINGLE_STRING: {
+      VectorHashKeyWrapperTwoLongSingleString[] wrappers =
+          new VectorHashKeyWrapperTwoLongSingleString[VectorizedRowBatch.DEFAULT_SIZE];
+      for (int i = 0; i < wrappers.length; ++i) {
+        wrappers[i] = new VectorHashKeyWrapperTwoLongSingleString(hashCtx);
       }
       vectorHashKeyWrappers = wrappers;
       break;

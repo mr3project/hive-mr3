@@ -595,7 +595,37 @@ final class VectorHashKeyWrapperBatchSpecializations {
     }
   }
 
+  static void clearIsNull(VectorHashKeyWrapperSingleString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].clearIsNull();
+    }
+  }
+
+  static void clearIsNull(VectorHashKeyWrapperTwoString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].clearIsNull();
+    }
+  }
+
   static void clearIsNull(VectorHashKeyWrapperThreeString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].clearIsNull();
+    }
+  }
+
+  static void clearIsNull(VectorHashKeyWrapperSingleLongSingleString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].clearIsNull();
+    }
+  }
+
+  static void clearIsNull(VectorHashKeyWrapperSingleLongTwoString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].clearIsNull();
+    }
+  }
+
+  static void clearIsNull(VectorHashKeyWrapperTwoLongSingleString[] wrappers, int size) {
     for (int i = 0; i < size; ++i) {
       wrappers[i].clearIsNull();
     }
@@ -627,7 +657,37 @@ final class VectorHashKeyWrapperBatchSpecializations {
     }
   }
 
+  static void setHashKeys(VectorHashKeyWrapperSingleString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].setHashKey();
+    }
+  }
+
+  static void setHashKeys(VectorHashKeyWrapperTwoString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].setHashKey();
+    }
+  }
+
   static void setHashKeys(VectorHashKeyWrapperThreeString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].setHashKey();
+    }
+  }
+
+  static void setHashKeys(VectorHashKeyWrapperSingleLongSingleString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].setHashKey();
+    }
+  }
+
+  static void setHashKeys(VectorHashKeyWrapperSingleLongTwoString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].setHashKey();
+    }
+  }
+
+  static void setHashKeys(VectorHashKeyWrapperTwoLongSingleString[] wrappers, int size) {
     for (int i = 0; i < size; ++i) {
       wrappers[i].setHashKey();
     }
