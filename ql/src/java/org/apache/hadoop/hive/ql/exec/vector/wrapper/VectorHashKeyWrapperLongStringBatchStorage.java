@@ -22,7 +22,6 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hive.ql.exec.vector.expressions.StringExpr;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase.HashContext;
-import org.apache.hive.common.util.Murmur3;
 
 /**
  * Column-major values shared by the fixed row views of one reusable batch.
@@ -82,50 +81,8 @@ final class VectorHashKeyWrapperLongStringBatchStorage {
 
   int computeHash(int row) {
     assert row >= 0 && row < capacity;
-    int longHash = 1;
-    for (int index = 0; index < longCount; ++index) {
-      long value = longValues[index * capacity + row];
-      longHash = 31 * longHash + (int) (value ^ (value >>> 32));
-    }
-    int nullHash = 1;
-    for (int keyIndex = 0; keyIndex < keyCount; ++keyIndex) {
-      nullHash = 31 * nullHash + (isNull[keyIndex * capacity + row] ? 1231 : 1237);
-    }
-    int hash = longHash ^ nullHash;
-
-    Murmur3.IncrementalHash32 bytesHash = null;
-    int pendingOffset = -1;
-    boolean hasNonNull = false;
-    for (int index = 0; index < stringCount; ++index) {
-      int offset = index * capacity + row;
-      if (byteLengths[offset] == -1) {
-        continue;
-      }
-      hasNonNull = true;
-      if (byteLengths[offset] > 0) {
-        if (pendingOffset != -1) {
-          if (bytesHash == null) {
-            bytesHash = HashContext.getBytesHash(hashCtx);
-            bytesHash.start(hash);
-          }
-          bytesHash.add(
-              byteValues[pendingOffset], byteStarts[pendingOffset], byteLengths[pendingOffset]);
-        }
-        pendingOffset = offset;
-      }
-    }
-    if (bytesHash != null) {
-      hash = bytesHash.addAndEnd(
-          byteValues[pendingOffset], byteStarts[pendingOffset], byteLengths[pendingOffset]);
-    } else if (pendingOffset != -1) {
-      hash = Murmur3.IncrementalHash32.hash32(
-          byteValues[pendingOffset], byteStarts[pendingOffset], byteLengths[pendingOffset], hash);
-    } else if (hasNonNull) {
-      bytesHash = HashContext.getBytesHash(hashCtx);
-      bytesHash.start(hash);
-      hash = bytesHash.end();
-    }
-    return hash;
+    return VectorHashKeyWrapperGeneralLongString.calculateHashCode(hashCtx,
+        longValues, isNull, byteValues, byteStarts, byteLengths, longCount, stringCount, row, capacity);
   }
 
   boolean equalRows(int row, VectorHashKeyWrapperLongStringBatchStorage other, int otherRow) {

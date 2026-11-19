@@ -22,6 +22,7 @@ import java.util.Arrays;
 
 import org.apache.hadoop.hive.ql.exec.vector.expressions.StringExpr;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase.HashContext;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperGeneralLongString;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
@@ -356,7 +357,7 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
       return false;
     }
     VectorHashKeyWrapperGeneralLongString key =
-        new VectorHashKeyWrapperGeneralLongString(null, longCount, stringCount, keyCount);
+        new VectorHashKeyWrapperGeneralLongString(new HashContext(), longCount, stringCount, keyCount);
     byte[] mask = new byte[nullMaskBytes];
     long memorySize = 0;
     for (int slot = 0; slot < values.length; ++slot) {

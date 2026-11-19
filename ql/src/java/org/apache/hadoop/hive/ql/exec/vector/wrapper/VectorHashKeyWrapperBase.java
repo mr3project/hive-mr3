@@ -47,7 +47,7 @@ public abstract class VectorHashKeyWrapperBase extends KeyWrapper {
     private static final int STRING_LENGTH_BUFFER_SIZE = 3 * Integer.BYTES;
 
     private final Murmur3.IncrementalHash32 bytesHash = new Murmur3.IncrementalHash32();
-    private final byte[] stringLengthBuffer = new byte[STRING_LENGTH_BUFFER_SIZE];
+    private byte[] stringLengthBuffer = new byte[STRING_LENGTH_BUFFER_SIZE];
 
     public static Murmur3.IncrementalHash32 getBytesHash(HashContext ctx) {
       if (ctx == null) {
@@ -58,6 +58,16 @@ public abstract class VectorHashKeyWrapperBase extends KeyWrapper {
 
     static byte[] getStringLengthBuffer(HashContext ctx) {
       return ctx == null ? new byte[STRING_LENGTH_BUFFER_SIZE] : ctx.stringLengthBuffer;
+    }
+
+    static byte[] getStringLengthBuffer(HashContext ctx, int size) {
+      if (ctx == null) {
+        return new byte[size];
+      }
+      if (ctx.stringLengthBuffer.length < size) {
+        ctx.stringLengthBuffer = new byte[size];
+      }
+      return ctx.stringLengthBuffer;
     }
 
     // The native byte order is assumed to be little-endian. Null fields have length -1.

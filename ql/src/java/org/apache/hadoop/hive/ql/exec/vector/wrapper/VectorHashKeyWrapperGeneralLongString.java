@@ -78,48 +78,48 @@ public final class VectorHashKeyWrapperGeneralLongString extends VectorHashKeyWr
 
   @Override
   public void setHashKey() {
-    int hash = Arrays.hashCode(longValues) ^ Arrays.hashCode(isNull);
+    hashcode = calculateHashCode(hashCtx, longValues, isNull, byteValues, byteStarts, byteLengths,
+        longValues.length, byteValues.length, 0, 1);
+  }
 
-    // This code, with branches and all, is not executed if there are no string keys.
+  // Copied keys use contiguous arrays. Batch rows use the same offset and stride for every array.
+  static int calculateHashCode(HashContext hashCtx, long[] longValues, boolean[] isNull,
+      byte[][] byteValues, int[] byteStarts, int[] byteLengths,
+      int longCount, int stringCount, int offset, int stride) {
+    int hash = Murmur3.hash32(longValues, longCount, isNull, longCount + stringCount,
+        offset, stride, Murmur3.DEFAULT_SEED);
+
+    int firstString = -1;
     Murmur3.IncrementalHash32 bytesHash = null;
-    int pendingIndex = -1;
-    boolean hasNonNull = false;
-    for (int i = 0; i < byteValues.length; ++i) {
-      /*
-       * Hashing the string is potentially expensive so it is better to branch.
-       * Additionally not looking at values for nulls allows us not to reset the values.
-       */
-      if (byteLengths[i] == -1) {
+    for (int i = 0, index = offset; i < stringCount; ++i, index += stride) {
+      int length = byteLengths[index];
+      if (length == -1) {
         continue;
       }
-      hasNonNull = true;
-      if (byteLengths[i] > 0) {
-        // Keep the last nonempty string for addAndEnd; empty strings contribute no bytes.
-        if (pendingIndex != -1) {
-          if (bytesHash == null) {
-            bytesHash = HashContext.getBytesHash(hashCtx);
-            bytesHash.start(hash);
-          }
-          bytesHash.add(
-              byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex]);
-        }
-        pendingIndex = i;
+      if (firstString == -1) {
+        firstString = index;
+        continue;
       }
+      if (bytesHash == null) {
+        bytesHash = HashContext.getBytesHash(hashCtx);
+        bytesHash.start(hash);
+        bytesHash.add(byteValues[firstString], byteStarts[firstString], byteLengths[firstString]);
+      }
+      bytesHash.add(byteValues[index], byteStarts[index], length);
     }
-    if (bytesHash != null) {
-      hash = bytesHash.addAndEnd(
-          byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex]);
-    } else if (pendingIndex != -1) {
-      // A single nonempty slice can be hashed without initializing incremental state.
-      hash = Murmur3.IncrementalHash32.hash32(
-          byteValues[pendingIndex], byteStarts[pendingIndex], byteLengths[pendingIndex], hash);
-    } else if (hasNonNull) {
-      // Non-null empty strings still finalize the seeded XXHash32 value.
-      bytesHash = HashContext.getBytesHash(hashCtx);
-      bytesHash.start(hash);
-      hash = bytesHash.end();
+    if (bytesHash == null) {
+      // The null bitmap identifies the position of a single non-null string.
+      return firstString == -1 ? hash : Murmur3.xxHash32(
+          byteValues[firstString], byteStarts[firstString], byteLengths[firstString], hash);
     }
-    this.hashcode = hash;
+
+    // Preserve field boundaries, including the difference between empty strings and nulls.
+    int lengthBytes = stringCount * Integer.BYTES;
+    byte[] lengths = HashContext.getStringLengthBuffer(hashCtx, lengthBytes);
+    for (int i = 0, index = offset; i < lengthBytes; i += Integer.BYTES, index += stride) {
+      HashContext.writeStringLength(lengths, i, byteLengths[index]);
+    }
+    return bytesHash.addAndEnd(lengths, 0, lengthBytes);
   }
 
   @Override

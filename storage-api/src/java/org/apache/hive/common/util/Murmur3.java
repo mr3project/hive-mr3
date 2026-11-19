@@ -128,6 +128,39 @@ public class Murmur3 {
   }
 
   /**
+   * Hashes strided longs in big-endian byte order, followed by flags packed least-significant
+   * bit first into little-endian words. Unused bits in the last word are zero.
+   */
+  public static int hash32(long[] values, int valueCount, boolean[] flags, int flagCount,
+      int offset, int stride, int seed) {
+    int hash = seed;
+    for (int i = 0, index = offset; i < valueCount; ++i, index += stride) {
+      long value = Long.reverseBytes(values[index]);
+      hash = mix32((int) value, hash);
+      hash = mix32((int) (value >>> 32), hash);
+    }
+
+    int word = 0;
+    for (int i = 0, index = offset; i < flagCount; ++i, index += stride) {
+      int bit = i & (Integer.SIZE - 1);
+      if (flags[index]) {
+        word |= 1 << bit;
+      }
+      if (bit == Integer.SIZE - 1) {
+        hash = mix32(word, hash);
+        word = 0;
+      }
+    }
+    int flagWords = flagCount / Integer.SIZE;
+    if ((flagCount & (Integer.SIZE - 1)) != 0) {
+      hash = mix32(word, hash);
+      ++flagWords;
+    }
+
+    return fmix32(valueCount * Long.BYTES + flagWords * Integer.BYTES, hash);
+  }
+
+  /**
    * Murmur3 32-bit variant.
    *
    * @param data - input byte array

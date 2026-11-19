@@ -834,6 +834,54 @@ public class TestVectorHashKeyWrapperBatch {
   }
 
   @Test
+  public void testGeneralLongStringHashIncludesFieldLengths() throws HiveException {
+    TypeInfo[] types = {TypeInfoFactory.stringTypeInfo, TypeInfoFactory.longTypeInfo,
+        TypeInfoFactory.stringTypeInfo, TypeInfoFactory.stringTypeInfo, TypeInfoFactory.longTypeInfo,
+        TypeInfoFactory.stringTypeInfo};
+    long[][] longs = {{7, 11}, {7, 11}, {7, 11}, {7, 11}};
+    String[][] strings = {{"ab", "c", "ignored", ""}, {"a", "bc", "ignored", ""},
+        {"", "abc", "ignored", ""}, {"abc", "", "ignored", ""}};
+    boolean[][] nulls = new boolean[longs.length][types.length];
+    for (boolean[] row : nulls) {
+      row[3] = true;
+    }
+    int[] hashes = generalLongStringHashes(types, longs, strings, nulls);
+    assertNotEquals(hashes[0], hashes[1]);
+    assertNotEquals(hashes[2], hashes[3]);
+  }
+
+  @Test
+  public void testGeneralLongStringHashUsesFullLongValues() throws HiveException {
+    TypeInfo[] types = {TypeInfoFactory.longTypeInfo, TypeInfoFactory.longTypeInfo,
+        TypeInfoFactory.longTypeInfo, TypeInfoFactory.longTypeInfo};
+    long[][] longs = {{0, 31, 7, 11}, {0x0000000100000001L, 31, 7, 11}, {1, 0, 7, 11}};
+    int[] hashes = generalLongStringHashes(types, longs, null, null);
+    assertNotEquals(hashes[0], hashes[1]);
+    assertNotEquals(hashes[0], hashes[2]);
+  }
+
+  private int[] generalLongStringHashes(TypeInfo[] types, long[][] longs, String[][] strings,
+      boolean[][] nulls) throws HiveException {
+    VectorHashKeyWrapperBatch wrappers =
+        VectorHashKeyWrapperBatch.compileKeyWrapperBatch(identityExpressions(types.length), types);
+    VectorizedRowBatch batch = createMixedLongStringBatch(types, nulls != null);
+    fillMixedLongStringBatch(batch, types, longs, strings, nulls);
+    wrappers.evaluateBatch(batch);
+
+    int[] hashes = new int[batch.size];
+    for (int row = 0; row < batch.size; ++row) {
+      VectorHashKeyWrapperBase key = wrappers.getVectorHashKeyWrappers()[row];
+      assertTrue(key instanceof VectorHashKeyWrapperLongStringRowView);
+      VectorHashKeyWrapperBase copy = (VectorHashKeyWrapperBase) key.copyKey();
+      copy.setHashKey();
+      assertEquals(key.hashCode(), copy.hashCode());
+      assertEquals(key, copy);
+      hashes[row] = key.hashCode();
+    }
+    return hashes;
+  }
+
+  @Test
   public void testVectorHashKeyWrapperGeneralLongStringCopyKeyClearsNullStrings() {
     VectorHashKeyWrapperGeneralLongString source = new VectorHashKeyWrapperGeneralLongString(
         new VectorHashKeyWrapperBase.HashContext(), 0, 2, 2);

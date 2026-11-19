@@ -97,6 +97,30 @@ public class TestMurmur3 {
   }
 
   @Test
+  public void testHash32StridedLongsAndFlags() {
+    int offset = 2;
+    int stride = 3;
+    long[] values = {0, 0, 0x0123456789abcdefL, 0, 0, 0xfedcba9876543210L};
+    boolean[] flags = new boolean[stride * 37];
+    flags[offset] = true;
+    flags[offset + stride * 31] = true;
+    flags[offset + stride * 32] = true;
+    flags[offset + stride * 36] = true;
+
+    int seed = 123;
+    ByteBuffer encoded = ByteBuffer.allocate(2 * Long.BYTES + 2 * Integer.BYTES);
+    encoded.putLong(values[offset]).putLong(values[offset + stride]).order(ByteOrder.LITTLE_ENDIAN);
+    assertEquals(Murmur3.hash32(encoded.array(), encoded.position(), seed),
+        Murmur3.hash32(values, 2, flags, 0, offset, stride, seed));
+    encoded.putInt(0x80000001);
+    assertEquals(Murmur3.hash32(encoded.array(), encoded.position(), seed),
+        Murmur3.hash32(values, 2, flags, 32, offset, stride, seed));
+    encoded.putInt(0x11);
+    assertEquals(Murmur3.hash32(encoded.array(), encoded.position(), seed),
+        Murmur3.hash32(values, 2, flags, 37, offset, stride, seed));
+  }
+
+  @Test
   public void testHashCodesM3_32_double() {
     int seed = 123;
     Random rand = new Random(seed);
