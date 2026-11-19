@@ -124,8 +124,6 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
    */
   private transient VectorHashKeyWrapperBatch keyWrappersBatch;
 
-  private transient Object[] forwardCache;
-
   private transient VectorizedRowBatch outputBatch;
   private transient VectorizedRowBatchCtx vrbCtx;
 
@@ -1321,8 +1319,6 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
     } catch (Throwable e) {
       throw new HiveException(e);
     }
-
-    forwardCache = new Object[outputKeyLength + aggregators.length];
 
     setupGroupingSets();
 
