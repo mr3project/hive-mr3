@@ -88,24 +88,15 @@ public abstract class VectorHashKeyWrapperBase extends KeyWrapper {
   }
 
   @Override
-  public void setHashKey() {
-    throw new RuntimeException("Not implemented");
-  }
-
-  @Override
   public int hashCode() {
     return hashcode;
   }
 
   @Override
-  public boolean equals(Object that) {
-    throw new RuntimeException("Not implemented");
-  }
+  public abstract boolean equals(Object that);
 
   @Override
-  protected Object clone() {
-    throw new RuntimeException("Not implemented");
-  }
+  protected abstract Object clone();
 
   @Override
   public KeyWrapper copyKey() {
@@ -187,16 +178,10 @@ public abstract class VectorHashKeyWrapperBase extends KeyWrapper {
   /*
    * This method is mainly intended for debug display purposes.
    */
-  public String stringifyKeys(VectorColumnSetInfo columnSetInfo)
-  {
-    throw new RuntimeException("Not implemented");
-  }
+  public abstract String stringifyKeys(VectorColumnSetInfo columnSetInfo);
 
   @Override
-  public String toString()
-  {
-    throw new RuntimeException("Not implemented");
-  }
+  public abstract String toString();
 
   public long getLongValue(int i) {
     throw new RuntimeException("Not implemented");
@@ -230,21 +215,13 @@ public abstract class VectorHashKeyWrapperBase extends KeyWrapper {
     throw new RuntimeException("Not implemented");
   }
 
-  public int getVariableSize() {
-    throw new RuntimeException("Not implemented");
-  }
+  public abstract int getVariableSize();
 
-  public void clearIsNull() {
-    throw new RuntimeException("Not implemented");
-  }
+  public abstract void clearIsNull();
 
-  public void setNull() {
-    throw new RuntimeException("Not implemented");
-  }
+  public abstract void setNull();
 
-  public boolean isNull(int keyIndex) {
-    throw new RuntimeException("Not implemented");
-  }
+  public abstract boolean isNull(int keyIndex);
 
   @Override
   public boolean isCopy() {
