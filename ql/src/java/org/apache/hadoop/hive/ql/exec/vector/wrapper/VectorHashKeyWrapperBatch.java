@@ -1587,23 +1587,9 @@ public class VectorHashKeyWrapperBatch extends VectorColumnSetInfo {
       Arrays.fill(vectorHashKeyWrappers, VectorHashKeyWrapperEmpty.EMPTY_KEY_WRAPPER);
       break;
     default:
-      vectorHashKeyWrappers = new VectorHashKeyWrapperBase[VectorizedRowBatch.DEFAULT_SIZE];
-      for (int i = 0; i < vectorHashKeyWrappers.length; ++i) {
-        vectorHashKeyWrappers[i] = allocateKeyWrapper();
-      }
+      assert false;
       break;
     }
-  }
-
-  public VectorHashKeyWrapperBase allocateKeyWrapper() {
-    return VectorHashKeyWrapperFactory.allocate(keyWrapperType, hashCtx,
-        longIndices.length,
-        doubleIndices.length,
-        stringIndices.length,
-        decimalIndices.length,
-        timestampIndices.length,
-        intervalDayTimeIndices.length,
-        keyCount);
   }
 
   /**
