@@ -107,6 +107,42 @@ final class VectorHashKeyWrapperBatchSpecializations {
     }
   }
 
+  static void assignLongNullsNoRepeatingSelection(VectorHashKeyWrapperSingleLongSingleString[] wrappers,
+      int keyIndex, int index, int size, LongColumnVector columnVector, int[] selected) {
+    for (int i = 0; i < size; ++i) {
+      int row = selected[i];
+      if (!columnVector.isNull[row]) {
+        wrappers[i].assignLong(index, columnVector.vector[row]);
+      } else {
+        wrappers[i].assignNullLong(keyIndex, index);
+      }
+    }
+  }
+
+  static void assignLongNullsNoRepeatingSelection(VectorHashKeyWrapperSingleLongTwoString[] wrappers,
+      int keyIndex, int index, int size, LongColumnVector columnVector, int[] selected) {
+    for (int i = 0; i < size; ++i) {
+      int row = selected[i];
+      if (!columnVector.isNull[row]) {
+        wrappers[i].assignLong(index, columnVector.vector[row]);
+      } else {
+        wrappers[i].assignNullLong(keyIndex, index);
+      }
+    }
+  }
+
+  static void assignLongNullsNoRepeatingSelection(VectorHashKeyWrapperTwoLongSingleString[] wrappers,
+      int keyIndex, int index, int size, LongColumnVector columnVector, int[] selected) {
+    for (int i = 0; i < size; ++i) {
+      int row = selected[i];
+      if (!columnVector.isNull[row]) {
+        wrappers[i].assignLong(index, columnVector.vector[row]);
+      } else {
+        wrappers[i].assignNullLong(keyIndex, index);
+      }
+    }
+  }
+
   static void assignLongNullsRepeating(VectorHashKeyWrapperGeneralBatchStorage storage,
       int keyIndex, int index, int size) {
     final int offset = index * storage.capacity;
@@ -138,6 +174,27 @@ final class VectorHashKeyWrapperBatchSpecializations {
   }
 
   static void assignLongNullsRepeating(VectorHashKeyWrapperThreeLong[] wrappers,
+      int keyIndex, int index, int size) {
+    for (int r = 0; r < size; ++r) {
+      wrappers[r].assignNullLong(keyIndex, index);
+    }
+  }
+
+  static void assignLongNullsRepeating(VectorHashKeyWrapperSingleLongSingleString[] wrappers,
+      int keyIndex, int index, int size) {
+    for (int r = 0; r < size; ++r) {
+      wrappers[r].assignNullLong(keyIndex, index);
+    }
+  }
+
+  static void assignLongNullsRepeating(VectorHashKeyWrapperSingleLongTwoString[] wrappers,
+      int keyIndex, int index, int size) {
+    for (int r = 0; r < size; ++r) {
+      wrappers[r].assignNullLong(keyIndex, index);
+    }
+  }
+
+  static void assignLongNullsRepeating(VectorHashKeyWrapperTwoLongSingleString[] wrappers,
       int keyIndex, int index, int size) {
     for (int r = 0; r < size; ++r) {
       wrappers[r].assignNullLong(keyIndex, index);
@@ -215,6 +272,39 @@ final class VectorHashKeyWrapperBatchSpecializations {
     }
   }
 
+  static void assignLongNullsNoRepeatingNoSelection(VectorHashKeyWrapperSingleLongSingleString[] wrappers,
+      int keyIndex, int index, int size, LongColumnVector columnVector) {
+    for (int r = 0; r < size; ++r) {
+      if (!columnVector.isNull[r]) {
+        wrappers[r].assignLong(index, columnVector.vector[r]);
+      } else {
+        wrappers[r].assignNullLong(keyIndex, index);
+      }
+    }
+  }
+
+  static void assignLongNullsNoRepeatingNoSelection(VectorHashKeyWrapperSingleLongTwoString[] wrappers,
+      int keyIndex, int index, int size, LongColumnVector columnVector) {
+    for (int r = 0; r < size; ++r) {
+      if (!columnVector.isNull[r]) {
+        wrappers[r].assignLong(index, columnVector.vector[r]);
+      } else {
+        wrappers[r].assignNullLong(keyIndex, index);
+      }
+    }
+  }
+
+  static void assignLongNullsNoRepeatingNoSelection(VectorHashKeyWrapperTwoLongSingleString[] wrappers,
+      int keyIndex, int index, int size, LongColumnVector columnVector) {
+    for (int r = 0; r < size; ++r) {
+      if (!columnVector.isNull[r]) {
+        wrappers[r].assignLong(index, columnVector.vector[r]);
+      } else {
+        wrappers[r].assignNullLong(keyIndex, index);
+      }
+    }
+  }
+
   static void assignLongNoNullsRepeating(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, LongColumnVector columnVector) {
     final int offset = index * storage.capacity;
@@ -242,6 +332,27 @@ final class VectorHashKeyWrapperBatchSpecializations {
   }
 
   static void assignLongNoNullsRepeating(VectorHashKeyWrapperThreeLong[] wrappers,
+      int index, int size, LongColumnVector columnVector) {
+    for (int r = 0; r < size; ++r) {
+      wrappers[r].assignLong(index, columnVector.vector[0]);
+    }
+  }
+
+  static void assignLongNoNullsRepeating(VectorHashKeyWrapperSingleLongSingleString[] wrappers,
+      int index, int size, LongColumnVector columnVector) {
+    for (int r = 0; r < size; ++r) {
+      wrappers[r].assignLong(index, columnVector.vector[0]);
+    }
+  }
+
+  static void assignLongNoNullsRepeating(VectorHashKeyWrapperSingleLongTwoString[] wrappers,
+      int index, int size, LongColumnVector columnVector) {
+    for (int r = 0; r < size; ++r) {
+      wrappers[r].assignLong(index, columnVector.vector[0]);
+    }
+  }
+
+  static void assignLongNoNullsRepeating(VectorHashKeyWrapperTwoLongSingleString[] wrappers,
       int index, int size, LongColumnVector columnVector) {
     for (int r = 0; r < size; ++r) {
       wrappers[r].assignLong(index, columnVector.vector[0]);
@@ -291,6 +402,27 @@ final class VectorHashKeyWrapperBatchSpecializations {
     }
   }
 
+  static void assignLongNoNullsNoRepeatingSelection(VectorHashKeyWrapperSingleLongSingleString[] wrappers,
+      int index, int size, LongColumnVector columnVector, int[] selected) {
+    for (int r = 0; r < size; ++r) {
+      wrappers[r].assignLong(index, columnVector.vector[selected[r]]);
+    }
+  }
+
+  static void assignLongNoNullsNoRepeatingSelection(VectorHashKeyWrapperSingleLongTwoString[] wrappers,
+      int index, int size, LongColumnVector columnVector, int[] selected) {
+    for (int r = 0; r < size; ++r) {
+      wrappers[r].assignLong(index, columnVector.vector[selected[r]]);
+    }
+  }
+
+  static void assignLongNoNullsNoRepeatingSelection(VectorHashKeyWrapperTwoLongSingleString[] wrappers,
+      int index, int size, LongColumnVector columnVector, int[] selected) {
+    for (int r = 0; r < size; ++r) {
+      wrappers[r].assignLong(index, columnVector.vector[selected[r]]);
+    }
+  }
+
   static void assignLongNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperGeneralBatchStorage storage,
       int index, int size, LongColumnVector columnVector) {
     final int offset = index * storage.capacity;
@@ -318,6 +450,27 @@ final class VectorHashKeyWrapperBatchSpecializations {
   }
 
   static void assignLongNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperThreeLong[] wrappers,
+      int index, int size, LongColumnVector columnVector) {
+    for (int r = 0; r < size; ++r) {
+      wrappers[r].assignLong(index, columnVector.vector[r]);
+    }
+  }
+
+  static void assignLongNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperSingleLongSingleString[] wrappers,
+      int index, int size, LongColumnVector columnVector) {
+    for (int r = 0; r < size; ++r) {
+      wrappers[r].assignLong(index, columnVector.vector[r]);
+    }
+  }
+
+  static void assignLongNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperSingleLongTwoString[] wrappers,
+      int index, int size, LongColumnVector columnVector) {
+    for (int r = 0; r < size; ++r) {
+      wrappers[r].assignLong(index, columnVector.vector[r]);
+    }
+  }
+
+  static void assignLongNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperTwoLongSingleString[] wrappers,
       int index, int size, LongColumnVector columnVector) {
     for (int r = 0; r < size; ++r) {
       wrappers[r].assignLong(index, columnVector.vector[r]);
@@ -380,7 +533,87 @@ final class VectorHashKeyWrapperBatchSpecializations {
     }
   }
 
+  static void assignStringNullsNoRepeatingSelection(VectorHashKeyWrapperSingleString[] wrappers,
+      int keyIndex, int index, int size, BytesColumnVector columnVector, int[] selected) {
+    for (int i = 0; i < size; ++i) {
+      int row = selected[i];
+      if (columnVector.isNull[row]) {
+        wrappers[i].assignNullString(keyIndex, index);
+      } else {
+        wrappers[i].assignString(
+            index,
+            columnVector.vector[row],
+            columnVector.start[row],
+            columnVector.length[row]);
+      }
+    }
+  }
+
+  static void assignStringNullsNoRepeatingSelection(VectorHashKeyWrapperTwoString[] wrappers,
+      int keyIndex, int index, int size, BytesColumnVector columnVector, int[] selected) {
+    for (int i = 0; i < size; ++i) {
+      int row = selected[i];
+      if (columnVector.isNull[row]) {
+        wrappers[i].assignNullString(keyIndex, index);
+      } else {
+        wrappers[i].assignString(
+            index,
+            columnVector.vector[row],
+            columnVector.start[row],
+            columnVector.length[row]);
+      }
+    }
+  }
+
   static void assignStringNullsNoRepeatingSelection(VectorHashKeyWrapperThreeString[] wrappers,
+      int keyIndex, int index, int size, BytesColumnVector columnVector, int[] selected) {
+    for (int i = 0; i < size; ++i) {
+      int row = selected[i];
+      if (columnVector.isNull[row]) {
+        wrappers[i].assignNullString(keyIndex, index);
+      } else {
+        wrappers[i].assignString(
+            index,
+            columnVector.vector[row],
+            columnVector.start[row],
+            columnVector.length[row]);
+      }
+    }
+  }
+
+  static void assignStringNullsNoRepeatingSelection(VectorHashKeyWrapperSingleLongSingleString[] wrappers,
+      int keyIndex, int index, int size, BytesColumnVector columnVector, int[] selected) {
+    for (int i = 0; i < size; ++i) {
+      int row = selected[i];
+      if (columnVector.isNull[row]) {
+        wrappers[i].assignNullString(keyIndex, index);
+      } else {
+        wrappers[i].assignString(
+            index,
+            columnVector.vector[row],
+            columnVector.start[row],
+            columnVector.length[row]);
+      }
+    }
+  }
+
+  static void assignStringNullsNoRepeatingSelection(VectorHashKeyWrapperSingleLongTwoString[] wrappers,
+      int keyIndex, int index, int size, BytesColumnVector columnVector, int[] selected) {
+    for (int i = 0; i < size; ++i) {
+      int row = selected[i];
+      if (columnVector.isNull[row]) {
+        wrappers[i].assignNullString(keyIndex, index);
+      } else {
+        wrappers[i].assignString(
+            index,
+            columnVector.vector[row],
+            columnVector.start[row],
+            columnVector.length[row]);
+      }
+    }
+  }
+
+  static void assignStringNullsNoRepeatingSelection(VectorHashKeyWrapperTwoLongSingleString[] wrappers,
       int keyIndex, int index, int size, BytesColumnVector columnVector, int[] selected) {
     for (int i = 0; i < size; ++i) {
       int row = selected[i];
@@ -452,7 +685,82 @@ final class VectorHashKeyWrapperBatchSpecializations {
     }
   }
 
+  static void assignStringNullsNoRepeatingNoSelection(VectorHashKeyWrapperSingleString[] wrappers,
+      int keyIndex, int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      if (columnVector.isNull[i]) {
+        wrappers[i].assignNullString(keyIndex, index);
+      } else {
+        wrappers[i].assignString(
+            index,
+            columnVector.vector[i],
+            columnVector.start[i],
+            columnVector.length[i]);
+      }
+    }
+  }
+
+  static void assignStringNullsNoRepeatingNoSelection(VectorHashKeyWrapperTwoString[] wrappers,
+      int keyIndex, int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      if (columnVector.isNull[i]) {
+        wrappers[i].assignNullString(keyIndex, index);
+      } else {
+        wrappers[i].assignString(
+            index,
+            columnVector.vector[i],
+            columnVector.start[i],
+            columnVector.length[i]);
+      }
+    }
+  }
+
   static void assignStringNullsNoRepeatingNoSelection(VectorHashKeyWrapperThreeString[] wrappers,
+      int keyIndex, int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      if (columnVector.isNull[i]) {
+        wrappers[i].assignNullString(keyIndex, index);
+      } else {
+        wrappers[i].assignString(
+            index,
+            columnVector.vector[i],
+            columnVector.start[i],
+            columnVector.length[i]);
+      }
+    }
+  }
+
+  static void assignStringNullsNoRepeatingNoSelection(VectorHashKeyWrapperSingleLongSingleString[] wrappers,
+      int keyIndex, int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      if (columnVector.isNull[i]) {
+        wrappers[i].assignNullString(keyIndex, index);
+      } else {
+        wrappers[i].assignString(
+            index,
+            columnVector.vector[i],
+            columnVector.start[i],
+            columnVector.length[i]);
+      }
+    }
+  }
+
+  static void assignStringNullsNoRepeatingNoSelection(VectorHashKeyWrapperSingleLongTwoString[] wrappers,
+      int keyIndex, int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      if (columnVector.isNull[i]) {
+        wrappers[i].assignNullString(keyIndex, index);
+      } else {
+        wrappers[i].assignString(
+            index,
+            columnVector.vector[i],
+            columnVector.start[i],
+            columnVector.length[i]);
+      }
+    }
+  }
+
+  static void assignStringNullsNoRepeatingNoSelection(VectorHashKeyWrapperTwoLongSingleString[] wrappers,
       int keyIndex, int index, int size, BytesColumnVector columnVector) {
     for (int i = 0; i < size; ++i) {
       if (columnVector.isNull[i]) {
@@ -483,7 +791,62 @@ final class VectorHashKeyWrapperBatchSpecializations {
     Arrays.fill(storage.byteLengths, offset, offset + size, columnVector.length[0]);
   }
 
+  static void assignStringNoNullsRepeating(VectorHashKeyWrapperSingleString[] wrappers,
+      int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[0],
+          columnVector.start[0],
+          columnVector.length[0]);
+    }
+  }
+
+  static void assignStringNoNullsRepeating(VectorHashKeyWrapperTwoString[] wrappers,
+      int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[0],
+          columnVector.start[0],
+          columnVector.length[0]);
+    }
+  }
+
   static void assignStringNoNullsRepeating(VectorHashKeyWrapperThreeString[] wrappers,
+      int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[0],
+          columnVector.start[0],
+          columnVector.length[0]);
+    }
+  }
+
+  static void assignStringNoNullsRepeating(VectorHashKeyWrapperSingleLongSingleString[] wrappers,
+      int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[0],
+          columnVector.start[0],
+          columnVector.length[0]);
+    }
+  }
+
+  static void assignStringNoNullsRepeating(VectorHashKeyWrapperSingleLongTwoString[] wrappers,
+      int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[0],
+          columnVector.start[0],
+          columnVector.length[0]);
+    }
+  }
+
+  static void assignStringNoNullsRepeating(VectorHashKeyWrapperTwoLongSingleString[] wrappers,
       int index, int size, BytesColumnVector columnVector) {
     for (int i = 0; i < size; ++i) {
       wrappers[i].assignString(
@@ -530,7 +893,67 @@ final class VectorHashKeyWrapperBatchSpecializations {
     }
   }
 
+  static void assignStringNoNullsNoRepeatingSelection(VectorHashKeyWrapperSingleString[] wrappers,
+      int index, int size, BytesColumnVector columnVector, int[] selected) {
+    for (int i = 0; i < size; ++i) {
+      int row = selected[i];
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[row],
+          columnVector.start[row],
+          columnVector.length[row]);
+    }
+  }
+
+  static void assignStringNoNullsNoRepeatingSelection(VectorHashKeyWrapperTwoString[] wrappers,
+      int index, int size, BytesColumnVector columnVector, int[] selected) {
+    for (int i = 0; i < size; ++i) {
+      int row = selected[i];
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[row],
+          columnVector.start[row],
+          columnVector.length[row]);
+    }
+  }
+
   static void assignStringNoNullsNoRepeatingSelection(VectorHashKeyWrapperThreeString[] wrappers,
+      int index, int size, BytesColumnVector columnVector, int[] selected) {
+    for (int i = 0; i < size; ++i) {
+      int row = selected[i];
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[row],
+          columnVector.start[row],
+          columnVector.length[row]);
+    }
+  }
+
+  static void assignStringNoNullsNoRepeatingSelection(VectorHashKeyWrapperSingleLongSingleString[] wrappers,
+      int index, int size, BytesColumnVector columnVector, int[] selected) {
+    for (int i = 0; i < size; ++i) {
+      int row = selected[i];
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[row],
+          columnVector.start[row],
+          columnVector.length[row]);
+    }
+  }
+
+  static void assignStringNoNullsNoRepeatingSelection(VectorHashKeyWrapperSingleLongTwoString[] wrappers,
+      int index, int size, BytesColumnVector columnVector, int[] selected) {
+    for (int i = 0; i < size; ++i) {
+      int row = selected[i];
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[row],
+          columnVector.start[row],
+          columnVector.length[row]);
+    }
+  }
+
+  static void assignStringNoNullsNoRepeatingSelection(VectorHashKeyWrapperTwoLongSingleString[] wrappers,
       int index, int size, BytesColumnVector columnVector, int[] selected) {
     for (int i = 0; i < size; ++i) {
       int row = selected[i];
@@ -558,7 +981,62 @@ final class VectorHashKeyWrapperBatchSpecializations {
     System.arraycopy(columnVector.length, 0, storage.byteLengths, offset, size);
   }
 
+  static void assignStringNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperSingleString[] wrappers,
+      int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[i],
+          columnVector.start[i],
+          columnVector.length[i]);
+    }
+  }
+
+  static void assignStringNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperTwoString[] wrappers,
+      int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[i],
+          columnVector.start[i],
+          columnVector.length[i]);
+    }
+  }
+
   static void assignStringNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperThreeString[] wrappers,
+      int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[i],
+          columnVector.start[i],
+          columnVector.length[i]);
+    }
+  }
+
+  static void assignStringNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperSingleLongSingleString[] wrappers,
+      int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[i],
+          columnVector.start[i],
+          columnVector.length[i]);
+    }
+  }
+
+  static void assignStringNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperSingleLongTwoString[] wrappers,
+      int index, int size, BytesColumnVector columnVector) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignString(
+          index,
+          columnVector.vector[i],
+          columnVector.start[i],
+          columnVector.length[i]);
+    }
+  }
+
+  static void assignStringNoNullsNoRepeatingNoSelection(VectorHashKeyWrapperTwoLongSingleString[] wrappers,
       int index, int size, BytesColumnVector columnVector) {
     for (int i = 0; i < size; ++i) {
       wrappers[i].assignString(
@@ -595,7 +1073,37 @@ final class VectorHashKeyWrapperBatchSpecializations {
     }
   }
 
+  static void clearIsNull(VectorHashKeyWrapperSingleString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].clearIsNull();
+    }
+  }
+
+  static void clearIsNull(VectorHashKeyWrapperTwoString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].clearIsNull();
+    }
+  }
+
   static void clearIsNull(VectorHashKeyWrapperThreeString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].clearIsNull();
+    }
+  }
+
+  static void clearIsNull(VectorHashKeyWrapperSingleLongSingleString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].clearIsNull();
+    }
+  }
+
+  static void clearIsNull(VectorHashKeyWrapperSingleLongTwoString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].clearIsNull();
+    }
+  }
+
+  static void clearIsNull(VectorHashKeyWrapperTwoLongSingleString[] wrappers, int size) {
     for (int i = 0; i < size; ++i) {
       wrappers[i].clearIsNull();
     }
@@ -627,7 +1135,37 @@ final class VectorHashKeyWrapperBatchSpecializations {
     }
   }
 
+  static void setHashKeys(VectorHashKeyWrapperSingleString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].setHashKey();
+    }
+  }
+
+  static void setHashKeys(VectorHashKeyWrapperTwoString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].setHashKey();
+    }
+  }
+
   static void setHashKeys(VectorHashKeyWrapperThreeString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].setHashKey();
+    }
+  }
+
+  static void setHashKeys(VectorHashKeyWrapperSingleLongSingleString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].setHashKey();
+    }
+  }
+
+  static void setHashKeys(VectorHashKeyWrapperSingleLongTwoString[] wrappers, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].setHashKey();
+    }
+  }
+
+  static void setHashKeys(VectorHashKeyWrapperTwoLongSingleString[] wrappers, int size) {
     for (int i = 0; i < size; ++i) {
       wrappers[i].setHashKey();
     }
@@ -653,7 +1191,42 @@ final class VectorHashKeyWrapperBatchSpecializations {
     Arrays.fill(storage.isNull, nullOffset, nullOffset + size, true);
   }
 
+  static void assignNullStrings(VectorHashKeyWrapperSingleString[] wrappers,
+      int keyIndex, int index, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignNullString(keyIndex, index);
+    }
+  }
+
+  static void assignNullStrings(VectorHashKeyWrapperTwoString[] wrappers,
+      int keyIndex, int index, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignNullString(keyIndex, index);
+    }
+  }
+
   static void assignNullStrings(VectorHashKeyWrapperThreeString[] wrappers,
+      int keyIndex, int index, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignNullString(keyIndex, index);
+    }
+  }
+
+  static void assignNullStrings(VectorHashKeyWrapperSingleLongSingleString[] wrappers,
+      int keyIndex, int index, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignNullString(keyIndex, index);
+    }
+  }
+
+  static void assignNullStrings(VectorHashKeyWrapperSingleLongTwoString[] wrappers,
+      int keyIndex, int index, int size) {
+    for (int i = 0; i < size; ++i) {
+      wrappers[i].assignNullString(keyIndex, index);
+    }
+  }
+
+  static void assignNullStrings(VectorHashKeyWrapperTwoLongSingleString[] wrappers,
       int keyIndex, int index, int size) {
     for (int i = 0; i < size; ++i) {
       wrappers[i].assignNullString(keyIndex, index);
