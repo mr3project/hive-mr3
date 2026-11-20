@@ -506,8 +506,7 @@ public class VectorGroupByOperator extends Operator<GroupByDesc>
       computeMemoryLimits();
       LOG.debug("using hash aggregation processing mode");
 
-      if (keyWrapperType == KeyWrapperType.GENERAL ||
-          keyWrapperType == KeyWrapperType.GENERAL_LONG_STRING) {
+      if (keyWrapperType == KeyWrapperType.GENERAL) {
         reusableKeyWrapperBuffer = new ArrayDeque<>(VectorizedRowBatch.DEFAULT_SIZE);
       }
     }
