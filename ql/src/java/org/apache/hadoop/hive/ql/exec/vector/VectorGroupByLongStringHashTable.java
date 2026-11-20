@@ -192,7 +192,7 @@ final class VectorGroupByLongStringHashTable extends VectorGroupByHashTable {
       stringKeys[insertionSlot] = Arrays.copyOfRange(bytes, start, start + length);
       keyMemorySize += JAVA_DATA_MODEL.lengthForByteArrayOfSize(length);
     }
-    linkEntryWithSpreadHash(insertionSlot, hashCode, value);
+    linkEntry(insertionSlot, hashCode, value);
     assert findSlot(key0, nullMask, bytes, start, length, hashCode) == insertionSlot;
     assert values[insertionSlot] == value;
   }
