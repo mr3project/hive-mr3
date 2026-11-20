@@ -187,7 +187,7 @@ final class VectorGroupByThreeLongHashTable extends VectorGroupByHashTable {
     keys[keyOffset + 2] = key2;
     nullMasks[insertionSlot] = (byte) nullMask;
     hashCodes[insertionSlot] = hashCode;
-    linkEntryWithSpreadHash(insertionSlot, hashCode, value);
+    linkEntry(insertionSlot, hashCode, value);
     assert findSlot(key0, key1, key2, nullMask, hashCode) == insertionSlot;
     assert values[insertionSlot] == value;
   }

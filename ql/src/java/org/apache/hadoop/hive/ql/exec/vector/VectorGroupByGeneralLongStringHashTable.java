@@ -268,7 +268,7 @@ final class VectorGroupByGeneralLongStringHashTable extends VectorGroupByHashTab
       }
     }
     hashCodes[insertionSlot] = hashCode;
-    linkEntryWithSpreadHash(insertionSlot, hashCode, value);
+    linkEntry(insertionSlot, hashCode, value);
     assert findSlot(key, mask, hashCode) == insertionSlot;
     assert values[insertionSlot] == value;
   }

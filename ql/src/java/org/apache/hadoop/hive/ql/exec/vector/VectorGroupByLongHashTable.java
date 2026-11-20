@@ -136,7 +136,7 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
         numEntries <= resizeThreshold && resizeThreshold < buckets.length;
     assert (freeList == 0) == (numEntries == numUsed);
     assert hashCode == HashCodeUtil.calculateLongHashCode(key);
-    int bucket = (hashCode ^ (hashCode >>> 16)) & (buckets.length - 1);
+    int bucket = hashCode & (buckets.length - 1);
     for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
       int slot = ref - 1;
       if (keys[slot] == key) {
@@ -151,7 +151,7 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
     assert insertionSlot == ~findSlot(key, hashCode);
     allocateSlot(insertionSlot);
     keys[insertionSlot] = key;
-    linkEntryWithSpreadHash(insertionSlot, spreadHash(hashCode), value);
+    linkEntry(insertionSlot, hashCode, value);
     assert findSlot(key, hashCode) == insertionSlot;
     assert values[insertionSlot] == value;
   }
@@ -177,8 +177,7 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
 
   void remove(int bucket, int previousSlot, int slot) {
     assert values[slot] != null;
-    assert bucket == ((HashCodeUtil.calculateLongHashCode(keys[slot]) ^
-        (HashCodeUtil.calculateLongHashCode(keys[slot]) >>> 16)) & (buckets.length - 1));
+    assert bucket == (HashCodeUtil.calculateLongHashCode(keys[slot]) & (buckets.length - 1));
     unlinkEntry(bucket, previousSlot, slot);
     assert findSlot(keys[slot], HashCodeUtil.calculateLongHashCode(keys[slot])) == ~slot;
   }
@@ -206,7 +205,7 @@ final class VectorGroupByLongHashTable extends VectorGroupByHashTable {
     for (int slot = 0; slot < numUsed; ++slot) {
       if (values[slot] != null) {
         int hashCode = HashCodeUtil.calculateLongHashCode(keys[slot]);
-        int bucket = (hashCode ^ (hashCode >>> 16)) & mask;
+        int bucket = hashCode & mask;
         next[slot] = buckets[bucket];
         buckets[bucket] = slot + 1;
         ++copiedEntries;
