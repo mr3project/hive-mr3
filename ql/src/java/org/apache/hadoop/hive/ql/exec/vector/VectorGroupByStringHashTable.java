@@ -30,7 +30,7 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
  */
 final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
   private byte[][] keys0;
-  // Cached spread hashes used for lookup and bucket selection.
+  // Cached hashes used for lookup and bucket selection.
   private int[] hashCodes;
   private long keyMemorySize;
 
@@ -48,7 +48,7 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
     for (int i = 0; i < n; ++i) {
       VectorHashKeyWrapperSingleString kw = (VectorHashKeyWrapperSingleString) keyWrappers[i];
       boolean isNull = kw.isNull(0);
-      int hashCode = isNull ? 0 : spreadHash(kw.hashCode());
+      int hashCode = isNull ? 0 : kw.hashCode();
       int slot = isNull ? 0 : findSlot(
           kw.getBytes(0), kw.getByteStart(0), kw.getByteLength(0), hashCode);
       VectorAggregationBufferRow aggregationBuffer = isNull ? nullValue :
@@ -136,7 +136,6 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
 
   /**
    * Returns the matching slot, or the bitwise complement of an insertion slot.
-   * The supplied hash code has already been spread for bucket selection.
    */
   int findSlot(byte[] key0, int start0, int length0, int hashCode) {
     assert keys0.length == values.length && hashCodes.length == values.length &&
@@ -145,8 +144,8 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
     assert numEntries >= 0 && numEntries <= numUsed && numUsed <= values.length &&
         numEntries <= resizeThreshold && resizeThreshold < buckets.length;
     assert (freeList == 0) == (numEntries == numUsed);
-    assert hashCode == spreadHash(VectorHashKeyWrapperSingleString.calculateHashCode(
-        false, key0, start0, length0));
+    assert hashCode == VectorHashKeyWrapperSingleString.calculateHashCode(
+        false, key0, start0, length0);
     int bucket = hashCode & (buckets.length - 1);
     for (int ref = buckets[bucket]; ref != 0; ref = next[ref - 1]) {
       int slot = ref - 1;
@@ -166,7 +165,7 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
     hashCodes[insertionSlot] = hashCode;
     keys0[insertionSlot] = Arrays.copyOfRange(key0, start0, start0 + length0);
     keyMemorySize += JAVA_DATA_MODEL.lengthForByteArrayOfSize(length0);
-    linkEntryWithSpreadHash(insertionSlot, hashCode, value);
+    linkEntry(insertionSlot, hashCode, value);
     assert findSlot(key0, start0, length0, hashCode) == insertionSlot;
     assert values[insertionSlot] == value;
   }
@@ -246,7 +245,7 @@ final class VectorGroupByStringHashTable extends VectorGroupByHashTable {
         if (keys0[slot] == null) {
           return false;
         }
-        if (hashCodes[slot] != spreadHash(hashCode(slot)) ||
+        if (hashCodes[slot] != hashCode(slot) ||
             findSlot(keys0[slot], 0, keys0[slot].length, hashCodes[slot]) != slot) {
           return false;
         }
