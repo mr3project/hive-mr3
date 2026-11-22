@@ -31,7 +31,6 @@ import org.apache.hadoop.hive.ql.exec.Operator;
 import org.apache.hadoop.hive.ql.exec.persistence.HybridHashTableContainer;
 import org.apache.hadoop.hive.ql.exec.persistence.HybridHashTableContainer.HashPartition;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer;
-import org.apache.hadoop.hive.ql.exec.vector.ColumnVector;
 import org.apache.hadoop.hive.ql.exec.vector.VectorDeserializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorSerializeRow;
 import org.apache.hadoop.hive.ql.exec.vector.VectorizationContext;
@@ -87,6 +86,8 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
   private transient VectorSerializeRow bigTableVectorSerializeRow;
 
   private transient VectorDeserializeRow bigTableVectorDeserializeRow;
+
+  private transient VectorizedRowBatch decodedSmallTableBatch;
 
   private transient Thread ownThread;
   private transient int interruptCheckCounter = CHECK_INTERRUPT_PER_OVERFLOW_BATCHES;
@@ -263,8 +264,15 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
       VectorMapJoinHashMapResult hashMapResult, int[] allMatches, int allMatchesIndex,
       int duplicateCount) throws HiveException, IOException {
 
-    if ((duplicateCount > 1 && smallTableValueVectorCopy != null) ||
-        (useOverflowRepeatedThreshold && hashMapResult.cappedCount() > overflowRepeatedThreshold)) {
+    if (duplicateCount == 0) {
+      return;
+    }
+
+    // Reusing decoded values requires a copier when more than one probe row needs them.
+    boolean canRepeatBatch = duplicateCount == 1 || smallTableValueVectorDeserializeRow == null
+        || smallTableValueVectorCopy != null;
+    if (canRepeatBatch && ((duplicateCount > 1 && smallTableValueVectorCopy != null)
+        || (useOverflowRepeatedThreshold && hashMapResult.cappedCount() > overflowRepeatedThreshold))) {
 
       // Large cross product: generate the vector optimization using repeating vectorized
       // row batch optimization in the overflow batch.
@@ -357,38 +365,50 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
       forwardOverflow();
     }
 
+    // Children may mutate a forwarded batch. Keep any values needed for subsequent
+    // probe rows in a separate batch that never reaches a child operator.
+    VectorizedRowBatch valueBatch = overflowBatch;
+    if (duplicateCount > 1 && smallTableValueVectorCopy != null) {
+      if (decodedSmallTableBatch == null) {
+        decodedSmallTableBatch = new VectorizedRowBatch(overflowBatch.numCols);
+        for (int column : smallTableValueColumnMap) {
+          decodedSmallTableBatch.cols[column] =
+              VectorizedBatchUtil.makeLikeColumnVector(overflowBatch.cols[column]);
+        }
+        decodedSmallTableBatch.reset();
+      }
+      valueBatch = decodedSmallTableBatch;
+    }
+
     ByteSegmentRef byteSegmentRef = hashMapResult.first();
     while (byteSegmentRef != null) {
 
-      // Fill up as much of the overflow batch as possible with small table values.
+      // Fill a batch with as many small table values as it can hold.
       while (byteSegmentRef != null) {
 
         if (smallTableValueVectorDeserializeRow != null) {
-          doSmallTableValueDeserializeRow(overflowBatch, overflowBatch.size,
+          doSmallTableValueDeserializeRow(valueBatch, valueBatch.size,
               byteSegmentRef, hashMapResult);
         }
 
-        overflowBatch.size++;
-        if (overflowBatch.size == overflowBatch.DEFAULT_SIZE) {
+        valueBatch.size++;
+        if (valueBatch.size == VectorizedRowBatch.DEFAULT_SIZE) {
           break;
         }
         byteSegmentRef = hashMapResult.next();
       }
 
-      // Forward the overflow batch over and over:
-      //
-      //    Reference a new one big table row's values each time
-      //      cross product
-      //    Current "batch" of small table values.
-      //
-      // TODO: This could be further optimized to copy big table (equal) keys once
-      //       and only copy big table values each time...
-      //       And, not set repeating every time...
-      //
+      final int valueCount = valueBatch.size;
 
       for (int i = 0; i < duplicateCount; i++) {
-
         int batchIndex = allMatches[allMatchesIndex + i];
+
+        if (valueBatch != overflowBatch) {
+          for (int row = 0; row < valueCount; row++) {
+            smallTableValueVectorCopy.copyByReference(valueBatch, row, overflowBatch, row);
+          }
+        }
+        overflowBatch.size = valueCount;
 
         if (bigTableRetainedVectorCopy != null) {
 
@@ -414,7 +434,6 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
           }
         }
 
-        int[] outerSmallTableKeyColumnMap = null;
         if (outerSmallTableKeyVectorCopy != null) {
 
           // For [FULL] OUTER MapJoin, copy Big Table keys to Small Table area within
@@ -423,43 +442,22 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
           outerSmallTableKeyVectorCopy.copyByValue(
               batch, batchIndex,
               overflowBatch, 0);
-          outerSmallTableKeyColumnMap = outerSmallTableKeyMapping.getOutputColumns();
           for (int column : outerSmallTableKeyColumnMap) {
             overflowBatch.cols[column].isRepeating = true;
           }
         }
 
-        // Crucial here that we don't reset the overflow batch, or we will loose the small table
-        // values we put in above.
-        forwardOverflowNoReset();
-
-        // Hand reset the big table columns.
-        for (int column : bigTableRetainColumnMap) {
-          ColumnVector colVector = overflowBatch.cols[column];
-          colVector.reset();
-        }
-        for (int column : nonOuterSmallTableKeyColumnMap) {
-          ColumnVector colVector = overflowBatch.cols[column];
-          colVector.reset();
-        }
-        if (outerSmallTableKeyColumnMap != null) {
-          for (int column : outerSmallTableKeyColumnMap) {
-            ColumnVector colVector = overflowBatch.cols[column];
-            colVector.reset();
-          }
-        }
+        forwardOverflow();
       }
 
-      byteSegmentRef = hashMapResult.next();
-      if (byteSegmentRef == null) {
-        break;
+      if (valueBatch != overflowBatch) {
+        valueBatch.reset();
       }
-
-      // Get ready for a another round of small table values.
-      overflowBatch.reset();
+      // A non-null reference means we stopped at the batch boundary.
+      if (byteSegmentRef != null) {
+        byteSegmentRef = hashMapResult.next();
+      }
     }
-    // Clear away any residue from our optimizations.
-    overflowBatch.reset();
   }
 
   /**
@@ -735,13 +733,6 @@ public abstract class VectorMapJoinGenerateResultOperator extends VectorMapJoinC
       throw new HiveException("Thread interrupted");
     }
     interruptCheckCounter = CHECK_INTERRUPT_PER_OVERFLOW_BATCHES;
-  }
-
-  /**
-   * Forward the overflow batch, but do not reset the batch.
-   */
-  private void forwardOverflowNoReset() throws HiveException {
-    vectorForward(overflowBatch);
   }
 
   /*
