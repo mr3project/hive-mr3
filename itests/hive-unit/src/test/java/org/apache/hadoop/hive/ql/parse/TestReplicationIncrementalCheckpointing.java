@@ -82,8 +82,8 @@ public class TestReplicationIncrementalCheckpointing extends BaseReplicationAcro
     loggerConfig.setLevel(Level.DEBUG);
     ctx.updateLoggers();
     appender = StringAppender.createStringAppender("%m");
-    appender.addToLogger(logger.getName(), Level.DEBUG);
     appender.start();
+    appender.addToLogger(logger.getName(), Level.DEBUG);
     extraPrimaryDb = "extra_" + primaryDbName;
   }
 

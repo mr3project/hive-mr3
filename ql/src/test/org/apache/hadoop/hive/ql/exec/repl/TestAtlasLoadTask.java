@@ -58,8 +58,8 @@ public class TestAtlasLoadTask {
     Mockito.when(conf.getBoolVar(HiveConf.ConfVars.HIVE_IN_TEST_REPL)).thenReturn(true);
     Logger logger = LoggerFactory.getLogger("ReplState");
     StringAppender appender = StringAppender.createStringAppender(null);
-    appender.addToLogger(logger.getName(), Level.INFO);
     appender.start();
+    appender.addToLogger(logger.getName(), Level.INFO);
     AtlasReplInfo atlasReplInfo = new AtlasReplInfo("http://localhost:21000/atlas", "srcDB",
         "tgtDB", "srcCluster", "tgtCluster", new Path("hdfs://tmp"), null, conf);
     atlasReplInfo.setSrcFsUri("hdfs://srcFsUri:8020");

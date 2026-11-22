@@ -316,8 +316,8 @@ public class TestHive {
 
     // Create a String Appender to capture log output
     StringAppender appender = StringAppender.createStringAppender("%m");
-    appender.addToLogger(logger.getName(), Level.DEBUG);
     appender.start();
+    appender.addToLogger(logger.getName(), Level.DEBUG);
 
     try {
       hm.clearMetaCallTiming();

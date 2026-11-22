@@ -1682,8 +1682,8 @@ public class TestReplicationScenariosExternalTables extends BaseReplicationAcros
     // Create a String Appender to capture log output
 
     StringAppender appender = StringAppender.createStringAppender("%m");
-    appender.addToLogger(logger.getName(), Level.DEBUG);
     appender.start();
+    appender.addToLogger(logger.getName(), Level.DEBUG);
     appender.reset();
 
     List<String> withClause = Arrays.asList("'distcp.options.update'=''",

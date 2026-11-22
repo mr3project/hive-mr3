@@ -143,8 +143,8 @@ public class TestRangerDumpTask {
   public void testSuccessRangerDumpMetrics() throws Exception {
     Logger logger = LoggerFactory.getLogger("ReplState");
     StringAppender appender = StringAppender.createStringAppender(null);
-    appender.addToLogger(logger.getName(), Level.INFO);
     appender.start();
+    appender.addToLogger(logger.getName(), Level.INFO);
     RangerExportPolicyList rangerPolicyList = new RangerExportPolicyList();
     rangerPolicyList.setPolicies(new ArrayList<RangerPolicy>());
     Mockito.when(mockClient.exportRangerPolicies(Mockito.anyString(), Mockito.anyString(), Mockito.anyString(),

@@ -1151,8 +1151,8 @@ public class TestReplicationScenarios {
     String name = testName.getMethodName();
     org.apache.logging.log4j.Logger logger = LogManager.getLogger("hive.ql.metadata.HIVE");
     StringAppender appender = StringAppender.createStringAppender("%m");
-    appender.addToLogger(logger.getName(), Level.INFO);
     appender.start();
+    appender.addToLogger(logger.getName(), Level.INFO);
 
     String dbName = createDB(name, driver);
     String replDbName = dbName + "_dupe";
@@ -4386,8 +4386,8 @@ public class TestReplicationScenarios {
       ctx.updateLoggers();
       // Create a String Appender to capture log output
       appender = StringAppender.createStringAppender("%m");
-      appender.addToLogger(logger.getName(), Level.DEBUG);
       appender.start();
+      appender.addToLogger(logger.getName(), Level.DEBUG);
       String testName = "testDDLTasksInParallel";
       String dbName = createDB(testName, driver);
       String replDbName = dbName + "_dupe";
@@ -4554,8 +4554,8 @@ public class TestReplicationScenarios {
     // Create a String Appender to capture log output
 
     StringAppender appender = StringAppender.createStringAppender("%m");
-    appender.addToLogger(logger.getName(), Level.DEBUG);
     appender.start();
+    appender.addToLogger(logger.getName(), Level.DEBUG);
     String testName = "testDatabaseInJobName";
     String dbName = createDB(testName, driver);
     String replDbName = dbName + "_dupe";
@@ -4738,8 +4738,8 @@ public class TestReplicationScenarios {
     // Create a String Appender to capture log output
 
     StringAppender appender = StringAppender.createStringAppender("%m");
-    appender.addToLogger(logger.getName(), Level.DEBUG);
     appender.start();
+    appender.addToLogger(logger.getName(), Level.DEBUG);
     String testName = "testAddPartition";
     String dbName = createDB(testName, driver);
     String replDbName = dbName + "_dupe";
@@ -4774,8 +4774,8 @@ public class TestReplicationScenarios {
     ctx.updateLoggers();
 
     StringAppender appender = StringAppender.createStringAppender("%m");
-    appender.addToLogger(logger.getName(), Level.DEBUG);
     appender.start();
+    appender.addToLogger(logger.getName(), Level.DEBUG);
 
     String testName = "testDropPartitionSingleEvent";
     String dbName = createDB(testName, driver);

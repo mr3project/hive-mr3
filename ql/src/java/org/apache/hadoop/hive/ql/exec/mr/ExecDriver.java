@@ -724,8 +724,8 @@ public class ExecDriver extends Task<MapredWork> implements Serializable, Hadoop
       // any logs. To turn the log on, please set -Dtest.silent=false
       org.apache.logging.log4j.Logger logger = org.apache.logging.log4j.LogManager.getRootLogger();
       NullAppender appender = NullAppender.createNullAppender();
-      appender.addToLogger(logger.getName(), Level.ERROR);
       appender.start();
+      appender.addToLogger(logger.getName(), Level.ERROR);
     } else {
       setupChildLog4j(conf);
     }

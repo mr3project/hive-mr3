@@ -107,8 +107,8 @@ public class TestAtlasDumpTask {
     Mockito.when(conf.getBoolVar(HiveConf.ConfVars.HIVE_IN_TEST_REPL)).thenReturn(true);
     Logger logger = LoggerFactory.getLogger("ReplState");
     StringAppender appender = StringAppender.createStringAppender(null);
-    appender.addToLogger(logger.getName(), Level.INFO);
     appender.start();
+    appender.addToLogger(logger.getName(), Level.INFO);
     Mockito.doReturn(0L).when(atlasDumpTaskSpy)
             .dumpAtlasMetaData(Mockito.any(AtlasRequestBuilder.class), Mockito.any(AtlasReplInfo.class));
     Mockito.doNothing().when(atlasDumpTaskSpy).createDumpMetadata(Mockito.any(AtlasReplInfo.class),

@@ -51,8 +51,8 @@ public class TestLog4j2Appenders {
     Logger logger = LogManager.getRootLogger();
     // Create a String Appender to capture log output
     StringAppender appender = StringAppender.createStringAppender("%m");
-    appender.addToLogger(logger.getName(), Level.INFO);
     appender.start();
+    appender.addToLogger(logger.getName(), Level.INFO);
 
     // Logger to the string appender
     logger.info("Hello!");
@@ -66,8 +66,8 @@ public class TestLog4j2Appenders {
   public void testHiveEventCounterAppender() throws Exception {
     Logger logger = LogManager.getRootLogger();
     HiveEventCounter appender = HiveEventCounter.createInstance("EventCounter", true, null, null);
-    appender.addToLogger(logger.getName(), Level.INFO);
     appender.start();
+    appender.addToLogger(logger.getName(), Level.INFO);
 
     logger.info("Test");
     logger.info("Test");

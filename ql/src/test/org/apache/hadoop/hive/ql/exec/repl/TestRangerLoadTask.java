@@ -128,8 +128,8 @@ public class TestRangerLoadTask {
   public void testSuccessRangerDumpMetrics() throws Exception {
     Logger logger = LoggerFactory.getLogger("ReplState");
     StringAppender appender = StringAppender.createStringAppender(null);
-    appender.addToLogger(logger.getName(), Level.INFO);
     appender.start();
+    appender.addToLogger(logger.getName(), Level.INFO);
     String rangerResponse = "{\"metaDataInfo\":{\"Host name\":\"ranger.apache.org\","
         + "\"Exported by\":\"hive\",\"Export time\":\"May 5, 2020, 8:55:03 AM\",\"Ranger apache version\""
         + ":\"2.0.0.7.2.0.0-61\"},\"policies\":[{\"service\":\"cm_hive\",\"name\":\"db-level\",\"policyType\":0,"
