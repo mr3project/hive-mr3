@@ -68,6 +68,13 @@ public class TestTxnCommands3 extends TxnCommandsBaseForTests {
     return TEST_DATA_DIR;
   }
 
+  @Override
+  void initHiveConf() {
+    super.initHiveConf();
+    // Local MR3 already has the compiled Hive classes on its classpath.
+    HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS, false);
+  }
+
   @Test
   public void testRenameTable() throws Exception {
     MetastoreConf.setBoolVar(hiveConf, MetastoreConf.ConfVars.CREATE_TABLES_AS_ACID, true);

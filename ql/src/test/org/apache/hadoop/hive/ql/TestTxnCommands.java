@@ -119,6 +119,8 @@ public class TestTxnCommands extends TxnCommandsBaseForTests {
   @Override
   void initHiveConf() {
     super.initHiveConf();
+    // Local MR3 already has the compiled Hive classes on its classpath.
+    HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS, false);
     //TestTxnCommandsWithSplitUpdateAndVectorization has the vectorized version
     //of these tests.
     HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED, false);

@@ -47,6 +47,13 @@ public class TestTxnLoadData extends TxnCommandsBaseForTests {
   @Rule
   public TemporaryFolder folder= new TemporaryFolder();
 
+  @Override
+  void initHiveConf() {
+    super.initHiveConf();
+    // Local MR3 already has the compiled Hive classes on its classpath.
+    HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS, false);
+  }
+
   @Before
   public void setUp() throws Exception {
     setUpInternal();
