@@ -41,6 +41,7 @@ import org.apache.hadoop.hive.common.io.SessionStream;
 import org.apache.hadoop.hive.common.io.SortAndDigestPrintStream;
 import org.apache.hadoop.hive.common.io.SortPrintStream;
 import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hive.common.util.HiveStringUtils;
 import org.apache.hive.common.util.StreamPrinter;
 
 /**
@@ -51,6 +52,8 @@ import org.apache.hive.common.util.StreamPrinter;
  */
 public class QTestResultProcessor {
   private static final String SORT_SUFFIX = ".sorted";
+  private static final Pattern NON_COMPARABLE_QUERY = Pattern.compile("^(?:explain|describe|desc)\\b",
+      Pattern.CASE_INSENSITIVE);
   private static final Pattern FLOATING_POINT_PATTERN = Pattern.compile("([+-]?\\d*)\\.(\\d+)([eE][+-]?\\d+)?");
   private static final Pattern ROW_ID_PATTERN = Pattern.compile("\\\"rowid\\\"\\s*:\\s*[+-]?\\d+");
   private static final int FLOATING_POINT_FRACTION_DIGITS = 10;
@@ -202,34 +205,35 @@ public class QTestResultProcessor {
     ArrayList<QueryResultSection> sections = new ArrayList<QueryResultSection>();
     BufferedReader reader = new BufferedReader(new FileReader(fileName));
     QueryResultSection currentSection = null;
-    boolean currentSectionComparable = false;
-    boolean currentQueryComparable = false;
+    StringBuilder currentQuery = null;
     boolean seenPostHookType = false;
     try {
       String line;
       while ((line = reader.readLine()) != null) {
         if (line.startsWith("PREHOOK: query: ")) {
-          if (currentSectionComparable && currentSection != null) {
+          if (currentSection != null) {
             sections.add(currentSection);
           }
-          String query = line.substring("PREHOOK: query: ".length()).trim();
-          currentQueryComparable = isComparableQuery(query);
-          currentSectionComparable = false;
-          currentSection = new QueryResultSection();
+          currentQuery = new StringBuilder(line.substring("PREHOOK: query: ".length()));
+          currentSection = null;
           seenPostHookType = false;
           continue;
         }
 
-        if (line.startsWith("PREHOOK: type: ")) {
-          currentSectionComparable = currentQueryComparable
-              && "QUERY".equals(line.substring("PREHOOK: type: ".length()));
-          if (!currentSectionComparable) {
-            currentSection = null;
+        if (currentQuery != null) {
+          if (line.startsWith("PREHOOK: type: ")) {
+            if ("QUERY".equals(line.substring("PREHOOK: type: ".length()))
+                && isComparableQuery(currentQuery.toString())) {
+              currentSection = new QueryResultSection();
+            }
+            currentQuery = null;
+          } else {
+            currentQuery.append('\n').append(line);
           }
           continue;
         }
 
-        if (!currentSectionComparable) {
+        if (currentSection == null) {
           continue;
         }
 
@@ -248,7 +252,7 @@ public class QTestResultProcessor {
       reader.close();
     }
 
-    if (currentSectionComparable && currentSection != null) {
+    if (currentSection != null) {
       sections.add(currentSection);
     }
 
@@ -256,10 +260,8 @@ public class QTestResultProcessor {
   }
 
   private boolean isComparableQuery(String query) {
-    String normalizedQuery = query.trim().toLowerCase();
-    return !normalizedQuery.startsWith("explain")
-        && !normalizedQuery.startsWith("describe")
-        && !normalizedQuery.startsWith("desc ");
+    String statement = HiveStringUtils.removeComments(query);
+    return !statement.isEmpty() && !NON_COMPARABLE_QUERY.matcher(statement).find();
   }
 
   private boolean isQTestMetadataLine(String line) {
