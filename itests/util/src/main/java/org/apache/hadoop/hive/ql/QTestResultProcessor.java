@@ -34,12 +34,15 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.antlr.runtime.Token;
 import org.apache.commons.io.output.ByteArrayOutputStream;
 import org.apache.hadoop.hive.cli.CliSessionState;
 import org.apache.hadoop.hive.common.io.DigestPrintStream;
 import org.apache.hadoop.hive.common.io.SessionStream;
 import org.apache.hadoop.hive.common.io.SortAndDigestPrintStream;
 import org.apache.hadoop.hive.common.io.SortPrintStream;
+import org.apache.hadoop.hive.ql.parse.GenericHiveLexer;
+import org.apache.hadoop.hive.ql.parse.HiveLexer;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hive.common.util.StreamPrinter;
 
@@ -202,34 +205,35 @@ public class QTestResultProcessor {
     ArrayList<QueryResultSection> sections = new ArrayList<QueryResultSection>();
     BufferedReader reader = new BufferedReader(new FileReader(fileName));
     QueryResultSection currentSection = null;
-    boolean currentSectionComparable = false;
-    boolean currentQueryComparable = false;
+    StringBuilder currentQuery = null;
     boolean seenPostHookType = false;
     try {
       String line;
       while ((line = reader.readLine()) != null) {
         if (line.startsWith("PREHOOK: query: ")) {
-          if (currentSectionComparable && currentSection != null) {
+          if (currentSection != null) {
             sections.add(currentSection);
           }
-          String query = line.substring("PREHOOK: query: ".length()).trim();
-          currentQueryComparable = isComparableQuery(query);
-          currentSectionComparable = false;
-          currentSection = new QueryResultSection();
+          currentQuery = new StringBuilder(line.substring("PREHOOK: query: ".length()));
+          currentSection = null;
           seenPostHookType = false;
           continue;
         }
 
-        if (line.startsWith("PREHOOK: type: ")) {
-          currentSectionComparable = currentQueryComparable
-              && "QUERY".equals(line.substring("PREHOOK: type: ".length()));
-          if (!currentSectionComparable) {
-            currentSection = null;
+        if (currentQuery != null) {
+          if (line.startsWith("PREHOOK: type: ")) {
+            if ("QUERY".equals(line.substring("PREHOOK: type: ".length()))
+                && isComparableQuery(currentQuery.toString())) {
+              currentSection = new QueryResultSection();
+            }
+            currentQuery = null;
+          } else {
+            currentQuery.append('\n').append(line);
           }
           continue;
         }
 
-        if (!currentSectionComparable) {
+        if (currentSection == null) {
           continue;
         }
 
@@ -248,7 +252,7 @@ public class QTestResultProcessor {
       reader.close();
     }
 
-    if (currentSectionComparable && currentSection != null) {
+    if (currentSection != null) {
       sections.add(currentSection);
     }
 
@@ -256,10 +260,15 @@ public class QTestResultProcessor {
   }
 
   private boolean isComparableQuery(String query) {
-    String normalizedQuery = query.trim().toLowerCase();
-    return !normalizedQuery.startsWith("explain")
-        && !normalizedQuery.startsWith("describe")
-        && !normalizedQuery.startsWith("desc ");
+    GenericHiveLexer lexer = GenericHiveLexer.of(query, null);
+    Token token;
+    do {
+      token = lexer.nextToken();
+    } while (token.getType() != Token.EOF && token.getChannel() != Token.DEFAULT_CHANNEL);
+
+    int type = token.getType();
+    return type != Token.EOF && type != HiveLexer.KW_EXPLAIN
+        && type != HiveLexer.KW_DESCRIBE && type != HiveLexer.KW_DESC;
   }
 
   private boolean isQTestMetadataLine(String line) {
