@@ -4442,15 +4442,14 @@ import com.google.common.annotations.VisibleForTesting;
   }
 
   static String getScratchName(TypeInfo typeInfo) throws HiveException {
-    // For now, leave DECIMAL precision/scale in the name so DecimalColumnVector scratch columns
-    // don't need their precision/scale adjusted...
-    if (typeInfo.getCategory() == Category.PRIMITIVE &&
-        ((PrimitiveTypeInfo) typeInfo).getPrimitiveCategory() == PrimitiveCategory.DECIMAL) {
+    // Preserve the element and field types of complex columns.
+    if (typeInfo.getCategory() != Category.PRIMITIVE) {
       return typeInfo.getTypeName();
     }
 
-    // And, for Complex Types, also leave the children types in place...
-    if (typeInfo.getCategory() != Category.PRIMITIVE) {
+    PrimitiveCategory category = ((PrimitiveTypeInfo) typeInfo).getPrimitiveCategory();
+    // Decimal vectors need their precision and scale. Date vectors carry shuffle calendar metadata.
+    if (category == PrimitiveCategory.DECIMAL || category == PrimitiveCategory.DATE) {
       return typeInfo.getTypeName();
     }
 

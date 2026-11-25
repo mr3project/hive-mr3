@@ -108,6 +108,8 @@ import java.util.List;
 import java.util.function.Supplier;
 
 import org.apache.hadoop.hive.ql.exec.Operator;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
 import org.apache.hadoop.io.BytesWritable;
 import org.junit.Test;
 
@@ -153,6 +155,34 @@ public class TestVectorShuffleBatchAccumulator {
         dateAdapter(false));
     assertRandomColumnRoundTrips("DATE_PROLEPTIC", DATE_PROPERTY_TEST_SEED,
         PROPERTY_TEST_ITERATIONS, dateAdapter(true));
+  }
+
+  @Test
+  public void testDateScratchColumnRoundTrip() throws Exception {
+    VectorizationContext vectorizationContext = new VectorizationContext("date scratch", List.of());
+    int dateColumn = vectorizationContext.allocateScratchColumn(TypeInfoFactory.dateTypeInfo);
+    VectorizedRowBatchCtx sourceContext = new VectorizedRowBatchCtx(
+        new String[0], new TypeInfo[0], null, null, 0, 0, null,
+        vectorizationContext.getScratchColumnTypeNames(),
+        vectorizationContext.getScratchDataTypePhysicalVariations());
+    VectorizedRowBatch source = sourceContext.createVectorizedRowBatch();
+    LongColumnVector sourceDates = (LongColumnVector) source.cols[dateColumn];
+    sourceDates.vector[0] = -1;
+    sourceDates.vector[1] = 20_000;
+    source.size = 2;
+
+    BytesWritable serialized = serialize(source);
+    DateColumnVector resultDates = new DateColumnVector().setUsingProlepticCalendar(true);
+    VectorizedRowBatch result = batchWithColumn(resultDates, 0);
+    VectorShuffleBatchAccumulatingDeserializer decoder =
+        new VectorShuffleBatchAccumulatingDeserializer(result, 1);
+    assertEquals(source.size, decoder.readHeader(serialized).getRowCount());
+    decoder.append(serialized, result);
+
+    assertEquals(source.size, result.size);
+    assertEquals(-1L, resultDates.vector[0]);
+    assertEquals(20_000L, resultDates.vector[1]);
+    assertFalse(resultDates.isUsingProlepticCalendar());
   }
 
   @Test
