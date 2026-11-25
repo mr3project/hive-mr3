@@ -43,6 +43,12 @@ public class TestTxnConcatenate extends TxnCommandsBaseForTests {
   public TemporaryFolder folder = new TemporaryFolder();
 
   @Override
+  void initHiveConf() {
+    super.initHiveConf();
+    HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS, false);
+  }
+
+  @Override
   protected String getTestDataDir() {
     return TEST_DATA_DIR;
   }

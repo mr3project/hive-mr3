@@ -76,6 +76,7 @@ public class TestTxnCommandsForMmTable extends TxnCommandsBaseForTests {
   @Override
   void initHiveConf() {
     super.initHiveConf();
+    HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS, false);
     HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_ACID_TRUNCATE_USE_BASE, false);
   }
 

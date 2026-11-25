@@ -107,6 +107,7 @@ public class TestReplicationScenariosExternalTables extends BaseReplicationAcros
     overrides.put(HiveConf.ConfVars.REPL_RUN_DATA_COPY_TASKS_ON_TARGET.varname, "false");
     overrides.put(HiveConf.ConfVars.REPL_BATCH_INCREMENTAL_EVENTS.varname, "false");
     overrides.put(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname, "tez");
+    overrides.put(HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS.varname, "false");
 
     internalBeforeClassSetup(overrides, TestReplicationScenarios.class);
   }

@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.AbortTxnRequest;
 import org.apache.hadoop.hive.metastore.api.OpenTxnRequest;
 import org.apache.hadoop.hive.metastore.api.MetaException;
@@ -29,6 +30,7 @@ import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.io.AcidUtils.ParsedDeltaLight;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorException;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
@@ -44,6 +46,13 @@ public class TestMSCKRepairOnAcid extends TxnCommandsBaseForTests {
           + "-" + System.currentTimeMillis()).getPath().replaceAll("\\\\", "/");
 
   private final String acidTblPartMsck = "acidtblpartmsck";
+
+  @Override
+  @Before
+  public void setUp() throws Exception {
+    super.setUp();
+    HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS, false);
+  }
 
   @Override
   protected String getTestDataDir() {

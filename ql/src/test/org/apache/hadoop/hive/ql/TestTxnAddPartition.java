@@ -61,6 +61,11 @@ public class TestTxnAddPartition extends TxnCommandsBaseForTests {
     return TEST_DATA_DIR;
   }
 
+  @Override
+  void initHiveConf() {
+    super.initHiveConf();
+    HiveConf.setBoolVar(hiveConf, HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS, false);
+  }
 
   @Test
   public void testAddPartition() throws Exception {

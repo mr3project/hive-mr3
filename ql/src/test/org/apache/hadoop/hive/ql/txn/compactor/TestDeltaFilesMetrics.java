@@ -56,6 +56,7 @@ public class TestDeltaFilesMetrics extends CompactorTest  {
   private static AcidMetricService metricService;
 
   private void setUpHiveConf() {
+    HiveConf.setBoolVar(conf, HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS, false);
     MetastoreConf.setLongVar(conf, MetastoreConf.ConfVars.METASTORE_DELTAMETRICS_DELTA_NUM_THRESHOLD, 1);
     MetastoreConf.setLongVar(conf, MetastoreConf.ConfVars.METASTORE_DELTAMETRICS_OBSOLETE_DELTA_NUM_THRESHOLD, 1);
     MetastoreConf.setTimeVar(conf, MetastoreConf.ConfVars.METASTORE_ACIDMETRICS_CHECK_INTERVAL, 1,

@@ -168,6 +168,7 @@ public class TestReplicationScenariosAcidTables extends BaseReplicationScenarios
         put("hive.txn.readonly.enabled", "true");
         //HIVE-25267
         put(MetastoreConf.ConfVars.TXN_OPENTXN_TIMEOUT.getVarname(), "2000");
+        put(HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS.varname, "false");
         put(HiveConf.ConfVars.REPL_BATCH_INCREMENTAL_EVENTS.varname, "false");
         put(HiveConf.ConfVars.REPL_RUN_DATA_COPY_TASKS_ON_TARGET.varname, "false");
         put(HiveConf.ConfVars.REPL_RETAIN_CUSTOM_LOCATIONS_FOR_DB_ON_TARGET.varname, "false");
@@ -184,6 +185,7 @@ public class TestReplicationScenariosAcidTables extends BaseReplicationScenarios
           put("hive.support.concurrency", "false");
           put("hive.txn.manager", "org.apache.hadoop.hive.ql.lockmgr.DummyTxnManager");
           put("hive.metastore.client.capability.check", "false");
+          put(HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS.varname, "false");
       }};
     overridesForHiveConf1.put(MetastoreConf.ConfVars.REPLDIR.getHiveName(), primary.repldDir);
     replicaNonAcid = new WarehouseInstance(LOG, miniDFSCluster, overridesForHiveConf1);

@@ -190,6 +190,7 @@ public class TestOperatorCmp {
   private static IDriver createDriver() {
     HiveConf conf = env_setup.getTestCtx().hiveConf;
 
+    conf.setBoolVar(ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS, false);
     conf.setBoolVar(ConfVars.HIVE_OPT_PPD, false);
     conf.setBoolVar(ConfVars.HIVE_QUERY_REEXECUTION_ENABLED, true);
     conf.setBoolVar(ConfVars.HIVE_VECTORIZATION_ENABLED, false);

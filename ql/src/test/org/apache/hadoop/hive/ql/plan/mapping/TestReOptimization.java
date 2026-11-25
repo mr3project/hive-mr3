@@ -292,6 +292,7 @@ public class TestReOptimization {
   private static IDriver createDriver(String strategies) {
     HiveConf conf = env_setup.getTestCtx().hiveConf;
 
+    conf.setBoolVar(ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS, false);
     conf.setBoolVar(ConfVars.HIVE_QUERY_REEXECUTION_ENABLED, true);
     conf.setBoolVar(ConfVars.HIVE_VECTORIZATION_ENABLED, false);
     conf.setVar(ConfVars.HIVE_CBO_FALLBACK_STRATEGY, "NEVER");

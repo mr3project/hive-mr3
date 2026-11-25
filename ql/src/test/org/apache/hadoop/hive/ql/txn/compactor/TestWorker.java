@@ -44,6 +44,7 @@ import org.apache.hadoop.hive.metastore.utils.StringableMap;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
@@ -87,6 +88,11 @@ public class TestWorker extends CompactorTest {
 
   private static final String CLASS_NAME = TestWorker.class.getName();
   private static final Logger LOG = LoggerFactory.getLogger(CLASS_NAME);
+
+  @Before
+  public void setUpHiveConf() {
+    HiveConf.setBoolVar(conf, HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS, false);
+  }
 
   @Test
   public void nothing() throws Exception {

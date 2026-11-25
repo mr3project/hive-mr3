@@ -41,6 +41,7 @@ import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.conf.HiveConfForTest;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.CompactionRequest;
@@ -97,6 +98,12 @@ public class TestCrudCompactorOnTez extends CompactorOnTezTest {
 
   private static final String DB = "default";
   private static final String TABLE1 = "t1";
+
+  @Override
+  protected void setupWithConf(HiveConfForTest hiveConf) throws Exception {
+    hiveConf.setBoolVar(HiveConf.ConfVars.HIVE_MR3_LOCALIZE_SESSION_JARS, false);
+    super.setupWithConf(hiveConf);
+  }
 
   @Test
   public void testRebalanceCompactionWithParallelDeleteAsSecondOptimisticLock() throws Exception {
