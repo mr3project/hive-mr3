@@ -663,9 +663,7 @@ public class DDLPlanUtils {
     List<String> columnNames = getTableColumnNames(table);
     tableToPartitionList.get(tableName).forEach(p -> partNames.add(p.getName()));
     Map<String, List<ColumnStatisticsObj>> partitionColStats =
-      Hive.get().getPartitionColumnStatistics(databaseName,
-        tableName, partNames, columnNames,
-        true);
+        Hive.get().getPartitionColumnStatistics(table, partNames, columnNames, true);
     Map<String, String> partitionToActualName = new HashMap<>();
     tableToPartitionList.get(tableName).forEach(p -> partitionToActualName.put(p.getName(), getPartitionActualName(p)));
     partitionColStats.keySet().stream().sorted().forEach(partitionName ->

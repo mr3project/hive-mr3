@@ -100,6 +100,7 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.HiveUtils;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.metadata.TempTable;
+import org.apache.hadoop.hive.ql.metadata.client.HMSQueryCache;
 import org.apache.hadoop.hive.ql.parse.SemanticAnalyzer;
 import org.apache.hadoop.hive.ql.security.HiveAuthenticationProvider;
 import org.apache.hadoop.hive.ql.security.authorization.HiveAuthorizationProvider;
@@ -2261,7 +2262,7 @@ public class SessionState implements ISessionAuthState {
    * @param queryId the unique identifier of the query
    * @return the cache for the query
    */
-  public Map<Object, Object> getQueryCache(String queryId) {
+  public HMSQueryCache getQueryCache(String queryId) {
     QueryState qs = getQueryState(queryId);
     if (qs == null) {
       return null;

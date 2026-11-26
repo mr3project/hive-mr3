@@ -27,6 +27,7 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.lockmgr.HiveTxnManager;
+import org.apache.hadoop.hive.ql.metadata.client.HMSQueryCache;
 import org.apache.hadoop.hive.ql.plan.HiveOperation;
 import org.apache.hadoop.hive.ql.session.LineageState;
 import org.apache.hadoop.hive.ql.session.SessionState;
@@ -89,7 +90,7 @@ public class QueryState {
   /**
    * Cache of HMS requests/responses utilized by SessionHiveMetaStoreClient.
    */
-  private Map<Object, Object> hmsCache;
+  private HMSQueryCache hmsCache;
 
   /**
    * Tracks if HMS cache should be used to answer metadata requests.
@@ -121,7 +122,7 @@ public class QueryState {
   }
 
   // Returns the HMS cache if it is currently enabled
-  public Map<Object, Object> getHMSCache() {
+  public HMSQueryCache getHMSCache() {
     return hmsCacheEnabled ? hmsCache : null;
   }
 
@@ -139,7 +140,7 @@ public class QueryState {
 
   public void createHMSCache() {
     LOG.info("Query-level HMS cache created for {}", getQueryId());
-    hmsCache = new HashMap<>();
+    hmsCache = new HMSQueryCache();
     hmsCacheEnabled = true;
   }
 
