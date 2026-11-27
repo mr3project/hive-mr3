@@ -5863,6 +5863,9 @@ public class HiveConf extends Configuration {
     MR3_RESOURCE_VCORES_DIVISOR("hive.mr3.resource.vcores.divisor", 1,
         "Divisor for CPU cores, between 1 and 1000"),
     // Vertex
+    MR3_MAP_OPERATOR_RUN_TIME("hive.mr3.map.operator.run.time", false,
+        "Log exclusive map task thread run time in nanoseconds at operator close for pipelines"
+            + " with a table scan, map join, and group by. Includes input reader time."),
     MR3_MAP_TASK_MEMORY_MB("hive.mr3.map.task.memory.mb", 1024,
         "Memory allocated to each mapper, in MB"),
     MR3_REDUCE_TASK_MEMORY_MB("hive.mr3.reduce.task.memory.mb", 1024,

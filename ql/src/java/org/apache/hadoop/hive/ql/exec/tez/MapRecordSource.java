@@ -24,6 +24,7 @@ import org.apache.hadoop.hive.ql.exec.tez.tools.KeyValueInputMerger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.exec.AbstractMapOperator;
+import org.apache.hadoop.hive.ql.exec.MapOperatorRunTime;
 import org.apache.hadoop.hive.ql.exec.mr.ExecMapperContext;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.io.Writable;
@@ -57,6 +58,10 @@ public class MapRecordSource implements RecordSource {
     this.reader = reader;
   }
 
+  AbstractMapOperator getMapOperator() {
+    return mapOp;
+  }
+
   @Override
   public final boolean isGrouped() {
     return grouped;
@@ -71,16 +76,24 @@ public class MapRecordSource implements RecordSource {
   public boolean pushRecord() throws HiveException {
     execContext.resetRow();
 
+    MapOperatorRunTime timing = MapOperatorRunTime.current();
     try {
-      if (reader.next()) {
-        Object value;
-        try {
+      boolean hasNext;
+      Object value = null;
+      long nestedAtStart = timing == null ? 0 : timing.nestedNanos();
+      long start = timing == null ? 0 : System.nanoTime();
+      try {
+        hasNext = reader.next();
+        if (hasNext) {
           value = reader.getCurrentValue();
-        } catch (IOException e) {
-          closeReader();
-          throw new HiveException(e);
         }
-        return processRow(value);
+      } finally {
+        if (timing != null) {
+          timing.finishRead(mapOp, start, nestedAtStart);
+        }
+      }
+      if (hasNext) {
+        return processRow(value, timing);
       } else if (flushLastRecord) {
         mapOp.flushRecursive();
       }
@@ -91,14 +104,18 @@ public class MapRecordSource implements RecordSource {
     return false;
   }
 
-  private boolean processRow(Object value) {
+  private boolean processRow(Object value, MapOperatorRunTime timing) {
     try {
       if (mapOp.getDone()) {
         return false; // done
       } else {
         // Since there is no concept of a group, we don't invoke
         // startGroup/endGroup for a mapper
-        mapOp.process((Writable) value);
+        if (timing == null) {
+          mapOp.process((Writable) value);
+        } else {
+          timing.process(mapOp, (Writable) value);
+        }
       }
     } catch (Throwable e) {
       if (e instanceof OutOfMemoryError) {

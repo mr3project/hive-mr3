@@ -44,6 +44,7 @@ import org.apache.hadoop.hive.llap.LlapOutputFormat;
 import org.apache.hadoop.hive.ql.exec.DummyStoreOperator;
 import org.apache.hadoop.hive.ql.exec.HashTableDummyOperator;
 import org.apache.hadoop.hive.ql.exec.MapOperator;
+import org.apache.hadoop.hive.ql.exec.MapOperatorRunTime;
 import org.apache.hadoop.hive.ql.exec.MapredContext;
 import org.apache.hadoop.hive.ql.exec.ObjectCache;
 import org.apache.hadoop.hive.ql.exec.ObjectCacheFactory;
@@ -85,6 +86,7 @@ public class MapRecordProcessor extends RecordProcessor {
   private AbstractMapOperator mapOp;
   private final List<AbstractMapOperator> mergeMapOpList = new ArrayList<>();
   private MapRecordSource[] sources;
+  private MapOperatorRunTime operatorRunTime;
   private final Map<String, MultiMRInput> multiMRInputMap = new HashMap<>();
   private int position;
   private MRInputLegacy legacyMRInput;
@@ -428,9 +430,29 @@ public class MapRecordProcessor extends RecordProcessor {
 
   @Override
   void run() throws Exception {
-    startAbortChecks();
-    while (sources[position].pushRecord()) {
-      addRowAndMaybeCheckAbort();
+    MapredContext context = MapredContext.get();
+    if (HiveConf.getBoolVar(jconf, HiveConf.ConfVars.MR3_MAP_OPERATOR_RUN_TIME)) {
+      List<AbstractMapOperator> inputRoots = new ArrayList<>();
+      for (MapRecordSource source : sources) {
+        if (source != null && source.getMapOperator() != null) {
+          inputRoots.add(source.getMapOperator());
+        }
+      }
+      operatorRunTime = MapOperatorRunTime.create(inputRoots);
+      if (operatorRunTime != null) {
+        context.setMapOperatorRunTime(operatorRunTime);
+      }
+    }
+    try {
+      startAbortChecks();
+      while (sources[position].pushRecord()) {
+        addRowAndMaybeCheckAbort();
+      }
+    } finally {
+      if (operatorRunTime != null) {
+        operatorRunTime.finishRun();
+        context.setMapOperatorRunTime(null);
+      }
     }
   }
 
@@ -477,6 +499,9 @@ public class MapRecordProcessor extends RecordProcessor {
     try {
       if (mapOp == null || mapWork == null) {
         return;
+      }
+      if (operatorRunTime != null) {
+        MapredContext.get().setMapOperatorRunTime(operatorRunTime);
       }
       boolean abort = isAborted();
       mapOp.close(abort);

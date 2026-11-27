@@ -81,6 +81,15 @@ public class MapredContext {
   private final List<Closeable> udfs;
 
   private Reporter reporter;
+  private MapOperatorRunTime mapOperatorRunTime;
+
+  MapOperatorRunTime getMapOperatorRunTime() {
+    return mapOperatorRunTime;
+  }
+
+  public void setMapOperatorRunTime(MapOperatorRunTime mapOperatorRunTime) {
+    this.mapOperatorRunTime = mapOperatorRunTime;
+  }
 
   protected MapredContext(boolean isMap, JobConf jobConf) {
     this.isMap = isMap;

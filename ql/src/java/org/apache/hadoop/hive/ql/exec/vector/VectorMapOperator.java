@@ -624,7 +624,7 @@ public class VectorMapOperator extends AbstractMapOperator {
     if (deserializerBatch.size > 0) {
 
       batchCounter++;
-      oneRootOperator.process(deserializerBatch, 0);
+      oneRootOperator.processWithRunTime(deserializerBatch, 0);
       deserializerBatch.reset();
       if (oneRootOperator.getDone()) {
         setDone(true);
@@ -806,7 +806,7 @@ public class VectorMapOperator extends AbstractMapOperator {
         }
       }
     }
-    oneRootOperator.process(value, 0);
+    oneRootOperator.processWithRunTime(value, 0);
     if (oneRootOperator.getDone()) {
       setDone(true);
       return false;
@@ -918,7 +918,7 @@ public class VectorMapOperator extends AbstractMapOperator {
              * Feed current full batch to operator tree.
              */
             batchCounter++;
-            oneRootOperator.process(deserializerBatch, 0);
+            oneRootOperator.processWithRunTime(deserializerBatch, 0);
 
             resetVectorizedRowBatchForDeserialize();
 

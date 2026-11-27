@@ -152,7 +152,7 @@ public class MapOperator extends AbstractMapOperator {
       if (op.getDone()) {
         return false;
       }
-      op.process(row, 0);
+      op.processWithRunTime(row, 0);
       return true;
     }
   }

@@ -610,6 +610,15 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
    */
   public abstract void process(Object row, int tag) throws HiveException;
 
+  public final void processWithRunTime(Object row, int tag) throws HiveException {
+    MapOperatorRunTime timing = MapOperatorRunTime.current();
+    if (timing == null) {
+      process(row, tag);
+    } else {
+      timing.process(this, row, tag);
+    }
+  }
+
   protected final void defaultStartGroup() throws HiveException {
     LOG.trace("Starting group");
 
@@ -664,7 +673,12 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
   // Recursive flush to flush all the tree operators
   public void flushRecursive() throws HiveException {
-    flush();
+    MapOperatorRunTime timing = MapOperatorRunTime.current();
+    if (timing == null) {
+      flush();
+    } else {
+      timing.timeAction(this, this::flush);
+    }
     if (CollectionUtils.isNotEmpty(childOperators)) {
       for (Operator<?> child : childOperators) {
         child.flushRecursive();
@@ -715,12 +729,21 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
     // set state as CLOSE as long as all parents are closed
     // state == CLOSE doesn't mean all children are also in state CLOSE
     state = State.CLOSE;
-    LOG.info("Closing Operator: {}", this);
+    Long runTimeNanos = MapOperatorRunTime.completedNanos(this);
+    if (runTimeNanos == null) {
+      LOG.info("Closing Operator: {}", this);
+    }
 
     abort |= abortOp.get();
 
     // call the operator specific close routine
-    closeOp(abort);
+    try {
+      closeOp(abort);
+    } finally {
+      if (runTimeNanos != null) {
+        LOG.info("Closing Operator: {} {}", this, runTimeNanos);
+      }
+    }
 
     // closeOp can be Overridden
     if (conf != null && conf.getRuntimeStatsTmpDir() != null) {
@@ -922,7 +945,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
       if (o.getDone()) {
         childrenDone++;
       } else {
-        o.process(row, childOperatorsTag[i]);
+        o.processWithRunTime(row, childOperatorsTag[i]);
       }
     }
 
@@ -953,7 +976,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
 
     final int childSize = childOperatorsArray.length;
     if (childSize == 1) {
-      childOperatorsArray[0].process(batch, childOperatorsTag[0]);
+      childOperatorsArray[0].processWithRunTime(batch, childOperatorsTag[0]);
       // if that single child is done, this operator is also done
       if (childOperatorsArray[0].getDone()){
         setDone(true);
@@ -965,7 +988,7 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
         if (o.getDone()) {
           childrenDone++;
         } else {
-          o.process(batch, childOperatorsTag[i]);
+          o.processWithRunTime(batch, childOperatorsTag[i]);
 
           // Restore original values
           batch.size = size;
@@ -1202,7 +1225,12 @@ public abstract class Operator<T extends OperatorDesc> implements Serializable,C
   // The input file has changed - every operator can invoke specific action
   // for each input file
   public void cleanUpInputFileChanged() throws HiveException {
-    this.cleanUpInputFileChangedOp();
+    MapOperatorRunTime timing = MapOperatorRunTime.current();
+    if (timing == null) {
+      cleanUpInputFileChangedOp();
+    } else {
+      timing.timeAction(this, this::cleanUpInputFileChangedOp);
+    }
     if (CollectionUtils.isNotEmpty(this.childOperators)) {
       for (Operator<? extends OperatorDesc> op : this.childOperators) {
         op.cleanUpInputFileChanged();
